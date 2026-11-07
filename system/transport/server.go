@@ -17,10 +17,11 @@ import (
  "github.com/dbontr/homelab-new/system/calendar"
  "github.com/dbontr/homelab-new/system/devices"
  "github.com/dbontr/homelab-new/system/media"
+ "github.com/dbontr/homelab-new/system/profiles"
  "github.com/dbontr/homelab-new/system/store"
 )
 type Backend struct { Name string; URL string; Token string }
-type Server struct { db *store.Store; token string; backend []Backend; client *http.Client; calendarURL string; gate *approval.Gate; media *media.Client; deviceCatalog *devices.Catalog; nodeCatalog *devices.NodeCatalog }
+type Server struct { db *store.Store; token string; backend []Backend; client *http.Client; calendarURL string; gate *approval.Gate; media *media.Client; deviceCatalog *devices.Catalog; nodeCatalog *devices.NodeCatalog; profiles *profiles.Registry }
 
 func New(db *store.Store,token string,backends []Backend)(*Server,error){
  if db==nil||token==""{return nil,errors.New("store and access token are required")}
@@ -36,6 +37,7 @@ func New(db *store.Store,token string,backends []Backend)(*Server,error){
 }
 func(s *Server) SetDeviceCatalog(catalog *devices.Catalog) { s.deviceCatalog = catalog }
 func(s *Server) SetNodeCatalog(catalog *devices.NodeCatalog) { s.nodeCatalog = catalog }
+func(s *Server) SetProfiles(registry *profiles.Registry) { s.profiles = registry }
 func(s *Server) SetCalendarURL(raw string)error{
  if err:=calendar.ValidateURL(raw);err!=nil{return err}
  s.calendarURL=raw
@@ -57,6 +59,9 @@ func(s *Server) Handler()http.Handler{
  mux.HandleFunc("GET /v1/calendar",s.calendarEvents)
  mux.HandleFunc("GET /v1/devices",func(w http.ResponseWriter,_ *http.Request){writeJSON(w,200,s.deviceCatalog.List())})
  mux.HandleFunc("GET /v1/nodes",func(w http.ResponseWriter,_ *http.Request){writeJSON(w,200,s.nodeCatalog.List())})
+ mux.HandleFunc("GET /v1/compute/profiles",s.profileRoutes)
+ mux.HandleFunc("GET /v1/compute/profiles/{id}",s.profileRoutes)
+ mux.HandleFunc("PUT /v1/compute/profiles/{id}",s.profileRoutes)
  mux.HandleFunc("GET /v1/media/search",s.mediaSearch)
  mux.HandleFunc("GET /v1/media/requests",s.mediaRequests)
  mux.HandleFunc("POST /v1/media/requests",s.mediaRequests)
@@ -197,6 +202,10 @@ func(s *Server)localTools()[]map[string]any{
   tool("device_inventory","List declared hardware access and constraints; this is not an online device probe",map[string]any{}),
   tool("node_inventory","List declarative management modes and roles without probing machines",map[string]any{}),
  }
+ if s.profiles!=nil {tools=append(tools,
+  tool("compute_profile_list","List saved reusable build configurations",map[string]any{}),
+  tool("compute_profile_get","Read a saved build configuration revision",map[string]any{"id":prop("string"),"version":prop("integer")},"id"),
+  tool("compute_profile_save","Save an immutable build profile revision",map[string]any{"spec":prop("object"),"expected_version":prop("integer")},"spec","expected_version"))}
  if s.calendarURL!=""{tools=append(tools,tool("calendar_feed","Read Proton Calendar event definitions; recurrence rules are not expanded",map[string]any{}))}
  if s.media!=nil{tools=append(tools,
   tool("media_search","Search movies and television through Seerr",map[string]any{"query":prop("string")},"query"),
@@ -225,6 +234,7 @@ func(s *Server)toolList(r *http.Request)[]map[string]any{
 }
 func(s *Server)localTool(ctx context.Context,name string,raw json.RawMessage)(any,error){
  if s.media!=nil&&(name=="media_search"||name=="media_request"||name=="media_requests"){return s.mediaTool(ctx,name,raw)}
+ if name=="compute_profile_list"||name=="compute_profile_get"||name=="compute_profile_save" {return s.profileTool(name,raw)}
  var args struct{
   store.TaskInput
   ID string `json:"id"`
