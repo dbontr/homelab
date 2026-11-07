@@ -15,11 +15,12 @@ import (
  "time"
  "github.com/dbontr/homelab-new/system/approval"
  "github.com/dbontr/homelab-new/system/calendar"
+ "github.com/dbontr/homelab-new/system/devices"
  "github.com/dbontr/homelab-new/system/media"
  "github.com/dbontr/homelab-new/system/store"
 )
 type Backend struct { Name string; URL string; Token string }
-type Server struct { db *store.Store; token string; backend []Backend; client *http.Client; calendarURL string; gate *approval.Gate; media *media.Client }
+type Server struct { db *store.Store; token string; backend []Backend; client *http.Client; calendarURL string; gate *approval.Gate; media *media.Client; deviceCatalog *devices.Catalog }
 
 func New(db *store.Store,token string,backends []Backend)(*Server,error){
  if db==nil||token==""{return nil,errors.New("store and access token are required")}
@@ -33,6 +34,7 @@ func New(db *store.Store,token string,backends []Backend)(*Server,error){
  }
  return &Server{db:db,token:token,backend:backends,gate:approval.New(),client:&http.Client{Timeout:120*time.Second,CheckRedirect:func(_ *http.Request,_ []*http.Request)error{return errors.New("backend redirects are disabled")}}},nil
 }
+func(s *Server) SetDeviceCatalog(catalog *devices.Catalog) { s.deviceCatalog = catalog }
 func(s *Server) SetCalendarURL(raw string)error{
  if err:=calendar.ValidateURL(raw);err!=nil{return err}
  s.calendarURL=raw
@@ -52,6 +54,7 @@ func(s *Server) Handler()http.Handler{
  mux.HandleFunc("GET /v1/recommendations",s.recommendations)
  mux.HandleFunc("GET /v1/reports/weekly",s.weekly)
  mux.HandleFunc("GET /v1/calendar",s.calendarEvents)
+ mux.HandleFunc("GET /v1/devices",func(w http.ResponseWriter,_ *http.Request){writeJSON(w,200,s.deviceCatalog.List())})
  mux.HandleFunc("GET /v1/media/search",s.mediaSearch)
  mux.HandleFunc("GET /v1/media/requests",s.mediaRequests)
  mux.HandleFunc("POST /v1/media/requests",s.mediaRequests)
@@ -186,6 +189,7 @@ func(s *Server)localTools()[]map[string]any{
   tool("weekly_report","Summarize recorded task completions",map[string]any{"week_of":prop("string")}),
   tool("system_status","List configured integrations",map[string]any{}),
   tool("approval_status","Check an administrator approval",map[string]any{"id":prop("string")},"id"),
+  tool("device_inventory","List declared hardware access and constraints; this is not an online device probe",map[string]any{}),
  }
  if s.calendarURL!=""{tools=append(tools,tool("calendar_feed","Read Proton Calendar event definitions; recurrence rules are not expanded",map[string]any{}))}
  if s.media!=nil{tools=append(tools,
@@ -238,6 +242,7 @@ func(s *Server)localTool(ctx context.Context,name string,raw json.RawMessage)(an
  case "rule_list":return s.db.Rules(),nil
  case "weekly_report":return s.db.Report(args.WeekOf)
  case "approval_status":return s.privilegeStatus(args.ID)
+ case "device_inventory":return s.deviceCatalog.List(),nil
  case "calendar_feed":
   if s.calendarURL==""{return nil,errors.New("calendar is not configured")}
   return calendar.Fetch(ctx,s.client,s.calendarURL)
