@@ -8,7 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/dbontr/homelab-new/platform/transport"
+	"github.com/dbontr/homelab-new/system/transport"
 )
 
 // serveApprovals exposes no TCP listener; access is restricted by directory

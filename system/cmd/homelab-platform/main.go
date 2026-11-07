@@ -10,9 +10,9 @@ import (
     "strings"
     "time"
 
-    "github.com/dbontr/homelab-new/platform/media"
-    "github.com/dbontr/homelab-new/platform/store"
-    "github.com/dbontr/homelab-new/platform/transport"
+    "github.com/dbontr/homelab-new/system/media"
+    "github.com/dbontr/homelab-new/system/store"
+    "github.com/dbontr/homelab-new/system/transport"
 )
 
 func secret(path string) (string,error) {
