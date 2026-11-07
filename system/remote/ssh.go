@@ -1,6 +1,7 @@
 package remote
 
 import (
+ "bytes"
  "context"
  "errors"
  "fmt"
@@ -9,6 +10,8 @@ import (
  "path/filepath"
  "strconv"
  "strings"
+ "sync"
+ "time"
 
  "github.com/dbontr/homelab-new/system/devices"
 )
@@ -52,10 +55,42 @@ func SSHArguments(catalog *devices.Catalog,deviceID,probe,knownHosts string)([]s
  return nil,errors.New("SSH device is not registered")
 }
 
+const maxInspectionBytes = 1 << 20
+
+var errInspectionLimit = errors.New("SSH inspection output exceeds limit")
+
+type boundedInspection struct {
+ mu sync.Mutex
+ data bytes.Buffer
+ limitHit bool
+}
+
+func(b *boundedInspection)Write(p []byte)(int,error){
+ b.mu.Lock()
+ defer b.mu.Unlock()
+ remaining:=maxInspectionBytes-b.data.Len()
+ if remaining<=0{
+  b.limitHit=true
+  return 0,errInspectionLimit
+ }
+ if len(p)>remaining{
+  _,_=b.data.Write(p[:remaining])
+  b.limitHit=true
+  return remaining,errInspectionLimit
+ }
+ return b.data.Write(p)
+}
+
 func Inspect(ctx context.Context,catalog *devices.Catalog,deviceID,probe,knownHosts string)(string,error){
- args,err:=SSHArguments(catalog,deviceID,probe,knownHosts);if err!=nil{return "",err}
- output,err:=exec.CommandContext(ctx,"ssh",args...).CombinedOutput()
- if len(output)>1<<20{return "",errors.New("SSH inspection output exceeds limit")}
+ args,err:=SSHArguments(catalog,deviceID,probe,knownHosts)
+ if err!=nil{return "",err}
+ ctx,cancel:=context.WithTimeout(ctx,30*time.Second)
+ defer cancel()
+ cmd:=exec.CommandContext(ctx,"ssh",args...)
+ output:=&boundedInspection{}
+ cmd.Stdout,cmd.Stderr=output,output
+ err=cmd.Run()
+ if output.limitHit{return "",errInspectionLimit}
  if err!=nil{return "",fmt.Errorf("SSH inspection failed: %w",err)}
- return string(output),nil
+ return output.data.String(),nil
 }
