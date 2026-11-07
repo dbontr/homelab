@@ -5,28 +5,25 @@
 
   outputs = { self, nixpkgs }:
     let
-      system = "x86_64-linux";
-      worker = module: nixpkgs.lib.nixosSystem {
-        inherit system;
-        modules = [ module ];
+      defaultSystem = "x86_64-linux";
+      inventory = import ./hardware.nix;
+      enrolled = builtins.filter (node: node.mode == "enrolled") inventory.nodes;
+      names = map (node: node.id) enrolled;
+      hostConfiguration = node: nixpkgs.lib.nixosSystem {
+        system = node.system;
+        specialArgs.workspaceMcp = ./system/compute;
+        modules = [ (./infrastructure/hosts + ("/" + node.id + "/configuration.nix")) ];
       };
-    in {
+    in
+    assert builtins.length names == builtins.length (nixpkgs.lib.unique names);
+    {
       nixosModules.clusterAgent = import ./infrastructure/modules/cluster-agent.nix;
       nixosModules.homelabPlatform = import ./nixosModules/platform.nix;
-      packages.${system}.homelab-platform = import ./packages/platform.nix {
-        pkgs = nixpkgs.legacyPackages.${system};
+      packages.x86_64-linux.homelab-platform = import ./packages/platform.nix {
+        pkgs = nixpkgs.legacyPackages.x86_64-linux;
       };
 
-      nixosConfigurations = {
-        saturn = nixpkgs.lib.nixosSystem {
-          inherit system;
-          specialArgs.workspaceMcp = ./system/compute;
-          modules = [ ./infrastructure/hosts/saturn/configuration.nix ];
-        };
-        jupiter = worker ./infrastructure/hosts/jupiter/configuration.nix;
-        venus = worker ./infrastructure/hosts/venus/configuration.nix;
-        mercury = worker ./infrastructure/hosts/mercury/configuration.nix;
-        janus = worker ./infrastructure/hosts/janus/configuration.nix;
-      };
+      nixosConfigurations = builtins.listToAttrs
+        (map (node: nixpkgs.lib.nameValuePair node.id (hostConfiguration node)) enrolled);
     };
 }

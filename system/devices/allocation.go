@@ -39,7 +39,7 @@ func (c *Catalog) ValidateAllocation(raw json.RawMessage) error {
 		count := 0
 		if c != nil {
 			for _, device := range c.items {
-				if device.Kind == "fpga" && device.Node == request.NodeID && device.EligibleForCompute {
+				if device.Kind == "fpga" && device.Node == request.NodeID && device.Mode == ModeEnrolled && device.EligibleForCompute {
 					count++
 				}
 			}
@@ -55,7 +55,7 @@ func (c *Catalog) ValidateAllocation(raw json.RawMessage) error {
 		permitted := false
 		if c != nil {
 			for _, device := range c.items {
-				if device.ID != request.USBDeviceID || device.Node != request.USBNode || device.Connection != "usb" || !device.EligibleForCompute {
+				if device.ID != request.USBDeviceID || device.Node != request.USBNode || device.Connection != "usb" || device.Mode != ModeEnrolled || !device.EligibleForCompute {
 					continue
 				}
 				for _, operation := range device.AllowedOperations {
