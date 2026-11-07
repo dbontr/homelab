@@ -1,9 +1,9 @@
-{ config, pkgs, lib, ... }:
+{ config, pkgs, lib, hardwareNode, ... }:
 {
   imports = [ ./hardware-configuration.nix ./mercury-network.nix ./homelab-access.nix ./homelab-worker.nix ../common/eda-build-vm.nix ./eda-node-settings.nix ];
 
   system.stateVersion = "26.05";
-  networking.hostName = "mercury";
+  networking.hostName = hardwareNode.id;
   networking.networkmanager.enable = false;
   time.timeZone = "America/Chicago";
   i18n.defaultLocale = "en_US.UTF-8";

@@ -1,21 +1,21 @@
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, hardwareNode, ... }:
 {
   imports = [ ./hardware-configuration.nix ./local-admin.nix ./homelab-worker.nix ../common/eda-build-vm.nix ./eda-node-settings.nix ];
   boot.loader.systemd-boot.enable = true;
   boot.loader.efi.canTouchEfiVariables = true;
-  networking.hostName = "venus";
+  networking.hostName = hardwareNode.id;
   networking.useDHCP = false;
-  networking.interfaces.enp2s0.useDHCP = false;
-  networking.interfaces.enp2s0.ipv4.addresses = [
-    { address = "10.77.30.230"; prefixLength = 24; }
+  networking.interfaces.${hardwareNode.lanInterface}.useDHCP = false;
+  networking.interfaces.${hardwareNode.lanInterface}.ipv4.addresses = [
+    { address = hardwareNode.nodeIP; prefixLength = 24; }
   ];
   networking.defaultGateway = {
     address = "10.77.30.1";
-    interface = "enp2s0";
+    interface = hardwareNode.lanInterface;
   };
   networking.nameservers = [ "10.77.30.1" ];
   networking.firewall.enable = true;
-  networking.firewall.interfaces.enp2s0.allowedTCPPorts = [ 22 9100 ];
+  networking.firewall.interfaces.${hardwareNode.lanInterface}.allowedTCPPorts = [ 22 9100 ];
   services.openssh.enable = true;
   services.openssh.openFirewall = false;
   services.openssh.settings = {
