@@ -128,9 +128,18 @@ pub fn Overview() -> Element {
 #[component]
 pub fn Projects() -> Element {
     let mut data = use_resource(|| async { api::get::<Value>("/v1/workspace/projects").await });
+    let mut filter = use_signal(String::new);
     let rows = data.cloned().and_then(Result::ok)
         .map(|value| api::list(&value, &["projects", "items", "results"]))
         .unwrap_or_default();
+    let search = filter().trim().to_ascii_lowercase();
+    let filtered: Vec<Value> = rows.iter().filter(|project| {
+        if search.is_empty() { return true; }
+        ["name","title","id","description","summary"]
+            .iter()
+            .any(|field|project.get(*field).and_then(Value::as_str)
+                .is_some_and(|text|text.to_ascii_lowercase().contains(&search)))
+    }).cloned().collect();
     rsx! {
         Heading {
             title: "Projects".to_owned(),
@@ -139,23 +148,33 @@ pub fn Projects() -> Element {
                 Icon { name: "refresh".to_owned() } "Refresh"
             }
         }
+        div { class: "inline-row", style: "margin-bottom: 1rem; max-width: 20rem;",
+            input {
+                class: "field",
+                type: "search",
+                placeholder: "Filter projects...",
+                aria_label: "Filter projects",
+                value: "{filter}",
+                oninput: move |event| filter.set(event.value()),
+            }
+        }
         Card { title: "Project directory".to_owned(), description: "Read directly from Workspace.".to_owned(),
             if let Some(Err(error)) = data.cloned() {
                 Notice { message: error }
             } else if data.cloned().is_none() {
                 Loading {}
-            } else if rows.is_empty() {
-                Empty { title: "No projects available".to_owned(), description: "The Workspace service has not returned any projects.".to_owned() }
+            } else if filtered.is_empty() {
+                Empty { title: "No projects match".to_owned(), description: "No project records match your filter, or none have been returned.".to_owned() }
             } else {
                 div { class: "table-clip",
                     table { class: "table",
                         thead { tr { th { "Project" } th { "Identifier" } th { "Description" } } }
                         tbody {
-                            for (index, project) in rows.iter().enumerate() {
+                            for (index, project) in filtered.iter().enumerate() {
                                 tr { key: "{index}",
-                                    td { "{api::property(project, &[\"name\", \"title\", \"id\"])}" }
-                                    td { class: "mono muted", "{api::property(project, &[\"id\", \"project_id\"])}" }
-                                    td { class: "muted", "{api::property(project, &[\"description\", \"summary\"])}" }
+                                    td { {api::property(project, &["name", "title", "id"])} }
+                                    td { class: "mono muted", {api::property(project, &["id", "project_id"])} }
+                                    td { class: "muted", {api::property(project, &["description", "summary"])} }
                                 }
                             }
                         }
@@ -175,11 +194,12 @@ pub fn Compute() -> Element {
     let mut nodes = use_resource(|| async { api::get::<Vec<Node>>("/v1/nodes").await });
     let mut devices = use_resource(|| async { api::get::<Vec<Device>>("/v1/devices").await });
     let mut profiles = use_resource(|| async { api::get::<Vec<Profile>>("/v1/compute/profiles").await });
+    let mut workers = use_resource(|| async { api::get::<Value>("/v1/workspace/nodes").await });
     rsx! {
         Heading { title: "Compute".to_owned(),
             description: "Node enrollment, attached hardware, and reusable build environments.".to_owned(),
             button { class: "btn btn-outline",
-                onclick: move |_| {nodes.restart(); devices.restart(); profiles.restart();},
+                onclick: move |_| {nodes.restart(); devices.restart(); profiles.restart(); workers.restart();},
                 Icon { name: "refresh".to_owned() } "Refresh"
             }
         }
@@ -192,7 +212,12 @@ pub fn Compute() -> Element {
                 onclick: move |_| tab.set(ComputeTab::Profiles), "Build profiles" }
         }
         match tab() {
-            ComputeTab::Nodes => rsx!{ NodeTable { records: nodes.cloned() } },
+            ComputeTab::Nodes => rsx!{
+                div { class: "stack",
+                    NodeTable { records: nodes.cloned() }
+                    WorkerTable { records: workers.cloned() }
+                }
+            },
             ComputeTab::Devices => rsx!{ DeviceTable { records: devices.cloned() } },
             ComputeTab::Profiles => rsx!{ ProfileTable { records: profiles.cloned() } },
         }
@@ -218,7 +243,7 @@ fn NodeTable(records: Option<Result<Vec<Node>, String>>) -> Element {
                                         td { "{node.id}" }
                                         td { Badge { text: node.mode } }
                                         td { "{node.role}" }
-                                        td { class: "muted", "{node.lan_interface}" }
+                                        td { class: "muted", "{node.system}" }
                                         td { class: "mono muted", "{node.node_ip}" }
                                     }
                                 }
@@ -226,6 +251,43 @@ fn NodeTable(records: Option<Result<Vec<Node>, String>>) -> Element {
                         }
                     }
                 },
+            }
+        }
+    }
+}
+
+
+#[component]
+fn WorkerTable(records: Option<Result<Value, String>>) -> Element {
+    let workers = records.as_ref().and_then(|result|result.as_ref().ok())
+        .map(|value|api::list(value,&["nodes","workers","results"]))
+        .unwrap_or_default();
+    rsx! {
+        Card { title: "Workspace workers".to_owned(), description: "Reported by the compute service, not inferred from inventory.".to_owned(),
+            if let Some(Err(error)) = records {
+                Notice { message: error }
+            } else if records.is_none() {
+                Loading {}
+            } else if workers.is_empty() {
+                Empty {
+                    title: "No workers reported".to_owned(),
+                    description: "The compute service returned no worker records.".to_owned()
+                }
+            } else {
+                div { class: "table-clip",
+                    table { class: "table",
+                        thead { tr { th { "Worker" } th { "Status" } th { "Node" } } }
+                        tbody {
+                            for (index,worker) in workers.iter().enumerate() {
+                                tr { key: "{index}",
+                                    td { {api::property(worker,&["id","name","worker_id"])} }
+                                    td { Badge { text: api::property(worker,&["status","state"]) } }
+                                    td { class: "mono muted", {api::property(worker,&["node","node_id"])} }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -334,8 +396,8 @@ fn SoftwareCollection(title: String, description: String, records: Vec<Value>) -
                         tbody {
                             for (index,item) in records.iter().enumerate(){
                                 tr {key:"{index}",
-                                    td {"{api::property(item,&[\"name\",\"title\",\"id\",\"software_id\",\"image_id\"])}"}
-                                    td {class:"mono muted","{api::property(item,&[\"version\",\"tag\",\"digest\"])}"}
+                                    td {{api::property(item, &["name", "title", "id", "software_id", "image_id"])}}
+                                    td {class:"mono muted",{api::property(item, &["version", "tag", "digest"])}}
                                     td {Badge{text:api::property(item,&["status","state"])}}
                                 }
                             }

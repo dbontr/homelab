@@ -108,18 +108,18 @@ fn App() -> Element {
                                     });
                                 },
                                 div { class: "form-row",
-                                    label { class: "label", r#for: "owner-passphrase", "Owner passphrase" }
+                                    label { class: "label", for: "owner-passphrase", "Owner passphrase" }
                                     input {
                                         id: "owner-passphrase",
                                         class: "field",
-                                        r#type: "password",
+                                        type: "password",
                                         autocomplete: "current-password",
                                         required: true,
                                         value: "{passphrase}",
                                         oninput: move |event| passphrase.set(event.value()),
                                     }
                                 }
-                                button { class: "btn btn-primary", r#type: "submit", "Sign in" }
+                                button { class: "btn btn-primary", type: "submit", "Sign in" }
                             }
                             p { class: "login-footer",
                                 "Authentication stays within the trusted homelab service. No MCP token is stored in this browser."

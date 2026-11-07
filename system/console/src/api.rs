@@ -15,6 +15,8 @@ pub struct Node {
     pub mode: String,
     #[serde(default)]
     pub role: String,
+    #[serde(default)]
+    pub system: String,
     #[serde(default, rename = "nodeIP")]
     pub node_ip: String,
     #[serde(default, rename = "lanInterface")]
