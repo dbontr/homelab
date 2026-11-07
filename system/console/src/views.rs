@@ -262,11 +262,13 @@ fn WorkerTable(records: Option<Result<Value, String>>) -> Element {
     let workers = records.as_ref().and_then(|result|result.as_ref().ok())
         .map(|value|api::list(value,&["nodes","workers","results"]))
         .unwrap_or_default();
+    let error = records.as_ref().and_then(|result| result.as_ref().err()).cloned();
+    let loading = records.is_none();
     rsx! {
         Card { title: "Workspace workers".to_owned(), description: "Reported by the compute service, not inferred from inventory.".to_owned(),
-            if let Some(Err(error)) = records {
+            if let Some(error) = error {
                 Notice { message: error }
-            } else if records.is_none() {
+            } else if loading {
                 Loading {}
             } else if workers.is_empty() {
                 Empty {
