@@ -47,6 +47,7 @@ func(s *Server) Handler()http.Handler{
  mux:=http.NewServeMux()
  mux.HandleFunc("GET /healthz",func(w http.ResponseWriter,_ *http.Request){writeJSON(w,200,map[string]string{"status":"ok"})})
  mux.HandleFunc("POST /mcp",s.mcp)
+ mux.HandleFunc("GET /v1/software",s.softwareLibrary)
  mux.HandleFunc("GET /v1/tools",func(w http.ResponseWriter,r *http.Request) {
   writeJSON(w,200,map[string]any{"tools":s.toolList(r)})
  })
@@ -189,6 +190,7 @@ func(s *Server)localTools()[]map[string]any{
   tool("device_inventory","List declared hardware access and constraints; this is not an online device probe",map[string]any{}),
   tool("node_inventory","List declarative management modes and roles without probing machines",map[string]any{}),
  }
+ if s.hasBackend("workspace") {tools=append(tools,tool("software_catalog","List approved images, software collections, and program requests",map[string]any{}))}
  if s.profiles!=nil {tools=append(tools,
   tool("compute_profile_list","List saved reusable build configurations",map[string]any{}),
   tool("compute_profile_get","Read a saved build configuration revision",map[string]any{"id":prop("string"),"version":prop("integer")},"id"),
@@ -250,6 +252,7 @@ func(s *Server)localTool(ctx context.Context,name string,raw json.RawMessage)(an
  case "calendar_feed":
   if s.calendarURL==""{return nil,errors.New("calendar is not configured")}
   return calendar.Fetch(ctx,s.client,s.calendarURL)
+ case "software_catalog":return s.softwareEntries(ctx)
  case "system_status":
   statuses:=map[string]string{}
   for _,b:=range s.backend{
