@@ -1,0 +1,24 @@
+name: saturn-media
+services:
+  jellyfin:
+    image: jellyfin/jellyfin@sha256:2038fe038ab3876a80f6e7b7e0aef6607b032c7dc0c9b3ad3296d0b2eba3bbb5
+    restart: unless-stopped
+    ports:
+      - "${SERVICE_BIND_IP:-127.0.0.1}:8096:8096"
+    environment:
+      TZ: America/Chicago
+    volumes:
+      - jellyfin-config:/config
+      - jellyfin-cache:/cache
+      - /srv/homelab/data/media:/media:ro
+      - /srv/homelab/data/games:/games:ro
+volumes:
+  jellyfin-config: {}
+  jellyfin-cache: {}
+networks:
+  default:
+    name: saturn-media_default
+    ipam:
+      config:
+        - subnet: 172.19.0.0/16
+          gateway: 172.19.0.1

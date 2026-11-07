@@ -1,0 +1,97 @@
+name: saturn-monitoring
+services:
+  prometheus:
+    image: prom/prometheus@sha256:fa3302279710be2f21a8301ec17a8b4f2301fd829bd113839b3b6b02b6f191a2
+    restart: unless-stopped
+    ports:
+      - "${SERVICE_BIND_IP:-127.0.0.1}:9090:9090"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./config/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+  grafana:
+    image: grafana/grafana@sha256:dbbc38ea21103cefb50396340cd88afec779c7e070b0a7bf5a75b4ce46651d3f
+    restart: unless-stopped
+    ports:
+      - "${SERVICE_BIND_IP:-127.0.0.1}:3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/grafana-password
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: "Viewer"
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/diagnostics.json
+    secrets: [grafana-password]
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./config/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./config/grafana/dashboards:/var/lib/grafana/dashboards:ro
+  loki:
+    image: grafana/loki@sha256:0db216b630ae1f348a1584c67f3cead8b4c1fc839169a39501db664744158e28
+    restart: unless-stopped
+    command: ["-config.file=/etc/loki/config.yaml"]
+    volumes:
+      - ./config/loki.yml:/etc/loki/config.yaml:ro
+      - loki-data:/loki
+  alloy:
+    image: grafana/alloy@sha256:89a5a320168387336b9ac3c850609c3ba7757eadd4ae5f1d819deb35e9854b18
+    profiles: [logs]
+    restart: unless-stopped
+    command: ["run", "/etc/alloy/config.alloy", "--storage.path=/var/lib/alloy"]
+    volumes:
+      - ./config/alloy.alloy:/etc/alloy/config.alloy:ro
+      - /var/log/journal:/host/var/log/journal:ro
+      - alloy-data:/var/lib/alloy
+    depends_on: [loki]
+  blackbox:
+    image: prom/blackbox-exporter@sha256:ea1c7aa3ef3f307cd03e85f34abb604478ccb90b567fc690da0cd9776da76b13
+    restart: unless-stopped
+    volumes:
+      - ./config/blackbox.yml:/etc/blackbox_exporter/config.yml:ro
+  node-exporter:
+    image: prom/node-exporter@sha256:1b4e4438faca4dd7e001dd445d161a4a2091b0fededa84093b3a8dfeae1f1be0
+    restart: unless-stopped
+    read_only: true
+    command:
+      - "--path.procfs=/host/proc"
+      - "--path.sysfs=/host/sys"
+      - "--path.rootfs=/host/root"
+      - "--collector.textfile.directory=/host/root/run/homelab-gpu"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/host/root:ro,rslave
+  snmp:
+    image: quay.io/prometheus/snmp-exporter@sha256:e5fd5e8b43ace6c088fe9bf0b37b7fff0e04380bee352be7ec41b853a4dd5859
+    restart: unless-stopped
+    profiles: [snmp]
+  scrutiny:
+    image: ghcr.io/analogj/scrutiny@sha256:6ee271ee531458f134220ca8b2c5c8ccc2711a799c827fef953fa865d91e312f
+    restart: unless-stopped
+    profiles: [storage-health]
+    cap_add: [SYS_RAWIO, SYS_ADMIN]
+    devices:
+      - /dev/nvme0:/dev/nvme0:r
+      - /dev/nvme0n1:/dev/nvme0n1:r
+    ports:
+      - "${SERVICE_BIND_IP:-127.0.0.1}:8086:8080"
+    volumes:
+      - scrutiny-config:/opt/scrutiny/config
+      - scrutiny-influxdb:/opt/scrutiny/influxdb
+      - /run/udev:/run/udev:ro
+volumes:
+  prometheus-data: {}
+  grafana-data: {}
+  loki-data: {}
+  alloy-data: {}
+  scrutiny-config: {}
+  scrutiny-influxdb: {}
+secrets:
+  grafana-password:
+    file: ../../secrets/grafana_password

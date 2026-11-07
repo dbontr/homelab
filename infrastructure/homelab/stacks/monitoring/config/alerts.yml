@@ -1,0 +1,28 @@
+groups:
+  - name: saturn
+    rules:
+      - alert: SaturnNodeExporterUnavailable
+        expr: up{job="saturn-node"} == 0
+        for: 5m
+        labels: {severity: warning}
+        annotations: {summary: "Saturn node metrics unavailable"}
+      - alert: SaturnDiskSpaceLow
+        expr: (node_filesystem_avail_bytes{mountpoint="/",fstype!="tmpfs"} / node_filesystem_size_bytes{mountpoint="/",fstype!="tmpfs"}) < 0.10
+        for: 10m
+        labels: {severity: warning}
+        annotations: {summary: "Saturn root filesystem below 10 percent free"}
+      - alert: SaturnMonitoringTargetUnavailable
+        expr: up{job=~"loki|blackbox-exporter"} == 0
+        for: 3m
+        labels: {severity: warning}
+        annotations: {summary: "Monitoring component unavailable: {{ $labels.job }}"}
+      - alert: SaturnServiceProbeFailed
+        expr: probe_success{job="blackbox"} == 0
+        for: 3m
+        labels: {severity: warning}
+        annotations: {summary: "Service health probe failed: {{ $labels.instance }}"}
+      - alert: JupiterGpuTelemetryUnavailable
+        expr: (homelab_gpu_collection_success == 0) or (time() - homelab_gpu_sample_timestamp_seconds > 180) or absent(homelab_gpu_collection_success) or absent(homelab_gpu_sample_timestamp_seconds)
+        for: 5m
+        labels: {severity: warning}
+        annotations: {summary: "Jupiter GPU telemetry unavailable"}
