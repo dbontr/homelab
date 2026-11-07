@@ -2,6 +2,7 @@
 {
   imports = [
     ../../nixosModules/platform.nix
+    ../../nixosModules/console.nix
     ./shared.nix
     ./cloudflare.nix
     ./mcp-ingress.nix

@@ -1,0 +1,76 @@
+package transport
+
+import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/dbontr/homelab-new/system/recipes"
+	"github.com/dbontr/homelab-new/system/security"
+	"github.com/dbontr/homelab-new/system/session"
+	"github.com/dbontr/homelab-new/system/store"
+)
+
+func TestRecipeRoutesAndScopedBrowserWrites(t *testing.T) {
+	dir := t.TempDir()
+	tasks, err := store.Open(filepath.Join(dir, "state.json"), "UTC")
+	if err != nil { t.Fatal(err) }
+	s, err := New(tasks, strings.Repeat("t", 40), nil)
+	if err != nil { t.Fatal(err) }
+	recipeStore, err := recipes.Open(filepath.Join(dir, "recipes.json"))
+	if err != nil { t.Fatal(err) }
+	s.SetRecipes(recipeStore)
+	verifier, err := security.HashPassphrase([]byte("owner-console-password"))
+	if err != nil { t.Fatal(err) }
+	sessions, err := session.New(verifier)
+	if err != nil { t.Fatal(err) }
+	s.SetSessions(sessions)
+	if err := s.SetAllowedOrigins([]string{"https://console.example"}); err != nil { t.Fatal(err) }
+	handler := s.Handler()
+	call := func(method, path, body string, cookie *http.Cookie, csrf string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest(method, path, strings.NewReader(body))
+		r.Host = "console.example"
+		r.Header.Set("Origin", "https://console.example")
+		if body != "" { r.Header.Set("Content-Type", "application/json") }
+		if csrf != "" { r.Header.Set("X-CSRF-Token", csrf) }
+		if cookie != nil { r.AddCookie(cookie) }
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, r)
+		return w
+	}
+	if r := call("GET","/v1/recipes","",nil,""); r.Code!=401 { t.Fatal("anonymous recipe read accepted") }
+	login := call("POST","/ui/session",`{"passphrase":"owner-console-password"}`,nil,"")
+	if login.Code!=200 { t.Fatalf("login: %s",login.Body.String()) }
+	cookie := login.Result().Cookies()[0]
+	status := call("GET","/ui/session","",cookie,"")
+	var sessionInfo struct { CSRF string `json:"csrf_token"` }
+	if err := json.Unmarshal(status.Body.Bytes(),&sessionInfo);err!=nil { t.Fatal(err) }
+	if sessionInfo.CSRF=="" { t.Fatal("missing session CSRF token") }
+	payload := `{"title":"Rice bowl","servings":2,"ingredients":[{"name":"Rice","amount":1,"unit":"cup"}],"steps":[{"text":"Cook the rice."}]}`
+	if r:=call("POST","/v1/recipes",payload,cookie,"");r.Code!=401 { t.Fatal("recipe write missing CSRF accepted") }
+	created := call("POST","/v1/recipes",payload,cookie,sessionInfo.CSRF)
+	if created.Code!=201 { t.Fatalf("create: %d %s",created.Code,created.Body.String()) }
+	var recipe recipes.Recipe
+	if err:=json.Unmarshal(created.Body.Bytes(),&recipe);err!=nil { t.Fatal(err) }
+	if recipe.ID=="" || recipe.Revision!=1 { t.Fatal("missing stored identity or revision") }
+	if r:=call("POST","/v1/tasks",`{"title":"Forbidden"}`,cookie,sessionInfo.CSRF);r.Code!=401 {
+		t.Fatal("recipe-scoped session mutated tasks")
+	}
+	if r:=call("POST","/mcp",`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`,cookie,sessionInfo.CSRF);r.Code!=401 {
+		t.Fatal("recipe-scoped session reached MCP")
+	}
+	meal := `{"recipe_id":"`+recipe.ID+`","date":"2026-11-12","servings":4}`
+	if r:=call("POST","/v1/meals",meal,cookie,sessionInfo.CSRF);r.Code!=201 {t.Fatalf("schedule meal: %s",r.Body.String())}
+	if r:=call("GET","/v1/groceries","",cookie,"");r.Code!=200 || !strings.Contains(r.Body.String(),`"amount":2`) {
+		t.Fatalf("consolidated grocery list: %s",r.Body.String())
+	}
+	if r:=call("DELETE","/v1/recipes/"+recipe.ID,"",cookie,sessionInfo.CSRF);r.Code!=428 {
+		t.Fatal("delete without revision accepted")
+	}
+	if r:=call("GET","/v1/recipes/export","",cookie,"");r.Code!=200 || !strings.Contains(r.Body.String(),`"version":1`) {
+		t.Fatal("archive not available to authenticated owner")
+	}
+}

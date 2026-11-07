@@ -1,6 +1,8 @@
 { config, lib, pkgs, ... }:
 let
   credentialsPath = "/srv/homelab/secrets/cloudflared-saturn.json";
+  homepageUnit = if config.services.homelabConsole.enable && config.services.homelabConsole.replaceHomepage
+    then "nginx.service" else "homepage-dashboard.service";
   configFile = (pkgs.formats.yaml { }).generate "saturn-cloudflared.yml" {
     tunnel = "132a5be7-22b0-4697-a46a-4683bcee9a25";
     "credentials-file" = "/run/credentials/cloudflared-saturn.service/tunnel.json";
@@ -76,8 +78,8 @@ in
   config.systemd.services.cloudflared-saturn = {
     description = "Private Cloudflare Tunnel for dbontr.me";
     wantedBy = [ "multi-user.target" ];
-    after = [ "network-online.target" "homepage-dashboard.service" ];
-    wants = [ "network-online.target" "homepage-dashboard.service" ];
+    after = [ "network-online.target" homepageUnit ];
+    wants = [ "network-online.target" homepageUnit ];
     unitConfig.ConditionFileNotEmpty = credentialsPath;
     serviceConfig = {
       Type = "simple";

@@ -497,6 +497,17 @@ pub fn Media() -> Element {
                 Icon{name:"refresh".to_owned()} "Refresh"
             }
         }
+        Card {title:"Applications".to_owned(),description:"Launch the original media client and diagnostics service.".to_owned(),
+            div {class:"inline-row",style:"flex-wrap:wrap",
+                a {class:"btn btn-primary",href:"https://media.tail305103.ts.net/",target:"_blank",rel:"noopener noreferrer",
+                    Icon{name:"media".to_owned()} "Open Moonfin"
+                }
+                a {class:"btn btn-outline",href:"https://monitor.dbontr.me/d/homelab-diag/homelab-diagnostics",
+                    target:"_blank",rel:"noopener noreferrer",
+                    Icon{name:"server".to_owned()} "Diagnostics"
+                }
+            }
+        }
         Card {title:"Requests".to_owned(),description:"Read-only view of recent media requests.".to_owned(),
             if let Some(Err(error))=data.cloned(){
                 Notice{message:error}

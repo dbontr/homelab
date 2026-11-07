@@ -12,16 +12,18 @@ dx serve --platform web
 
 Requires a Rust toolchain with the `wasm32-unknown-unknown` target, Dioxus CLI 0.7, and cached Cargo dependencies. Use a local reverse proxy to serve the compiled console and Go API under one HTTPS origin. Dioxus is a web application; the API must be reachable under the same origin.
 
-Do not expose the gateway's MCP bearer secret to the browser. The browser uses a short-lived, read-only cookie authenticated through `POST /ui/session`. Go accepts GET access to selected native resources for that cookie and requires independent authorization for mutations.
+Do not expose the gateway's MCP bearer secret to the browser. The browser uses a short-lived cookie authenticated through `POST /ui/session`. Go accepts GET access to selected native resources; first-party recipe mutations require a CSRF token and an exact allowed Origin. The cookie cannot change cluster configuration, invoke MCP tools, or update other domain resources.
 
 The Go service must have `HOMELAB_CONSOLE_PASSPHRASE_FILE` pointing to an owner-only JSON passphrase verifier, provisioned independently of the administrator approval passphrase. Configure `HOMELAB_ALLOWED_ORIGINS` for the console's exact HTTPS origin. No browser session is available if the verifier is not configured.
 
 ## Views
 
-Overview, Projects, Compute, Software Library, Tasks, Learning, Health, Media and Administration consume live API responses. Unconfigured services return unavailable states; the UI does not fabricate readings, cluster health or demonstration data. Compute modes distinguish declared enrollment from verified online status.
+Overview, Projects, Compute, Software Library, Tasks, Learning, Health, Recipes, Media and Administration consume live API responses. The Recipes view supports structured editing, serving scaling, step-by-step cooking, planned meals, grocery consolidation, and versioned JSON import/export. Nutrition values retain measured/estimated/reported provenance. They are not automatically imported into Health food logs. Unconfigured services return unavailable states; the UI does not fabricate readings, cluster health or demonstration data. Compute modes distinguish declared enrollment from verified online status.
 
 ## Fidelity
 
 The palette, neutral colors, radius scale, buttons, cards, compact tables, and sidebar geometry are derived from shadcn/ui's neutral new-york family. The rendered DOM is produced by Rust/Dioxus; no React implementation is shipped. Visual equivalence depends on the same font metrics, CSS environment and component content. Compare browser screenshots with the matching upstream component reference before claiming pixel-level fidelity.
+
+The original Moonfin client is launched externally; the console does not implement media playback. The console can replace the existing homepage only when the optional `services.homelabConsole` NixOS module is explicitly enabled and `replaceHomepage = true`; neither flag is enabled by default. The Nix module expects a prebuilt Dioxus web output containing `index.html` and assets, not an arbitrary Rust source directory.
 
 See `THIRD_PARTY_NOTICES.md` for the upstream copyright license and `docs/console.md` at repository root for system interaction rules.
