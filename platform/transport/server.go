@@ -10,7 +10,6 @@ import (
  "net/http"
  "net/url"
  "os"
- "sort"
  "strconv"
  "strings"
  "time"
@@ -188,7 +187,9 @@ func(s *Server)toolList(r *http.Request)[]map[string]any{
  out:=s.localTools()
  for _,b:=range s.backend{
   var remote any
-  e:=s.forward(r.Context(),b,rpcRequest{JSONRPC:"2.0",ID:json.RawMessage("1"),Method:"tools/list"},&remote)
+  ctx,cancel:=context.WithTimeout(r.Context(),4*time.Second)
+  e:=s.forward(ctx,b,rpcRequest{JSONRPC:"2.0",ID:json.RawMessage("1"),Method:"tools/list"},&remote)
+  cancel()
   if e!=nil{continue}
   response,ok:=remote.(map[string]any);if !ok{continue}
   list,ok:=response["tools"].([]any);if !ok{continue}
@@ -228,8 +229,15 @@ func(s *Server)localTool(ctx context.Context,name string,raw json.RawMessage)(an
   if s.calendarURL==""{return nil,errors.New("calendar is not configured")}
   return calendar.Fetch(ctx,s.client,s.calendarURL)
  case "system_status":
-  names:=make([]string,0,len(s.backend));for _,b:=range s.backend{names=append(names,b.Name)};sort.Strings(names)
-  return map[string]any{"configured_integrations":names,"local":"available"},nil
+  statuses:=map[string]string{}
+  for _,b:=range s.backend{
+   checkCtx,cancel:=context.WithTimeout(ctx,4*time.Second)
+   var output any
+   e:=s.forward(checkCtx,b,rpcRequest{JSONRPC:"2.0",ID:json.RawMessage("1"),Method:"tools/list"},&output)
+   cancel()
+   if e!=nil{statuses[b.Name]="unavailable"}else{statuses[b.Name]="available"}
+  }
+  return map[string]any{"integrations":statuses,"local":"available"},nil
  default:return nil,fmt.Errorf("unknown tool: %s",name)
  }
 }
