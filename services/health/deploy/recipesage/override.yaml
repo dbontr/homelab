@@ -1,0 +1,16 @@
+services:
+  proxy:
+    ports: !override
+      - "127.0.0.1:7270:80"
+  api:
+    environment:
+      API_PUBLIC_BASE_URL: "http://127.0.0.1:7270/api"
+      GRIP_KEY: ${RECIPESAGE_GRIP_KEY:?set in secrets file}
+      POSTGRES_PASSWORD: ${RECIPESAGE_DB_PASS:?set in secrets file}
+      DATABASE_URL: "postgresql://recipesage_selfhost:${RECIPESAGE_DB_PASS:?set in secrets file}@postgres:5432/recipesage_selfhost"
+  postgres:
+    environment:
+      POSTGRES_PASSWORD: ${RECIPESAGE_DB_PASS:?set in secrets file}
+  pushpin:
+    environment:
+      GRIP_KEY: ${RECIPESAGE_GRIP_KEY:?set in secrets file}

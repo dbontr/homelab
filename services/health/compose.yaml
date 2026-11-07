@@ -1,0 +1,29 @@
+services:
+  personal-health-mcp:
+    build: .
+    restart: unless-stopped
+    environment:
+      MCP_TRANSPORT: http
+      MCP_LISTEN: 0.0.0.0:8080
+      MCP_API_TOKEN: ${MCP_API_TOKEN:?set MCP_API_TOKEN}
+      PERSONAL_HEALTH_DB_PATH: /data/health.db
+      MCP_ALLOWED_ORIGINS: ${MCP_ALLOWED_ORIGINS:-}
+      USDA_FDC_API_KEY: ${USDA_FDC_API_KEY:-}
+      GOOGLE_HEALTH_SYNC_INTERVAL: ${GOOGLE_HEALTH_SYNC_INTERVAL:-}
+      GOOGLE_HEALTH_SYNC_LOOKBACK: ${GOOGLE_HEALTH_SYNC_LOOKBACK:-168h}
+      GOOGLE_HEALTH_SYNC_TYPES: ${GOOGLE_HEALTH_SYNC_TYPES:-sleep,steps,weight,heart-rate,daily-resting-heart-rate}
+      GOOGLE_HEALTH_ACCESS_TOKEN: ${GOOGLE_HEALTH_ACCESS_TOKEN:-}
+      GOOGLE_HEALTH_REFRESH_TOKEN: ${GOOGLE_HEALTH_REFRESH_TOKEN:-}
+      GOOGLE_HEALTH_CLIENT_ID: ${GOOGLE_HEALTH_CLIENT_ID:-}
+      GOOGLE_HEALTH_CLIENT_SECRET: ${GOOGLE_HEALTH_CLIENT_SECRET:-}
+      RECIPE_SAGE_URL: ${RECIPE_SAGE_URL:-}
+      RECIPE_SAGE_TOKEN: ${RECIPE_SAGE_TOKEN:-}
+      RECIPE_SAGE_EMAIL: ${RECIPE_SAGE_EMAIL:-}
+      RECIPE_SAGE_PASSWORD: ${RECIPE_SAGE_PASSWORD:-}
+    ports:
+      - "127.0.0.1:8089:8080"
+    volumes:
+      - health_data:/data
+
+volumes:
+  health_data:
