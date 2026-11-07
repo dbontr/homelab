@@ -29,7 +29,7 @@ go vet ./...
 go build ./cmd/homelab-platform
 ```
 
-The complete workspace requires the highest Go version declared by its constituent modules. The root flake pins Nixpkgs and composes all five hosts; use the pinned Nix toolchain when evaluating or building infrastructure and application releases.
+The root Nix flake builds the Go platform directly with `nix build .#homelab-platform` and composes all five hosts. The complete Go workspace requires the highest Go version declared by its constituent modules. Use the pinned Nix toolchain when evaluating infrastructure and application releases.
 
 ## Operations
 
