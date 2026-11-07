@@ -1,0 +1,11 @@
+/Handoffs/
+/result
+*.pem
+*.key
+*.env
+secrets/
+*.age
+*.sops
+
+__pycache__/
+*.py[cod]
