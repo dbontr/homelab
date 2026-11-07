@@ -1,0 +1,322 @@
+{{- if .Values.controller.enabled }}
+{{- if or .Values.controller.access.issuer .Values.controller.access.audience .Values.controller.access.jwksURL .Values.controller.access.ownerEmailSecretName }}
+{{- if not (and .Values.controller.access.issuer .Values.controller.access.audience .Values.controller.access.jwksURL .Values.controller.access.ownerEmailSecretName) }}
+{{- fail "Cloudflare Access requires issuer, audience, JWKS URL and owner email Secret together" }}
+{{- end }}
+{{- end }}
+{{- if and .Values.controller.backupInterval (or (not .Values.controller.offsite.repository) (not .Values.controller.offsite.passwordSecretName)) }}
+{{- fail "controller encrypted backups require controller.offsite.repository and controller.offsite.passwordSecretName" }}
+{{- end }}
+{{- if and .Values.controller.backupInterval (hasPrefix "sftp:" .Values.controller.offsite.repository) (not .Values.controller.offsite.sshSecretName) }}
+{{- fail "SFTP backups require controller.offsite.sshSecretName with a pinned host key and a scoped identity" }}
+{{- end }}
+{{- if and .Values.controller.localGit.existingClaimName (or (not .Values.controller.localGit.authorName) (not .Values.controller.localGit.authorEmail)) }}
+{{- fail "controller local Git publication requires an explicit author name and email" }}
+{{- end }}
+{{- if and (not .Values.controller.localGit.existingClaimName) (or .Values.controller.localGit.authorName .Values.controller.localGit.authorEmail) }}
+{{- fail "controller local Git author settings require an existing persistent volume claim" }}
+{{- end }}
+{{- if and .Values.controller.offsite.sshSecretName (not .Values.controller.backupInterval) }}
+{{- fail "controller.offsite.sshSecretName requires encrypted backups to be enabled" }}
+{{- end }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: pwm-controller
+  namespace: {{ .Values.systemNamespace }}
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pwm-controller-state
+  namespace: {{ .Values.systemNamespace }}
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes: ["ReadWriteOnce"]
+  {{- if .Values.controller.storageClass }}
+  storageClassName: {{ .Values.controller.storageClass | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.controller.databaseSize }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pwm-controller
+  namespace: {{ .Values.systemNamespace }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: pwm-controller
+  template:
+    metadata:
+      labels:
+        app: pwm-controller
+    spec:
+      serviceAccountName: pwm-controller
+      {{- with .Values.controller.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      automountServiceAccountToken: false
+      {{- with .Values.controller.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsUser: 65534
+        runAsGroup: 65534
+        runAsNonRoot: true
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      {{- if .Values.controller.backupInterval }}
+      initContainers:
+        - name: restic-password
+          image: busybox:1.36
+          command:
+            - sh
+            - -ec
+            - |
+              umask 077
+              cat /input/password > /output/password
+              test -s /output/password
+              chmod 0600 /output/password
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            runAsGroup: 65534
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: restic-password-input
+              mountPath: /input
+              readOnly: true
+            - name: restic-password
+              mountPath: /output
+        {{- if .Values.controller.offsite.sshSecretName }}
+        - name: restic-ssh
+          image: busybox:1.36
+          command:
+            - sh
+            - -ec
+            - |
+              umask 077
+              mkdir -p /output/.ssh
+              test -s /input/id_ed25519
+              test -s /input/known_hosts
+              cp /input/id_ed25519 /output/.ssh/id_ed25519
+              cp /input/known_hosts /output/.ssh/known_hosts
+              cat > /output/.ssh/config <<'EOF'
+              Host *
+                IdentityFile /tmp/.ssh/id_ed25519
+                UserKnownHostsFile /tmp/.ssh/known_hosts
+                StrictHostKeyChecking yes
+                BatchMode yes
+                IdentitiesOnly yes
+                ServerAliveInterval 60
+                ServerAliveCountMax 4
+              EOF
+              chmod 0700 /output/.ssh
+              chmod 0600 /output/.ssh/id_ed25519 /output/.ssh/config
+              chmod 0644 /output/.ssh/known_hosts
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            runAsGroup: 65534
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: restic-ssh-input
+              mountPath: /input
+              readOnly: true
+            - name: scratch
+              mountPath: /output
+        {{- end }}
+      {{- end }}
+      containers:
+        - name: controller
+          image: {{ .Values.controller.image | quote }}
+          imagePullPolicy: {{ .Values.controller.imagePullPolicy }}
+          args: ["controller", "--listen", "0.0.0.0:8443"]
+          ports:
+            - containerPort: 8443
+              name: https
+          env:
+            - name: HOME
+              value: /tmp
+            - name: PWM_DB
+              value: /data/state.db
+            - name: PWM_ALLOW_REMOTE_LISTEN
+              value: "1"
+            - name: PWM_TLS_CERT_FILE
+              value: /tls/tls.crt
+            - name: PWM_TLS_KEY_FILE
+              value: /tls/tls.key
+            - name: PWM_ALLOWED_HOSTS
+              value: {{ .Values.controller.allowedHosts | quote }}
+            - name: PWM_ALLOWED_ORIGINS
+              value: {{ .Values.controller.allowedOrigins | quote }}
+            - name: PWM_ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.controller.secretName }}
+                  key: admin_token
+            {{- if .Values.controller.publicURL }}
+            - name: PWM_PUBLIC_URL
+              value: {{ .Values.controller.publicURL | quote }}
+            {{- end }}
+            {{- if .Values.controller.access.issuer }}
+            - name: PWM_ACCESS_ISSUER
+              value: {{ .Values.controller.access.issuer | quote }}
+            - name: PWM_ACCESS_AUDIENCE
+              value: {{ .Values.controller.access.audience | quote }}
+            - name: PWM_ACCESS_JWKS_URL
+              value: {{ .Values.controller.access.jwksURL | quote }}
+            - name: PWM_ACCESS_OWNER_EMAIL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.controller.access.ownerEmailSecretName }}
+                  key: email
+            {{- end }}
+            {{- if .Values.controller.githubPATSecretName }}
+            - name: PWM_GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.controller.githubPATSecretName }}
+                  key: token
+            {{- end }}
+            {{- if .Values.controller.localGit.existingClaimName }}
+            - name: PWM_GIT_LOCAL_ROOT
+              value: /git
+            - name: PWM_GIT_AUTHOR_NAME
+              value: {{ .Values.controller.localGit.authorName | quote }}
+            - name: PWM_GIT_AUTHOR_EMAIL
+              value: {{ .Values.controller.localGit.authorEmail | quote }}
+            {{- end }}
+            {{- if .Values.controller.backupInterval }}
+            - name: PWM_RESTIC_BACKUP_INTERVAL
+              value: {{ .Values.controller.backupInterval | quote }}
+            - name: PWM_RESTIC_REPOSITORY
+              value: {{ .Values.controller.offsite.repository | quote }}
+            - name: PWM_RESTIC_PASSWORD_FILE
+              value: /run/restic/password
+            {{- end }}
+          {{- if and .Values.controller.backupInterval .Values.controller.offsite.backendSecretName }}
+          envFrom:
+            - secretRef:
+                name: {{ .Values.controller.offsite.backendSecretName }}
+          {{- end }}
+          volumeMounts:
+            {{- if .Values.controller.backupInterval }}
+            - name: restic-password
+              mountPath: /run/restic
+              readOnly: true
+            {{- end }}
+            - name: state
+              mountPath: /data
+            - name: tls
+              mountPath: /tls
+              readOnly: true
+            - name: scratch
+              mountPath: /tmp
+            {{- if .Values.controller.localGit.existingClaimName }}
+            - name: git-repositories
+              mountPath: /git
+            {{- end }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            {{- toYaml .Values.controller.resources | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: https
+              scheme: HTTPS
+              httpHeaders:
+                - name: Host
+                  value: pwm-controller.{{ .Values.systemNamespace }}.svc.cluster.local
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: https
+              scheme: HTTPS
+              httpHeaders:
+                - name: Host
+                  value: pwm-controller.{{ .Values.systemNamespace }}.svc.cluster.local
+            initialDelaySeconds: 10
+            periodSeconds: 20
+      volumes:
+        {{- if .Values.controller.backupInterval }}
+        - name: restic-password-input
+          secret:
+            secretName: {{ .Values.controller.offsite.passwordSecretName }}
+            defaultMode: 292
+            items:
+              - key: password
+                path: password
+        - name: restic-password
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Mi
+        {{- if .Values.controller.offsite.sshSecretName }}
+        - name: restic-ssh-input
+          secret:
+            secretName: {{ .Values.controller.offsite.sshSecretName }}
+            defaultMode: 292
+            items:
+              - key: id_ed25519
+                path: id_ed25519
+              - key: known_hosts
+                path: known_hosts
+        {{- end }}
+        {{- end }}
+        {{- if .Values.controller.localGit.existingClaimName }}
+        - name: git-repositories
+          persistentVolumeClaim:
+            claimName: {{ .Values.controller.localGit.existingClaimName | quote }}
+        {{- end }}
+        - name: state
+          persistentVolumeClaim:
+            claimName: pwm-controller-state
+        - name: tls
+          secret:
+            secretName: {{ .Values.controller.tlsSecretName }}
+            defaultMode: 288
+        - name: scratch
+          emptyDir:
+            sizeLimit: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pwm-controller
+  namespace: {{ .Values.systemNamespace }}
+spec:
+  type: ClusterIP
+  selector:
+    app: pwm-controller
+  ports:
+    - name: https
+      port: 8443
+      targetPort: https
+{{- end }}

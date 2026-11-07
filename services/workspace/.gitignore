@@ -1,0 +1,10 @@
+# Build and local state
+*.db
+*.db-*
+.env
+/artifacts/
+/data/
+/project-workspace-controller
+/project-workspace-worker
+*.test
+*.out

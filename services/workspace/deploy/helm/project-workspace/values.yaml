@@ -1,0 +1,94 @@
+systemNamespace: pwm-system
+
+controller:
+  enabled: true
+  image: ghcr.io/dbontr/project-workspace-controller:main
+  imagePullPolicy: Always
+  imagePullSecrets: []
+  secretName: pwm-controller-credentials
+  tlsSecretName: pwm-controller-tls
+  publicURL: ""
+  allowedHosts: "pwm-controller,pwm-controller.pwm-system.svc.cluster.local"
+  allowedOrigins: "https://pwm-controller.pwm-system.svc.cluster.local"
+  databaseSize: 50Gi
+  storageClass: ""
+  nodeSelector: {}
+  githubPATSecretName: ""
+  access:
+    issuer: ""
+    audience: ""
+    jwksURL: ""
+    ownerEmailSecretName: ""
+  localGit:
+    existingClaimName: ""
+    authorName: ""
+    authorEmail: ""
+  backupInterval: ""
+  offsite:
+    repository: ""
+    passwordSecretName: ""
+    backendSecretName: ""
+    sshSecretName: ""
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "2"
+      memory: 2Gi
+
+worker:
+  enabled: false
+  image: ghcr.io/dbontr/project-workspace-worker:main
+  imagePullPolicy: Always
+  imagePullSecrets: []
+  nodeSelector: {}
+  workloadNode: ""
+  name: research-agent
+  projectID: research
+  instanceID: ""
+  workloadNamespace: pwm-research
+  tokenSecretName: pwm-worker-research-credentials
+  controllerCASecretName: pwm-controller-ca
+  cpuCapacity: 8
+  memoryCapacityMB: 16384
+  maxJobs: 4
+  workspaceStorage: 10Gi
+  workspaceStorageClass: ""
+  allowedImages: "debian:bookworm-slim"
+  deviceManifestConfigMap: ""
+  gpuRuntimeClassName: ""
+  workspaceImagePullSecret: ""
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: "2"
+      memory: 1Gi
+
+quota:
+  cpu: "16"
+  memory: 32Gi
+  storage: 500Gi
+  maxPods: "64"
+  maxPVCs: "64"
+  maxJobs: "64"
+
+# Kubernetes device-plugin registration is opt-in and owned by the workspace release.
+# Drivers and the container runtime remain responsibilities of the host.
+hardware:
+  namespace: kube-system
+  nvidia:
+    enabled: false
+    image: nvcr.io/nvidia/k8s-device-plugin:v0.19.1
+    imagePullPolicy: IfNotPresent
+    nodeSelector: {}
+    runtimeClassName: nvidia-cdi
+    priorityClassName: system-node-critical
+    deviceIDStrategy: index
+  intelNpu:
+    enabled: false
+    image: intel/intel-npu-plugin:0.36.0
+    imagePullPolicy: IfNotPresent
+    nodeSelector: {}
