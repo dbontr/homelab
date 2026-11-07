@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Health · Dashboard</title>
+<style>
+:root{color-scheme:light dark;--border:#929ba3;--accent:#277d74;font:14px/1.48 system-ui,sans-serif}
+*{box-sizing:border-box}body{background:Canvas;color:CanvasText;margin:0;padding:14px}
+main{max-width:1100px;margin:auto}h1{font-size:20px;margin:0}h2{font-size:16px;margin:5px 0 9px}
+p{color:GrayText;margin:3px 0 12px}label{display:grid;gap:3px;font-size:13px;font-weight:600}
+input,select,button{padding:7px 9px;border:1px solid var(--border);border-radius:7px;
+ color:CanvasText;background:Canvas;font:inherit}
+button{cursor:pointer}button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+section{border:1px solid var(--border);border-radius:11px;padding:13px;margin:12px 0}
+.controls{display:flex;gap:9px;flex-wrap:wrap;align-items:end}.controls label{flex:1;min-width:120px}
+.controls button{align-self:end}.primary{background:var(--accent);color:white}
+svg{width:100%;height:265px;display:block;border-radius:9px;background:color-mix(in srgb,CanvasText 3%,Canvas)}
+#legend{display:flex;gap:12px;flex-wrap:wrap;padding:10px 0;font-size:12px}
+#goalGrid{width:100%;border-collapse:collapse}td,th{border-bottom:1px solid var(--border);padding:7px;text-align:left}
+th{font-size:12px}td{font-variant-numeric:tabular-nums}
+.status{min-height:22px;font-size:13px}small{font-size:12px;color:GrayText}
+@media(max-width:600px){.controls label{min-width:120px}svg{height:220px}}
+</style>
+</head>
+<body><main>
+<header><h1>Health dashboard</h1><p>Observations are shown with original units and provenance. Missing measurements are not counted as zero.</p></header>
+<section>
+<h2>Measurements</h2>
+<div class="controls">
+<label>Domain<select id="domain">
+<option value="sleep">Sleep</option><option value="biometric">Biometrics</option>
+<option value="nutrition">Nutrition</option><option value="activity">Activity</option>
+<option value="cognition">Cognition</option><option value="workout">Workout</option>
+</select></label>
+<label>Metric<input id="metric" value="duration_hours"></label>
+<label>From (UTC)<input id="start" type="date"></label>
+<label>To (UTC)<input id="end" type="date"></label>
+<button id="load" class="primary">Plot</button>
+</div>
+<svg id="plot" role="img" aria-label="Time series of health measurements" viewBox="0 0 900 250"></svg>
+<div id="legend"></div><small id="chartNote"></small>
+</section>
+<section>
+<h2>Nutrition targets</h2>
+<div class="controls">
+<label>Day (UTC)<input type="date" id="day"></label>
+<button id="refresh">Load nutrient totals</button>
+</div>
+<div style="overflow-x:auto"><table id="goalGrid"><thead><tr>
+<th scope="col">Nutrient</th><th scope="col">Logged</th><th scope="col">Target</th><th scope="col">Coverage</th>
+</tr></thead><tbody id="rows"></tbody></table></div>
+<h2>Change a target</h2>
+<div class="controls"><label>Metric<input id="goalMetric" placeholder="protein"></label>
+<label>Target<input id="goalValue" type="number" step="any" placeholder="100"></label>
+<label>Unit<input id="goalUnit" placeholder="g"></label>
+<button id="setGoal">Save target</button></div>
+<small>Targets apply to logged measurements, not automatically inferred dietary requirements.</small>
+</section>
+<p class="status" id="status" role="status" aria-live="polite"></p>
+</main>
+<script>
+'use strict';
+const $=id=>document.getElementById(id);
+let pending=new Map(),seq=1;
+function request(method,params={}){
+ const id=seq++;return new Promise((resolve,reject)=>{
+  pending.set(id,{resolve,reject});window.parent.postMessage({jsonrpc:'2.0',id,method,params},'*');
+  setTimeout(()=>{if(pending.has(id)){pending.delete(id);reject(new Error('Host did not respond'));}},12000);
+ });
+}
+function notify(method,params={}){window.parent.postMessage({jsonrpc:'2.0',method,params},'*');}
+async function call(name,args={}){
+ const res=await request('tools/call',{name,arguments:args});
+ if(res?.isError)throw Error(res.content?.[0]?.text||'Tool failed');
+ return res.structuredContent||JSON.parse(res.content?.[0]?.text||'{}');
+}
+function setStatus(text,error=false){$('status').textContent=text;$('status').style.color=error?'#c94b4b':'';}
+const isoDay=d=>d.toISOString().slice(0,10);
+const today=new Date(),start=new Date(today.getTime()-30*86400000);
+$('day').value=isoDay(today);$('end').value=isoDay(today);$('start').value=isoDay(start);
+const defaults={sleep:'duration_hours',biometric:'weight',nutrition:'protein',activity:'steps_interval',cognition:'simple_reaction_ms',workout:'session'};
+$('domain').onchange=()=>{$('metric').value=defaults[$('domain').value]||'';};
+function svgElement(type,attrs={}){
+ const el=document.createElementNS('http://www.w3.org/2000/svg',type);
+ Object.entries(attrs).forEach(([k,v])=>el.setAttribute(k,String(v)));return el;
+}
+function draw(points){
+ const svg=$('plot');svg.replaceChildren();
+ const legend=$('legend');legend.replaceChildren();
+ if(!points.length){$('chartNote').textContent='No measurements in this period.';return;}
+ const units=[...new Set(points.map(p=>p.unit))];
+ if(units.length!==1){
+  $('chartNote').textContent='Multiple units detected: '+units.join(', ')+'. Plot each unit separately.';
+  return;
+ }
+ const filtered=points.filter(p=>Number.isFinite(p.value)&&Number.isFinite(Date.parse(p.at)));
+ if(!filtered.length){$('chartNote').textContent='No plottable measurements.';return;}
+ const values=filtered.map(p=>p.value),times=filtered.map(p=>Date.parse(p.at));
+ let minY=Math.min(...values),maxY=Math.max(...values);
+ if(minY===maxY){const pad=Math.max(Math.abs(minY)*0.1,1);minY-=pad;maxY+=pad;}
+ const lo=Math.min(...times),hi=Math.max(...times),span=Math.max(hi-lo,1);
+ const toX=t=>55+(t-lo)/span*790,toY=v=>220-(v-minY)/(maxY-minY)*185;
+ for(let i=0;i<=4;i++){
+  const y=35+i*46.25;
+  svg.append(svgElement('line',{x1:55,y1:y,x2:845,y2:y,stroke:'currentColor','stroke-opacity':0.13}));
+  const text=svgElement('text',{x:49,y:y+4,'text-anchor':'end','font-size':12,fill:'currentColor'});
+  text.textContent=(maxY-i*(maxY-minY)/4).toFixed(1);svg.append(text);
+ }
+ const line=svgElement('polyline',{fill:'none',stroke:'#168779','stroke-width':2.5,
+   points:filtered.map((p,i)=>toX(times[i]).toFixed(1)+','+toY(p.value).toFixed(1)).join(' ')});
+ svg.append(line);
+ for(let i=0;i<filtered.length;i++){
+  const p=filtered[i];if(i>150&&i%Math.ceil(filtered.length/150)!==0)continue;
+  const circle=svgElement('circle',{cx:toX(times[i]),cy:toY(p.value),r:3,fill:'#168779'});
+  const label=svgElement('title');label.textContent=p.at+' — '+p.value+' '+p.unit+' ('+p.method+', '+p.source+')';
+  circle.append(label);svg.append(circle);
+ }
+ const metadata=document.createElement('span');metadata.textContent=filtered.length+' observations · '+units[0]+
+  ' · source/method available per point';
+ legend.append(metadata);
+ $('chartNote').textContent='Dated source values; no missing days are interpolated. Potentially uneven sampling intervals.';
+}
+async function load(){
+ setStatus('');try{
+  const d=await call('health_metric_series',{domain:$('domain').value,
+    metric:$('metric').value.trim(),start_date:$('start').value,end_date:$('end').value,limit:10000});
+  draw(d.points||[]);
+ }catch(e){setStatus(e.message,true);}
+}
+async function nutrition(){
+ setStatus('');
+ try{
+  const [totals,goals]=await Promise.all([
+   call('health_nutrient_daily',{date:$('day').value}),call('health_goal_list',{})]);
+  const all=new Set([...Object.keys(goals||{}),...Object.keys(totals.units_and_totals||{})]);
+  const rows=$('rows');rows.replaceChildren();
+  for(const name of [...all].sort()){
+   const goal=goals[name],available=totals.units_and_totals?.[name];
+   const tr=document.createElement('tr');
+   const labeled=document.createElement('th');labeled.scope='row';labeled.textContent=name;tr.append(labeled);
+   const observations=document.createElement('td');const target=document.createElement('td'),coverage=document.createElement('td');
+   observations.textContent=available?Object.entries(available).map(([unit,amount])=>amount.toFixed(2)+' '+unit).join(', '):'Unknown';
+   target.textContent=goal?goal.value+' '+goal.unit:'Not set';
+   coverage.textContent=available?'Logged, may be incomplete':'Missing';
+   tr.append(observations,target,coverage);rows.append(tr);
+  }
+  if(!all.size){const r=document.createElement('tr'),c=document.createElement('td');c.colSpan=4;c.textContent='No nutrient logs or targets for this day.';r.append(c);rows.append(r);}
+ }catch(e){setStatus(e.message,true);}
+}
+$('load').onclick=load;$('refresh').onclick=nutrition;
+$('setGoal').onclick=async()=>{
+ try{
+  const metric=$('goalMetric').value.trim(),value=Number($('goalValue').value),unit=$('goalUnit').value.trim();
+  if(!metric||!unit||!$('goalValue').value||!Number.isFinite(value))throw Error('Enter metric, finite value and unit.');
+  await call('health_goal_set',{metric,value,unit});setStatus('Target saved.');await nutrition();
+ }catch(e){setStatus(e.message,true);}
+};
+window.addEventListener('message',e=>{
+ if(e.source!==window.parent||e.data?.jsonrpc!=='2.0')return;
+ const m=e.data;if(m.id!==undefined&&pending.has(m.id)){
+  const p=pending.get(m.id);pending.delete(m.id);
+  if(m.error)p.reject(Error(m.error.message));else p.resolve(m.result);
+ }
+});
+(async()=>{
+ try{
+  await request('ui/initialize',{appInfo:{name:'Health Dashboard',version:'0.1.0'},
+    appCapabilities:{availableDisplayModes:['inline','fullscreen']},protocolVersion:'2026-01-26'});
+  notify('ui/notifications/initialized');await Promise.all([load(),nutrition()]);
+ }catch(e){setStatus(e.message,true);}
+})();
+</script></body></html>

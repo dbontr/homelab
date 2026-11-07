@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Health · Simple reaction time</title>
+<style>
+:root{color-scheme:light dark;font:14px/1.5 system-ui,sans-serif;--edge:#8997a5}
+*{box-sizing:border-box}body{margin:0;padding:18px;background:Canvas;color:CanvasText}main{max-width:720px;margin:auto}
+h1{font-size:20px;margin:0}p{color:GrayText;margin:8px 0 14px}
+button{font:inherit;padding:10px 15px;border-radius:9px;border:1px solid var(--edge);cursor:pointer;background:Canvas;color:CanvasText}
+button:focus-visible{outline:3px solid #16746b;outline-offset:3px}
+#pad{display:grid;place-items:center;min-height:250px;border:2px solid var(--edge);border-radius:13px;font-weight:600;font-size:24px;text-align:center;user-select:none;cursor:pointer}
+#pad.ready{background:#d5b75b;color:#151515}#pad.go{background:#217c50;color:white}#pad.done{background:#94b7c0;color:#111}
+.controls{display:flex;gap:9px;margin:13px 0;align-items:center;flex-wrap:wrap}
+#progress,#status{min-height:23px}dl{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin:15px 0}
+dt{font-weight:600}dd{margin:0}footer{border-top:1px solid var(--edge);padding-top:8px}
+</style></head>
+<body>
+<main>
+<h1>Simple visual reaction time</h1>
+<p>Complete five trials. Tap or click as soon as the square turns green. Early responses do not count. Timing varies with display refresh, browser performance, and input hardware.</p>
+<div id="pad" role="button" tabindex="0" aria-label="Reaction test target">Start to begin</div>
+<div class="controls"><button id="start" type="button">Start five trials</button><button id="save" type="button" disabled>Save results</button><strong id="progress"></strong></div>
+<dl><dt>Median reaction</dt><dd id="median">—</dd><dt>Trials completed</dt><dd id="trials">0 / 5</dd></dl>
+<p id="status" role="status" aria-live="polite"></p>
+<footer><p>This is a repeated personal performance task, not a medical or neuropsychological examination. Compare results only when equipment and test conditions are similar.</p></footer>
+</main>
+<script>
+'use strict';
+const $=id=>document.getElementById(id);
+const pending=new Map();let seq=1;let initialized=false;
+let state='idle',values=[],goAt=0,timer=null;
+function rpc(method,params={}){
+ const id=seq++;return new Promise((resolve,reject)=>{
+  pending.set(id,{resolve,reject});
+  window.parent.postMessage({jsonrpc:'2.0',id,method,params},'*');
+  setTimeout(()=>{if(pending.has(id)){pending.delete(id);reject(new Error('Host did not respond'));}},12000);
+ });
+}
+function notify(method,params={}){window.parent.postMessage({jsonrpc:'2.0',method,params},'*');}
+async function call(name,args){const res=await rpc('tools/call',{name,arguments:args});if(res?.isError)throw Error(res.content?.[0]?.text||'Failed');return JSON.parse(res.content?.[0]?.text||'{}');}
+function status(s){$('status').textContent=s;}
+function medianOf(a){const b=[...a].sort((x,y)=>x-y),n=b.length;return n%2?b[(n-1)/2]:(b[n/2-1]+b[n/2])/2;}
+function paint(cls,text){$('pad').className=cls;$('pad').textContent=text;}
+function next(){
+ if(values.length>=5){
+  state='done';paint('done','Complete');
+  const median=medianOf(values);
+  $('median').textContent=median.toFixed(1)+' ms';
+  $('save').disabled=false;
+  $('start').disabled=false;status('Results ready for review and saving.');return;
+ }
+ state='waiting';paint('ready','Wait for green');$('progress').textContent='Trial '+(values.length+1)+' of 5';
+ timer=setTimeout(()=>{
+  state='go';goAt=performance.now();paint('go','TAP NOW');
+ },1000+Math.random()*2500);
+}
+function start(){
+ clearTimeout(timer);values=[];goAt=0;state='idle';
+ $('start').disabled=true;$('save').disabled=true;$('median').textContent='—';
+ $('trials').textContent='0 / 5';status('Waiting for the signal.');
+ next();
+}
+function tap(){
+ if(state==='idle'||state==='done'){start();return;}
+ if(state==='waiting'){
+  clearTimeout(timer);state='false_start';paint('ready','Too soon');
+  status('Early response. Restarting this trial.');
+  timer=setTimeout(next,800);return;
+ }
+ if(state==='go'){
+  const elapsed=performance.now()-goAt;
+  if(elapsed<80||elapsed>1500){state='false_start';paint('ready','Out-of-range trial');timer=setTimeout(next,800);return;}
+  values.push(elapsed);
+  $('trials').textContent=values.length+' / 5';state='pause';paint('','Recorded: '+elapsed.toFixed(0)+' ms');
+  timer=setTimeout(next,700);
+ }
+}
+$('start').onclick=start;
+$('pad').onclick=tap;
+$('pad').onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();tap();}};
+$('save').onclick=async()=>{
+ if(values.length!==5)return;
+ $('save').disabled=true;
+ const median=medianOf(values);
+ const mean=values.reduce((a,b)=>a+b,0)/values.length;
+ try{
+  await call('health_record_add',{domain:'cognition',metric:'simple_reaction_ms',value:median,unit:'ms',
+    source:'browser_visual_reaction_test',method:'estimated',
+    metadata:{trials_ms:values.map(x=>Math.round(x*10)/10),mean_ms:mean,protocol:'five trial visual response',
+      constraints:'Browser and display latency; not clinically standardized'}});
+  status('Saved median and individual trials to your health record.');
+ }catch(e){$('save').disabled=false;status(e.message);}
+};
+window.addEventListener('message',event=>{
+ if(event.source!==window.parent||event.data?.jsonrpc!=='2.0')return;
+ const m=event.data;
+ if(m.id!==undefined&&pending.has(m.id)){
+  const p=pending.get(m.id);pending.delete(m.id);
+  if(m.error)p.reject(new Error(m.error.message));else p.resolve(m.result);
+ }
+});
+(async()=>{
+ try{
+  await rpc('ui/initialize',{appInfo:{name:'Health cognitive assessment',version:'0.1.0'},appCapabilities:{availableDisplayModes:['inline','fullscreen']},protocolVersion:'2026-01-26'});
+  initialized=true;notify('ui/notifications/initialized');status('Ready.');
+ }catch(e){status(e.message);}
+})();
+</script></body></html>
