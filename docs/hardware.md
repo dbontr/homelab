@@ -4,7 +4,7 @@ Hardware identity and permission are separate. The inventory in `hardware.nix` d
 
 ## Enrolled compute nodes
 
-An enrolled node is an explicitly managed NixOS host. Add an entry under `nodes` with a unique `id`, `mode = "enrolled"`, its `system` architecture and `role = "compute"`. Add the corresponding `infrastructure/hosts/<id>/configuration.nix` NixOS definition. The flake derives host outputs from enrolled entries; no separate machine-name list is maintained.
+An enrolled node is an explicitly managed NixOS host. Add an entry under `nodes` with a unique `id`, `mode = "enrolled"`, its `system` architecture and `role = "compute"`. Supply the compute node `nodeIP` and `lanInterface` network settings, and add the corresponding `infrastructure/hosts/<id>/configuration.nix` NixOS definition. Import the shared `infrastructure/modules/compute-worker.nix` worker template from the host module with its inventory-backed `hardwareNode`. The flake derives host outputs from enrolled entries; the compute worker template reads device-independent network and cluster settings from the same inventory. No separate machine-name list is maintained.
 
 Remove the inventory entry to remove a host from the build graph. This does not decommission an existing host, delete disks, remove workloads or revoke credentials. Those operations require independent authorization.
 

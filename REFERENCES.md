@@ -11,3 +11,4 @@
 - [RFC 7636: Proof Key for Code Exchange by OAuth Public Clients](https://www.rfc-editor.org/rfc/rfc7636) — IETF. Used for: OAuth authorization-code PKCE and one-time state.
 - [RFC 6749: The OAuth 2.0 Authorization Framework](https://www.rfc-editor.org/rfc/rfc6749) — IETF. Used for: provider authorization-code flow boundaries.
 - [RFC 2104: HMAC: Keyed-Hashing for Message Authentication](https://www.rfc-editor.org/rfc/rfc2104) — IETF. Used for: operation-bound approval grants.
+- [NIST SP 800-38D: Recommendation for Block Cipher Modes of Operation — Galois/Counter Mode (GCM)](https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication800-38d.pdf) — NIST. Used for: authenticated encryption of locally stored provider credentials.

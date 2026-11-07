@@ -14,6 +14,7 @@ The Go platform exposes authenticated loopback HTTP endpoints. Native JSON and M
 - GET /v1/calendar: read-only event definitions from an optional iCalendar sharing link
 - GET /v1/devices: declared device inventory and access policy, not live device status
 - GET /v1/nodes: enrolled and agentless node inventory, not live node status
+- GET /v1/software: read the Workspace-backed approved image, software, and program catalogs
 - GET /v1/tools: discover local and configured backend capabilities using the MCP tool catalog
 - POST /v1/tools/{name}/call: invoke the same authorized operation as MCP, with a JSON body containing `arguments`; the result uses MCP tool-content semantics
 - GET /v1/compute/profiles: list reusable, versioned build configurations
@@ -27,7 +28,7 @@ All endpoints other than /healthz require a bearer token supplied through a prot
 
 ## MCP
 
-The primary endpoint is POST /mcp. Local tools correspond to the task, goal, rule, report and status functions. The node_inventory tool lists declared host roles. The compute_profile_list, compute_profile_get and compute_profile_save tools operate on the same persisted build configurations as the native API. The device_inventory tool lists declared hardware constraints without making a physical connection. The calendar_feed tool is available only when a calendar sharing link is configured. The media_search, media_requests and media_request tools are available only when the Seerr adapter is configured. The approval_status tool reports whether a specific administrator request remains pending or approved. Configured Workspace, Learning, and Health tools can be exposed with collision-free internal prefixes without creating separate user-facing assistants.
+The primary endpoint is POST /mcp. Local tools correspond to the task, goal, rule, report and status functions. The node_inventory tool lists declared host roles. The compute_profile_list, compute_profile_get and compute_profile_save tools operate on the same persisted build configurations as the native API. The software_catalog tool combines the Workspace-approved image, software and program pools without duplicating their persisted state. The device_inventory tool lists declared hardware constraints without making a physical connection. The calendar_feed tool is available only when a calendar sharing link is configured. The media_search, media_requests and media_request tools are available only when the Seerr adapter is configured. The approval_status tool reports whether a specific administrator request remains pending or approved. Configured Workspace, Learning, and Health tools can be exposed with collision-free internal prefixes without creating separate user-facing assistants.
 
 MCP tool calls are not a privileged deployment pipeline. Upstream mutations use explicitly configured credentials and report failures rather than fabricating success.
 

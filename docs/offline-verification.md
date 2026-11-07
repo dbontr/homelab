@@ -29,4 +29,4 @@ A successful core check is not evidence that all modules build. Successful Nix e
 - Accounts: validate allowlisted OAuth providers, PKCE and one-time callback state without displaying authorization codes, private verifiers or access tokens.
 - Failure: test unavailable integration backends and report errors rather than unverified success.
 
-Build profiles are saved definitions, not permission to run a command. The security package provides reusable authorization contracts but no configured production credential broker or cluster executor. Connecting them requires independent owner authentication, credential storage, protected IPC and executor-side lease policy.
+Build profiles are saved definitions, not permission to run a command. The security package provides reusable authorization contracts but no configured production credential broker or cluster executor. The credential library supplies encrypted, owner-only file storage and mock-tested OAuth token exchange. Operational integration still requires independent owner authentication, protected IPC, a secure key-unlock mechanism, and executor-side lease policy.
