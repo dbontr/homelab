@@ -4,7 +4,7 @@
 
 Git is authoritative for source and declarative desired state. Protected credentials, runtime records, media and application databases remain outside Git.
 
-The running fleet is not changed by repository commits. A separate development and release pipeline, administered through NanoKVM for the present configuration, validates and activates accepted revisions. The main MCP does not inherit the release controller's credentials.
+The running fleet is not changed by repository commits. Saturn does not run a repository self-push timer; source delivery is handled by the independent release process. A separate development and release pipeline, administered through NanoKVM for the present configuration, validates and activates accepted revisions. The main MCP does not inherit the release controller's credentials.
 
 ## Platform service
 

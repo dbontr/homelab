@@ -2,7 +2,7 @@
 {
   imports = [
     ./hardware-configuration.nix
-    ./github-sync.nix
+    ./github-access.nix
     ./management-access.nix
     ./router.nix
     ./router-rollout.nix
