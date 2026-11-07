@@ -1,22 +1,40 @@
-# Personal Computing Platform
+# Homelab
 
-A NixOS and Go monorepo for a single-user, self-hosted computing environment. The system integrates infrastructure, personal planning, research execution, learning, health, media, and observability behind one authenticated API and MCP interface. Each capability remains usable independently of the MCP transport.
+A self-hosted personal computing platform implemented in NixOS and Go. Source code, infrastructure, and deployment definitions are maintained together. The system presents one personal assistant interface without making the operation of any service dependent on ChatGPT or the MCP transport.
 
-## Design
+## Repository layout
 
-- One repository owns application source, host configuration, build definitions, and deployment manifests.
-- Nix declares the five NixOS hosts and their services; Go implements application logic.
-- The personal model is unified: people, goals, projects, resources, tasks, schedules, observations, and events can reference each other through stable identifiers.
-- Business operations are exposed through Go interfaces. HTTP and MCP are adapters, not authoritative implementations.
-- Stateless services may be replaced independently; persistent storage remains scoped to its authoritative owner.
-- Saturn retains routing, identity, application services, and K3s control plane. Worker nodes execute isolated compute workloads.
-- Cloudflare remains infrastructure plumbing and is not an MCP capability.
-- The release controller is external to the primary MCP and validates revisions before applying NixOS or Kubernetes changes.
-- Media files are outside Git and are never discarded during deployment.
-- No local language model is required; AI reasoning is provided by a connected client.
+| Path | Responsibility |
+| --- | --- |
+| `flake.nix` | Declarative configuration for Saturn, Jupiter, Venus, Mercury and Janus |
+| `infrastructure/` | NixOS routing, networking, diagnostics, media and host configuration |
+| `services/workspace/` | Distributed compute, Git projects and libraries, hardware and artifacts |
+| `services/learning/` | Adaptive teaching and knowledge evidence |
+| `services/health/` | Health, nutrition, training and RecipeSage integration |
+| `platform/` | Unified native API, personal planning, weekly reporting and primary MCP gateway |
+| `nixosModules/` | NixOS integration for the platform application |
 
-## Implementation
+The Go platform uses a private, atomic JSON state store for one owner. It supports tasks, goals, personal rules, quick-win recommendations, weekly reports and a read-only iCalendar subscription. A minimum of three completed tasks per day counts tasks regardless of size; long-term goal progress is measured separately. Calendar events with recurrence rules are returned as definitions and are not yet expanded into dated occurrences.
 
-Application source and infrastructure migrate into this repository without altering the running system. A release becomes authoritative only after acceptance testing and an explicit service cutover. Original repositories may be retired after the new repository serves their functionality.
+Existing Go services remain buildable as separate modules in a Go workspace. The gateway can discover and invoke their MCP tools behind one authenticated endpoint when their private URLs are configured. Their runtime identities, permissions, and stores remain independently protected.
+
+## Development
+
+The platform requires Go 1.23 or later and uses only the Go standard library:
+
+```sh
+cd platform
+go test ./...
+go vet ./...
+go build ./cmd/homelab-platform
+```
+
+The complete workspace requires the highest Go version declared by its constituent modules. The root flake pins Nixpkgs and composes all five hosts; use the pinned Nix toolchain when evaluating or building infrastructure and application releases.
+
+## Operations
+
+The platform service is defined in `nixosModules/platform.nix` and is disabled by default. When enabled it binds to loopback, requires a protected owner token, stores state outside Git, and can read a Proton Calendar sharing URL from a systemd credential. Its native API and MCP endpoint are not directly exposed to the network. The development and release pipeline is separate from the main MCP's operational capabilities.
+
+Source consolidation is not equivalent to runtime acceptance. The existing operating services remain authoritative until the integrated deployment has passed build, authorization, recovery, and cutover checks. No media files or running deployments are modified by source imports.
 
 See [architecture](docs/architecture.md), [interfaces](docs/interfaces.md), [deployment](docs/deployment.md), and [references](REFERENCES.md).

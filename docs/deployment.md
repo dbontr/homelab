@@ -1,22 +1,29 @@
 # Deployment
 
-## Source of authority
+## Authority and boundaries
 
-Git is authoritative for reviewed source and declarative desired state. Protected runtime configuration, credentials, media, application databases, and artifacts are not part of the source repository.
+Git is authoritative for source and declarative desired state. Protected credentials, runtime records, media and application databases remain outside Git.
 
-The active fleet is not automatically changed by commits to this repository. Deployments are performed through a separate development and release mechanism. NanoKVM is an administration channel, not a runtime dependency or secret-management system.
+The running fleet is not changed by repository commits. A separate development and release pipeline, administered through NanoKVM for the present configuration, validates and activates accepted revisions. The main MCP does not inherit the release controller's credentials.
+
+## Platform service
+
+The NixOS platform module is located at nixosModules/platform.nix and is disabled unless explicitly enabled. It packages the standard-library Go application, binds to loopback and reads credentials from systemd-protected files. Configure services.homelabPlatform.tokenFile with a token containing at least 32 characters. The optional calendarURLFile contains the read-only Proton Calendar sharing link and must not be committed.
+
+The service's private state is stored under /var/lib/homelab-platform. Optional backend MCP URLs and token files are configured independently for Workspace, Learning and Health. Protected network ingress must authenticate remote clients before routing traffic to the platform.
 
 ## Validation gates
 
-1. Build and test each Go module with the toolchain required by its go.mod.
-2. Evaluate all five NixOS host configurations from the root flake.
-3. Verify API and MCP discovery, authentication, tool execution, worker isolation, and error handling.
-4. Confirm media mount points and network routing invariants before activation.
-5. Apply one independently replaceable service at a time, verify health, and retain the prior executable or NixOS generation for rollback.
-6. Cut over primary MCP ingress only after the consolidated endpoint passes live acceptance.
+1. Build and test the Go platform and each imported Go module using its declared toolchain.
+2. Evaluate every host configuration from the root Nix flake.
+3. Verify API and MCP discovery, authorized/unauthorized requests, backend failure behavior and calendar access.
+4. Verify that media mount points, networking, and VPN confinement are unaffected.
+5. Validate application state behavior, independent worker failure and service rollback.
+6. Activate one replaceable component at a time and verify the live result before routing production traffic.
+7. Retire source repositories and rename the successor only after operational acceptance.
 
-The platform source currently preserves existing service deployment definitions as imported code. Runtime activation of consolidated services and decommissioning of originals are separate, testable operations.
+The imported upstream service modules retain existing runtime release references. Replacing those with locally built, verified packages is part of runtime integration, not implied by code placement.
 
 ## Recovery
 
-Source rollbacks use Git revisions and NixOS generations. Media and other uniquely valuable runtime data must not be deleted as part of the transition. Automatic state backups are not enabled by this repository.
+Revisions and NixOS generations permit rollback of code and configuration. Existing media and uniquely valuable data must not be deleted during integration. This repository does not enable automatic state backup scheduling.
