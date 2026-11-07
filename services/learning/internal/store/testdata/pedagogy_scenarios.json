@@ -1,0 +1,307 @@
+{
+  "schema_version": 1,
+  "kind": "synthetic_contract_cases",
+  "purpose": "Reproducible storage and orchestration behavior checks using curated judgments; not a measured improvement in human learning",
+  "cases": [
+    {
+      "id": "limit-definition",
+      "domain": "mathematics",
+      "concept": "derivative",
+      "topic": "limit construction",
+      "prompt": "What makes the derivative of f at x a mathematical definition rather than an algebraic shortcut?",
+      "options": [
+        {
+          "id": "a",
+          "label": "The limit of a difference quotient as its increment tends to zero"
+        },
+        {
+          "id": "b",
+          "label": "Substituting a zero increment directly into the quotient"
+        },
+        {
+          "id": "c",
+          "label": "Expanding the numerator without taking a limit"
+        }
+      ],
+      "correct_option": "a",
+      "learner_option": "a",
+      "learner_explanation": "The limit is unnecessary because ordinary algebra already gives the instantaneous derivative.",
+      "reasoning_verdict": "gap",
+      "confidence": 0.95,
+      "expected_probe": "gap",
+      "expected_action": "plan_repair",
+      "known_misconception": "confusing algebraic simplification with the existence of a limit",
+      "independent_transfer": "Explain when the derivative of |x| at x=0 fails to exist."
+    },
+    {
+      "id": "vector-rotation",
+      "domain": "physics",
+      "concept": "basis-invariance",
+      "topic": "coordinate invariance",
+      "prompt": "Why is the Euclidean length of a physical vector unchanged by a rotation of its coordinate axes?",
+      "options": [
+        {
+          "id": "a",
+          "label": "Its Cartesian components remain separately unchanged"
+        },
+        {
+          "id": "b",
+          "label": "Orthogonal rotations preserve the dot product"
+        },
+        {
+          "id": "c",
+          "label": "The vector must point along the rotation axis"
+        }
+      ],
+      "correct_option": "b",
+      "learner_option": "b",
+      "learner_explanation": "The physical vector and each of its numeric components remain exactly unchanged after rotating coordinates.",
+      "reasoning_verdict": "gap",
+      "confidence": 0.9,
+      "expected_probe": "gap",
+      "expected_action": "plan_repair",
+      "known_misconception": "confusing vector invariance with invariance of coordinate components",
+      "independent_transfer": "Derive the dot-product invariance under a two-dimensional rotation matrix."
+    },
+    {
+      "id": "junction-current",
+      "domain": "electrical engineering",
+      "concept": "kirchhoff",
+      "topic": "charge conservation",
+      "prompt": "In a steady circuit, why do the currents entering a node sum to the currents leaving it?",
+      "options": [
+        {
+          "id": "a",
+          "label": "Because the voltage across every resistor is identical"
+        },
+        {
+          "id": "b",
+          "label": "Because the power dissipated in each branch is fixed"
+        },
+        {
+          "id": "c",
+          "label": "Because charge does not accumulate at the node"
+        }
+      ],
+      "correct_option": "c",
+      "learner_option": "c",
+      "learner_explanation": "Some charge is consumed as it passes each resistor, but the node immediately creates more.",
+      "reasoning_verdict": "gap",
+      "confidence": 0.86,
+      "expected_probe": "gap",
+      "expected_action": "plan_repair",
+      "known_misconception": "treating charge as consumed by resistance",
+      "independent_transfer": "Analyze an RC transient where charge temporarily accumulates on a capacitor plate."
+    },
+    {
+      "id": "population-selection",
+      "domain": "biology",
+      "concept": "selection",
+      "topic": "population genetics",
+      "prompt": "Which change is a plausible population-level result of natural selection?",
+      "options": [
+        {
+          "id": "a",
+          "label": "A favorable inherited allele becomes more frequent over generations"
+        },
+        {
+          "id": "b",
+          "label": "An individual deliberately changes its genome to meet a challenge"
+        },
+        {
+          "id": "c",
+          "label": "Every mutation improves fitness in all environments"
+        }
+      ],
+      "correct_option": "a",
+      "learner_option": "a",
+      "learner_explanation": "Organisms decide to develop a favorable inherited trait and then transmit it to offspring.",
+      "reasoning_verdict": "gap",
+      "confidence": 0.92,
+      "expected_probe": "gap",
+      "expected_action": "plan_repair",
+      "known_misconception": "intentional acquisition mistaken for population-level selection",
+      "independent_transfer": "Predict allele-frequency change when environmental selection pressure reverses."
+    },
+    {
+      "id": "source-corroboration",
+      "domain": "history",
+      "concept": "source-criticism",
+      "topic": "historical inference",
+      "prompt": "What is the best initial method for evaluating two conflicting eyewitness accounts?",
+      "options": [
+        {
+          "id": "a",
+          "label": "Assume the earlier account must be true"
+        },
+        {
+          "id": "b",
+          "label": "Compare provenance, context, incentives, and independent corroboration"
+        },
+        {
+          "id": "c",
+          "label": "Average the accounts into one factual statement"
+        }
+      ],
+      "correct_option": "b",
+      "learner_option": "b",
+      "learner_explanation": "If any two accounts mention the same event, they prove every proposed cause of that event.",
+      "reasoning_verdict": "uncertain",
+      "confidence": 0.61,
+      "expected_probe": "uncertain",
+      "expected_action": "plan_repair",
+      "known_misconception": "corroborated observation confused with corroborated causal explanation",
+      "independent_transfer": "Evaluate two independently authored but politically interested accounts of a treaty."
+    },
+    {
+      "id": "safe-solder-joint",
+      "domain": "practical crafts",
+      "concept": "solder-inspection",
+      "topic": "electronics workmanship",
+      "prompt": "After soldering adjacent pins, which procedure best checks for an unintended solder bridge?",
+      "options": [
+        {
+          "id": "a",
+          "label": "Assume transparent flux residue is an electrical short"
+        },
+        {
+          "id": "b",
+          "label": "Power on immediately to test whether anything overheats"
+        },
+        {
+          "id": "c",
+          "label": "Inspect with magnification and check electrical continuity as appropriate"
+        }
+      ],
+      "correct_option": "c",
+      "learner_option": "a",
+      "learner_explanation": "Any shiny transparent area on solder mask means a conductive connection has formed.",
+      "reasoning_verdict": "gap",
+      "confidence": 0.94,
+      "expected_probe": "gap",
+      "expected_action": "plan_repair",
+      "known_misconception": "visual flux residue equated with a conductive bridge",
+      "independent_transfer": "Distinguish a cold joint, flux residue, and a conductive short using safe inspection."
+    },
+    {
+      "id": "algorithmic-complexity",
+      "domain": "computer science",
+      "concept": "complexity",
+      "topic": "asymptotic analysis",
+      "prompt": "Why is binary search on a sorted array logarithmic in the worst case?",
+      "options": [
+        {
+          "id": "a",
+          "label": "The unresolved search interval is at most halved on each comparison"
+        },
+        {
+          "id": "b",
+          "label": "Every array element is inspected once"
+        },
+        {
+          "id": "c",
+          "label": "A binary tree guarantees constant time for every input"
+        }
+      ],
+      "correct_option": "a",
+      "learner_option": "a",
+      "learner_explanation": "After k iterations at most n/2^k positions remain, so k is proportional to log2(n).",
+      "reasoning_verdict": "supported",
+      "confidence": 0.74,
+      "expected_probe": "supported",
+      "expected_action": "advance_phase",
+      "known_misconception": "",
+      "independent_transfer": "Prove the bound when n is not a power of two and the target is absent."
+    },
+    {
+      "id": "subject-agreement",
+      "domain": "linguistics",
+      "concept": "agreement",
+      "topic": "syntax",
+      "prompt": "In the sentence 'The collection of manuscripts is rare', why is 'is' singular?",
+      "options": [
+        {
+          "id": "a",
+          "label": "'Manuscripts' is the nearest noun"
+        },
+        {
+          "id": "b",
+          "label": "The head of the subject noun phrase is singular 'collection'"
+        },
+        {
+          "id": "c",
+          "label": "Every noun in the phrase is grammatically singular"
+        }
+      ],
+      "correct_option": "b",
+      "learner_option": "b",
+      "learner_explanation": "The head noun 'collection' determines the subject's number; the prepositional phrase does not change it.",
+      "reasoning_verdict": "supported",
+      "confidence": 0.82,
+      "expected_probe": "supported",
+      "expected_action": "advance_phase",
+      "known_misconception": "",
+      "independent_transfer": "Explain agreement in 'The results of the experiment are unexpected'."
+    },
+    {
+      "id": "probability-guess",
+      "domain": "probability",
+      "concept": "conditional-probability",
+      "topic": "Bayesian inference",
+      "prompt": "When new evidence arrives, which quantity must account for the likelihood of that evidence?",
+      "options": [
+        {
+          "id": "a",
+          "label": "The posterior probability"
+        },
+        {
+          "id": "b",
+          "label": "The prior probability alone"
+        },
+        {
+          "id": "c",
+          "label": "The sample mean of unrelated observations"
+        }
+      ],
+      "correct_option": "a",
+      "learner_option": "a",
+      "learner_explanation": "",
+      "reasoning_verdict": "",
+      "confidence": 0.99,
+      "expected_probe": "uncertain",
+      "expected_action": "plan_repair",
+      "known_misconception": "unsubstantiated correct selection",
+      "independent_transfer": "Explain the base-rate effect in a medical screening example without assuming probabilities."
+    },
+    {
+      "id": "logical-implication",
+      "domain": "logic",
+      "concept": "implication",
+      "topic": "valid inference",
+      "prompt": "Given P implies Q and P, which conclusion is valid?",
+      "options": [
+        {
+          "id": "a",
+          "label": "Not Q"
+        },
+        {
+          "id": "b",
+          "label": "Q"
+        },
+        {
+          "id": "c",
+          "label": "Not P"
+        }
+      ],
+      "correct_option": "b",
+      "learner_option": "b",
+      "learner_explanation": "The conjunction of P implies Q and P entails Q by modus ponens.",
+      "reasoning_verdict": "supported",
+      "confidence": 0.86,
+      "expected_probe": "supported",
+      "expected_action": "advance_phase",
+      "known_misconception": "",
+      "independent_transfer": "Explain why Q and P implies Q do not entail P."
+    }
+  ]
+}
