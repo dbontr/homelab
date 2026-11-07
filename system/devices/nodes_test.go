@@ -10,7 +10,7 @@ import (
 func TestNodeMembershipFollowsConfiguration(t *testing.T) {
     nodes, err := NewNodes([]Node{
         {ID:"saturn",Mode:ModeEnrolled,Role:"controller",System:"x86_64-linux"},
-        {ID:"venus",Mode:ModeEnrolled,Role:"compute",System:"x86_64-linux"},
+        {ID:"venus",Mode:ModeEnrolled,Role:"compute",System:"x86_64-linux",NodeIP:"10.77.30.230",LANInterface:"enp2s0"},
         {ID:"external",Mode:ModeSSH},
     })
     if err != nil { t.Fatal(err) }
@@ -36,12 +36,13 @@ func TestNodeInventoryValidity(t *testing.T) {
         {{ID:"bad_name",Mode:ModeSSH}},
         {{ID:"test",Mode:ModeEnrolled,Role:"compute",System:""}},
         {{ID:"test",Mode:ModeEnrolled,Role:"unknown",System:"x86_64-linux"}},
+        {{ID:"test",Mode:ModeEnrolled,Role:"compute",System:"x86_64-linux"}},
         {{ID:"test",Mode:ModeSSH,Role:"compute"}},
     } {
         if _,err:=NewNodes(items);err==nil {t.Fatalf("invalid nodes accepted: %+v",items)}
     }
     path:=filepath.Join(t.TempDir(),"nodes.json")
-    raw,_:=json.Marshal([]Node{{ID:"jupiter",Mode:ModeEnrolled,Role:"compute",System:"x86_64-linux"}})
+    raw,_:=json.Marshal([]Node{{ID:"jupiter",Mode:ModeEnrolled,Role:"compute",System:"x86_64-linux",NodeIP:"10.77.30.230",LANInterface:"enp2s0"}})
     if err:=os.WriteFile(path,raw,0600);err!=nil {t.Fatal(err)}
     nodes,err:=LoadNodes(path)
     if err!=nil || len(nodes.List())!=1 {t.Fatalf("load nodes: %v",err)}

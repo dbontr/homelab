@@ -17,10 +17,15 @@
           builtins.elem node.role [ "controller" "compute" ]
           && builtins.elem node.system [ "x86_64-linux" "aarch64-linux" ]
           && builtins.pathExists (./infrastructure/hosts + ("/" + node.id + "/configuration.nix"))
+          && (node.role != "compute" || (
+            node ? nodeIP && node ? lanInterface
+            && builtins.match "^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$" node.nodeIP != null
+            && node.lanInterface != ""
+          ))
         ));
       hostConfiguration = node: nixpkgs.lib.nixosSystem {
         system = node.system;
-        specialArgs.workspaceMcp = ./system/compute;
+        specialArgs = { workspaceMcp = ./system/compute; hardwareNode = node; };
         modules = [ (./infrastructure/hosts + ("/" + node.id + "/configuration.nix")) ];
       };
     in

@@ -49,7 +49,7 @@ func TestSoftwareLibraryUsesWorkspacePoolWithoutCopyingState(t *testing.T){
 func TestNodeInventoryIsConsistentAcrossInterfaces(t *testing.T){
  db,err:=store.Open(filepath.Join(t.TempDir(),"state.json"),"UTC");if err!=nil{t.Fatal(err)}
  server,err:=New(db,strings.Repeat("n",40),nil);if err!=nil{t.Fatal(err)}
- nodes,err:=devices.NewNodes([]devices.Node{{ID:"jupiter",Mode:devices.ModeEnrolled,Role:"compute",System:"x86_64-linux"},{ID:"external",Mode:devices.ModeSSH}})
+ nodes,err:=devices.NewNodes([]devices.Node{{ID:"jupiter",Mode:devices.ModeEnrolled,Role:"compute",System:"x86_64-linux",NodeIP:"10.77.30.229",LANInterface:"enp129s0"},{ID:"external",Mode:devices.ModeSSH}})
  if err!=nil{t.Fatal(err)}
  server.SetNodeCatalog(nodes)
  token:=strings.Repeat("n",40)

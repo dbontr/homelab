@@ -15,9 +15,34 @@ type Node struct {
     Mode   string `json:"mode"`
     Role   string `json:"role,omitempty"`
     System string `json:"system,omitempty"`
+    NodeIP string `json:"nodeIP,omitempty"`
+    LANInterface string `json:"lanInterface,omitempty"`
 }
 
 type NodeCatalog struct{ items []Node }
+
+var networkInterface = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_.-]{0,31}package devices
+
+import (
+    "bytes"
+    "encoding/json"
+    "errors"
+    "fmt"
+    "io"
+    "os"
+    "sort"
+)
+
+type Node struct {
+    ID     string `json:"id"`
+    Mode   string `json:"mode"`
+    Role   string `json:"role,omitempty"`
+    System string `json:"system,omitempty"`
+    NodeIP string `json:"nodeIP,omitempty"`
+    LANInterface string `json:"lanInterface,omitempty"`
+}
+
+)
 
 func NewNodes(nodes []Node) (*NodeCatalog, error) {
     seen := make(map[string]bool, len(nodes))
@@ -35,8 +60,15 @@ func NewNodes(nodes []Node) (*NodeCatalog, error) {
             if node.System != "x86_64-linux" && node.System != "aarch64-linux" {
                 return nil, fmt.Errorf("enrolled node %s requires a supported NixOS system", node.ID)
             }
+            if node.Role == "compute" {
+                if ip := net.ParseIP(node.NodeIP); ip == nil || ip.To4() == nil || !networkInterface.MatchString(node.LANInterface) {
+                    return nil, fmt.Errorf("enrolled compute node %s requires valid network configuration", node.ID)
+                }
+            } else if node.NodeIP != "" || node.LANInterface != "" {
+                return nil, fmt.Errorf("controller node %s must not declare compute networking", node.ID)
+            }
         case ModeSSH:
-            if node.Role != "" || node.System != "" {
+            if node.Role != "" || node.System != "" || node.NodeIP != "" || node.LANInterface != "" {
                 return nil, fmt.Errorf("SSH node %s cannot specify managed compute configuration", node.ID)
             }
         default:
