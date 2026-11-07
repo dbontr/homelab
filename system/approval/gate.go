@@ -252,7 +252,7 @@ func redact(v any) any {
 		out := make(map[string]any, len(typed))
 		for key, value := range typed {
 			lower := strings.ToLower(key)
-			if strings.Contains(lower, "password") || strings.Contains(lower, "secret") || strings.Contains(lower, "token") || strings.Contains(lower, "credential") || strings.Contains(lower, "api_key") || strings.Contains(lower, "authorization") || strings.Contains(lower, "passcode") {
+			if strings.Contains(lower, "password") || strings.Contains(lower, "secret") || strings.Contains(lower, "token") || strings.Contains(lower, "credential") || strings.Contains(lower, "api_key") || strings.Contains(lower, "authorization") || strings.Contains(lower, "passcode") || strings.Contains(lower, "private_key") || lower == "code" || lower == "cookie" || lower == "refresh" || lower == "session" {
 				out[key] = "[REDACTED]"
 			} else {
 				out[key] = redact(value)

@@ -1,6 +1,9 @@
 package calendar
 
 import (
+ "context"
+ "net/http"
+ "time"
  "strings"
  "testing"
 )
@@ -12,4 +15,14 @@ func TestRecurringEventsRemainExplicit(t *testing.T){
 func TestValidateSource(t *testing.T){
  if _,e:=Parse("bad");e==nil{t.Fatal("accepted invalid feed")}
  if e:=ValidateURL("http://example.com/share");e==nil{t.Fatal("accepted non-TLS URL")}
+}
+
+
+func TestCalendarFailureDoesNotExposePrivateSharingURL(t *testing.T) {
+ secretURL:="https://unreachable.invalid/calendar?private_token=do-not-expose"
+ client:=&http.Client{Timeout:100*time.Millisecond}
+ _,err:=Fetch(context.Background(),client,secretURL)
+ if err==nil||strings.Contains(err.Error(),"do-not-expose")||strings.Contains(err.Error(),secretURL){
+    t.Fatalf("calendar error exposed private link or reported success: %v",err)
+ }
 }

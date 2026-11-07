@@ -36,3 +36,13 @@ A managed GPU, NPU, FPGA or other accelerator may use Rust for narrowly scoped d
 The `system/security` package defines short-lived HMAC grants bound to a target, action and canonical operation arguments. An independent executor records consumed grants to prevent replay after restart. The MCP gateway must neither issue these grants nor own the executor's key. The executable handler registry rejects operations the owner has not explicitly registered.
 
 The OAuth broker implements PKCE for configured HTTPS providers and a loopback callback. Authorization codes, verifier values and resulting access tokens must remain in the trusted local credential process. The broker library can exchange an OAuth authorization code with a configured HTTPS token endpoint and encrypt the token response in an AES-256-GCM vault, returning only a credential handle. An operator-only Unix-socket approval handler verifies a locally stored PBKDF2-HMAC-SHA256 passphrase record and issues short-lived operation grants for explicitly allowlisted operations. The verifier applies a bounded lockout and the socket requires a private directory and owner-only file mode. This code has no production daemon, user-facing unlock prompt, live credential provider, or protected gateway-to-executor IPC. Independent executor authorization remains a release requirement. The repository test suite exercises mock operations without live credentials.
+
+## External request boundaries
+
+The API rejects browser requests with an unapproved `Origin` and requires explicit HTTPS origins for remote clients. Non-browser clients without an `Origin` header continue to use bearer authentication. The NixOS option `services.homelabPlatform.allowedOrigins` configures exact permitted origins; wildcard origins are not supported.
+
+Federated MCP calls are restricted to operations advertised by their backend. Upstream replies have a bounded size and must match the request's JSON-RPC ID. Sensitive Workspace operations require local administrator approval, while unrecognized Workspace operations fail closed into an approval-required state. Upstream error details and private calendar-sharing URLs are not returned to API callers.
+
+Tool arguments use canonical JSON for both approval and execution. Duplicate keys, excessive nesting and numeric rounding ambiguities are rejected. An approved operation cannot acquire different arguments through a second JSON interpretation.
+
+The local administrator challenge is a gateway-level policy check. It is not a replacement for independently enforced authorization inside compute, software-installation, GitHub or cluster executors.
