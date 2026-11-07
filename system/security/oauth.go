@@ -15,6 +15,7 @@ import (
 type Provider struct {
  Name string
  AuthorizeURL string
+ TokenURL string
  ClientID string
  RedirectURL string
  Scopes []string
