@@ -29,8 +29,8 @@ func SSHArguments(catalog *devices.Catalog,deviceID,probe,knownHosts string)([]s
  if !filepath.IsAbs(knownHosts)||filepath.Clean(knownHosts)!=knownHosts{
    return nil,errors.New("a trusted absolute known-hosts file is required")
  }
- info,err:=os.Stat(knownHosts)
- if err!=nil||!info.Mode().IsRegular(){return nil,errors.New("trusted host-key inventory is unavailable")}
+ info,err:=os.Lstat(knownHosts)
+ if err!=nil||!info.Mode().IsRegular()||info.Mode().Perm()&0022!=0{return nil,errors.New("trusted host-key inventory is unavailable")}
  if catalog==nil{return nil,errors.New("device inventory is required")}
  for _,d:=range catalog.List() {
   if d.ID!=deviceID{continue}

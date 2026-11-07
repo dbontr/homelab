@@ -39,6 +39,11 @@ type Authority struct {
 func NewAuthority(key []byte, replayFile string) (*Authority,error) {
  if len(key)<32 || replayFile=="" {return nil,errors.New("executor requires a secret key and durable replay file")}
  a:=&Authority{key:append([]byte(nil),key...),path:replayFile,used:map[string]int64{},now:time.Now}
+ info,err:=os.Lstat(replayFile)
+ if err==nil && (!info.Mode().IsRegular()||info.Mode().Perm()&0077!=0){
+   return nil,errors.New("executor replay file must be an owner-only regular file")
+ }
+ if err!=nil&&!errors.Is(err,os.ErrNotExist){return nil,err}
  b,err:=os.ReadFile(replayFile)
  if errors.Is(err,os.ErrNotExist) {return a,nil}
  if err!=nil{return nil,err}

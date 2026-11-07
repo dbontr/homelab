@@ -4,6 +4,7 @@ import (
  "context"
  "encoding/json"
  "net/url"
+ "os"
  "path/filepath"
  "strings"
  "testing"
@@ -60,4 +61,10 @@ func TestOAuthBrokerKeepsVerifierPrivate(t *testing.T) {
  if err!=nil{t.Fatal(err)}
  if err:=broker.Finish(context.Background(),state,"code",func(context.Context,Provider,string,string)error{return nil});err==nil||calls!=1{t.Fatal("state reused")}
  if _,err:=NewOAuthBroker([]Provider{{Name:"unsafe",AuthorizeURL:"http://provider.example/auth",ClientID:"a",RedirectURL:"https://evil.example/callback"}});err==nil{t.Fatal("insecure provider accepted")}
+}
+
+func TestRejectsInsecureExecutorReplayFile(t *testing.T){
+ path:=filepath.Join(t.TempDir(),"spent.json")
+ if err:=os.WriteFile(path,[]byte("{}"),0644);err!=nil{t.Fatal(err)}
+ if _,err:=NewAuthority([]byte(strings.Repeat("k",32)),path);err==nil{t.Fatal("insecure replay file accepted")}
 }
