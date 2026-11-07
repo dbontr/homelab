@@ -21,7 +21,7 @@ import (
  "github.com/dbontr/homelab-new/system/store"
 )
 type Backend struct { Name string; URL string; Token string }
-type Server struct { db *store.Store; token string; backend []Backend; client *http.Client; calendarURL string; gate *approval.Gate; media *media.Client; deviceCatalog *devices.Catalog; nodeCatalog *devices.NodeCatalog; profiles *profiles.Registry }
+type Server struct { db *store.Store; token string; backend []Backend; client *http.Client; calendarURL string; gate *approval.Gate; allowedOrigins map[string]struct{}; media *media.Client; deviceCatalog *devices.Catalog; nodeCatalog *devices.NodeCatalog; profiles *profiles.Registry }
 
 func New(db *store.Store,token string,backends []Backend)(*Server,error){
  if db==nil||token==""{return nil,errors.New("store and access token are required")}
@@ -75,6 +75,7 @@ func(s *Server) Handler()http.Handler{
   w.Header().Set("Cache-Control","no-store")
   w.Header().Set("X-Content-Type-Options","nosniff")
   if r.URL.Path!="/healthz" {
+   if !s.originAllowed(r) {writeError(w,http.StatusForbidden,"origin not permitted");return}
    auth:=r.Header.Get("Authorization")
    if !strings.HasPrefix(auth,"Bearer ")||subtle.ConstantTimeCompare([]byte(strings.TrimPrefix(auth,"Bearer ")),[]byte(s.token))!=1{
     writeError(w,401,"authorization required");return

@@ -41,6 +41,9 @@ func main(){
         v,enabled,e:=configuredBackend(b.name,b.upper);if e!=nil{log.Fatal(e)};if enabled{backends=append(backends,v)}
     }
     server,e:=transport.New(db,token,backends);if e!=nil{log.Fatal(e)}
+    if raw:=os.Getenv("HOMELAB_ALLOWED_ORIGINS");raw!=""{
+        if err:=server.SetAllowedOrigins(strings.Split(raw,","));err!=nil{log.Fatal(err)}
+    }
     profileFile:=os.Getenv("HOMELAB_PROFILES_FILE")
     if profileFile=="" {profileFile=filepath.Join(filepath.Dir(state),"profiles.json")}
     registry,e:=profiles.Open(profileFile);if e!=nil{log.Fatal(e)}
