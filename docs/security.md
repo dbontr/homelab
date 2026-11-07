@@ -29,3 +29,10 @@ Media data and all runtime credentials remain outside Git. The absence of automa
 The hardware inventory is declarative and is not proof of connectivity. The KV260 inventory currently permits SSH connection and inspection only, with compute allocation disabled. These are entry-specific policy values, not restrictions associated with hardware models or owners. SSH equipment can be added or removed without changing Go code; it is never enrolled as a NixOS host or compute worker. An ordinary non-root SSH login must enforce host-key verification and explicitly permitted operations. No worker or controller is installed remotely through this mode. The catalog has no SSH login target until the owner configures one. Credentials and trusted host keys remain outside Git. The SSH account does not imply permission to install software, elevate privileges, reprogram the FPGA, change firmware, or use USB/JTAG. The actual device executor must enforce authorization and bind the real device lease to the configured device identity; preflight catalog checks are not sufficient by themselves.
 
 An owned GPU, NPU, FPGA or other accelerator may use Rust for narrowly scoped device work when necessary. Rust does not confer any additional operating-system permissions.
+
+
+## Independent execution and provider credentials
+
+The `system/security` package defines short-lived HMAC grants bound to a target, action and canonical operation arguments. An independent executor records consumed grants to prevent replay after restart. The MCP gateway must neither issue these grants nor own the executor's key. The executable handler registry rejects operations the owner has not explicitly registered.
+
+The OAuth broker implements PKCE for configured HTTPS providers and a loopback callback. Authorization codes, verifier values and resulting access tokens must remain in the trusted local credential process. Provider token exchange, owner passphrase or passkey authentication, durable token storage and production executor wiring are separate acceptance requirements. The repository test suite exercises mock operations without live credentials.
