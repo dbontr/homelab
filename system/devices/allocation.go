@@ -21,6 +21,17 @@ func (c *Catalog) ValidateAllocation(raw json.RawMessage) error {
 			return errors.New("invalid hardware allocation arguments")
 		}
 	}
+	for kind, count := range request.Hardware {
+		if count < 0 {
+			return fmt.Errorf("hardware count for %s must not be negative", kind)
+		}
+		if kind != "fpga" && kind != "gpu" && kind != "npu" && kind != "usb" {
+			return fmt.Errorf("unsupported hardware kind: %s", kind)
+		}
+	}
+	if request.NodeID != "" && request.USBNode != "" && request.NodeID != request.USBNode {
+		return errors.New("USB passthrough node does not match the requested worker")
+	}
 	if n := request.Hardware["fpga"]; n > 0 {
 		if request.NodeID == "" {
 			return errors.New("FPGA allocation requires a target node")
