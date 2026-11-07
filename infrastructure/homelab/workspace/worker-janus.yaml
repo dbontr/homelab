@@ -1,0 +1,28 @@
+# Site-specific placement, not application implementation. No credentials belong in this file.
+# Built from dbontr/workspace-mcp commit 9967ebc7c96393bc92415869260c746f3bfa239c.
+controller:
+  enabled: false
+worker:
+  enabled: true
+  image: docker.io/library/project-workspace-worker:git-9967ebc7c963
+  imagePullPolicy: IfNotPresent
+  name: pwm-janus
+  projectID: workspace-mcp
+  instanceID: ws-janus
+  workloadNamespace: pwm-workspace-janus
+  tokenSecretName: pwm-worker-janus-credentials
+  nodeSelector:
+    kubernetes.io/hostname: janus
+  workloadNode: janus
+  cpuCapacity: 6
+  memoryCapacityMB: 8192
+  maxJobs: 2
+  allowedImages: "debian:bookworm-slim"
+  workspaceStorage: 10Gi
+quota:
+  cpu: "10"
+  memory: 12Gi
+  storage: 100Gi
+  maxPods: "16"
+  maxPVCs: "16"
+  maxJobs: "16"

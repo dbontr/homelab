@@ -1,0 +1,28 @@
+# Site-specific placement, not application implementation. No credentials belong in this file.
+# Built from dbontr/workspace-mcp commit 9967ebc7c96393bc92415869260c746f3bfa239c.
+controller:
+  enabled: false
+worker:
+  enabled: true
+  image: docker.io/library/project-workspace-worker:git-9967ebc7c963
+  imagePullPolicy: IfNotPresent
+  name: pwm-venus
+  projectID: workspace-mcp
+  instanceID: ws-venus
+  workloadNamespace: pwm-workspace-venus
+  tokenSecretName: pwm-worker-venus-credentials
+  nodeSelector:
+    kubernetes.io/hostname: venus
+  workloadNode: venus
+  cpuCapacity: 2
+  memoryCapacityMB: 4096
+  maxJobs: 1
+  allowedImages: "debian:bookworm-slim"
+  workspaceStorage: 10Gi
+quota:
+  cpu: "4"
+  memory: 6Gi
+  storage: 100Gi
+  maxPods: "16"
+  maxPVCs: "16"
+  maxJobs: "16"

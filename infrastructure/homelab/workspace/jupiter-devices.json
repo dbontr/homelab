@@ -1,0 +1,17 @@
+{
+  "devices": [
+    {
+      "id": "jupiter-gpu-0",
+      "kind": "gpu",
+      "model": "NVIDIA RTX 5070",
+      "memory_mb": 12227,
+      "resource": "nvidia.com/gpu"
+    },
+    {
+      "id": "jupiter-npu-0",
+      "kind": "npu",
+      "model": "Intel NPU",
+      "resource": "npu.intel.com/accel"
+    }
+  ]
+}
