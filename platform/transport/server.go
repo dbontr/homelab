@@ -13,11 +13,13 @@ import (
  "strconv"
  "strings"
  "time"
+ "github.com/dbontr/homelab-new/platform/approval"
  "github.com/dbontr/homelab-new/platform/calendar"
+ "github.com/dbontr/homelab-new/platform/media"
  "github.com/dbontr/homelab-new/platform/store"
 )
 type Backend struct { Name string; URL string; Token string }
-type Server struct { db *store.Store; token string; backend []Backend; client *http.Client; calendarURL string }
+type Server struct { db *store.Store; token string; backend []Backend; client *http.Client; calendarURL string; gate *approval.Gate; media *media.Client }
 
 func New(db *store.Store,token string,backends []Backend)(*Server,error){
  if db==nil||token==""{return nil,errors.New("store and access token are required")}
@@ -29,7 +31,7 @@ func New(db *store.Store,token string,backends []Backend)(*Server,error){
   if u.User!=nil||u.RawQuery!=""||u.Fragment!=""{return nil,errors.New("invalid backend URL")}
   if u.Scheme!="https"&&!(u.Scheme=="http"&&(u.Hostname()=="localhost"||u.Hostname()=="127.0.0.1"||u.Hostname()=="::1")){return nil,errors.New("backend must use HTTPS or loopback HTTP")}
  }
- return &Server{db:db,token:token,backend:backends,client:&http.Client{Timeout:120*time.Second,CheckRedirect:func(_ *http.Request,_ []*http.Request)error{return errors.New("backend redirects are disabled")}}},nil
+ return &Server{db:db,token:token,backend:backends,gate:approval.New(),client:&http.Client{Timeout:120*time.Second,CheckRedirect:func(_ *http.Request,_ []*http.Request)error{return errors.New("backend redirects are disabled")}}},nil
 }
 func(s *Server) SetCalendarURL(raw string)error{
  if err:=calendar.ValidateURL(raw);err!=nil{return err}
@@ -50,6 +52,9 @@ func(s *Server) Handler()http.Handler{
  mux.HandleFunc("GET /v1/recommendations",s.recommendations)
  mux.HandleFunc("GET /v1/reports/weekly",s.weekly)
  mux.HandleFunc("GET /v1/calendar",s.calendarEvents)
+ mux.HandleFunc("GET /v1/media/search",s.mediaSearch)
+ mux.HandleFunc("GET /v1/media/requests",s.mediaRequests)
+ mux.HandleFunc("POST /v1/media/requests",s.mediaRequests)
  return http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){
   w.Header().Set("Cache-Control","no-store")
   w.Header().Set("X-Content-Type-Options","nosniff")
@@ -145,6 +150,7 @@ func(s *Server)mcp(w http.ResponseWriter,r *http.Request){
  case "tools/call":
   var p struct {Name string `json:"name"`; Arguments json.RawMessage `json:"arguments"`}
   if e:=json.Unmarshal(req.Params,&p);e!=nil||p.Name==""{s.rpc(w,req.ID,nil,failure(-32602,"tool name required"));return}
+  if output,allowed:=s.checkPrivilege(p.Name,p.Arguments);!allowed{s.rpc(w,req.ID,output,nil);return}
   for _,b:=range s.backend{
    prefix:=b.Name+"__"
    if strings.HasPrefix(p.Name,prefix){
@@ -179,8 +185,13 @@ func(s *Server)localTools()[]map[string]any{
   tool("rule_list","List personal rules",map[string]any{}),
   tool("weekly_report","Summarize recorded task completions",map[string]any{"week_of":prop("string")}),
   tool("system_status","List configured integrations",map[string]any{}),
+  tool("approval_status","Check an administrator approval",map[string]any{"id":prop("string")},"id"),
  }
  if s.calendarURL!=""{tools=append(tools,tool("calendar_feed","Read Proton Calendar event definitions; recurrence rules are not expanded",map[string]any{}))}
+ if s.media!=nil{tools=append(tools,
+  tool("media_search","Search movies and television through Seerr",map[string]any{"query":prop("string")},"query"),
+  tool("media_requests","List Seerr media requests",map[string]any{}),
+  tool("media_request","Request a movie or television season through Seerr",map[string]any{"mediaType":prop("string"),"mediaId":prop("integer"),"seasons":map[string]any{"type":"array","items":prop("integer")},"is4k":prop("boolean")},"mediaType","mediaId"))}
  return tools
 }
 func(s *Server)toolList(r *http.Request)[]map[string]any{
@@ -203,6 +214,7 @@ func(s *Server)toolList(r *http.Request)[]map[string]any{
  return out
 }
 func(s *Server)localTool(ctx context.Context,name string,raw json.RawMessage)(any,error){
+ if s.media!=nil&&(name=="media_search"||name=="media_request"||name=="media_requests"){return s.mediaTool(ctx,name,raw)}
  var args struct{
   store.TaskInput
   ID string `json:"id"`
@@ -225,6 +237,7 @@ func(s *Server)localTool(ctx context.Context,name string,raw json.RawMessage)(an
  case "rule_set":return s.db.SetRule(args.Key,args.Text,args.Kind)
  case "rule_list":return s.db.Rules(),nil
  case "weekly_report":return s.db.Report(args.WeekOf)
+ case "approval_status":return s.privilegeStatus(args.ID)
  case "calendar_feed":
   if s.calendarURL==""{return nil,errors.New("calendar is not configured")}
   return calendar.Fetch(ctx,s.client,s.calendarURL)
