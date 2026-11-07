@@ -96,9 +96,12 @@ struct HealthGoal {
     unit: String,
 }
 
-fn current_record(records: &[Recipe], selected: Option<String>) -> Option<Recipe> {
+fn current_record(records: &[Recipe], selected: Option<String>, query: &str) -> Option<Recipe> {
     selected.and_then(|id| records.iter().find(|recipe| recipe.id == id).cloned())
-        .or_else(|| records.first().cloned())
+        .or_else(|| records.iter().find(|recipe| {
+            query.is_empty() || format!("{} {} {}", recipe.title, recipe.summary, recipe.tags.join(" "))
+                .to_lowercase().contains(query)
+        }).cloned())
 }
 
 #[component]
@@ -166,7 +169,7 @@ pub fn Recipes(csrf: String) -> Element {
     let mut recipes = use_resource(|| async { api::get::<Vec<Recipe>>("/v1/recipes").await });
     let mut meals = use_resource(|| async { api::get::<Vec<Meal>>("/v1/meals").await });
     let mut groceries = use_resource(|| async { api::get::<Vec<GroceryItem>>("/v1/groceries").await });
-    let health_goals = use_resource(|| async { api::get::<HashMap<String, HealthGoal>>("/v1/recipes/health-goals").await });
+    let mut health_goals = use_resource(|| async { api::get::<HashMap<String, HealthGoal>>("/v1/recipes/health-goals").await });
 
     let mut tab = use_signal(|| Tab::Library);
     let mut search = use_signal(String::new);
@@ -196,7 +199,7 @@ pub fn Recipes(csrf: String) -> Element {
             .to_lowercase().contains(&query)
     }).cloned().collect();
 
-    let active = current_record(&records, selected()).or_else(|| filtered.first().cloned());
+    let active = current_record(&records, selected(), &query);
     let draft_value = draft();
     let planned = meals.cloned().and_then(Result::ok).unwrap_or_default();
     let shopping = groceries.cloned().and_then(Result::ok).unwrap_or_default();
@@ -206,7 +209,7 @@ pub fn Recipes(csrf: String) -> Element {
             title: "Recipes".to_owned(),
             description: "Your recipe library, cooking plans and shopping list.".to_owned(),
             button { class: "btn btn-outline", onclick: move |_| {
-                recipes.restart(); meals.restart(); groceries.restart();
+                recipes.restart(); meals.restart(); groceries.restart(); health_goals.restart();
             }, "Refresh" }
             button { class: "btn btn-primary", onclick: move |_| {
                 draft.set(Recipe::blank());
@@ -474,7 +477,7 @@ pub fn Recipes(csrf: String) -> Element {
                                         h2 { class: "card-title", "{recipe.title}" }
                                         div { class: "inline-row",
                                             button { class: "btn btn-outline btn-sm", onclick: move |_| {
-                                                if let Some(record) = current_record(&recipes.cloned().and_then(Result::ok).unwrap_or_default(), selected()) {
+                                                if let Some(record) = current_record(&recipes.cloned().and_then(Result::ok).unwrap_or_default(), selected(), &search().trim().to_lowercase()) {
                                                     tags.set(record.tags.join(", "));
                                                     equipment.set(record.equipment.join(", "));
                                                     nutrients.set(nutrient_lines(&record));
@@ -584,7 +587,7 @@ pub fn Recipes(csrf: String) -> Element {
                                         }
                                         button { class: "btn btn-outline", disabled: busy() || plan_date().is_empty(),
                                             onclick: move |_| {
-                                                let Some(record) = current_record(&recipes.cloned().and_then(Result::ok).unwrap_or_default(),selected()) else {return};
+                                                let Some(record) = current_record(&recipes.cloned().and_then(Result::ok).unwrap_or_default(), selected(), &search().trim().to_lowercase()) else {return};
                                                 let meal = Meal { recipe_id: record.id, date: plan_date(),
                                                     meal_type: plan_type(), servings: portion(), ..Default::default() };
                                                 let csrf = csrf();
@@ -603,7 +606,7 @@ pub fn Recipes(csrf: String) -> Element {
                                             span { class: "small", "Delete this recipe permanently?" }
                                             button { class: "btn btn-outline btn-sm", onclick: move |_| confirm_delete.set(false), "Cancel" }
                                             button { class: "btn btn-primary btn-sm", disabled: busy(), onclick: move |_| {
-                                                let Some(record) = current_record(&recipes.cloned().and_then(Result::ok).unwrap_or_default(),selected()) else {return};
+                                                let Some(record) = current_record(&recipes.cloned().and_then(Result::ok).unwrap_or_default(), selected(), &search().trim().to_lowercase()) else {return};
                                                 let path = format!("/v1/recipes/{}", record.id);
                                                 let revision = record.revision;
                                                 let csrf = csrf();

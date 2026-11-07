@@ -116,6 +116,18 @@ func Open(path string) (*Store, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return nil, err
 	}
+	dirInfo, err := os.Lstat(filepath.Dir(path))
+	if err != nil { return nil, err }
+	if !dirInfo.IsDir() || dirInfo.Mode().Perm()&0077 != 0 {
+		return nil, errors.New("recipe database directory must be private")
+	}
+	if fileInfo, err := os.Lstat(path); err == nil {
+		if !fileInfo.Mode().IsRegular() || fileInfo.Mode().Perm()&0077 != 0 {
+			return nil, errors.New("recipe database must be a private regular file")
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
 	s := &Store{path: path, data: snapshot{Version: 1, Recipes: map[string]Recipe{}, Meals: map[string]Meal{}}}
 	body, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
