@@ -7,6 +7,8 @@ import (
  "encoding/base64"
  "encoding/hex"
  "encoding/json"
+
+ "github.com/dbontr/homelab-new/system/canonicaljson"
  "errors"
  "fmt"
  "os"
@@ -52,13 +54,10 @@ func NewAuthority(key []byte, replayFile string) (*Authority,error) {
 }
 
 func digestArgs(args json.RawMessage)(string,error){
- if len(args)==0 {args=json.RawMessage("{}")}
- var obj any
- if err:=json.Unmarshal(args,&obj);err!=nil{return "",errors.New("invalid operation arguments")}
- if _,ok:=obj.(map[string]any);!ok{return "",errors.New("operation arguments must be a JSON object")}
- encoded,err:=json.Marshal(obj);if err!=nil{return "",err}
- sum:=sha256.Sum256(encoded)
- return hex.EncodeToString(sum[:]),nil
+    encoded,_,err:=canonicaljson.Object(args)
+    if err!=nil{return "",err}
+    sum:=sha256.Sum256(encoded)
+    return hex.EncodeToString(sum[:]),nil
 }
 
 func(a *Authority)mac(payload string)[]byte{

@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/dbontr/homelab-new/system/canonicaljson"
 )
 
 const (
@@ -43,11 +45,7 @@ func digestArguments(args json.RawMessage) ([32]byte, string, error) {
 	if len(args) == 0 {
 		args = []byte("{}")
 	}
-	var doc any
-	if err := json.Unmarshal(args, &doc); err != nil {
-		return [32]byte{}, "", errors.New("invalid tool arguments")
-	}
-	canon, err := json.Marshal(doc)
+	canon, doc, err := canonicaljson.Object(args)
 	if err != nil {
 		return [32]byte{}, "", err
 	}

@@ -5,9 +5,14 @@ import (
  "encoding/json"
  "net/http"
  "strings"
+
+ "github.com/dbontr/homelab-new/system/canonicaljson"
 )
 
 func (s *Server) invoke(ctx context.Context,name string,args json.RawMessage,id json.RawMessage) map[string]any {
+ normalized,_,err:=canonicaljson.Object(args)
+ if err!=nil{return toolError(err.Error())}
+ args=normalized
  if name=="workspace__resource_plan" {
    if err:=s.deviceCatalog.ValidatePlan(args);err!=nil{return toolError(err.Error())}
  }
