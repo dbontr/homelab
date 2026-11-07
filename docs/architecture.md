@@ -16,7 +16,7 @@ A single capability registry and consistent authorization rules govern tool disc
 
 ## Hardware and privilege
 
-The declared inventory is in `hardware.nix`, validated by the Go `system/devices` package and presented through the native API and MCP. An inventory entry is not proof of physical connectivity. The borrowed Kria KV260 is declared SSH-only for connection and inspection. It is not eligible for automatic compute enrollment, USB/JTAG access, firmware modification, bitstream programming, or unattended operation.
+The declared inventory is in `hardware.nix`, validated by the Go `system/devices` package and presented through the native API and MCP. An inventory entry is not proof of physical connectivity. The current Kria KV260 inventory entry permits SSH connection and inspection only and is not compute-eligible. A different physical device, or changed ownership and permissions, is represented by editing the inventory. The compute executor must enforce actual device selection and lease authorization independently of the gateway.
 
 Go is the primary systems language. Rust may be introduced for owned device interfaces requiring precise hardware control, accelerator buffers or WebAssembly, with a stable native boundary and Nix packaging. An SSH-only FPGA does not require a Rust agent.
 

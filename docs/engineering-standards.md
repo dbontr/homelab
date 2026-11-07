@@ -19,7 +19,7 @@ A project may include several repositories, shared libraries, learning goals, ex
 2. Use Go and Nix by default. Introduce Rust only where a bounded hardware, memory, or WebAssembly component benefits materially; package it through Nix and keep its interface stable.
 3. Do not use one executable or database merely for visual uniformity. Isolate failures, sensitive data, external provider credentials and hardware leases.
 4. Preserve a single API and MCP identity. Internal package and process names must not force the owner to select different assistants.
-5. Make hardware restrictions explicit: borrowed FPGAs must not acquire USB, JTAG, firmware, programming, or general-purpose cluster-worker permissions through a broad capability flag.
+5. Make hardware restrictions explicit: devices must receive only the permissions explicitly declared in their individual inventory entries. Ownership is descriptive metadata, not an immutable authorization rule. Actual device operations and leases require executor-side enforcement.
 6. Keep the privileged executor and deployment pipeline separate from the public assistant. Require operation-specific authorization at the executor, not only the gateway.
 7. Prefer standard libraries and existing implementations. Delete obsolete files, unnecessary scaffolding, duplicate descriptions, temporary data, generated assistant metadata and abandoned configurations.
 8. Maintain durable behavior tests, negative authorization tests and reference documentation. Format Go source with `gofmt`; validate Nix expressions and the actual build graph.

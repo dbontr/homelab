@@ -32,9 +32,9 @@ func TestBorrowedFPGAIsNotPassedToComputeBackend(t *testing.T) {
 	token := strings.Repeat("e", 40)
 	w := request(server.Handler(),"GET","/v1/devices","",token)
 	if w.Code!=200 || !strings.Contains(w.Body.String(), "kv260") || !strings.Contains(w.Body.String(), "ssh") {t.Fatalf("missing device policy: %s",w.Body.String())}
-	payload := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"workspace__workspace_create","arguments":{"hardware":{"fpga":1}}}}`
+	payload := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"workspace__workspace_create","arguments":{"hardware":{"fpga":1},"node_id":"venus"}}}`
 	w = request(server.Handler(),"POST","/mcp",payload,token)
-	if forwarded.Load()!=0 || !strings.Contains(w.Body.String(),"FPGA devices are not available") {t.Fatalf("borrowed FPGA sent to backend: %s",w.Body.String())}
+	if forwarded.Load()!=0 || !strings.Contains(w.Body.String(),"FPGA allocation is not permitted") {t.Fatalf("borrowed FPGA sent to backend: %s",w.Body.String())}
 	payload = `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"workspace__workspace_create","arguments":{"usb_passthrough":true}}}`
 	w = request(server.Handler(),"POST","/mcp",payload,token)
 	if forwarded.Load()!=0 || !strings.Contains(w.Body.String(),"USB devices") {t.Fatalf("USB passthrough sent to backend: %s",w.Body.String())}

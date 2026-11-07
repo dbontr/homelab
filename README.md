@@ -29,6 +29,6 @@ NixOS operators can evaluate the five hosts and build the `homelab-platform` pac
 
 ## Operating boundaries
 
-The public-facing MCP does not inherit deployment or cluster administrator credentials. Sensitive operations require short-lived operator approval and separate enforcement at the actual privileged executor. External accounts use protected local credentials or provider authentication. A borrowed Kria KV260, if connected, is SSH-only; no physical FPGA access or modification is authorized by default.
+The public-facing MCP does not inherit deployment or cluster administrator credentials. Sensitive operations require short-lived operator approval and separate enforcement at the actual privileged executor. External accounts use protected local credentials or provider authentication. The current KV260 entry is configured for SSH connection and inspection only. Device permissions and compute eligibility are individually declared in `hardware.nix`, rather than hardcoded by board model or ownership.
 
 Source code in this repository is not itself proof of an active deployment. The existing machines and media remain authoritative until build, authentication, integration and rollback acceptance passes. Consult [architecture](docs/architecture.md), [security](docs/security.md), [interfaces](docs/interfaces.md), [deployment](docs/deployment.md), [engineering standards](docs/engineering-standards.md) and [references](REFERENCES.md).

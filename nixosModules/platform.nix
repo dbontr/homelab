@@ -38,6 +38,7 @@ in
           kind = lib.mkOption { type = lib.types.enum [ "fpga" "gpu" "npu" "other" ]; };
           ownership = lib.mkOption { type = lib.types.enum [ "owned" "borrowed" ]; };
           connection = lib.mkOption { type = lib.types.enum [ "ssh" "usb" "pcie" "local" ]; };
+          node = lib.mkOption { type = lib.types.str; default = ""; };
           allowedOperations = lib.mkOption {
             type = lib.types.listOf lib.types.str;
             default = [];

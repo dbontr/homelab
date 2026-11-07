@@ -14,6 +14,7 @@ type Device struct {
 	Kind               string   `json:"kind"`
 	Ownership          string   `json:"ownership"`
 	Connection         string   `json:"connection"`
+	Node               string   `json:"node,omitempty"`
 	AllowedOperations  []string `json:"allowedOperations"`
 	EligibleForCompute bool     `json:"eligibleForCompute"`
 }
@@ -39,15 +40,8 @@ func New(items []Device) (*Catalog, error) {
 		if d.Connection != "ssh" && d.Connection != "usb" && d.Connection != "pcie" && d.Connection != "local" {
 			return nil, fmt.Errorf("invalid device connection for %s", d.ID)
 		}
-		if d.Ownership == "borrowed" && d.Kind == "fpga" {
-			if d.Connection != "ssh" || d.EligibleForCompute {
-				return nil, fmt.Errorf("borrowed FPGA %s must use SSH without compute enrollment", d.ID)
-			}
-			for _, op := range d.AllowedOperations {
-				if op != "connect" && op != "inspect" {
-					return nil, fmt.Errorf("borrowed FPGA %s cannot authorize %s", d.ID, op)
-				}
-			}
+		if d.Node != "" && !identifier.MatchString(d.Node) {
+			return nil, fmt.Errorf("invalid device node for %s", d.ID)
 		}
 		if len(d.AllowedOperations) > 16 {
 			return nil, errors.New("too many device permissions")
@@ -58,6 +52,9 @@ func New(items []Device) (*Catalog, error) {
 				return nil, fmt.Errorf("invalid or repeated operation on %s", d.ID)
 			}
 			operations[op] = true
+		}
+		if d.EligibleForCompute && (d.Node == "" || !operations["allocate"]) {
+			return nil, fmt.Errorf("compute-eligible device %s requires a node and allocate permission", d.ID)
 		}
 		d.AllowedOperations = append([]string(nil), d.AllowedOperations...)
 		result.items = append(result.items, d)
