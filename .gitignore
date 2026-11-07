@@ -1,0 +1,12 @@
+# Local state and build outputs
+result
+result-*
+*.test
+*.out
+*.log
+*.sqlite
+*.sqlite-*
+*.db
+*.db-*
+platform/state.json
+platform/.state-*
