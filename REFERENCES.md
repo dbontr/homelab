@@ -6,3 +6,5 @@
 - [Model Context Protocol Specification](https://modelcontextprotocol.io/specification/2025-06-18) — MCP project; 2025-06-18. Used for: stateless JSON-RPC transport, tool discovery, and tool calls.
 - [RFC 5545: Internet Calendaring and Scheduling Core Object Specification](https://www.rfc-editor.org/rfc/rfc5545) — IETF. Used for: the read-only iCalendar parser; recurrence support is partial.
 - [Kubernetes Documentation](https://kubernetes.io/docs/) — Kubernetes project. Used for: scheduled compute workers and workload isolation.
+- [Seerr API: Create New Request](https://docs.seerr.dev/api/create-new-request/) — Seerr project. Used for: media request payloads and supported movie/TV media types.
+- [Seerr OpenAPI](https://github.com/seerr-team/seerr/blob/develop/seerr-api.yml) — Seerr project. Used for: authenticated media search, request listing, and API key headers.

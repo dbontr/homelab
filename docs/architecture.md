@@ -13,7 +13,7 @@ All capabilities are implemented independently of their user-interface adapters.
 - Workspace provides Git, project repositories and libraries, compute scheduling, artifacts, Kubernetes workers, and approved hardware allocation.
 - Learning supplies adaptive teaching, knowledge graph and independent assessment.
 - Health supplies longitudinal observations, fitness, nutrition, meal planning, and RecipeSage integration.
-- Media and monitoring remain infrastructure-managed services.
+- Media and monitoring remain infrastructure-managed services. The native Seerr adapter exposes a constrained media interface without duplicating Seerr's own state.
 - The finance capability is not active.
 
 Saturn hosts networking, the K3s control plane, and persistent low-cost application services. Jupiter, Venus, Mercury, and Janus receive approved compute jobs. Stateful storage is managed at the service boundary rather than placed in a shared universal database.

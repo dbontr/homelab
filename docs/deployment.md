@@ -10,7 +10,7 @@ The running fleet is not changed by repository commits. A separate development a
 
 The NixOS platform module is located at nixosModules/platform.nix and is disabled unless explicitly enabled. It packages the standard-library Go application, binds to loopback and reads credentials from systemd-protected files. Configure services.homelabPlatform.tokenFile with a token containing at least 32 characters. The optional calendarURLFile contains the read-only Proton Calendar sharing link and must not be committed.
 
-The service's private state is stored under /var/lib/homelab-platform. Optional backend MCP URLs and token files are configured independently for Workspace, Learning and Health. Protected network ingress must authenticate remote clients before routing traffic to the platform.
+The service's private state is stored under /var/lib/homelab-platform. A protected local approval socket resides at /run/homelab-platform/approval.sock. A trusted Saturn administrator can review pending challenges and approve an exact operation using the homelab-approve command. The socket must never be proxied through the public ingress. Configure the optional Seerr URL and protected API key file together; private HTTP is accepted only for explicitly configured private or loopback IPs. Optional backend MCP URLs and token files are configured independently for Workspace, Learning and Health. Protected network ingress must authenticate remote clients before routing traffic to the platform.
 
 ## Validation gates
 
