@@ -4,5 +4,5 @@ pkgs.buildGoModule {
   version = "0.1.0";
   src = ../platform;
   vendorHash = null;
-  subPackages = [ "cmd/homelab-platform" ];
+  subPackages = [ "cmd/homelab-platform" "cmd/homelab-approve" ];
 }

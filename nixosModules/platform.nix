@@ -19,6 +19,18 @@ in
       type = lib.types.str;
       default = "America/Chicago";
     };
+    seerr = {
+      url = lib.mkOption {
+        type = lib.types.str;
+        default = "";
+        description = "Private Seerr API origin.";
+      };
+      apiKeyFile = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Protected path containing the Seerr API key.";
+      };
+    };
     calendarURLFile = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
       default = null;
@@ -37,6 +49,10 @@ in
 
   config = lib.mkIf cfg.enable {
     assertions = [
+      {
+        assertion = (cfg.seerr.url == "") == (cfg.seerr.apiKeyFile == null);
+        message = "Seerr requires both its origin URL and protected API key file.";
+      }
       {
         assertion = cfg.tokenFile != null;
         message = "The platform requires a protected API token file.";
@@ -57,8 +73,12 @@ in
       environment = {
         HOMELAB_LISTEN_ADDR = cfg.listenAddress;
         HOMELAB_TIME_ZONE = cfg.timeZone;
+        HOMELAB_APPROVAL_SOCKET = "/run/homelab-platform/approval.sock";
         HOMELAB_STATE_FILE = "/var/lib/homelab-platform/state.json";
         HOMELAB_API_TOKEN_FILE = "/run/credentials/homelab-platform.service/access_token";
+      } // lib.optionalAttrs (cfg.seerr.url != "") {
+        HOMELAB_SEERR_URL = cfg.seerr.url;
+        HOMELAB_SEERR_API_KEY_FILE = "/run/credentials/homelab-platform.service/seerr_api_key";
       } // lib.optionalAttrs (cfg.calendarURLFile != null) {
         HOMELAB_CALENDAR_URL_FILE = "/run/credentials/homelab-platform.service/calendar_url";
       } // (lib.foldl' (acc: name:
@@ -78,10 +98,13 @@ in
         Type = "simple";
         DynamicUser = true;
         StateDirectory = "homelab-platform";
+        RuntimeDirectory = "homelab-platform";
+        RuntimeDirectoryMode = "0700";
         StateDirectoryMode = "0700";
         LoadCredential =
           [ "access_token:${cfg.tokenFile}" ]
           ++ lib.optional (cfg.calendarURLFile != null) "calendar_url:${cfg.calendarURLFile}"
+          ++ lib.optional (cfg.seerr.apiKeyFile != null) "seerr_api_key:${cfg.seerr.apiKeyFile}"
           ++ lib.concatMap (name:
             lib.optional (cfg.integrations.${name}.tokenFile != null)
               "${name}_token:${cfg.integrations.${name}.tokenFile}"
