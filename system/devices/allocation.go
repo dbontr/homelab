@@ -5,10 +5,9 @@ import (
 	"errors"
 )
 
-// ValidateAllocation denies direct FPGA and USB assignments unless a device
-// is explicitly eligible for compute. Borrowed SSH-only equipment cannot be
-// assigned to a workspace, even when visible in the device inventory.
-func (c *Catalog) ValidateAllocation(raw json.RawMessage) error {
+// ValidateAllocation denies direct FPGA and USB assignment until a device-specific
+// executor can bind each lease to explicitly approved equipment.
+func (*Catalog) ValidateAllocation(raw json.RawMessage) error {
 	var request struct {
 		Hardware       map[string]int `json:"hardware"`
 		USBPassthrough bool           `json:"usb_passthrough"`
