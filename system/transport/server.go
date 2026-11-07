@@ -21,19 +21,20 @@ import (
  "github.com/dbontr/homelab-new/system/store"
 )
 type Backend struct { Name string; URL string; Token string }
-type Server struct { db *store.Store; token string; backend []Backend; client *http.Client; calendarURL string; gate *approval.Gate; allowedOrigins map[string]struct{}; media *media.Client; deviceCatalog *devices.Catalog; nodeCatalog *devices.NodeCatalog; profiles *profiles.Registry }
+type Server struct { db *store.Store; token string; backend []Backend; client *http.Client; calendarURL string; gate *approval.Gate; allowedOrigins map[string]struct{}; media *media.Client; deviceCatalog *devices.Catalog; nodeCatalog *devices.NodeCatalog; profiles *profiles.Registry; inflight chan struct{} }
 
 func New(db *store.Store,token string,backends []Backend)(*Server,error){
- if db==nil||token==""{return nil,errors.New("store and access token are required")}
+ if db==nil||len(token)<32||strings.ContainsAny(token,"\r\n\t"){return nil,errors.New("store and a strong access token are required")}
  used:=map[string]bool{}
  for _,b:=range backends{
   if !validIntegrationName(b.Name)||used[b.Name){return nil,errors.New("invalid backend name")}
   used[b.Name]=true
-  u,e:=url.Parse(b.URL);if e!=nil{return nil,e}
+  u,e:=url.Parse(b.URL);if e!=nil{return nil,errors.New("invalid backend URL")}
+  if u.Hostname()==""||u.Opaque!=""{return nil,errors.New("backend URL requires a host")}
   if u.User!=nil||u.RawQuery!=""||u.Fragment!=""{return nil,errors.New("invalid backend URL")}
   if u.Scheme!="https"&&!(u.Scheme=="http"&&(u.Hostname()=="localhost"||u.Hostname()=="127.0.0.1"||u.Hostname()=="::1")){return nil,errors.New("backend must use HTTPS or loopback HTTP")}
  }
- return &Server{db:db,token:token,backend:backends,gate:approval.New(),client:&http.Client{Timeout:120*time.Second,CheckRedirect:func(_ *http.Request,_ []*http.Request)error{return errors.New("backend redirects are disabled")}}},nil
+ return &Server{db:db,token:token,backend:backends,gate:approval.New(),inflight:make(chan struct{},32),client:&http.Client{Timeout:120*time.Second,CheckRedirect:func(_ *http.Request,_ []*http.Request)error{return errors.New("backend redirects are disabled")}}},nil
 }
 func(s *Server) SetDeviceCatalog(catalog *devices.Catalog) { s.deviceCatalog = catalog }
 func(s *Server) SetNodeCatalog(catalog *devices.NodeCatalog) { s.nodeCatalog = catalog }
@@ -74,6 +75,10 @@ func(s *Server) Handler()http.Handler{
  return http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){
   w.Header().Set("Cache-Control","no-store")
   w.Header().Set("X-Content-Type-Options","nosniff")
+  w.Header().Set("Referrer-Policy","no-referrer")
+  select {case s.inflight<-struct{}{}: defer func(){<-s.inflight}()
+   default: w.Header().Set("Retry-After","1");writeError(w,http.StatusTooManyRequests,"request capacity exhausted");return
+  }
   if r.URL.Path!="/healthz" {
    if !s.originAllowed(r) {writeError(w,http.StatusForbidden,"origin not permitted");return}
    auth:=r.Header.Get("Authorization")
@@ -153,7 +158,10 @@ func toolError(msg string)map[string]any{return map[string]any{"content":[]any{m
 func(s *Server)mcp(w http.ResponseWriter,r *http.Request){
  r.Body=http.MaxBytesReader(w,r.Body,8<<20)
  var req rpcRequest
- if e:=json.NewDecoder(r.Body).Decode(&req);e!=nil{s.rpc(w,nil,nil,failure(-32700,"invalid JSON"));return}
+ decoder:=json.NewDecoder(r.Body)
+ if e:=decoder.Decode(&req);e!=nil{s.rpc(w,nil,nil,failure(-32700,"invalid JSON"));return}
+ var trailing any
+ if e:=decoder.Decode(&trailing);e!=io.EOF{s.rpc(w,nil,nil,failure(-32700,"multiple JSON messages are not permitted"));return}
  if req.JSONRPC!="2.0"||req.Method==""{s.rpc(w,req.ID,nil,failure(-32600,"invalid JSON-RPC request"));return}
  if len(req.ID)==0{
   if strings.HasPrefix(req.Method,"notifications/"){w.WriteHeader(http.StatusAccepted);return}
