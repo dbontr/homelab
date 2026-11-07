@@ -13,6 +13,9 @@
     in {
       nixosModules.clusterAgent = import ./infrastructure/modules/cluster-agent.nix;
       nixosModules.homelabPlatform = import ./nixosModules/platform.nix;
+      packages.${system}.homelab-platform = import ./packages/platform.nix {
+        pkgs = nixpkgs.legacyPackages.${system};
+      };
 
       nixosConfigurations = {
         saturn = nixpkgs.lib.nixosSystem {
