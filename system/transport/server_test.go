@@ -50,7 +50,7 @@ func TestFederatedToolCalls(t *testing.T){
   w.Header().Set("Content-Type","application/json")
   switch input.Method{
   case "tools/list":_,_=w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"echo","description":"Echo","inputSchema":{"type":"object"}}]}}`))
-  case "tools/call":_,_=w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"forwarded"}]}}`))
+  case "tools/call":_,_=w.Write([]byte(`{"jsonrpc":"2.0","id":2,"result":{"content":[{"type":"text","text":"forwarded"}]}}`))
   default:http.Error(w,"unknown",400)
   }
  }));defer downstream.Close()

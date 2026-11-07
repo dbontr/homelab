@@ -21,7 +21,7 @@ func TestClusterChangeRequiresExactOneTimeApproval(t *testing.T) {
 		}
 		if request.Method == "tools/call" {
 			forwarded.Add(1)
-			_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"changed"}]}}`))
+			_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":7,"result":{"content":[{"type":"text","text":"changed"}]}}`))
 			return
 		}
 		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"configure","description":"Change cluster","inputSchema":{"type":"object"}}]}}`))

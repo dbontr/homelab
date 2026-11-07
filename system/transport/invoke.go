@@ -18,7 +18,9 @@ func (s *Server) invoke(ctx context.Context,name string,args json.RawMessage,id 
  for _,b:=range s.backend {
    prefix:=b.Name+"__"
    if strings.HasPrefix(name,prefix) {
-     params:=map[string]any{"name":strings.TrimPrefix(name,prefix),"arguments":json.RawMessage(args)}
+     toolName:=strings.TrimPrefix(name,prefix)
+     if !s.backendHasTool(ctx,b,toolName){return toolError("backend tool unavailable or not advertised")}
+     params:=map[string]any{"name":toolName,"arguments":json.RawMessage(args)}
      raw,_:=json.Marshal(params)
      var remote any
      err:=s.forward(ctx,b,rpcRequest{JSONRPC:"2.0",ID:id,Method:"tools/call",Params:raw},&remote)

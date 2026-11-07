@@ -27,7 +27,7 @@ func New(db *store.Store,token string,backends []Backend)(*Server,error){
  if db==nil||token==""{return nil,errors.New("store and access token are required")}
  used:=map[string]bool{}
  for _,b:=range backends{
-  if b.Name==""||used[b.Name]||strings.Contains(b.Name,"__"){return nil,errors.New("invalid backend name")}
+  if !validIntegrationName(b.Name)||used[b.Name){return nil,errors.New("invalid backend name")}
   used[b.Name]=true
   u,e:=url.Parse(b.URL);if e!=nil{return nil,e}
   if u.User!=nil||u.RawQuery!=""||u.Fragment!=""{return nil,errors.New("invalid backend URL")}
@@ -217,7 +217,7 @@ func(s *Server)toolList(r *http.Request)[]map[string]any{
   list,ok:=response["tools"].([]any);if !ok{continue}
   for _,item:=range list{
    t,ok:=item.(map[string]any);if !ok{continue}
-   name,ok:=t["name"].(string);if !ok||name==""{continue}
+   name,ok:=t["name"].(string);if !ok||!validBackendToolName(name){continue}
    t["name"]=b.Name+"__"+name
    out=append(out,t)
   }
