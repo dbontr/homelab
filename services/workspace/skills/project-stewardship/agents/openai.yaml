@@ -1,0 +1,4 @@
+interface:
+  display_name: Project Stewardship
+  short_description: Organize multi-repository projects, reusable libraries, private knowledge and GitHub
+  default_prompt: Use Workspace MCP to manage a project independently of its repositories, including library projects and reusable publications, optional private Git knowledge, native GitHub planning, and authorized compute.
