@@ -1,0 +1,144 @@
+{ config, lib, pkgs, ... }:
+let
+  cfg = config.services.adaptiveTeachingMcp;
+  executable = if cfg.package != null then "${cfg.package}/bin/adaptive-teaching" else if cfg.binaryPath != null then cfg.binaryPath else "/bin/false";
+  checksum = pkgs.writeText "adaptive-teaching-release.sha256" "${cfg.binarySHA256}  ${if cfg.binaryPath == null then "/bin/false" else cfg.binaryPath}\n";
+  credentialFile = if cfg.bearerCredentialFile == null then "/dev/null" else cfg.bearerCredentialFile;
+in {
+  options.services.adaptiveTeachingMcp = {
+    enable = lib.mkEnableOption "the independently packaged Adaptive Teaching MCP";
+    package = lib.mkOption {
+      type = lib.types.nullOr lib.types.package;
+      default = null;
+      description = "Verified upstream release containing bin/adaptive-teaching.";
+    };
+    binaryPath = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "Immutable release executable on the host, installed from an authenticated upstream artifact.";
+    };
+    binarySHA256 = lib.mkOption {
+      type = lib.types.str;
+      default = "";
+      description = "Expected SHA-256 of the separately installed release executable.";
+    };
+    bearerCredentialFile = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "Runtime path to an owner-only MCP bearer token, kept outside the Nix store.";
+    };
+    listenAddress = lib.mkOption {
+      type = lib.types.str;
+      default = "127.0.0.1:8200";
+      description = "Loopback address for the authenticated local MCP service.";
+    };
+    allowedHosts = lib.mkOption {
+      type = lib.types.str;
+      default = "127.0.0.1:*,localhost:*";
+      description = "Comma-separated HTTP Host allowlist for the trusted local ingress.";
+    };
+    allowedOrigins = lib.mkOption {
+      type = lib.types.str;
+      default = "";
+      description = "Comma-separated allowed browser Origin values.";
+    };
+    access = {
+      issuer = lib.mkOption {
+        type = lib.types.str;
+        default = "";
+      };
+      audience = lib.mkOption {
+        type = lib.types.str;
+        default = "";
+      };
+      certsURL = lib.mkOption {
+        type = lib.types.str;
+        default = "";
+      };
+      ownerCredentialFile = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Root-owned file containing the authorized Access identity.";
+      };
+    };
+  };
+
+  config = lib.mkIf cfg.enable {
+    assertions = [
+      {
+        assertion = (cfg.package != null) != (cfg.binaryPath != null);
+        message = "Adaptive Teaching requires exactly one release source: a Nix package or an immutable host executable.";
+      }
+      {
+        assertion = cfg.binaryPath == null || builtins.match "[0-9a-f]{64}" cfg.binarySHA256 != null;
+        message = "Adaptive Teaching host releases require an exact SHA-256.";
+      }
+      {
+        assertion = cfg.bearerCredentialFile != null;
+        message = "Adaptive Teaching requires an external bearer token file.";
+      }
+      {
+        assertion = (cfg.access.issuer == "" && cfg.access.audience == "" &&
+          cfg.access.certsURL == "" && cfg.access.ownerCredentialFile == null) ||
+          (cfg.access.issuer != "" && cfg.access.audience != "" &&
+          cfg.access.certsURL != "" && cfg.access.ownerCredentialFile != null);
+        message = "Adaptive Teaching Access identity requires all verification fields and an owner credential.";
+      }
+      {
+        assertion = lib.hasPrefix "127.0.0.1:" cfg.listenAddress ||
+          lib.hasPrefix "[::1]:" cfg.listenAddress ||
+          lib.hasPrefix "localhost:" cfg.listenAddress;
+        message = "Adaptive Teaching must listen on loopback behind the trusted ingress.";
+      }
+    ];
+
+    systemd.services.adaptive-teaching = {
+      description = "Adaptive Teaching MCP";
+      wantedBy = [ "multi-user.target" ];
+      after = [ "network.target" ];
+      serviceConfig = {
+        Type = "simple";
+        DynamicUser = true;
+        StateDirectory = "adaptive-teaching";
+        StateDirectoryMode = "0700";
+        RuntimeDirectory = "adaptive-teaching";
+        RuntimeDirectoryMode = "0700";
+        LoadCredential = [ "mcp_token:${credentialFile}" ] ++
+          lib.optional (cfg.access.ownerCredentialFile != null)
+            "access_owner:${cfg.access.ownerCredentialFile}";
+        ExecStart = executable;
+        ExecStartPre = (lib.optional (cfg.binaryPath != null)
+          "${pkgs.coreutils}/bin/sha256sum --check ${checksum}") ++ [
+            "${pkgs.coreutils}/bin/install -m 0600 %d/mcp_token /run/adaptive-teaching/mcp_token"
+          ] ++ lib.optional (cfg.access.ownerCredentialFile != null)
+            "${pkgs.coreutils}/bin/install -m 0600 %d/access_owner /run/adaptive-teaching/access_owner";
+        Environment = [
+          "ADAPTIVE_TEACHING_DB_PATH=/var/lib/adaptive-teaching/learning.db"
+          "ADAPTIVE_TEACHING_LISTEN_ADDR=${cfg.listenAddress}"
+          "ADAPTIVE_TEACHING_ALLOWED_HOSTS=${cfg.allowedHosts}"
+          "ADAPTIVE_TEACHING_ALLOWED_ORIGINS=${cfg.allowedOrigins}"
+          "ADAPTIVE_TEACHING_BEARER_TOKEN_FILE=/run/adaptive-teaching/mcp_token"
+        ] ++ lib.optionals (cfg.access.ownerCredentialFile != null) [
+          "ADAPTIVE_TEACHING_ACCESS_ISSUER=${cfg.access.issuer}"
+          "ADAPTIVE_TEACHING_ACCESS_AUDIENCE=${cfg.access.audience}"
+          "ADAPTIVE_TEACHING_ACCESS_CERTS_URL=${cfg.access.certsURL}"
+          "ADAPTIVE_TEACHING_ACCESS_OWNER_FILE=/run/adaptive-teaching/access_owner"
+        ];
+        Restart = "on-failure";
+        RestartSec = "5s";
+        TimeoutStopSec = "20s";
+        UMask = "0077";
+        NoNewPrivileges = true;
+        PrivateTmp = true;
+        PrivateDevices = true;
+        ProtectHome = true;
+        ProtectSystem = "strict";
+        ProtectKernelTunables = true;
+        ProtectKernelModules = true;
+        ProtectControlGroups = true;
+        CapabilityBoundingSet = "";
+        RestrictAddressFamilies = [ "AF_INET" "AF_INET6" "AF_UNIX" ];
+      };
+    };
+  };
+}

@@ -1,0 +1,16 @@
+/adaptive-teaching
+/data/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+.env
+.DS_Store
+/teaching-eval
+/baseline-run.json
+/foundation-run.json
+/blind-bundle.json
+/private-map.json
+/blank-reviews.json
+/completed-reviews.json
+/assessment-report.json
+/eval/private/

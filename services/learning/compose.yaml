@@ -1,0 +1,20 @@
+services:
+  adaptive-teaching:
+    build: .
+    restart: unless-stopped
+    environment:
+      ADAPTIVE_TEACHING_DB_PATH: /var/lib/adaptive-teaching/learning.db
+      ADAPTIVE_TEACHING_LISTEN_ADDR: 0.0.0.0:8000
+      ADAPTIVE_TEACHING_ALLOWED_HOSTS: ${ADAPTIVE_TEACHING_ALLOWED_HOSTS:-localhost:*,127.0.0.1:*}
+      ADAPTIVE_TEACHING_ALLOWED_ORIGINS: ${ADAPTIVE_TEACHING_ALLOWED_ORIGINS:-}
+    volumes:
+      - adaptive-teaching-data:/var/lib/adaptive-teaching
+    ports:
+      - "127.0.0.1:8000:8000"
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+volumes:
+  adaptive-teaching-data:
