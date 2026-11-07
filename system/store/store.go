@@ -21,6 +21,8 @@ type Task struct {
  Notes string `json:"notes,omitempty"`
  GoalID string `json:"goal_id,omitempty"`
  Links []string `json:"links,omitempty"`
+ ParentID string `json:"parent_id,omitempty"`
+ DependsOn []string `json:"depends_on,omitempty"`
  Due string `json:"due,omitempty"`
  Minutes int `json:"minutes,omitempty"`
  Energy string `json:"energy,omitempty"`
@@ -35,6 +37,8 @@ type TaskInput struct {
  Notes string `json:"notes,omitempty"`
  GoalID string `json:"goal_id,omitempty"`
  Links []string `json:"links,omitempty"`
+ ParentID string `json:"parent_id,omitempty"`
+ DependsOn []string `json:"depends_on,omitempty"`
  Due string `json:"due,omitempty"`
  Minutes int `json:"minutes,omitempty"`
  Energy string `json:"energy,omitempty"`
@@ -107,8 +111,16 @@ func (s *Store) AddTask(in TaskInput)(Task,error){
  if in.Energy!=""&&in.Energy!="low"&&in.Energy!="medium"&&in.Energy!="high"{return Task{},errors.New("invalid energy")}
  s.mu.Lock();defer s.mu.Unlock()
  if in.GoalID!=""{if _,ok:=s.data.Goals[in.GoalID];!ok{return Task{},errors.New("goal does not exist")}}
+ if in.ParentID!=""{if _,ok:=s.data.Tasks[in.ParentID];!ok{return Task{},errors.New("parent task does not exist")}}
+ if len(in.DependsOn)>32{return Task{},errors.New("too many prerequisites")}
+ seen:=map[string]bool{}
+ for _,dep:=range in.DependsOn{
+  if _,ok:=s.data.Tasks[dep];!ok{return Task{},errors.New("prerequisite task does not exist")}
+  if seen[dep]{return Task{},errors.New("duplicate prerequisite task")}
+  seen[dep]=true
+ }
  key,e:=id();if e!=nil{return Task{},e}
- t:=Task{ID:key,Title:in.Title,Notes:in.Notes,GoalID:in.GoalID,Links:append([]string(nil),in.Links...),Due:in.Due,Minutes:in.Minutes,Energy:in.Energy,Location:in.Location,Priority:in.Priority,Status:"open",CreatedAt:time.Now().UTC()}
+ t:=Task{ID:key,Title:in.Title,Notes:in.Notes,GoalID:in.GoalID,Links:append([]string(nil),in.Links...),ParentID:in.ParentID,DependsOn:append([]string(nil),in.DependsOn...),Due:in.Due,Minutes:in.Minutes,Energy:in.Energy,Location:in.Location,Priority:in.Priority,Status:"open",CreatedAt:time.Now().UTC()}
  next:=clone(s.data);next.Tasks[key]=t
  return t,s.save(next)
 }
@@ -123,13 +135,19 @@ func (s *Store) CompleteTask(key string)(Task,error){
 func (s *Store) Tasks(status string)[]Task{
  s.mu.Lock();defer s.mu.Unlock()
  out:=make([]Task,0,len(s.data.Tasks))
- for _,t:=range s.data.Tasks{if status==""||t.Status==status{out=append(out,t)}}
+ for _,t:=range s.data.Tasks{if status==""||t.Status==status{t.Links=append([]string(nil),t.Links...);t.DependsOn=append([]string(nil),t.DependsOn...);out=append(out,t)}}
  sort.Slice(out,func(i,j int)bool{return out[i].CreatedAt.After(out[j].CreatedAt)})
  return out
 }
 func (s *Store) Suggest(minutes int,energy,location,mode string,limit int)[]Task{
- tasks:=s.Tasks("open");out:=make([]Task,0,len(tasks))
+ tasks:=s.Tasks("");out:=make([]Task,0,len(tasks))
+ completed:=map[string]bool{}
+ for _,task:=range tasks{if task.Status=="completed"{completed[task.ID]=true}}
  for _,t:=range tasks{
+  if t.Status!="open"{continue}
+  blocked:=false
+  for _,dependency:=range t.DependsOn{if !completed[dependency]{blocked=true;break}}
+  if blocked{continue}
   if minutes>0&&t.Minutes>minutes{continue}
   if energy!=""&&t.Energy!=""&&t.Energy!=energy{continue}
   if location!=""&&t.Location!=""&&t.Location!=location{continue}

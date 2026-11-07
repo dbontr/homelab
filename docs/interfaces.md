@@ -32,7 +32,7 @@ MCP tool calls are not a privileged deployment pipeline. Upstream mutations use 
 
 ## Personal operating rules
 
-The baseline minimum is three completed tasks per day. Any completed task can count; quick errands are intentionally eligible. Goal progress and the significance of a particular accomplishment remain separate measures. Natural-language rules are stored as preferences or constraints, but only explicitly implemented structured constraints are mechanically enforced.
+Tasks may declare a parent and prerequisites through `parent_id` and `depends_on`. Recommendations exclude tasks with incomplete recorded prerequisites. Both interfaces use the same task data and rules. The baseline minimum is three completed tasks per day. Any completed task can count; quick errands are intentionally eligible. Goal progress and the significance of a particular accomplishment remain separate measures. Natural-language rules are stored as preferences or constraints, but only explicitly implemented structured constraints are mechanically enforced.
 
 Reports measure recorded completions. A missing record does not establish inactivity.
 

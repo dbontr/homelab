@@ -176,7 +176,7 @@ func tool(name,description string,properties map[string]any,required ...string)m
 func prop(kind string)map[string]any{return map[string]any{"type":kind}}
 func(s *Server)localTools()[]map[string]any{
  tools:=[]map[string]any{
-  tool("task_add","Create a personal task",map[string]any{"title":prop("string"),"notes":prop("string"),"goal_id":prop("string"),"due":prop("string"),"minutes":prop("integer"),"energy":prop("string"),"location":prop("string"),"priority":prop("integer")},"title"),
+  tool("task_add","Create a personal task",map[string]any{"parent_id":prop("string"),"depends_on":map[string]any{"type":"array","items":prop("string")},"title":prop("string"),"notes":prop("string"),"goal_id":prop("string"),"due":prop("string"),"minutes":prop("integer"),"energy":prop("string"),"location":prop("string"),"priority":prop("integer")},"title"),
   tool("task_complete","Mark a task complete",map[string]any{"id":prop("string")},"id"),
   tool("task_list","List personal tasks",map[string]any{"status":prop("string")}),
   tool("task_suggest","Recommend tasks by time, mental effort, location, or quick-win mode",map[string]any{"minutes":prop("integer"),"energy":prop("string"),"location":prop("string"),"mode":prop("string"),"limit":prop("integer")}),
