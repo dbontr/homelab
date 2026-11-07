@@ -7,7 +7,7 @@ A self-hosted personal computing system managed through one source repository. G
 - `system/` contains the entire Go application source: personal planning, research execution, computation, learning, health, media, credentials and integrations. Internal Go modules preserve independent build and failure boundaries, not separate user-facing products.
 - `infrastructure/` declares the hosts, networking, K3s, storage, media applications and operational environment.
 - `nixosModules/` and `packages/` provide reproducible NixOS packages and activation.
-- `flake.nix` and `flake.lock` define the five-host fleet and reproducible dependency revisions.
+- `hardware.nix` declares nodes and devices; `flake.nix` derives enrolled NixOS hosts and pins reproducible dependencies through `flake.lock`.
 - `docs/` records current architecture, security, operating procedures and engineering standards.
 
 The unified interface supports tasks, goals, configurable personal rules, quick-win recommendations, weekly progress reporting, and read-only iCalendar data. Movie and television search and requests use Seerr when configured. Additional capabilities are attached through Go interfaces. Projects can link multiple repositories and shared libraries; a repository does not define a project.
@@ -25,10 +25,10 @@ go vet ./...
 go build ./cmd/homelab-platform
 ```
 
-NixOS operators can evaluate the five hosts and build the `homelab-platform` package from the root flake. Runtime credentials, personal state and media bytes are not stored in Git.
+NixOS operators can evaluate enrolled hosts and build the `homelab-platform` package from the root flake. Source development never activates a generation. Runtime credentials, personal state and media bytes are not stored in Git.
 
 ## Operating boundaries
 
-The public-facing MCP does not inherit deployment or cluster administrator credentials. Sensitive operations require short-lived operator approval and separate enforcement at the actual privileged executor. External accounts use protected local credentials or provider authentication. The current KV260 entry is configured for SSH connection and inspection only. Device permissions and compute eligibility are individually declared in `hardware.nix`, rather than hardcoded by board model or ownership.
+The public-facing MCP does not inherit deployment or cluster administrator credentials. Sensitive operations require short-lived operator approval and separate enforcement at the actual privileged executor. External accounts use protected local credentials or provider authentication. The current KV260 entry is configured for SSH connection and inspection only. Device permissions and compute eligibility are individually declared in `hardware.nix`, rather than hardcoded by board model. SSH mode is agentless, while enrolled mode permits explicitly authorized managed compute.
 
 Source code in this repository is not itself proof of an active deployment. The existing machines and media remain authoritative until build, authentication, integration and rollback acceptance passes. Consult [architecture](docs/architecture.md), [security](docs/security.md), [interfaces](docs/interfaces.md), [deployment](docs/deployment.md), [engineering standards](docs/engineering-standards.md) and [references](REFERENCES.md).

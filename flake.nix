@@ -19,8 +19,8 @@
     {
       nixosModules.clusterAgent = import ./infrastructure/modules/cluster-agent.nix;
       nixosModules.homelabPlatform = import ./nixosModules/platform.nix;
-      packages.x86_64-linux.homelab-platform = import ./packages/platform.nix {
-        pkgs = nixpkgs.legacyPackages.x86_64-linux;
+      packages.${defaultSystem}.homelab-platform = import ./packages/platform.nix {
+        pkgs = nixpkgs.legacyPackages.${defaultSystem};
       };
 
       nixosConfigurations = builtins.listToAttrs

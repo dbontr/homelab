@@ -16,9 +16,9 @@ A single capability registry and consistent authorization rules govern tool disc
 
 ## Hardware and privilege
 
-The declared inventory is in `hardware.nix`, validated by the Go `system/devices` package and presented through the native API and MCP. An inventory entry is not proof of physical connectivity. The current Kria KV260 inventory entry permits SSH connection and inspection only and is not compute-eligible. A different physical device, or changed ownership and permissions, is represented by editing the inventory. The compute executor must enforce actual device selection and lease authorization independently of the gateway.
+The declared inventory is in `hardware.nix`, validated by the Go `system/devices` package and presented through the native API and MCP. An inventory entry is not proof of physical connectivity. The current Kria KV260 inventory entry permits SSH connection and inspection only and is not compute-eligible. Any physical device can be removed or reconfigured through the inventory without model-specific Go changes. The compute executor must enforce actual device selection and lease authorization independently of the gateway.
 
-Go is the primary systems language. Rust may be introduced for owned device interfaces requiring precise hardware control, accelerator buffers or WebAssembly, with a stable native boundary and Nix packaging. An SSH-only FPGA does not require a Rust agent.
+Go is the primary systems language. Rust may be introduced for owned device interfaces requiring precise hardware control, accelerator buffers or WebAssembly, with a stable native boundary and Nix packaging. SSH-mode equipment is not a NixOS deployment target and cannot receive managed compute leases. SSH connections use unprivileged user accounts and require separately authorized execution. Enrolled NixOS hosts are derived from the declarative node inventory, not hardcoded in the flake.
 
 The main assistant process never owns deployment or unrestricted cluster credentials. A separately trusted executor must authorize sensitive operations at the actual enforcement boundary. External credentials and media files remain outside Git.
 
