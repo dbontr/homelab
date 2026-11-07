@@ -71,6 +71,11 @@ in
       default = (import ../hardware.nix).devices;
       description = "Declared hardware inventory. Transport does not imply connectivity or permission to modify devices.";
     };
+    consolePassphraseFile = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "Owner-only path to the browser console passphrase verifier. This verifier must not grant cluster administration privileges.";
+    };
     calendarURLFile = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
       default = null;
@@ -119,6 +124,9 @@ in
         HOMELAB_APPROVAL_SOCKET = "/run/homelab-platform/approval.sock";
         HOMELAB_STATE_FILE = "/var/lib/homelab-platform/state.json";
         HOMELAB_PROFILES_FILE = "/var/lib/homelab-platform/profiles.json";
+      } // lib.optionalAttrs (cfg.consolePassphraseFile != null) {
+        HOMELAB_CONSOLE_PASSPHRASE_FILE = "/run/credentials/homelab-platform.service/console_passphrase";
+      } // {
         HOMELAB_API_TOKEN_FILE = "/run/credentials/homelab-platform.service/access_token";
       } // lib.optionalAttrs (cfg.seerr.url != "") {
         HOMELAB_SEERR_URL = cfg.seerr.url;
@@ -148,6 +156,7 @@ in
         LoadCredential =
           [ "access_token:${cfg.tokenFile}" ]
           ++ lib.optional (cfg.calendarURLFile != null) "calendar_url:${cfg.calendarURLFile}"
+          ++ lib.optional (cfg.consolePassphraseFile != null) "console_passphrase:${cfg.consolePassphraseFile}"
           ++ lib.optional (cfg.seerr.apiKeyFile != null) "seerr_api_key:${cfg.seerr.apiKeyFile}"
           ++ lib.concatMap (name:
             lib.optional (cfg.integrations.${name}.tokenFile != null)

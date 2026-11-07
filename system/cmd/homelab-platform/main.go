@@ -15,6 +15,9 @@ import (
     "github.com/dbontr/homelab-new/system/media"
     "github.com/dbontr/homelab-new/system/profiles"
     "github.com/dbontr/homelab-new/system/store"
+    "github.com/dbontr/homelab-new/system/security"
+    "github.com/dbontr/homelab-new/system/session"
+    "encoding/json"
     "github.com/dbontr/homelab-new/system/transport"
 )
 
@@ -48,6 +51,13 @@ func main(){
     if profileFile=="" {profileFile=filepath.Join(filepath.Dir(state),"profiles.json")}
     registry,e:=profiles.Open(profileFile);if e!=nil{log.Fatal(e)}
     server.SetProfiles(registry)
+    if file:=os.Getenv("HOMELAB_CONSOLE_PASSPHRASE_FILE");file!=""{
+        b,e:=os.ReadFile(file);if e!=nil{log.Fatal(e)}
+        var record security.PassphraseRecord
+        if e:=json.Unmarshal(b,&record);e!=nil{log.Fatal(e)}
+        manager,e:=session.New(record);if e!=nil{log.Fatal(e)}
+        server.SetSessions(manager)
+    }
     if file:=os.Getenv("HOMELAB_DEVICES_FILE");file!=""{
         catalog,e:=devices.Load(file);if e!=nil{log.Fatal(e)}
         server.SetDeviceCatalog(catalog)
