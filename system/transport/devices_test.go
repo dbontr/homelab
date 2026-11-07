@@ -38,6 +38,13 @@ func TestBorrowedFPGAIsNotPassedToComputeBackend(t *testing.T) {
 	payload = `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"workspace__workspace_create","arguments":{"usb_passthrough":true}}}`
 	w = request(server.Handler(),"POST","/mcp",payload,token)
 	if forwarded.Load()!=0 || !strings.Contains(w.Body.String(),"USB devices") {t.Fatalf("USB passthrough sent to backend: %s",w.Body.String())}
+	for _, tool := range []string{"workspace__resource_plan", "workspace__task_compute_submit"} {
+		payload = `{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"`+tool+`","arguments":{"hardware":{"fpga":1},"node_id":"venus"}}}`
+		w = request(server.Handler(),"POST","/mcp",payload,token)
+		if forwarded.Load()!=0 || !strings.Contains(w.Body.String(),"FPGA allocation is not permitted") {
+			t.Fatalf("unapproved hardware request reached backend: %s",tool)
+		}
+	}
 	payload = `{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"device_inventory","arguments":{}}}`
 	w = request(server.Handler(),"POST","/mcp",payload,token)
 	if !strings.Contains(w.Body.String(),"kv260") {t.Fatalf("inventory not exposed: %s",w.Body.String())}
