@@ -26,7 +26,7 @@ An SSH-mode device is not a managed compute worker. Add a `devices` entry:
 
 The SSH target is optional so an unconfigured device can be inventoried without contacting it. No login is attempted merely by declaring one. Credentials, SSH agent state and trusted host keys belong outside Git. Use a non-root account and verify the remote host key independently.
 
-Agentless access must not install workers, controllers or system services, modify system configuration, assume administrative permissions or obtain managed compute leases. A separately authorized SSH executor must enforce permitted operations and remote identity before any connection is enabled. The Go catalog validates inventory policy; it does not yet authorize remote execution.
+Agentless access must not install workers, controllers or system services, modify system configuration, assume administrative permissions or obtain managed compute leases. A separately authorized SSH executor must enforce permitted operations and remote identity before any connection is enabled. The Go catalog validates inventory policy, and the SSH adapter permits only fixed inspection probes through a trusted known-hosts file with a 30-second deadline and a 1 MiB output limit. This does not establish that the remote account is safe to use for arbitrary commands or authorize managed compute leases.
 
 ## Device allocation
 
