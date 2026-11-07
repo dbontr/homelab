@@ -1,0 +1,101 @@
+apiVersion: 1
+groups:
+  - orgId: 1
+    name: Saturn Infrastructure
+    folder: Saturn Monitoring
+    interval: 1m
+    rules:
+    - uid: saturn_node_missing
+      title: Saturn Node Exporter Down
+      condition: C
+      data:
+        - refId: A
+          relativeTimeRange: {from: 300, to: 0}
+          datasourceUid: saturn-prometheus
+          model:
+            datasource: {type: prometheus, uid: saturn-prometheus}
+            expr: 'up{job="saturn-node"}'
+            instant: true
+            range: false
+            intervalMs: 60000
+            maxDataPoints: 43200
+            refId: A
+        - refId: B
+          datasourceUid: __expr__
+          model:
+            datasource: {type: __expr__, uid: __expr__}
+            expression: A
+            type: reduce
+            reducer: last
+            intervalMs: 60000
+            maxDataPoints: 43200
+            refId: B
+        - refId: C
+          datasourceUid: __expr__
+          model:
+            datasource: {type: __expr__, uid: __expr__}
+            expression: B
+            type: threshold
+            conditions:
+              - evaluator: {type: lt, params: [1]}
+                operator: {type: and}
+                query: {params: [C]}
+                reducer: {type: last, params: []}
+                type: query
+            intervalMs: 60000
+            maxDataPoints: 43200
+            refId: C
+      for: 5m
+      noDataState: Alerting
+      execErrState: Alerting
+      isPaused: false
+      labels: {severity: warning, host: saturn}
+      annotations:
+        summary: "Saturn host metrics are unavailable"
+    - uid: saturn_root_disk_low
+      title: Saturn Root Disk Below Ten Percent
+      condition: C
+      data:
+        - refId: A
+          relativeTimeRange: {from: 300, to: 0}
+          datasourceUid: saturn-prometheus
+          model:
+            datasource: {type: prometheus, uid: saturn-prometheus}
+            expr: '100 * node_filesystem_avail_bytes{job="saturn-node",mountpoint="/",fstype!="tmpfs"} / node_filesystem_size_bytes{job="saturn-node",mountpoint="/",fstype!="tmpfs"}'
+            instant: true
+            range: false
+            intervalMs: 60000
+            maxDataPoints: 43200
+            refId: A
+        - refId: B
+          datasourceUid: __expr__
+          model:
+            datasource: {type: __expr__, uid: __expr__}
+            expression: A
+            type: reduce
+            reducer: last
+            intervalMs: 60000
+            maxDataPoints: 43200
+            refId: B
+        - refId: C
+          datasourceUid: __expr__
+          model:
+            datasource: {type: __expr__, uid: __expr__}
+            expression: B
+            type: threshold
+            conditions:
+              - evaluator: {type: lt, params: [10]}
+                operator: {type: and}
+                query: {params: [C]}
+                reducer: {type: last, params: []}
+                type: query
+            intervalMs: 60000
+            maxDataPoints: 43200
+            refId: C
+      for: 10m
+      noDataState: Alerting
+      execErrState: Alerting
+      isPaused: false
+      labels: {severity: warning, host: saturn}
+      annotations:
+        summary: "Saturn root filesystem has less than 10 percent free"

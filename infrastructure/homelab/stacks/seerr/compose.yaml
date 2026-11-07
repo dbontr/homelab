@@ -1,0 +1,35 @@
+services:
+  seerr:
+    image: ghcr.io/seerr-team/seerr@sha256:d8fab675b55ad293ded98fd71efcfd46054cbad9746534ae1cc4794a88c0b3be
+    container_name: saturn-seerr
+    user: "1000:1000"
+    init: true
+    restart: unless-stopped
+    environment:
+      TZ: America/Chicago
+      LOG_LEVEL: info
+      PORT: "5055"
+    ports:
+      - "127.0.0.1:5055:5055"
+    volumes:
+      - /srv/homelab/data/seerr/config:/app/config
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:5055/api/v1/settings/public || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    mem_limit: 768m
+    pids_limit: 128
+    networks:
+      media:
+        ipv4_address: 172.19.0.3
+
+networks:
+  media:
+    external: true
+    name: saturn-media_default
