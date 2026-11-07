@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Health · Groceries</title>
+<style>
+:root{color-scheme:light dark;font:14px/1.5 system-ui,sans-serif;--border:#85949d;--accent:#197b6c}
+*{box-sizing:border-box}body{padding:15px;margin:0;background:Canvas;color:CanvasText}
+main{max-width:1050px;margin:auto}h1{font-size:20px;margin:0}
+p{color:GrayText;margin:5px 0 12px}
+label{display:grid;gap:4px;font-weight:600;font-size:13px}
+input,select,button{background:Canvas;color:CanvasText;font:inherit;border:1px solid var(--border);padding:8px;border-radius:8px}
+button{cursor:pointer}button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+section{border:1px solid var(--border);border-radius:11px;padding:13px;margin:12px 0}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:end}
+.row label{flex:1;min-width:130px}.row button{align-self:end}
+.primary{background:var(--accent);color:#fff}
+table{width:100%;border-collapse:collapse}td,th{padding:7px 4px;border-bottom:1px solid var(--border);text-align:left}
+td input{width:100%;min-width:50px}th{font-size:12px}
+input[type=checkbox]{width:18px;height:18px;cursor:pointer}
+.status{min-height:26px}
+@media(max-width:620px){table{font-size:12px}td input{padding:6px 2px}td button{padding:5px}}
+</style></head>
+<body><main>
+<h1>Meals & groceries</h1>
+<p>Build a shopping list from a meal plan, or edit an existing list. RecipeSage recipes require verified ingredient quantities; a recipe link alone does not imply measured ingredients.</p>
+<section><div class="row"><label>Saved grocery lists<select id="lists"></select></label>
+<button id="refresh">Refresh</button><button id="blank">Create empty list</button></div>
+<div class="row" style="margin-top:10px"><label>Meal plan<select id="plans"></select></label>
+<button id="makePlan">Generate from plan</button></div></section>
+<section><div class="row"><label>List name<input id="title" maxlength="200" placeholder="Weekly groceries"></label>
+<span id="version"></span></div>
+<div style="overflow-x:auto"><table><thead><tr>
+<th scope="col">Bought</th><th scope="col">Ingredient</th><th scope="col">Quantity</th><th scope="col">Unit</th><th scope="col">Action</th>
+</tr></thead><tbody id="items"></tbody></table></div>
+<div class="row" style="margin-top:12px"><button id="add">Add item</button><button id="save" class="primary">Save list</button></div></section>
+<p class="status" id="status" role="status" aria-live="polite"></p>
+</main><script>
+'use strict';
+const $=id=>document.getElementById(id);
+const pending=new Map();let seq=1;
+let lists=[],plans=[],current={id:'',title:'',items:[],revision:0};
+function rpc(method,params={}){
+ const id=seq++;return new Promise((resolve,reject)=>{
+  pending.set(id,{resolve,reject});window.parent.postMessage({jsonrpc:'2.0',id,method,params},'*');
+  setTimeout(()=>{if(pending.has(id)){pending.delete(id);reject(Error('Host did not respond'));}},12000);
+ });
+}
+function notify(method,params={}){window.parent.postMessage({jsonrpc:'2.0',method,params},'*');}
+async function call(name,args={}){
+ const r=await rpc('tools/call',{name,arguments:args});
+ if(r?.isError)throw Error(r.content?.[0]?.text||'Tool failed');
+ return r.structuredContent||JSON.parse(r.content?.[0]?.text||'{}');
+}
+function status(text,fail=false){$('status').textContent=text;$('status').style.color=fail?'#bf4b4b':'';}
+function clone(value){return JSON.parse(JSON.stringify(value));}
+function field(type,value,change){
+ const e=document.createElement('input');e.type=type;e.value=String(value??'');
+ e.onchange=()=>change(e.value);return e;
+}
+function render(){
+ $('title').value=current.title||'';
+ $('version').textContent=current.revision?'Revision '+current.revision:'Not saved';
+ const rows=$('items');rows.replaceChildren();
+ for(const [index,item]of current.items.entries()){
+  const tr=document.createElement('tr');
+  const checkbox=document.createElement('td'),cb=document.createElement('input');
+  cb.type='checkbox';cb.checked=!!item.checked;cb.setAttribute('aria-label','Bought '+item.name);
+  cb.onchange=()=>item.checked=cb.checked;checkbox.append(cb);tr.append(checkbox);
+  const name=document.createElement('td');name.append(field('text',item.name,value=>item.name=value));tr.append(name);
+  const qty=document.createElement('td');const quantity=field('number',item.quantity,value=>item.quantity=Number(value));
+  quantity.min='0.001';quantity.step='any';quantity.setAttribute('aria-label','Quantity for '+item.name);qty.append(quantity);tr.append(qty);
+  const unit=document.createElement('td');unit.append(field('text',item.unit,value=>item.unit=value));tr.append(unit);
+  const end=document.createElement('td'),del=document.createElement('button');del.type='button';del.textContent='Remove';
+  del.onclick=()=>{current.items.splice(index,1);render();};end.append(del);tr.append(end);rows.append(tr);
+ }
+ if(!current.items.length){const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=5;td.textContent='No items yet.';tr.append(td);rows.append(tr);}
+}
+function create(){
+ current={id:'',title:'Groceries',items:[],revision:0};render();status('Unsaved list.');
+}
+function choose(id){
+ const item=lists.find(x=>x.id===id);if(!item)return create();
+ current=clone(item);render();status('');
+}
+async function reload(selected=''){
+ const [found,all]=await Promise.all([call('health_grocery_list'),call('health_plan_list')]);
+ lists=Array.isArray(found)?found:[];plans=(Array.isArray(all)?all:[]).filter(p=>p.kind==='meal');
+ const select=$('lists');select.replaceChildren();
+ for(const item of lists){const o=document.createElement('option');o.value=item.id;o.textContent=item.title;select.append(o);}
+ const planSelect=$('plans');planSelect.replaceChildren();
+ for(const p of plans){const o=document.createElement('option');o.value=p.id;o.textContent=p.title;planSelect.append(o);}
+ if(selected&&lists.some(x=>x.id===selected)){choose(selected);select.value=selected;}
+ else if(lists.length){choose(lists[0].id);}else create();
+}
+$('lists').onchange=e=>choose(e.target.value);
+$('refresh').onclick=()=>reload(current.id).catch(e=>status(e.message,true));
+$('blank').onclick=create;
+$('title').oninput=e=>current.title=e.target.value;
+$('makePlan').onclick=async()=>{
+ const id=$('plans').value;if(!id){status('Create a meal plan first.',true);return;}
+ try{
+  const grouped=await call('health_grocery_from_plan',{plan_id:id});
+  const meal=plans.find(x=>x.id===id);
+  current={id:'',title:(meal?.title||'Meal plan')+' groceries',items:grouped,revision:0};
+  render();status('Review ingredient amounts and recipe details before saving.');
+ }catch(e){status(e.message,true);}
+};
+$('add').onclick=()=>{
+ current.items.push({id:'item-'+Math.random().toString(36).slice(2)+Date.now().toString(36),
+  name:'',quantity:1,unit:'each',checked:false});
+ render();
+};
+$('save').onclick=async()=>{
+ try{
+  for(const item of current.items){
+   if(!item.name.trim()||!item.unit.trim()||!Number.isFinite(item.quantity)||item.quantity<=0){
+    throw Error('Every item requires a name, positive quantity, and unit.');
+   }
+  }
+  const result=await call('health_grocery_save',{
+    id:current.id||undefined,title:current.title,items:current.items,
+    expected_revision:current.revision});
+  await reload(result.id);status('Saved revision '+result.revision+'.');
+ }catch(e){status(e.message+'. Refresh and review before retrying.',true);}
+};
+window.addEventListener('message',e=>{
+ if(e.source!==window.parent||e.data?.jsonrpc!=='2.0')return;
+ const m=e.data;if(m.id!==undefined&&pending.has(m.id)){
+  const p=pending.get(m.id);pending.delete(m.id);
+  if(m.error)p.reject(Error(m.error.message));else p.resolve(m.result);
+ }
+});
+(async()=>{
+ try{
+  await rpc('ui/initialize',{appInfo:{name:'Health groceries',version:'0.1.0'},
+   appCapabilities:{availableDisplayModes:['inline','fullscreen']},protocolVersion:'2026-01-26'});
+  notify('ui/notifications/initialized');await reload();
+ }catch(e){status(e.message,true);}
+})();
+</script></body></html>
