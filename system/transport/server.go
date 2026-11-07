@@ -47,6 +47,10 @@ func(s *Server) Handler()http.Handler{
  mux:=http.NewServeMux()
  mux.HandleFunc("GET /healthz",func(w http.ResponseWriter,_ *http.Request){writeJSON(w,200,map[string]string{"status":"ok"})})
  mux.HandleFunc("POST /mcp",s.mcp)
+ mux.HandleFunc("GET /v1/tools",func(w http.ResponseWriter,r *http.Request) {
+  writeJSON(w,200,map[string]any{"tools":s.toolList(r)})
+ })
+ mux.HandleFunc("POST /v1/tools/{name}/call",s.nativeToolCall)
  mux.HandleFunc("GET /v1/tasks",s.tasks)
  mux.HandleFunc("POST /v1/tasks",s.tasks)
  mux.HandleFunc("POST /v1/tasks/{id}/complete",s.complete)
@@ -160,24 +164,7 @@ func(s *Server)mcp(w http.ResponseWriter,r *http.Request){
  case "tools/call":
   var p struct {Name string `json:"name"`; Arguments json.RawMessage `json:"arguments"`}
   if e:=json.Unmarshal(req.Params,&p);e!=nil||p.Name==""{s.rpc(w,req.ID,nil,failure(-32602,"tool name required"));return}
-  if p.Name=="workspace__workspace_create" || p.Name=="workspace__resource_plan" || p.Name=="workspace__task_compute_submit" {
-   if e:=s.deviceCatalog.ValidateAllocation(p.Arguments);e!=nil{s.rpc(w,req.ID,toolError(e.Error()),nil);return}
-  }
-  if output,allowed:=s.checkPrivilege(p.Name,p.Arguments);!allowed{s.rpc(w,req.ID,output,nil);return}
-  for _,b:=range s.backend{
-   prefix:=b.Name+"__"
-   if strings.HasPrefix(p.Name,prefix){
-    args:=map[string]any{"name":strings.TrimPrefix(p.Name,prefix),"arguments":json.RawMessage(p.Arguments)}
-    raw,_:=json.Marshal(args)
-    var remote any
-    e:=s.forward(r.Context(),b,rpcRequest{JSONRPC:"2.0",ID:req.ID,Method:"tools/call",Params:raw},&remote)
-    if e!=nil{s.rpc(w,req.ID,toolError(e.Error()),nil);return}
-    s.rpc(w,req.ID,remote,nil);return
-   }
-  }
-  v,e:=s.localTool(r.Context(),p.Name,p.Arguments)
-  if e!=nil{s.rpc(w,req.ID,toolError(e.Error()),nil);return}
-  s.rpc(w,req.ID,result(v),nil)
+  s.rpc(w,req.ID,s.invoke(r.Context(),p.Name,p.Arguments,req.ID),nil)
  default:s.rpc(w,req.ID,nil,failure(-32601,"method not found"))
  }
 }

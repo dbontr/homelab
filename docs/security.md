@@ -4,7 +4,7 @@
 
 The primary MCP and HTTP API operate as a single-user application interface. Application operations use credentials specific to their target service. The presence of a tool does not imply authority to execute it. The target service must enforce its own authorization.
 
-Cluster changes and other elevated operations require a second approval step. The platform creates a short-lived challenge bound to the exact tool and canonical arguments. A local administrator reviews the operation on Saturn and approves it over the Unix socket. The grant is single-use and expires after two minutes; unapproved challenges expire after five minutes. The user repeats the identical MCP tool call after approval.
+Cluster changes and shared software-library administration require an independently enforced approval step. The platform creates a short-lived challenge bound to the exact tool and canonical arguments. A local administrator reviews the operation on Saturn and approves it over the Unix socket. The grant is single-use and expires after two minutes; unapproved challenges expire after five minutes. The user repeats the identical MCP tool call after approval. Shared software-pool registration and review are privileged operations.
 
 The approval socket is created under a private runtime directory with mode 0600. Only a trusted operating-system administrator should have permission to connect. Neither the socket nor its handler may be exposed through the public HTTP or MCP ingress. The administrative CLI is intended for a trusted login through NanoKVM or another securely authenticated local management channel.
 
