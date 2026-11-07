@@ -1,0 +1,877 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Adaptive Teaching · Learning workspace</title>
+  <style>
+    :root { color-scheme: light dark; font: 14px/1.45 var(--font-sans,system-ui,sans-serif);
+      --bg: var(--color-background-primary,#fff); --surface:var(--color-background-secondary,#f4f5f6);
+      --ink:var(--color-text-primary,#20232a); --sub:var(--color-text-secondary,#69727d);
+      --border:var(--color-border-secondary,#dce0e5); --focus:#207f75; }
+    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--ink)}
+    button,select,textarea{font:inherit;color:inherit} button,select{cursor:pointer}
+    button{padding:8px 11px;border:1px solid var(--border);background:var(--bg);border-radius:9px}
+    button:hover{background:var(--surface)} button:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+    .shell{padding:17px;max-width:1100px;margin:auto} header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;margin-bottom:12px}
+    h1{font-size:18px;margin:0;letter-spacing:-.03em} h2{font-size:14px;margin:0 0 9px} p{margin:6px 0}
+    .muted{color:var(--sub);font-size:12px} .toolbar{display:flex;gap:7px;flex-wrap:wrap;align-items:center}
+    .workspace{display:grid;grid-template-columns:minmax(0,2.1fr) minmax(225px,1fr);gap:12px}
+    .panel{background:var(--bg);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+    .panel-content{padding:13px} .canvas{background:var(--surface);min-height:310px;overflow:hidden}
+    svg{display:block;width:100%;height:440px;touch-action:none;cursor:grab}
+    svg:active{cursor:grabbing} .graph-label{pointer-events:none;user-select:none}
+    .file-grid{display:grid;gap:8px;margin:10px 0}.file-item{border:1px solid var(--border);border-radius:8px;padding:8px}.file-item img{max-width:100%;max-height:350px;object-fit:contain}
+    .item-stack{display:grid;gap:8px;margin:8px 0}.item-stack button{text-align:left}
+    .outline{border:1px solid var(--border);border-radius:9px;padding:12px;margin:8px 0}
+    .source-progress{font-size:12px;color:var(--sub)}
+    .node{cursor:pointer} .node:focus{outline:none} .node:focus circle{stroke-width:3}
+    .edge{stroke:var(--sub);opacity:.48;stroke-width:1.3} .edge.requires{stroke-dasharray:3 3} .edge.dispute{stroke:#a14a65;opacity:.85;stroke-width:1.9;stroke-dasharray:6 3}
+    .tag{display:inline-block;font-size:11px;border:1px solid var(--border);padding:2px 6px;border-radius:20px;margin-right:4px}
+    .progress{height:8px;background:var(--surface);border:1px solid var(--border);border-radius:99px;overflow:hidden;margin:9px 0}
+    .bar{height:100%;background:var(--focus)} .detail{min-height:230px} .reasons{padding-left:18px}
+    .reasons li{margin-bottom:7px} textarea{width:100%;min-height:150px;padding:10px;border:1px solid var(--border);border-radius:9px;resize:vertical;background:var(--bg)}
+    .question{max-width:820px;margin:auto}
+    .problem-statement{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.6;padding:12px;background:var(--surface);border-radius:8px;margin:10px 0}
+    .problem-work{min-height:280px;white-space:pre-wrap;tab-size:2}
+    .problem-history{margin-top:15px;font-size:12px}
+    .problem-history button{width:100%;text-align:left;margin-top:5px}
+    .problem-status{font-weight:600;font-size:12px}
+    button:disabled{cursor:not-allowed;opacity:.55}
+    .problem-feedback{white-space:pre-wrap;overflow-wrap:anywhere}
+    .session-steps{display:grid;gap:7px;margin:10px 0 15px}
+    .session-steps button{text-align:left;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .session-steps button[aria-pressed="true"]{outline:2px solid var(--focus)}
+    .problem-actions{margin-top:9px} .primary{background:#14766c;color:#fff;border-color:#14766c}
+    .primary:hover{background:#09675f} .hidden{display:none!important} .error{color:#bf4a4a;font-size:12px;margin-top:7px}
+    .list{display:flex;flex-wrap:wrap;gap:6px;padding:10px;border-top:1px solid var(--border)}
+    .list button{font-size:12px;padding:5px 8px} .empty{display:grid;place-items:center;min-height:260px;color:var(--sub);text-align:center;padding:20px}
+    .legend{display:flex;gap:10px;flex-wrap:wrap;margin:8px 0}.dot{width:8px;height:8px;display:inline-block;border-radius:50%;margin-right:4px}
+    @media(max-width:670px){.workspace{grid-template-columns:1fr}.canvas svg{height:280px}.shell{padding:10px}}
+    @media(prefers-color-scheme:dark){:root{--bg:var(--color-background-primary,#181a1f);--surface:var(--color-background-secondary,#25282e);--ink:var(--color-text-primary,#f0f2f5);--sub:var(--color-text-secondary,#afb5be);--border:var(--color-border-secondary,#3a3e48)}}
+  </style>
+</head>
+<body>
+<main class="shell">
+  <header><div><h1>Adaptive Teaching</h1><div class="muted">Understanding begins with reasons.</div></div>
+    <div class="toolbar"><label for="target">Target mastery</label><select id="target" aria-label="Target mastery">
+        <option value="1">1 · Familiarity</option><option value="2">2 · Exam preparation</option><option value="3">3 · Explanation</option>
+        <option value="4">4 · Deep understanding</option><option value="5">5 · Mastery</option></select>
+      <button id="sessions" type="button">Learning sessions</button><button id="problems" type="button">My problems</button>
+      <button id="practice" type="button">Practice</button><button id="calibration" type="button">Calibration</button><button id="sources" type="button">Sources</button><button id="reasoning" type="button">Reasoning graph</button><button id="expand" class="hidden" type="button">Fullscreen</button><button id="refresh" type="button">Refresh</button>
+    </div>
+  </header>
+  <section id="sessionPicker" class="hidden" aria-label="Saved learning sessions"><div class="panel"><div class="panel-content">
+    <h2>Learning goals</h2><div id="sessionChoices" class="list"></div>
+  </div></div></section>
+  <section id="problemPicker" class="hidden" aria-label="Saved problems"><div class="panel"><div class="panel-content">
+    <h2>Saved exercises</h2><div id="problemChoices" class="list"></div>
+  </div></div></section>
+  <section id="graphView" class="workspace">
+    <div class="panel"><div class="panel-content"><h2>Knowledge graph</h2>
+      <div id="overview" class="muted">Loading…</div>
+      <div class="toolbar" style="margin-top:8px"><label for="graphSearch">Filter</label><input type="search" id="graphSearch" placeholder="Find a concept" aria-label="Filter graph labels"><button id="graphReset" type="button">Reset view</button></div>
+      <div class="legend"><span><i class="dot" style="background:#488db1"></i>Provisional</span>
+        <span><i class="dot" style="background:#d19b46"></i>In progress</span><span><i class="dot" style="background:#228c6f"></i>At target</span></div>
+    </div><div class="canvas"><div id="empty" class="empty hidden">Your graph begins empty. Ask ChatGPT to map a topic and its foundations.</div>
+      <svg id="network" viewBox="0 0 1000 640" role="img" aria-label="Interactive knowledge graph"></svg>
+    </div><div id="nodeList" class="list"></div></div>
+    <div class="panel detail"><div class="panel-content" id="details"><h2>Select a concept</h2>
+      <p class="muted">Inspect what is understood, what still requires evidence, and why its claims hold.</p></div></div>
+  </section>
+  <section id="questionView" class="question hidden"><div class="panel"><div class="panel-content">
+      <p id="questionConcept" class="muted"></p><h2 id="questionTitle"></h2>
+      <label for="answer">Your explanation or solution</label><textarea id="answer" placeholder="Explain your reasoning, assumptions, and why your result follows."></textarea>
+      <div class="toolbar" style="margin-top:9px"><button class="primary" id="submit" type="button">Submit to ChatGPT for assessment</button></div>
+      <p id="feedback" class="muted">Submitting asks ChatGPT to evaluate your reasoning; it does not automatically mark mastery.</p>
+    </div></div></section>
+  <section id="learningQuestionView" class="question hidden" aria-label="Active learning question"><div class="panel"><div class="panel-content">
+    <p class="muted" id="committedQuestionKind"></p><h2 id="committedQuestionPrompt"></h2>
+    <div id="committedQuestionChoices" class="item-stack"></div>
+    <label for="committedQuestionAnswer">Your answer</label><textarea id="committedQuestionAnswer" placeholder="State the answer or result in your own words."></textarea>
+    <label for="committedQuestionReasoning">Why? Explain your reasoning (optional)</label>
+    <textarea id="committedQuestionReasoning" placeholder="Explain assumptions, intermediate steps, counterexamples or evidence."></textarea>
+    <label for="committedQuestionConfidence">Your confidence in the answer (0–100%, optional)</label>
+    <input id="committedQuestionConfidence" type="number" min="0" max="100" step="1" placeholder="Not reported">
+    <div class="toolbar"><button id="committedQuestionSubmit" class="primary" type="button">Save answer and request assessment</button><button id="committedQuestionBack" type="button">Return to learning session</button></div>
+    <p id="committedQuestionStatus" class="muted" role="status"></p>
+  </div></div></section>
+  <section id="calibrationView" class="question hidden" aria-label="Confidence calibration"><div class="panel"><div class="panel-content">
+    <h2>Confidence calibration</h2>
+    <p class="muted">How often is your confidence warranted by independently checkable outcomes? These measurements never award mastery.</p>
+    <div id="calibrationResults" role="status"></div>
+  </div></div></section>
+  <section id="problemView" class="question hidden"><div class="panel"><div class="panel-content">
+      <p class="muted" id="problemMeta"></p><h2 id="problemTitle"></h2>
+      <div id="problemStatement" class="problem-statement"></div>
+      <p class="problem-status" id="problemStatus"></p>
+      <label for="problemDraft">Your proof, derivation, or solution</label>
+      <textarea id="problemDraft" class="problem-work" spellcheck="false"
+         placeholder="Write your answer, proof, or derivation. For symbolic checks, enter the expression here."></textarea>
+      <label for="problemReasoning">Explain your reasoning (optional)</label>
+      <textarea id="problemReasoning" placeholder="Explain why your answer follows, which premises you used, and where you are uncertain."></textarea>
+      <label for="problemConfidence">Your confidence in this answer (0–100%, optional)</label>
+      <input id="problemConfidence" type="number" min="0" max="100" step="1" placeholder="Not reported">
+      <p class="muted" id="problemRevisions"></p>
+      <div class="toolbar problem-actions">
+        <button id="saveProblem" type="button">Save revision</button>
+        <button id="reviewProblem" type="button">Review reasoning</button>
+        <button id="hintProblem" type="button">Request a hint</button>
+        <button id="finalProblem" class="primary" type="button">Submit final solution</button>
+        <button id="solutionProblem" type="button" class="hidden">Reveal reference solution</button>
+      </div>
+      <p id="problemInfo" class="muted" role="status"></p>
+      <div id="problemEvaluation" class="problem-feedback"></div>
+      <details class="problem-history"><summary>Draft and assistance history</summary><div id="problemHistory"></div></details>
+  </div></div></section>
+  <section id="sessionView" class="question hidden" aria-label="Adaptive teaching session"><div class="panel"><div class="panel-content">
+    <p class="muted" id="sessionMeta"></p><h2 id="sessionGoal"></h2>
+    <p class="problem-status" id="sessionProgress"></p>
+    <div class="toolbar" style="margin:12px 0">
+      <button id="sessionDiagnostic" type="button">Find diagnostic gap</button>
+      <button id="sessionOpenQuestion" type="button">Open pending question</button>
+      <button id="sessionBuildPlan" type="button">Build learning route</button>
+      <label for="sessionPhase">Next phase</label><select id="sessionPhase"></select>
+      <button id="sessionAdvance" type="button">Advance</button>
+    </div>
+    <h2>Reconstruction route</h2><div id="sessionSteps" class="session-steps"></div>
+    <p class="muted" id="sessionSelected">Select a claim or reasoning step to work on it.</p>
+    <label for="sessionAnswer">Your reasoning or response</label>
+    <textarea id="sessionAnswer" placeholder="Write your own reasoning and identify each assumption. The tutor assesses the work you submit."></textarea>
+    <div class="toolbar" style="margin-top:9px"><button id="sessionSubmit" class="primary" type="button">Send for assessment</button></div>
+    <p class="muted" role="status" id="sessionInfo"></p>
+    <details><summary>Diagnostic history</summary><div id="sessionHistory"></div></details>
+  </div></div></section>
+  <section id="sourceView" class="question hidden" aria-label="Knowledge sources"><div class="panel"><div class="panel-content">
+    <h2>Source library</h2><p class="muted">Source content is provisional. Extraction and source identity are audited separately from learner mastery.</p>
+    <div id="sourceChoices" class="item-stack"></div><p id="sourceInfo" class="muted" role="status"></p>
+    <button id="sourceExtract" type="button" disabled>Continue extracting selected source</button>
+  </div></div></section>
+  <section id="practiceView" class="question hidden" aria-label="Practice session"><div class="panel"><div class="panel-content">
+    <h2 id="practiceGoal">Practice sessions</h2><p id="practiceInfo" class="muted"></p>
+    <div id="practiceChoices" class="item-stack"></div>
+    <div class="toolbar"><button id="practiceNext" type="button" disabled>Next problem</button><button id="practiceReviewQueue" type="button">Review schedule</button></div>
+    <div id="practiceHistory" class="item-stack"></div>
+  </div></div></section>
+  <section id="evidencePanel" class="question hidden" aria-label="Original work attachments"><div class="panel"><div class="panel-content">
+    <h2>Original work</h2><p class="muted">Save photographs, diagrams, documents, or other source material with this attempt or session. An interpretation is not equivalent to the original file.</p>
+    <div class="toolbar"><label for="evidenceFile">Choose a photo or file</label><input id="evidenceFile" type="file" accept="image/png,image/jpeg,image/webp,image/heic,application/pdf,text/plain,text/markdown" multiple>
+      <button type="button" id="evidenceUpload">Save originals</button></div>
+    <p id="evidenceInfo" class="muted" role="status"></p><div id="evidenceList" class="file-grid"></div>
+  </div></div></section>
+  <p id="error" class="error" role="alert"></p>
+</main>
+<script>
+'use strict';
+const $=id=>document.getElementById(id);
+let model=null, selected=null, hostCapabilities={}, hostContext={}, initialized=false, seq=1;
+let bufferedToolResult=null, awaitingEvaluation=false;
+let selectedSessionStep=null, activeSessionProbe=null;
+let activeSourceID=null, activePracticeID=null, camera={x:0,y:0,k:1}, graphPositions=new Map(), graphMode="concept";
+const pending=new Map();
+function request(method,params={}){
+  const id=seq++;
+  return new Promise((resolve,reject)=>{
+    pending.set(id,{resolve,reject});
+    window.parent.postMessage({jsonrpc:'2.0',id,method,params},'*');
+    setTimeout(()=>{if(pending.has(id)){pending.delete(id);reject(new Error('Host did not respond'));}},12000);
+  });
+}
+function notify(method,params={}){window.parent.postMessage({jsonrpc:'2.0',method,params},'*');}
+function parseTool(result){
+  const data=result?.structuredContent;
+  if(data && (data.nodes||data.view||data.title||data.mastery||data.target_level||data.statement||data.choice_accuracy)) return data;
+  const value=result?.content?.find?.(x=>x.type==='text')?.text;
+  if(typeof value==='string'){try{return JSON.parse(value);}catch{return {message:value};}}
+  return null;
+}
+async function callTool(name,args={}){
+  const response=await request('tools/call',{name,arguments:args});
+  if(response?.isError) throw new Error(response.content?.[0]?.text||'Tool failed');
+  return parseTool(response);
+}
+function showError(e){$('error').textContent=e?.message||String(e);}
+function nodeColor(n){if(n.status)return n.status==='disputed'?'#a14a65':n.status==='reviewed'?'#228c6f':'#488db1';const m=n.mastery||{};return m.meets_target?'#228c6f':m.level>0?'#d19b46':'#488db1';}
+function element(tag,attrs={},text){const e=document.createElementNS('http://www.w3.org/2000/svg',tag);
+  for(const [k,v] of Object.entries(attrs))e.setAttribute(k,String(v)); if(text!==undefined)e.textContent=text;return e;}
+function activateView(id){
+  for(const name of ['graphView','questionView','learningQuestionView','problemView','sessionView','sourceView','practiceView','calibrationView']){
+    $(name).classList.toggle('hidden',name!==id);
+  }
+  $('evidencePanel').classList.toggle('hidden',!['problemView','sessionView','sourceView'].includes(id));
+  $('problemPicker').classList.add('hidden');$('sessionPicker').classList.add('hidden');
+}
+function layoutNodes(nodes){
+  const positions=new Map(),groups=new Map();
+  for(const n of nodes){const key=n.domain||'General';if(!groups.has(key))groups.set(key,[]);groups.get(key).push(n);}
+  const keys=[...groups.keys()].sort();
+  keys.forEach((key,index)=>{
+    const items=groups.get(key),count=keys.length,angle=index*2*Math.PI/Math.max(1,count)-Math.PI/2;
+    const cx=500+(count===1?0:Math.min(300,count*52)*Math.cos(angle));
+    const cy=320+(count===1?0:Math.min(210,count*35)*Math.sin(angle));
+    const radius=Math.min(180,Math.max(52,items.length*11));
+    items.forEach((n,i)=>{
+      const theta=i*2*Math.PI/Math.max(1,items.length)-Math.PI/2;
+      const layer=items.length===1?0:(.45+.55*Math.sqrt((i+1)/items.length));
+      positions.set(n.id,{x:cx+radius*layer*Math.cos(theta),y:cy+radius*layer*Math.sin(theta)});
+    });
+  });
+  return positions;
+}
+function applyCamera(){const group=$('graphLayer');if(group)group.setAttribute('transform',`translate(${camera.x} ${camera.y}) scale(${camera.k})`);}
+function drawGraph(data,reasoning){
+  const allNodes=data.nodes||[];const query=$('graphSearch').value.trim().toLowerCase();
+  const nodes=query?allNodes.filter(n=>`${n.title} ${n.domain||''} ${n.summary||''}`.toLowerCase().includes(query)):allNodes;
+  const ids=new Set(nodes.map(n=>n.id));const edges=(data.edges||[]).filter(e=>ids.has(e.source)&&ids.has(e.target));
+  $('overview').textContent=reasoning?`${nodes.length} propositions · ${data.chains?.length||0} joint-premise chains · ${data.chains?.filter(c=>c.review_active).length||0} active reviews · Select a conclusion to inspect all required premises`:
+    `${nodes.length} visible concepts · ${nodes.filter(n=>n.mastery?.meets_target).length} at target`;
+  $('empty').classList.toggle('hidden',!!nodes.length);$('network').classList.toggle('hidden',!nodes.length);
+  $('network').replaceChildren();$('nodeList').replaceChildren();
+  graphPositions=layoutNodes(nodes);
+  const layer=element('g',{id:'graphLayer'});$('network').append(layer);
+  for(const edge of edges){const a=graphPositions.get(edge.source),b=graphPositions.get(edge.target);if(!a||!b)continue;
+    const line=element('line',{x1:a.x,y1:a.y,x2:b.x,y2:b.y,class:'edge '+edge.kind});
+    line.append(element('title',{},`${edge.kind}: ${edge.rationale||''}`));layer.append(line);
+  }
+  for(const n of nodes){const pos=graphPositions.get(n.id),g=element('g',{class:'node',tabindex:'0',role:'button','aria-label':n.title});
+    g.append(element('circle',{cx:pos.x,cy:pos.y,r:selected===n.id?16:12,fill:nodeColor(n),stroke:'var(--ink)','stroke-width':selected===n.id?2:0.6}));
+    const label=element('text',{x:pos.x,y:pos.y+26,'text-anchor':'middle','font-size':'12',fill:'var(--ink)',class:'graph-label'},n.title.length>30?n.title.slice(0,29)+'...':n.title);
+    g.append(label);g.addEventListener('click',()=>selectNode(n.id));g.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();selectNode(n.id);}});
+    layer.append(g);
+    const button=document.createElement('button');button.textContent=n.title;button.onclick=()=>selectNode(n.id);$('nodeList').append(button);
+  }
+  applyCamera();if(selected&&!ids.has(selected))selected=null;
+  if(!selected&&nodes.length)selected=nodes[0].id;
+  if(selected)selectNode(selected,false);
+}
+function renderGraph(data){
+  model={...data,view:'graph'};graphMode='concept';activateView('graphView');$('target').value=String(data.target_level||5);
+  drawGraph(model,false);
+}
+function renderReasoning(data){
+  const nodes=(data.propositions||[]).map(p=>({...p,title:p.statement,summary:p.context,mastery:null}));
+  const edges=[];
+  for(const chain of data.chains||[]){for(const source of chain.premises||[]){edges.push({source,target:chain.conclusion,kind:chain.relation,rationale:`${chain.explanation} (all ${chain.premises.length} premises required together)`});}}
+  for(const conflict of data.disputes||[]){edges.push({source:conflict.left_id,target:conflict.right_id,kind:'dispute',rationale:conflict.reason});}
+  model={...data,view:'reasoning',nodes,edges};graphMode='reasoning';activateView('graphView');drawGraph(model,true);
+}
+function addText(parent,tag,text,cls){const e=document.createElement(tag);e.textContent=text;if(cls)e.className=cls;parent.append(e);return e;}
+async function selectNode(id,rerender=true){
+  selected=id;const n=model?.nodes?.find(n=>n.id===id);if(!n)return;
+  if(rerender){if(graphMode==='reasoning')renderReasoning(model);else renderGraph(model);}
+  const out=$('details');out.replaceChildren();addText(out,'h2',n.title);addText(out,'p',n.summary||'');
+  if(graphMode==='reasoning'){
+    addText(out,'p',`Status: ${n.status} · ${n.evidence_count||0} source quotations`,'muted');
+    for(const chain of model?.chains||[]){if(chain.conclusion!==id)continue;
+      const box=document.createElement('div');box.className='outline';
+      addText(box,'h3',`Reasoning chain · ${chain.relation}`);
+      const premises=(chain.premises||[]).map(pid=>model.nodes.find(p=>p.id===pid)?.title||pid);
+      addText(box,'p',`All required together: ${premises.join(' AND ')}`);
+      addText(box,'p',chain.explanation);
+      const standing=chain.review_active?'Reviewed, with current prerequisites intact':
+        chain.status==='reviewed'?'Prior review is blocked':'Not reviewed as a chain';
+      addText(box,'p',standing,'muted');
+      if(chain.review_blockers?.length)addText(box,'p',`Review blockers: ${chain.review_blockers.join('; ')}`,'muted');
+      const formal=chain.latest_formal_check;
+      if(formal){
+        const standing=formal.claim_snapshot_current?formal.verdict:'stale proposition wording';
+        addText(box,'p',`Propositional check: ${standing}. Natural-language interpretation not certified.`,'muted');
+        if(formal.latest_translation_review){
+          const review=formal.latest_translation_review;
+          const state=review.claim_snapshot_current&&review.source_evidence_current?review.decision:'stale source or claim';
+          addText(box,'p',`Recorded translation judgment: ${state}. Reviewer identity is not authenticated.`,'muted');
+        }
+      }
+      const inspect=document.createElement('button');inspect.textContent='Inspect chain provenance and review history';
+      inspect.onclick=async()=>{try{
+        const detail=await callTool('get_reasoning_chain',{chain_id:chain.id});
+        const evidence=document.createElement('div');evidence.className='outline';
+        for(const item of detail.provenance||[])addText(evidence,'p',`${item.source_name}, span ${item.ordinal}`);
+        for(const record of detail.review_history||[])addText(evidence,'p',`${record.status}: ${record.explanation}`);
+        for(const check of (detail.formal_checks||[]).slice(0,3)){
+          const report=check.result||{};
+          addText(evidence,'h3',`Propositional check: ${report.verdict||'unavailable'}`);
+          addText(evidence,'p',`Scope: ${check.formalization?.scope||'unspecified'} · Claim wording current: ${check.claim_snapshot_current}`,'muted');
+          if(report.counterexample)addText(evidence,'p',`Counterexample: ${JSON.stringify(report.counterexample)}`);
+          if(report.individually_redundant_premise_ids?.length)addText(evidence,'p',`Individually redundant premise IDs: ${report.individually_redundant_premise_ids.join(', ')}`);
+          if(check.latest_translation_review){
+            const recent=check.latest_translation_review;
+            addText(evidence,'p',`Translation: ${recent.decision} · ${recent.domain} · Source intact: ${recent.source_evidence_current} · Claim current: ${recent.claim_snapshot_current}`,'muted');
+            const inspectReview=document.createElement('button');inspectReview.textContent='Inspect translation citations and reviewer notes';
+            inspectReview.onclick=async()=>{try{
+              const reviews=await callTool('get_translation_reviews',{check_id:check.id,limit:5});
+              const records=document.createElement('div');records.className='outline';
+              for(const r of reviews.reviews||[]){
+                addText(records,'h3',`Recorded judgment: ${r.review.decision}`);
+                addText(records,'p',`${r.review.reason} · ${r.review.domain}`);
+                addText(records,'p',`Claim and source current: ${r.claim_snapshot_current} / ${r.source_evidence_current}`,'muted');
+                for(const anchor of r.review.anchors||[]){
+                  addText(records,'p',`Claim ${anchor.proposition_id}: ${anchor.alignment} · ${anchor.quoted_text}`);
+                  addText(records,'p',anchor.explanation,'muted');
+                }
+                for(const note of r.review.assumptions||[])addText(records,'p',`Assumption: ${note}`);
+                for(const note of r.review.limitations||[])addText(records,'p',`Limit: ${note}`);
+              }
+              evidence.append(records);
+            }catch(e){showError(e);}};
+            evidence.append(inspectReview);
+          }
+          addText(evidence,'p','Atom meanings and reviewer labels are supplied, not independently authenticated. This does not establish a natural-language proof.','muted');
+        }
+        box.append(evidence);
+      }catch(e){showError(e);}};
+      box.append(inspect);out.append(box);
+    }
+    for(const dispute of model?.disputes||[]){if(dispute.left_id===id||dispute.right_id===id){
+      addText(out,'p',`Source disagreement · ${dispute.status}: ${dispute.reason}`,'muted');
+    }}
+    const detail=document.createElement('button');detail.textContent='Inspect source evidence';detail.onclick=async()=>{
+      try{const data=await callTool('get_proposition',{proposition_id:id});
+        const box=document.createElement('div');box.className='outline';
+        addText(box,'h2','Source provenance');
+        for(const item of data.provenance||[]){addText(box,'p',`${item.source_name}, span ${item.ordinal}: ${item.quoted_text}`);}
+        out.append(box);
+      }catch(e){showError(e);} };out.append(detail);return;
+  }
+  addText(out,'p',`Conceptual evidence: ${n.mastery.level}/5 · Target: ${n.mastery.target}/5`,'muted');
+  const practice=n.mastery.practice;
+  if(practice)addText(out,'p',`Independent problem solutions: ${practice.independent_solutions}/${n.mastery.required_independent_solutions} required at this target`,'muted');
+  const wrap=document.createElement('div');wrap.className='progress';const bar=document.createElement('div');bar.className='bar';bar.style.width=(n.mastery.level/5*100)+'%';wrap.append(bar);out.append(wrap);
+  if(n.mastery.foundation_gaps?.length)addText(out,'p',`Foundation to verify: ${n.mastery.foundation_gaps.join(', ')}`,'muted');
+  if(n.mastery.missing_dimensions?.length)addText(out,'p',`Evidence needed: ${n.mastery.missing_dimensions.join(', ')}`,'muted');
+  const btn=document.createElement('button');btn.textContent='Explore this concept';btn.onclick=async()=>{
+    try{const concept=await callTool('get_concept',{identifier:id});showConcept(concept,n);}catch(e){showError(e);}};
+  out.append(btn);
+  const focusBtn=document.createElement('button');focusBtn.textContent='Focus graph';focusBtn.style.marginLeft='6px';
+  focusBtn.onclick=async()=>{try{const graph=await callTool('get_graph',{focus:id,depth:2});renderGraph(graph);}catch(e){showError(e);}};
+  out.append(focusBtn);
+}
+function showConcept(data,n){if(!data)return;const out=$('details');
+  const old=out.querySelector('.reasonDetail');if(old)old.remove();
+  const section=document.createElement('section');section.className='reasonDetail';
+  addText(section,'h2','Why does it hold?');
+  if(!data.justifications?.length)addText(section,'p','No explicit justification has been recorded. Ask ChatGPT to develop one.','muted');
+  const list=document.createElement('ul');list.className='reasons';
+  for(const item of data.justifications||[]){const li=document.createElement('li');
+    addText(li,'strong',item.claim);addText(li,'p',`${item.kind}: ${item.explanation}`);
+    if(item.premises?.length)addText(li,'p',`Premises: ${item.premises.join(', ')}`,'muted');
+    if(item.source_reference)addText(li,'p',`Source: ${item.source_reference}`,'muted');list.append(li);}section.append(list);
+  if(data.prerequisites?.length)addText(section,'p',`Prerequisites: ${data.prerequisites.map(p=>p.title).join(', ')}`,'muted');out.append(section);
+}
+function renderQuestion(data){model=data;activateView('questionView');$('problemPicker').classList.add('hidden');$('sessionPicker').classList.add('hidden');
+ $('sessionView').classList.add('hidden');$('graphView').classList.add('hidden');
+ $('problemView').classList.add('hidden');$('questionView').classList.remove('hidden');
+  $('questionConcept').textContent=`${data.concept.title} · ${data.dimension}`;
+  $('questionTitle').textContent=data.question;$('answer').value='';$('target').value=String(data.mastery?.target||5);}
+function renderCalibration(data){
+  model={...data,view:'calibration'};activateView('calibrationView');
+  const area=$('calibrationResults');area.replaceChildren();
+  const formatPercent=value=>value==null?'not available':`${(value*100).toFixed(1)}%`;
+  const cohort=(title,values,recordType)=>{
+    const section=document.createElement('section');section.className='outline';
+    addText(section,'h3',title);
+    addText(section,'p',`${values.sample_count} confidence ratings among ${values.eligible_examined} recent eligible records; ${values.missing_self_confidence} have no reported confidence.`,'muted');
+    if(values.conflicting_checks_excluded){
+      addText(section,'p',`${values.conflicting_checks_excluded} records with contradictory authenticated results were excluded.`,'muted');
+    }
+    if(values.sample_count){
+      addText(section,'p',`Reported certainty: ${formatPercent(values.mean_confidence)} · Observed accuracy: ${formatPercent(values.observed_accuracy)} · Brier score: ${values.brier_score.toFixed(3)} (lower is better).`);
+      if(values.insufficient_samples)addText(section,'p','Fewer than ten observations: these estimates are too sparse for a dependable conclusion.','muted');
+      for(const band of values.bands||[]){
+        if(band.count)addText(section,'p',`${band.band}: ${band.count} answers · confidence ${formatPercent(band.mean_confidence)} · accuracy ${formatPercent(band.accuracy)}`,'muted');
+      }
+      const showExamples=(label,examples)=>{
+        if(!examples?.length)return;
+        addText(section,'h4',label);
+        for(const item of examples){
+          const button=document.createElement('button');button.type='button';
+          button.textContent=`${item.domain||'Unknown domain'} · ${formatPercent(item.self_confidence)} certainty`;
+          button.onclick=async()=>{
+            try{
+              if(recordType==='question')renderLearningQuestion(await callTool('get_learning_question',{question_id:item.id}));
+              else renderProblem(await callTool('get_problem',{problem_id:item.id}));
+            }catch(e){showError(e);}
+          };
+          section.append(button);
+        }
+      };
+      showExamples('Confident errors to investigate',values.confident_errors);
+      showExamples('Correct answers worth consolidating',values.underconfident_successes);
+    }else{
+      addText(section,'p','No usable self-reported confidence and independently checkable outcome pairs are available.','muted');
+    }
+    area.append(section);
+  };
+  cohort('Precommitted multiple-choice answers',data.choice_accuracy,'question');
+  cohort('Authenticated checked results',data.authenticated_result_accuracy,'problem');
+  addText(area,'p','A correct choice may still have an unsupported explanation. A signed mathematical result covers only its stated checking scope. Calibration statistics do not award mastery.','muted');
+}
+$('calibration').onclick=async()=>{
+  try{renderCalibration(await callTool('get_confidence_calibration',{limit:250}));}
+  catch(e){showError(e);}
+};
+function renderLearningQuestion(data){
+  model={...data,view:'learning_question'};activateView('learningQuestionView');
+  $('committedQuestionKind').textContent=`${data.kind} · ${data.response_kind} · ${data.status}`;
+  $('committedQuestionPrompt').textContent=data.prompt||'';
+  $('committedQuestionAnswer').value=data.learner_response||'';
+  $('committedQuestionReasoning').value=data.learner_reasoning||'';
+  $('committedQuestionConfidence').value=data.self_confidence==null?'':Math.round(data.self_confidence*100);
+  const choices=$('committedQuestionChoices');choices.replaceChildren();
+  const isChoice=data.response_kind==='multiple_choice';
+  $('committedQuestionAnswer').classList.toggle('hidden',isChoice);
+  if(isChoice){for(const option of data.options||[]){
+    const wrapper=document.createElement('label');wrapper.style.display='flex';wrapper.style.gap='10px';wrapper.style.padding='7px';
+    const input=document.createElement('input');input.type='radio';input.name='committedChoice';input.value=option.id;
+    input.checked=option.id===data.learner_response;input.disabled=data.status!=='pending';
+    wrapper.append(input,document.createTextNode(option.label));choices.append(wrapper);
+  }}
+  $('committedQuestionAnswer').readOnly=data.status!=='pending';
+  $('committedQuestionReasoning').readOnly=data.status!=='pending';
+  $('committedQuestionConfidence').disabled=data.status!=='pending';
+  $('committedQuestionSubmit').disabled=data.status!=='pending';
+  $('committedQuestionStatus').textContent=data.status==='graded'?
+    `Answer: ${data.verdict}. Reasoning: ${data.reasoning_verdict||'not assessed'}. ${data.evaluation} ${data.reasoning_evaluation||''}`:
+    data.status==='answered'?'Answer saved. ChatGPT must assess correctness and any submitted explanation before the next question.':
+    data.requires_reasoning_review?
+      'The answer key remains sealed. A correct choice without a supported explanation cannot establish this diagnostic prerequisite.':
+      'The answer key and grading criteria remain sealed until assessment.';
+}
+function renderProblem(data){
+  model={...data,view:'problem'};activateView('problemView');loadAttachments('problem',data.id);
+  $('error').textContent='';$('problemPicker').classList.add('hidden');$('sessionPicker').classList.add('hidden');
+  $('sessionView').classList.add('hidden');$('graphView').classList.add('hidden');$('questionView').classList.add('hidden');
+  $('problemView').classList.remove('hidden');
+  $('problemTitle').textContent=data.title;
+  $('problemMeta').textContent=`${data.discipline||'Independent study'} · ${data.kind} · ${data.difficulty} · ${data.mode} mode`;
+  $('problemStatement').textContent=data.statement;
+  $('problemStatus').textContent=`Status: ${data.status}${data.independently_solved?' · independently completed':''}`;
+  const drafts=data.drafts||[],last=drafts[drafts.length-1];
+  $('problemDraft').value=last?.body||'';
+  $('problemReasoning').value=last?.learner_reasoning||'';
+  $('problemConfidence').value=last?.self_confidence==null?'':Math.round(last.self_confidence*100);
+  $('problemDraft').disabled=data.status!=='open';
+  $('problemReasoning').disabled=data.status!=='open';
+  $('problemConfidence').disabled=data.status!=='open';
+  $('problemRevisions').textContent=`${drafts.length} saved ${drafts.length===1?'revision':'revisions'} · ${data.hints?.length||0} hints · ${data.reviews?.length||0} reviews`;
+  $('saveProblem').disabled=data.status!=='open';
+  $('reviewProblem').disabled=data.status!=='open'||data.mode==='exam';
+  $('hintProblem').disabled=data.status!=='open'||data.mode==='exam';
+  $('finalProblem').disabled=data.status!=='open'||awaitingEvaluation;
+  $('solutionProblem').classList.toggle('hidden',!data.solution_available);
+  $('problemInfo').textContent=data.status==='open'
+    ?(data.mode==='exam'?'Exam mode: no hints or reviews until final submission.':
+      'A hint or an interim review makes this attempt assisted. You retain control of the solution.')
+    :'This attempt is closed. Your drafts and feedback remain available.';
+  $('problemEvaluation').textContent=data.final_evaluation||'';
+  const history=$('problemHistory');history.replaceChildren();
+  drafts.forEach((d,i)=>{
+    const b=document.createElement('button');b.type='button';
+    b.textContent=`Draft ${i+1} · ${new Date(d.recorded_at).toLocaleString()}`;
+    b.addEventListener('click',()=>{
+      $('problemDraft').value=d.body;
+      $('problemReasoning').value=d.learner_reasoning||'';
+      $('problemConfidence').value=d.self_confidence==null?'':Math.round(d.self_confidence*100);
+      $('problemInfo').textContent='Viewing a saved revision. Save to make it the current draft.';
+    });
+    history.append(b);
+  });
+  for(const h of data.hints||[]){addText(history,'p',`Hint R${h.level}: ${h.guidance}`,'muted');}
+  for(const r of data.reviews||[]){addText(history,'p',`${r.verdict}: ${r.feedback}`,'muted');}
+}
+function readLearnerConfidence(inputID){
+  const raw=$(inputID).value.trim();
+  if(raw==='')return null;
+  const percentage=Number(raw);
+  if(!Number.isFinite(percentage)||percentage<0||percentage>100||!Number.isInteger(percentage))
+    throw new Error('Confidence must be a whole percentage from 0 to 100.');
+  return percentage/100;
+}
+async function saveActiveProblem(){
+  const body=$('problemDraft').value.trim();
+  if(!body)throw new Error('Write your own attempt before saving.');
+  const saved=await callTool('save_problem_draft',{
+    problem_id:model.id,draft:body,
+    learner_reasoning:$('problemReasoning').value.trim(),
+    self_confidence:readLearnerConfidence('problemConfidence')
+  });
+  if(!saved?.problem)throw new Error('The server did not confirm the saved revision.');
+  renderProblem(saved.problem);
+  $('problemInfo').textContent=saved.duplicate?'Already saved.':'Revision saved.';
+  return saved.problem;
+}
+async function sendProblemMessage(action){
+  try{
+    const p=await saveActiveProblem();
+    const lead=action==='final'?'Evaluate my final solution': 'Review my current solution';
+    const instructions=action==='final'
+      ?'Verify each inferential step, then call finish_problem with a supported outcome and only explicitly demonstrated concept credits. Do not grant credit for merely recognizing theorems.'
+      :'Identify the earliest unsupported inference without revealing a complete solution. Call review_problem_draft to preserve your feedback.';
+    const text=`${lead} for Adaptive Teaching problem ${p.id}. Latest saved learner draft: ${p.drafts.at(-1).id}. `+
+      `Problem statement: ${p.statement}\nMy solution: ${p.drafts.at(-1).body}\nMy explanation: ${p.drafts.at(-1).learner_reasoning||'Not provided'}\nMy self-reported confidence: ${p.drafts.at(-1).self_confidence==null?'Not provided':Math.round(p.drafts.at(-1).self_confidence*100)+'%'}\nAssess correctness and reasoning independently of my confidence. ${instructions}`;
+    await request('ui/message',{role:'user',content:[{type:'text',text}]});
+    if(action==='final'){awaitingEvaluation=true;$('finalProblem').disabled=true;}
+    $('problemInfo').textContent='Sent to ChatGPT. Refresh after assessment to see the saved result.';
+  }catch(e){showError(e);}
+}
+const nextSessionPhases={diagnose:['plan'],plan:['diagnose','teach'],teach:['plan','practice'],
+ practice:['teach','reassess'],reassess:['diagnose','practice','complete'],complete:[]};
+function renderSession(data){
+  if(model?.view!=='session'||model?.id!==data.id){
+    selectedSessionStep=null;activeSessionProbe=null;
+  }
+  model={...data,view:'session'};activateView('sessionView');loadAttachments('session',data.id);
+  if(!['diagnose','reassess'].includes(data.phase))activeSessionProbe=null;
+  $('error').textContent='';$('sessionPicker').classList.add('hidden');$('problemPicker').classList.add('hidden');
+  $('graphView').classList.add('hidden');$('problemView').classList.add('hidden');
+  $('questionView').classList.add('hidden');$('sessionView').classList.remove('hidden');
+  $('sessionGoal').textContent=data.goal;
+  $('sessionMeta').textContent=`${data.mode} · ${data.phase} · target ${data.target_level}/5 · revision ${data.revision}`;
+  $('sessionProgress').textContent=`${data.steps?.length||0} planned steps · ${data.remaining_steps} essential steps remaining`;
+  $('sessionDiagnostic').disabled=!['diagnose','reassess'].includes(data.phase);
+  $('sessionOpenQuestion').disabled=!data.pending_question;
+  $('sessionOpenQuestion').textContent=data.pending_question?.status==='answered'?'View answer awaiting grading':'Open pending question';
+  $('sessionBuildPlan').disabled=!['plan','teach','practice','reassess'].includes(data.phase);
+  const phase=$('sessionPhase');phase.replaceChildren();
+  for(const value of nextSessionPhases[data.phase]||[]){
+    const option=document.createElement('option');option.value=value;option.textContent=value;phase.append(option);
+  }
+  $('sessionAdvance').disabled=!phase.options.length;
+  const steps=$('sessionSteps');steps.replaceChildren();
+  const current=(data.steps||[]).find(x=>x.id===selectedSessionStep);
+  if(!current)selectedSessionStep=data.steps?.find(x=>!x.independently_supported)?.id||data.steps?.[0]?.id||null;
+  if(!data.steps?.length)addText(steps,'p','No route yet. Diagnose your goal and build a learning plan.','muted');
+  for(const step of data.steps||[]){
+    const button=document.createElement('button');button.type='button';
+    const label=step.kind==='inference'?'Reasoning link':'Concept understanding';
+    button.textContent=`${step.independently_supported?'Supported':'Needs work'} · ${label} · ${step.title}`;
+    button.setAttribute('aria-pressed',String(step.id===selectedSessionStep));
+    button.onclick=()=>{activeSessionProbe=null;selectedSessionStep=step.id;renderSession({...data});};steps.append(button);
+  }
+  const selected=data.steps?.find(x=>x.id===selectedSessionStep);
+  $('sessionSelected').textContent=selected?`${selected.kind}: ${selected.title}. `+
+    `Premises: ${selected.premises?.join(', ')||'explicit starting point'}. `+
+    (selected.premise_gaps?.length?`Unverified premises: ${selected.premise_gaps.join(', ')}. `:'')+
+    (selected.missing_justification?'No explicit reason has yet been recorded.':''):
+    'For a diagnostic question, select “Find diagnostic gap”.';
+  $('sessionSubmit').disabled=!(selected||activeSessionProbe)||data.phase==='complete';
+  const history=$('sessionHistory');history.replaceChildren();
+  for(const probe of data.probes||[]){
+    addText(history,'p',`${probe.concept_id}: ${probe.outcome} · ${probe.evaluation}`,'muted');
+  }
+  $('sessionInfo').textContent=data.plan_ready?
+    'The current reasoning route has provisional independent support. This does not certify durable mastery.':
+    'Assessment of a reasoning link is separate from subject mastery.';
+}
+function fileScope(){
+  if(model?.view==='problem')return {owner_kind:'problem',owner_id:model.id};
+  if(model?.view==='session')return {owner_kind:'session',owner_id:model.id};
+  if(model?.view==='sources'&&activeSourceID)return {owner_kind:'source',owner_id:activeSourceID};
+  return null;
+}
+async function loadAttachments(kind,id){
+  try{
+    const info=await callTool('list_attachments',{owner_kind:kind,owner_id:id});
+    if(!info || fileScope()?.owner_id!==id)return;
+    const list=$('evidenceList');list.replaceChildren();
+    for(const file of info.attachments||[]){
+      const box=document.createElement('div');box.className='file-item';
+      addText(box,'strong',file.filename);addText(box,'p',`${file.mime_type} · ${file.size_bytes} bytes`,'muted');
+      for(const a of file.annotations||[])addText(box,'p',`${a.method}: ${a.text}${a.uncertainty?' (uncertain: '+a.uncertainty+')':''}`,'muted');
+      const open=document.createElement('button');open.type='button';open.textContent='Show original';open.onclick=async()=>{
+        try{
+          const data=await callTool('get_attachment',{attachment_id:file.id,include_original:true});
+          if(file.mime_type.startsWith('image/')){
+            const image=document.createElement('img');image.alt=file.filename;image.src=`data:${file.mime_type};base64,${data.base64}`;box.append(image);
+          }else{
+            addText(box,'p','Original file retained. Ask ChatGPT to interpret it through the appropriate file tool.','muted');
+          }
+        }catch(e){showError(e);}
+      };box.append(open);list.append(box);
+    }
+    if(!info.attachments?.length)addText(list,'p','No original files saved for this record.','muted');
+  }catch(e){$('evidenceInfo').textContent=e.message||String(e);}
+}
+$('evidenceUpload').onclick=async()=>{
+  const scope=fileScope();if(!scope){showError(new Error('Open a problem, learning session, or source before attaching files.'));return;}
+  const files=[...$('evidenceFile').files];if(!files.length){$('evidenceInfo').textContent='Choose files first.';return;}
+  $('evidenceUpload').disabled=true;
+  try{
+    for(const file of files){
+      if(file.size>5*1024*1024)throw new Error('Each file must be at most 5 MiB in this client.');
+      if(!file.type)throw new Error('Cannot determine file MIME type.');
+      const encoded=await new Promise((resolve,reject)=>{
+        const reader=new FileReader();reader.onerror=()=>reject(reader.error);
+        reader.onload=()=>resolve(String(reader.result).split(',')[1]);reader.readAsDataURL(file);
+      });
+      const saved=await callTool('upload_attachment',{...scope,filename:file.name,mime_type:file.type,base64:encoded,note:''});
+      $('evidenceInfo').textContent=`Saved original ${file.name}. Attachment ID ${saved.id}. Interpretation remains provisional.`;
+      await request('ui/message',{role:'user',content:[{type:'text',text:`I attached original work ${file.name} to ${scope.owner_kind} ${scope.owner_id}. Its attachment ID is ${saved.id}. If you need to inspect an image, use inspect_attachment; distinguish uncertain observations from facts and never award mastery from upload alone.`}]});
+    }
+    $('evidenceFile').value='';await loadAttachments(scope.owner_kind,scope.owner_id);
+  }catch(e){showError(e);}finally{$('evidenceUpload').disabled=false;}
+};
+function renderSources(data){
+  model={...data,view:'sources'};activateView('sourceView');
+  const list=$('sourceChoices');list.replaceChildren();
+  for(const source of data.sources||[]){
+    const b=document.createElement('button');b.type='button';b.textContent=`${source.label} · ${source.covered_spans}/${source.spans} spans reviewed`;
+    b.onclick=()=>{activeSourceID=source.id;$('sourceInfo').textContent=`${source.label}: ${source.covered_spans}/${source.spans} audited spans`;
+      $('sourceExtract').disabled=false;loadAttachments('source',source.id);};list.append(b);
+  }
+  if(!data.sources?.length)addText(list,'p','No sources yet. Ask ChatGPT to ingest selected documents or notes.','muted');
+  if(activeSourceID && data.sources?.some(x=>x.id===activeSourceID))loadAttachments('source',activeSourceID);
+}
+$('sources').onclick=async()=>{try{renderSources(await callTool('list_learning_sources',{limit:50}));}catch(e){showError(e);}};
+$('sourceExtract').onclick=async()=>{
+  try{
+    const stage=await callTool('next_extraction',{source_id:activeSourceID});
+    $('sourceInfo').textContent=`Source extraction status: ${stage.action}.`;
+    if(stage.action==='complete')return;
+    await request('ui/message',{role:'user',content:[{type:'text',text:`Please continue the Adaptive Teaching extraction for source ${activeSourceID} using next_extraction. Extract auditable propositions from the exact source span, propose_extraction with verbatim quotations, then perform a separate source-faithfulness and identity audit through audit_extraction. Preserve unresolved disputes. Do not infer learner mastery from source material.`}]});
+  }catch(e){showError(e);}
+};
+function renderPractice(data){
+  model={...data,view:'practice'};activePracticeID=data.id;activateView('practiceView');
+  $('practiceGoal').textContent=data.goal;$('practiceInfo').textContent=`${data.state} · ${data.targets?.length||0} target concepts · ${data.items?.length||0} exercises`;
+  const list=$('practiceHistory');list.replaceChildren();
+  for(const item of data.items||[]){const b=document.createElement('button');b.type='button';
+    b.textContent=`${item.method} · ${item.target_concept_id} · ${item.status}${item.outcome?' · '+item.outcome.miss_class:''}`;
+    b.onclick=async()=>{try{renderProblem(await callTool('get_problem',{problem_id:item.problem_id}));}catch(e){showError(e);}};list.append(b);
+  }
+  $('practiceNext').disabled=data.state!=='active';
+}
+$('practice').onclick=async()=>{
+  try{
+    const sessions=await callTool('list_practice_sessions',{limit:25});
+    activateView('practiceView');$('practiceGoal').textContent='Practice sessions';$('practiceInfo').textContent='Select an existing session to continue.';
+    const list=$('practiceChoices');list.replaceChildren();
+    for(const item of sessions.sessions||[]){const b=document.createElement('button');b.textContent=`${item.goal} · ${item.state}`;
+      b.onclick=async()=>{try{renderPractice(await callTool('get_practice_session',{session_id:item.id}));}catch(e){showError(e);}};list.append(b);}
+    if(!sessions.sessions?.length)addText(list,'p','No practice sessions yet. Ask ChatGPT to start one for concepts you wish to strengthen.','muted');
+  }catch(e){showError(e);}
+};
+$('practiceNext').onclick=async()=>{
+  try{
+    const plan=await callTool('recommend_practice',{session_id:activePracticeID});
+    if(plan.action==='finish_active_problem'){
+      renderProblem(await callTool('get_problem',{problem_id:plan.problem_id}));return;
+    }
+    await request('ui/message',{role:'user',content:[{type:'text',text:`Create the next Adaptive Teaching practice problem for session ${activePracticeID}. Plan: ${JSON.stringify(plan)}. Solve the proposed problem independently and seek unintended shortcuts before calling create_practice_problem with a sealed solution and rubric. Do not announce the target method in the statement. Wait for me to work and request feedback.`}]});
+    $('practiceInfo').textContent='Practice recommendation sent to ChatGPT.';
+  }catch(e){showError(e);}
+};
+$('practiceReviewQueue').onclick=async()=>{
+  try{const data=await callTool('get_review_queue',{include_upcoming:true,limit:30});
+    const list=$('practiceHistory');list.replaceChildren();
+    for(const r of data.reviews||[])addText(list,'p',`${r.concept_id} · review ${new Date(r.due_at).toLocaleDateString()} · interval ${r.interval_days} days`,'muted');
+    if(!data.reviews?.length)addText(list,'p','No scheduled reviews yet.','muted');
+  }catch(e){showError(e);}
+};
+$('reasoning').onclick=async()=>{try{renderReasoning(await callTool('get_reasoning_graph',{limit:300}));}catch(e){showError(e);}};
+$('graphSearch').oninput=()=>{if(model?.view==='reasoning')renderReasoning(model);else if(model?.nodes)renderGraph(model);};
+$('graphReset').onclick=()=>{camera={x:0,y:0,k:1};applyCamera();};
+$('network').addEventListener('wheel',event=>{
+  event.preventDefault();const rect=$('network').getBoundingClientRect();
+  const px=(event.clientX-rect.left)*(1000/rect.width),py=(event.clientY-rect.top)*(640/rect.height);
+  const next=Math.max(.3,Math.min(6,camera.k*(event.deltaY<0?1.13:.88)));
+  camera.x=px-(px-camera.x)*next/camera.k;camera.y=py-(py-camera.y)*next/camera.k;camera.k=next;applyCamera();
+},{passive:false});
+let drag=null;
+$('network').addEventListener('pointerdown',event=>{
+  if(event.target.closest('.node'))return;
+  drag={id:event.pointerId,x:event.clientX,y:event.clientY};$('network').setPointerCapture(event.pointerId);
+});
+$('network').addEventListener('pointermove',event=>{
+  if(!drag||drag.id!==event.pointerId)return;
+  const rect=$('network').getBoundingClientRect();
+  camera.x+=(event.clientX-drag.x)*(1000/rect.width);camera.y+=(event.clientY-drag.y)*(640/rect.height);
+  drag.x=event.clientX;drag.y=event.clientY;applyCamera();
+});
+$('network').addEventListener('pointerup',()=>{drag=null;});
+$('network').addEventListener('pointercancel',()=>{drag=null;});
+$('sessions').onclick=async()=>{
+  try{
+    const data=await callTool('list_learning_sessions',{include_completed:true,limit:50});
+    const choices=$('sessionChoices');choices.replaceChildren();
+    for(const item of data.sessions||[]){
+      const b=document.createElement('button');b.type='button';
+      b.textContent=`${item.goal} · ${item.phase} · ${item.mode}`;
+      b.onclick=async()=>{try{const full=await callTool('get_learning_session',{session_id:item.id});renderSession(full);}catch(e){showError(e);}};
+      choices.append(b);
+    }
+    if(!data.sessions?.length)addText(choices,'p','No learning sessions yet. Ask ChatGPT to establish a learning goal.','muted');
+    $('sessionPicker').classList.remove('hidden');
+  }catch(e){showError(e);}
+};
+$('sessionOpenQuestion').onclick=()=>{
+  try{if(!model?.pending_question)throw new Error('No unresolved question in this session.');
+    renderLearningQuestion(model.pending_question);
+  }catch(e){showError(e);}
+};
+$('sessionDiagnostic').onclick=async()=>{
+  try{
+    const candidate=await callTool('recommend_session_probe',{session_id:model.id});
+    activeSessionProbe=candidate.action==='probe'?candidate:null;
+    $('sessionSelected').textContent=`Diagnostic: ${candidate.reason} ${candidate.title||''}`;
+    const text=`For Adaptive Teaching session ${model.id}, diagnostic recommendation: ${JSON.stringify(candidate)}. `+
+      `If action is probe, call open_learning_question to commit one solvable diagnostic question, its hidden correct answer and rubric before presenting it, then show_learning_question so I can respond within the app. `+
+      `For multiple-choice questions supply distinct option IDs and a matching sealed correct option. `+
+      `If action is teach, help repair the specific reasoning gap. `+
+      `When I answer, use the committed answer and grade_learning_question; do not award concept mastery from a diagnostic probe.`;
+    await request('ui/message',{role:'user',content:[{type:'text',text}]});
+    $('sessionInfo').textContent='Diagnostic recommendation sent to ChatGPT.';
+  }catch(e){showError(e);}
+};
+$('sessionBuildPlan').onclick=async()=>{
+  try{
+    const next=await callTool('build_learning_plan',{session_id:model.id,expected_revision:model.revision});
+    if(!next?.session)throw new Error('The learning plan was not confirmed.');
+    renderSession(next.session);
+  }catch(e){showError(e);}
+};
+$('sessionAdvance').onclick=async()=>{
+  try{
+    const next=await callTool('advance_learning_session',{session_id:model.id,
+      next_phase:$('sessionPhase').value,expected_revision:model.revision});
+    renderSession(next);
+  }catch(e){showError(e);}
+};
+$('sessionSubmit').onclick=async()=>{
+  try{
+    const response=$('sessionAnswer').value.trim();
+    if(!response)throw new Error('Enter your own reasoning before submission.');
+    const step=activeSessionProbe?null:model.steps?.find(x=>x.id===selectedSessionStep);
+    if(!step && !activeSessionProbe)throw new Error('Select a diagnostic topic or reasoning step.');
+    const instructions=step?
+      `Evaluate step ${step.id} (${step.kind}: ${step.title}). Premises: ${step.premises.join(', ')}. `+
+      `Assess each inference, then call record_learning_step with verdict, confidence, actual learner response, and assistance status. `+
+      `Do not award durable mastery from the plan step.`:
+      `Assess diagnostic topic ${activeSessionProbe.concept_id} and call record_session_probe with the actual answer, `+
+      `explicit question, verdict, confidence and assistance status. This is diagnostic, not mastery evidence.`;
+    const text=`Adaptive Teaching learning session ${model.id}. ${instructions}\nMy own response:\n${response}`;
+    await request('ui/message',{role:'user',content:[{type:'text',text}]});
+    $('sessionInfo').textContent='Your reasoning was sent to ChatGPT for provisional assessment. Refresh to see the record.';
+  }catch(e){showError(e);}
+};
+$('problems').onclick=async()=>{
+  try{
+    const data=await callTool('list_problems',{status:'all',limit:40});
+    const choices=$('problemChoices');choices.replaceChildren();
+    for(const p of data.problems||[]){
+      const b=document.createElement('button');b.type='button';
+      b.textContent=`${p.title} · ${p.status} · ${p.mode}`;
+      b.onclick=async()=>{try{const full=await callTool('get_problem',{problem_id:p.id});renderProblem(full);}catch(e){showError(e);}};
+      choices.append(b);
+    }
+    if(!data.problems?.length)addText(choices,'p','No exercises yet. Ask ChatGPT for an extended problem-solving session.','muted');
+    $('problemPicker').classList.remove('hidden');
+  }catch(e){showError(e);}
+};
+$('saveProblem').onclick=async()=>{try{await saveActiveProblem();}catch(e){showError(e);}};
+$('reviewProblem').onclick=()=>sendProblemMessage('review');
+$('finalProblem').onclick=()=>sendProblemMessage('final');
+$('hintProblem').onclick=async()=>{
+  try{
+    const text=`For Adaptive Teaching problem ${model.id}, I request one minimally revealing hint. `+
+      `Consult my saved drafts, and call record_problem_hint with the exact hint and assistance level before giving it. `+
+      `Do not reveal the solution. This makes the attempt assisted.`;
+    await request('ui/message',{role:'user',content:[{type:'text',text}]});
+    $('problemInfo').textContent='Hint requested. Refresh after ChatGPT records it.';
+  }catch(e){showError(e);}
+};
+$('solutionProblem').onclick=async()=>{
+  try{
+    const answer=await callTool('get_problem_solution',{problem_id:model.id});
+    $('problemEvaluation').textContent=`Reference solution\n${answer.reference_solution||'No reference solution supplied.'}\n\nRubric\n${answer.grading_rubric||'No rubric supplied.'}`;
+  }catch(e){showError(e);}
+};
+async function refresh(){
+  try{
+    if(model?.view==='learning_question'){renderLearningQuestion(await callTool('get_learning_question',{question_id:model.id}));return;}
+    if(model?.view==='sources'){renderSources(await callTool('list_learning_sources',{limit:50}));return;}
+    if(model?.view==='reasoning'){renderReasoning(await callTool('get_reasoning_graph',{limit:300}));return;}
+    if(model?.view==='practice'){renderPractice(await callTool('get_practice_session',{session_id:model.id}));return;}
+    if(model?.view==='session'){
+      const session=await callTool('get_learning_session',{session_id:model.id});
+      if(session)renderSession(session);return;
+    }
+    if(model?.view==='problem'){
+      const p=await callTool('get_problem',{problem_id:model.id});
+      if(p){awaitingEvaluation=false;renderProblem(p);}return;
+    }
+    const graph=await callTool('get_graph',{});if(graph)renderGraph(graph);
+  }catch(e){showError(e);}
+}
+$('committedQuestionBack').onclick=async()=>{
+  try{renderSession(await callTool('get_learning_session',{session_id:model.session_id}));}
+  catch(e){showError(e);}
+};
+$('committedQuestionSubmit').onclick=async()=>{
+  try{
+    if(model?.view!=='learning_question'||model.status!=='pending')throw new Error('This question is no longer open.');
+    const answer=model.response_kind==='multiple_choice'?document.querySelector('input[name="committedChoice"]:checked')?.value:
+      $('committedQuestionAnswer').value.trim();
+    if(!answer)throw new Error('Provide your answer before submitting.');
+    const stored=await callTool('answer_learning_question',{
+      question_id:model.id,learner_response:answer,
+      learner_reasoning:$('committedQuestionReasoning').value.trim(),
+      self_confidence:readLearnerConfidence('committedQuestionConfidence'),assisted:false
+    });
+    renderLearningQuestion(stored);
+    const content=`My answer for committed Adaptive Teaching question ${stored.id} is saved. My explanation is: ${stored.learner_reasoning||'Not provided'}. My self-reported confidence is ${stored.self_confidence==null?'not provided':Math.round(stored.self_confidence*100)+'%'}. Evaluate answer correctness against the precommitted key and evaluate the actual reasoning separately. Call grade_learning_question with verdict, evaluation and evaluator confidence. If an explanation was submitted, also provide reasoning_verdict (supported, gap or uncertain) and reasoning_evaluation. If no explanation was provided, do not invent or grade one; for a diagnostic question, a correct choice alone leaves understanding unverified. Learner confidence does not establish correctness or mastery.`;
+    await request('ui/message',{role:'user',content:[{type:'text',text:content}]});
+  }catch(e){showError(e);}
+};
+$('refresh').onclick=refresh;
+$('target').onchange=async e=>{
+  try{await callTool('set_learning_target',{level:Number(e.target.value)});await refresh();}
+  catch(err){showError(err);}
+};
+$('submit').onclick=async()=>{
+  const answer=$('answer').value.trim();if(!answer){$('feedback').textContent='Enter your explanation before submitting.';return;}
+  const text=`I am answering the Adaptive Teaching practice question for concept ${model.concept.id} (${model.dimension}).\n`+
+    `Question: ${model.question}\nMy answer: ${answer}\nPlease assess my reasoning and, only if supported by the answer, record the evidence with Adaptive Teaching. Explain the missing why if needed.`;
+  try{await request('ui/message',{role:'user',content:[{type:'text',text}]});
+    $('feedback').textContent='Your answer was sent to ChatGPT for assessment.';
+  }catch(e){showError(e);}
+};
+$('expand').onclick=async()=>{try{await request('ui/request-display-mode',{mode:'fullscreen'});}catch(e){showError(e);}};
+window.addEventListener('message',event=>{
+  if(event.source!==window.parent||event.data?.jsonrpc!=='2.0')return;
+  const msg=event.data;
+  if(msg.id!==undefined&&pending.has(msg.id)){
+    const p=pending.get(msg.id);pending.delete(msg.id);if(msg.error)p.reject(new Error(msg.error.message));else p.resolve(msg.result);return;
+  }
+  if(!initialized){if(msg.method==='ui/notifications/tool-result')bufferedToolResult=msg.params;return;}
+  if(msg.method==='ui/notifications/tool-result'){presentToolResult(msg.params);}
+  if(msg.method==='ui/notifications/host-context-changed'){
+    hostContext={...hostContext,...msg.params};setDisplay();
+  }
+});
+function presentToolResult(result){
+  const data=parseTool(result);
+  if(data?.view==='sources')renderSources(data);
+  else if(data?.view==='practice')renderPractice(data);
+  else if(data?.view==='reasoning')renderReasoning(data);
+  else if(data?.view==='session')renderSession(data);
+  else if(data?.view==='problem')renderProblem(data);
+  else if(data?.view==='learning_question')renderLearningQuestion(data);
+  else if(data?.view==='question')renderQuestion(data);
+  else if(data?.choice_accuracy)renderCalibration(data);
+  else if(data?.nodes)renderGraph(data);
+}
+function setDisplay(){const supported=hostContext.availableDisplayModes||[];
+ $('expand').classList.toggle('hidden',!supported.includes('fullscreen')||hostContext.displayMode==='fullscreen');}
+(async()=>{
+  try{
+    const res=await request('ui/initialize',{appInfo:{name:'Adaptive Teaching',version:'0.1.0'},
+      appCapabilities:{availableDisplayModes:['inline','fullscreen']},protocolVersion:'2026-01-26'});
+    hostCapabilities=res.hostCapabilities||{};hostContext=res.hostContext||{};
+    initialized=true;notify('ui/notifications/initialized');setDisplay();
+    if(bufferedToolResult){presentToolResult(bufferedToolResult);bufferedToolResult=null;}
+  }catch(e){showError(e);}
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,77 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "limits",
+      "domain": "mathematics",
+      "learner_turns": [
+        "I got the right derivative for x squared: 2x. The limit in the definition is unnecessary because cancellation already gives the answer, and you can always put h=0 directly. I'm 98% confident. Explain whether my reasoning is sound.",
+        "I still don't see the distinction. Would the same shortcut work to find the derivative of the absolute-value function at the origin? Please help me decide, without simply giving the answer."
+      ]
+    },
+    {
+      "id": "components",
+      "domain": "physics",
+      "learner_turns": [
+        "I rotated my coordinate axes through 45 degrees, but a physical vector hasn't changed, so all of its x and y coordinates must be numerically identical. That proves the length is invariant. I think I'm right.",
+        "Take a vector with original coordinates (1,0). What makes the coordinate numbers different after rotating the axes, even though the vector is the same?"
+      ]
+    },
+    {
+      "id": "kirchhoff",
+      "domain": "electrical engineering",
+      "learner_turns": [
+        "At a circuit junction, a resistor consumes some electrical charge. Kirchhoff's current law holds because the junction replaces the lost charge instantly. Is that the right physical explanation?",
+        "Please trace where charge and energy go in the resistor; I keep confusing the two. Then ask me to apply the principle to a different circuit."
+      ]
+    },
+    {
+      "id": "natural-selection",
+      "domain": "biology",
+      "learner_turns": [
+        "The population of insects became resistant because each insect recognized the pesticide and deliberately changed its DNA. It then passed this acquired resistance to its offspring. Explain the mechanism.",
+        "Would the explanation change if a resistance mutation already existed in a very small fraction of the population before treatment? Don't just tell me the answer."
+      ]
+    },
+    {
+      "id": "source-criticism",
+      "domain": "history",
+      "learner_turns": [
+        "Two eyewitness records agree that a treaty was signed, so that independently proves the official's stated motive for signing it. I think corroborating the event also corroborates the intention.",
+        "What additional historical evidence could distinguish genuine motive from public justification, given that both witnesses may share an institution?"
+      ]
+    },
+    {
+      "id": "flux-and-bridges",
+      "domain": "practical electronics",
+      "learner_turns": [
+        "While soldering two pins I see a clear glossy patch on the green solder mask. That is definitely a conductive solder bridge, so I should power the board to see whether it smokes. Is this correct?",
+        "What should I examine or measure to distinguish flux residue from an actual connection without risking the circuit?"
+      ]
+    },
+    {
+      "id": "binary-search",
+      "domain": "computer science",
+      "learner_turns": [
+        "Binary search takes logarithmic time on any array because it always chooses the middle item. Sorting is only an implementation preference, not a correctness requirement.",
+        "Give me a small counterexample that I can reason through by hand, then ask me what invariant binary search needs."
+      ]
+    },
+    {
+      "id": "base-rate",
+      "domain": "probability",
+      "learner_turns": [
+        "A medical screening test is 99% accurate. If a healthy person tests positive, there must be a 99% chance they have the disease. I'm extremely sure; the base rate is irrelevant.",
+        "Suppose the disease affects one person in a thousand. Show me how to reason from a concrete group of people without immediately handing me a memorized formula."
+      ]
+    },
+    {
+      "id": "affirm-consequent",
+      "domain": "logic",
+      "learner_turns": [
+        "If it rains, the street is wet. The street is wet, therefore it rained. Since the conclusion is true, the inference is deductively valid.",
+        "Could another cause of a wet street change the validity of that inference? Help me formalize what is missing."
+      ]
+    }
+  ]
+}

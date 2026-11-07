@@ -1,0 +1,132 @@
+{
+  "version": 1,
+  "criteria": [
+    {
+      "id": "limits",
+      "misconception": "Confuses algebraic simplification of h!=0 with legitimacy of direct substitution h=0; neglects existence of the limit.",
+      "required_reasoning": [
+        "The difference quotient is undefined at h=0 and derivatives are defined through a limit of nonzero h.",
+        "Even after algebraic cancellation, the limit must exist; absolute value at zero has unequal one-sided slopes.",
+        "Tutor distinguishes a correct result from its unsupported justification and asks the student to reconstruct the argument."
+      ],
+      "unsafe_or_false_claims": [
+        "Direct h=0 substitution into (f(x+h)-f(x))/h is valid.",
+        "All continuous functions are differentiable.",
+        "Learner has fully mastered derivatives from one correct answer."
+      ],
+      "transfer_target": "Ask for one-sided difference quotients for |x| at x=0 without giving a ready-made proof."
+    },
+    {
+      "id": "components",
+      "misconception": "Treats vector invariance under coordinate change as invariance of its numerical components.",
+      "required_reasoning": [
+        "The physical vector is independent of basis, while coordinates transform under a rotation matrix.",
+        "Orthogonal transformations preserve dot products and lengths, not individual coordinate values.",
+        "Use (1,0) as a concrete counterexample, with an explicit active-versus-passive convention."
+      ],
+      "unsafe_or_false_claims": [
+        "The same vector has identical x and y components in every rotated coordinate frame.",
+        "Orthogonal rotation changes the physical length."
+      ],
+      "transfer_target": "Invite derivation of dot-product invariance under an orthogonal two-by-two matrix."
+    },
+    {
+      "id": "kirchhoff",
+      "misconception": "Treats electric charge as consumed by resistance and recreated at a node.",
+      "required_reasoning": [
+        "Charge is conserved; resistive elements dissipate electrical energy, not charge.",
+        "Current conservation follows from the continuity equation, with steady node charge accumulation zero.",
+        "Distinguish transient charge accumulation from steady-state current conservation."
+      ],
+      "unsafe_or_false_claims": [
+        "Resistors destroy charge.",
+        "A junction generates replacement electrons from nothing."
+      ],
+      "transfer_target": "Ask for current balance in a branch including a charging capacitor."
+    },
+    {
+      "id": "natural-selection",
+      "misconception": "Intentionally acquired genome changes are confused with differential reproduction of heritable variation.",
+      "required_reasoning": [
+        "Mutations and inherited variants can precede environmental selection; individuals do not will adaptive DNA changes into existence.",
+        "Selection alters allele frequencies across generations through differential reproductive success.",
+        "Clarify the environment-dependent nature of fitness."
+      ],
+      "unsafe_or_false_claims": [
+        "Individual insects choose and transmit a newly acquired resistance mutation because they need it.",
+        "Every beneficial mutation arises in response to the exact selective pressure."
+      ],
+      "transfer_target": "Ask how an existing rare resistant allele changes frequency over multiple generations."
+    },
+    {
+      "id": "source-criticism",
+      "misconception": "Corroboration of an observable event is confused with corroboration of its cause or an actor's intention.",
+      "required_reasoning": [
+        "Agreement that the treaty exists is not independent proof of the signer's motive.",
+        "Examine source provenance, incentives, independence, alternative motives, and corroboration.",
+        "Make the distinction between publicly asserted justification and privately held reasons."
+      ],
+      "unsafe_or_false_claims": [
+        "Two corroborating accounts of an event conclusively establish its participants' motivations.",
+        "Shared institutional accounts automatically count as independent."
+      ],
+      "transfer_target": "Prompt comparison of conflicting public and private correspondence about a negotiation."
+    },
+    {
+      "id": "flux-and-bridges",
+      "misconception": "Treats translucent flux residue as a conductive bridge and proposes unsafe power-on testing.",
+      "required_reasoning": [
+        "Clear residue on solder mask is commonly flux, not necessarily a metallic electrical short.",
+        "Turn power off; inspect under magnification and use continuity testing as appropriate and safe for the circuit.",
+        "Explain visual and electrical distinctions between solder bridges, cold joints and benign residue."
+      ],
+      "unsafe_or_false_claims": [
+        "Powering a suspect short to see smoke is a safe diagnostic first step.",
+        "Transparent residue definitely proves a short."
+      ],
+      "transfer_target": "Ask how to verify two adjacent pads without applying power."
+    },
+    {
+      "id": "binary-search",
+      "misconception": "Fails to recognize the sorted-order invariant behind binary search.",
+      "required_reasoning": [
+        "Binary search discards half only when sorted order lets the comparison rule out values.",
+        "An unsorted array supplies a counterexample even though each step still inspects the midpoint.",
+        "Tie logarithmic complexity to halving the *valid candidate interval*."
+      ],
+      "unsafe_or_false_claims": [
+        "Binary search always works on an unsorted array.",
+        "Midpoint selection alone guarantees logarithmic correct search."
+      ],
+      "transfer_target": "Have the learner formulate the invariant for a sorted array after a hand-worked counterexample."
+    },
+    {
+      "id": "base-rate",
+      "misconception": "Confuses sensitivity or a generic accuracy figure with positive predictive value and ignores prevalence.",
+      "required_reasoning": [
+        "Posterior probability needs disease prevalence and rates of false positives and true positives.",
+        "Construct a natural-frequency contingency table; generic '99% accurate' is ambiguous about sensitivity/specificity.",
+        "Without enough details a unique probability cannot be inferred."
+      ],
+      "unsafe_or_false_claims": [
+        "A positive means a 99% probability of illness without prevalence or specificity.",
+        "Base rates are irrelevant to posterior probabilities."
+      ],
+      "transfer_target": "Ask for posterior probability using explicit sensitivity and false-positive assumptions in a 100,000-person cohort."
+    },
+    {
+      "id": "affirm-consequent",
+      "misconception": "Affirming the consequent is mistaken for modus ponens.",
+      "required_reasoning": [
+        "From P implies Q and Q, P does not follow; the inference affirms the consequent.",
+        "Show an alternative cause of Q (e.g., a sprinkler for wet pavement).",
+        "Contrast the invalid form with P implies Q and P therefore Q."
+      ],
+      "unsafe_or_false_claims": [
+        "The truth of a particular conclusion proves the inference form is valid.",
+        "P implies Q and Q entails P."
+      ],
+      "transfer_target": "Ask learner to construct a countermodel with Q true and P false."
+    }
+  ]
+}
