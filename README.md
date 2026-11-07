@@ -1,40 +1,34 @@
 # Homelab
 
-A self-hosted personal computing platform implemented in NixOS and Go. Source code, infrastructure, and deployment definitions are maintained together. The system presents one personal assistant interface without making the operation of any service dependent on ChatGPT or the MCP transport.
+A self-hosted personal computing system managed through one source repository. Go implements its operations, MCP and native HTTP interfaces. Nix declares the operating environment. Every capability is available through the same assistant interface; an MCP client is optional.
 
-## Repository layout
+## Source layout
 
-| Path | Responsibility |
-| --- | --- |
-| `flake.nix` | Declarative configuration for Saturn, Jupiter, Venus, Mercury and Janus |
-| `infrastructure/` | NixOS routing, networking, diagnostics, media and host configuration |
-| `services/workspace/` | Distributed compute, Git projects and libraries, hardware and artifacts |
-| `services/learning/` | Adaptive teaching and knowledge evidence |
-| `services/health/` | Health, nutrition, training and RecipeSage integration |
-| `platform/` | Unified native API, personal planning, weekly reporting and primary MCP gateway |
-| `nixosModules/` | NixOS integration for the platform application |
+- `system/` contains the entire Go application source: personal planning, research execution, computation, learning, health, media, credentials and integrations. Internal Go modules preserve independent build and failure boundaries, not separate user-facing products.
+- `infrastructure/` declares the hosts, networking, K3s, storage, media applications and operational environment.
+- `nixosModules/` and `packages/` provide reproducible NixOS packages and activation.
+- `flake.nix` and `flake.lock` define the five-host fleet and reproducible dependency revisions.
+- `docs/` records current architecture, security, operating procedures and engineering standards.
 
-The Go platform uses a private, atomic JSON state store for one owner. It supports tasks, goals, personal rules, quick-win recommendations, weekly reports and a read-only iCalendar subscription. An optional Seerr adapter adds movie/TV search and requests; book fulfillment requires a separate provider. A minimum of three completed tasks per day counts tasks regardless of size; long-term goal progress is measured separately. Calendar events with recurrence rules are returned as definitions and are not yet expanded into dated occurrences.
+The unified interface supports tasks, goals, configurable personal rules, quick-win recommendations, weekly progress reporting, and read-only iCalendar data. Movie and television search and requests use Seerr when configured. Additional capabilities are attached through Go interfaces. Projects can link multiple repositories and shared libraries; a repository does not define a project.
 
-Existing Go services remain buildable as separate modules in a Go workspace. The gateway can discover and invoke their MCP tools behind one authenticated endpoint when their private URLs are configured. Their runtime identities, permissions, and stores remain independently protected.
+Compute, teaching and health implementations retain independent operating-system and database boundaries where necessary for reliability. Their separation must not require the user to choose between assistants, endpoints or inconsistent project identifiers.
 
 ## Development
 
-The platform requires Go 1.23 or later and uses only the Go standard library:
+The core Go module is in `system/`; specialist executables and packages are in its compute, learning and health implementation directories. The Go workspace at the repository root composes those modules. Build the core using the Go toolchain from `system/`:
 
 ```sh
-cd platform
+cd system
 go test ./...
 go vet ./...
 go build ./cmd/homelab-platform
 ```
 
-The root Nix flake builds the Go platform directly with `nix build .#homelab-platform` and composes all five hosts. The complete Go workspace requires the highest Go version declared by its constituent modules. Use the pinned Nix toolchain when evaluating infrastructure and application releases.
+NixOS operators can evaluate the five hosts and build the `homelab-platform` package from the root flake. Runtime credentials, personal state and media bytes are not stored in Git.
 
-## Operations
+## Operating boundaries
 
-The platform service is defined in `nixosModules/platform.nix` and is disabled by default. When enabled it binds to loopback, requires a protected owner token, stores state outside Git, and can read a Proton Calendar sharing URL from a systemd credential. Its native API and MCP endpoint are not directly exposed to the network. Administrator operations require an operation-bound approval granted through a protected local Unix socket. See [security](docs/security.md) and [engineering standards](docs/engineering-standards.md). The development and release pipeline is separate from the main MCP's operational capabilities.
+The public-facing MCP does not inherit deployment or cluster administrator credentials. Sensitive operations require short-lived operator approval and separate enforcement at the actual privileged executor. External accounts use protected local credentials or provider authentication. A borrowed Kria KV260, if connected, is SSH-only; no physical FPGA access or modification is authorized by default.
 
-Source consolidation is not equivalent to runtime acceptance. The existing operating services remain authoritative until the integrated deployment has passed build, authorization, recovery, and cutover checks. No media files or running deployments are modified by source imports.
-
-See [architecture](docs/architecture.md), [interfaces](docs/interfaces.md), [deployment](docs/deployment.md), and [references](REFERENCES.md).
+Source code in this repository is not itself proof of an active deployment. The existing machines and media remain authoritative until build, authentication, integration and rollback acceptance passes. Consult [architecture](docs/architecture.md), [security](docs/security.md), [interfaces](docs/interfaces.md), [deployment](docs/deployment.md), [engineering standards](docs/engineering-standards.md) and [references](REFERENCES.md).

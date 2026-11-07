@@ -1,8 +1,8 @@
 go 1.27.3
 
 use (
-  ./platform
-  ./services/workspace
-  ./services/learning
-  ./services/health
+  ./system
+  ./system/compute
+  ./system/learning
+  ./system/health
 )

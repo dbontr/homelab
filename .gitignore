@@ -8,5 +8,5 @@ result-*
 *.sqlite-*
 *.db
 *.db-*
-platform/state.json
-platform/.state-*
+system/state.json
+system/.state-*

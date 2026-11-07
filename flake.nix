@@ -20,7 +20,7 @@
       nixosConfigurations = {
         saturn = nixpkgs.lib.nixosSystem {
           inherit system;
-          specialArgs.workspaceMcp = ./services/workspace;
+          specialArgs.workspaceMcp = ./system/compute;
           modules = [ ./infrastructure/hosts/saturn/configuration.nix ];
         };
         jupiter = worker ./infrastructure/hosts/jupiter/configuration.nix;
