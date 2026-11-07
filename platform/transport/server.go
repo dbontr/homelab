@@ -1,6 +1,7 @@
 package transport
 
 import (
+ "context"
  "crypto/subtle"
  "encoding/json"
  "errors"
@@ -13,10 +14,11 @@ import (
  "strconv"
  "strings"
  "time"
+ "github.com/dbontr/homelab-new/platform/calendar"
  "github.com/dbontr/homelab-new/platform/store"
 )
 type Backend struct { Name string; URL string; Token string }
-type Server struct { db *store.Store; token string; backend []Backend; client *http.Client }
+type Server struct { db *store.Store; token string; backend []Backend; client *http.Client; calendarURL string }
 
 func New(db *store.Store,token string,backends []Backend)(*Server,error){
  if db==nil||token==""{return nil,errors.New("store and access token are required")}
@@ -29,6 +31,11 @@ func New(db *store.Store,token string,backends []Backend)(*Server,error){
   if u.Scheme!="https"&&!(u.Scheme=="http"&&(u.Hostname()=="localhost"||u.Hostname()=="127.0.0.1"||u.Hostname()=="::1")){return nil,errors.New("backend must use HTTPS or loopback HTTP")}
  }
  return &Server{db:db,token:token,backend:backends,client:&http.Client{Timeout:120*time.Second,CheckRedirect:func(_ *http.Request,_ []*http.Request)error{return errors.New("backend redirects are disabled")}}},nil
+}
+func(s *Server) SetCalendarURL(raw string)error{
+ if err:=calendar.ValidateURL(raw);err!=nil{return err}
+ s.calendarURL=raw
+ return nil
 }
 func(s *Server) Handler()http.Handler{
  mux:=http.NewServeMux()
@@ -43,6 +50,7 @@ func(s *Server) Handler()http.Handler{
  mux.HandleFunc("PUT /v1/rules/{key}",s.rules)
  mux.HandleFunc("GET /v1/recommendations",s.recommendations)
  mux.HandleFunc("GET /v1/reports/weekly",s.weekly)
+ mux.HandleFunc("GET /v1/calendar",s.calendarEvents)
  return http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){
   w.Header().Set("Cache-Control","no-store")
   w.Header().Set("X-Content-Type-Options","nosniff")
@@ -100,6 +108,12 @@ func(s *Server)weekly(w http.ResponseWriter,r *http.Request){
  v,e:=s.db.Report(r.URL.Query().Get("week_of"));if e!=nil{writeError(w,400,e.Error());return}
  writeJSON(w,200,v)
 }
+func(s *Server)calendarEvents(w http.ResponseWriter,r *http.Request){
+ if s.calendarURL==""{writeError(w,503,"calendar is not configured");return}
+ feed,e:=calendar.Fetch(r.Context(),s.client,s.calendarURL)
+ if e!=nil{writeError(w,502,"calendar feed unavailable");return}
+ writeJSON(w,200,feed)
+}
 type rpcRequest struct { JSONRPC string `json:"jsonrpc"`; ID json.RawMessage `json:"id,omitempty"`; Method string `json:"method"`; Params json.RawMessage `json:"params,omitempty"` }
 type rpcResponse struct { JSONRPC string `json:"jsonrpc"`; ID json.RawMessage `json:"id,omitempty"`; Result json.RawMessage `json:"result,omitempty"`; Error *rpcError `json:"error,omitempty"` }
 type rpcError struct { Code int `json:"code"`; Message string `json:"message"` }
@@ -143,18 +157,19 @@ func(s *Server)mcp(w http.ResponseWriter,r *http.Request){
     s.rpc(w,req.ID,remote,nil);return
    }
   }
-  v,e:=s.localTool(p.Name,p.Arguments)
+  v,e:=s.localTool(r.Context(),p.Name,p.Arguments)
   if e!=nil{s.rpc(w,req.ID,toolError(e.Error()),nil);return}
   s.rpc(w,req.ID,result(v),nil)
  default:s.rpc(w,req.ID,nil,failure(-32601,"method not found"))
  }
 }
 func tool(name,description string,properties map[string]any,required ...string)map[string]any{
+ if required==nil{required=[]string{}}
  return map[string]any{"name":name,"description":description,"inputSchema":map[string]any{"type":"object","properties":properties,"required":required}}
 }
 func prop(kind string)map[string]any{return map[string]any{"type":kind}}
 func(s *Server)localTools()[]map[string]any{
- return []map[string]any{
+ tools:=[]map[string]any{
   tool("task_add","Create a personal task",map[string]any{"title":prop("string"),"notes":prop("string"),"goal_id":prop("string"),"due":prop("string"),"minutes":prop("integer"),"energy":prop("string"),"location":prop("string"),"priority":prop("integer")},"title"),
   tool("task_complete","Mark a task complete",map[string]any{"id":prop("string")},"id"),
   tool("task_list","List personal tasks",map[string]any{"status":prop("string")}),
@@ -166,6 +181,8 @@ func(s *Server)localTools()[]map[string]any{
   tool("weekly_report","Summarize recorded task completions",map[string]any{"week_of":prop("string")}),
   tool("system_status","List configured integrations",map[string]any{}),
  }
+ if s.calendarURL!=""{tools=append(tools,tool("calendar_feed","Read Proton Calendar event definitions; recurrence rules are not expanded",map[string]any{}))}
+ return tools
 }
 func(s *Server)toolList(r *http.Request)[]map[string]any{
  out:=s.localTools()
@@ -184,7 +201,7 @@ func(s *Server)toolList(r *http.Request)[]map[string]any{
  }
  return out
 }
-func(s *Server)localTool(name string,raw json.RawMessage)(any,error){
+func(s *Server)localTool(ctx context.Context,name string,raw json.RawMessage)(any,error){
  var args struct{
   store.TaskInput
   ID string `json:"id"`
@@ -207,6 +224,9 @@ func(s *Server)localTool(name string,raw json.RawMessage)(any,error){
  case "rule_set":return s.db.SetRule(args.Key,args.Text,args.Kind)
  case "rule_list":return s.db.Rules(),nil
  case "weekly_report":return s.db.Report(args.WeekOf)
+ case "calendar_feed":
+  if s.calendarURL==""{return nil,errors.New("calendar is not configured")}
+  return calendar.Fetch(ctx,s.client,s.calendarURL)
  case "system_status":
   names:=make([]string,0,len(s.backend));for _,b:=range s.backend{names=append(names,b.Name)};sort.Strings(names)
   return map[string]any{"configured_integrations":names,"local":"available"},nil

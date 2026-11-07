@@ -25,6 +25,11 @@ in
       type = lib.types.str;
       default = "America/Chicago";
     };
+    calendarURLFile = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "Protected file containing the read-only Proton Calendar sharing URL.";
+    };
     tokenFile = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
       default = null;
@@ -60,6 +65,8 @@ in
         HOMELAB_TIME_ZONE = cfg.timeZone;
         HOMELAB_STATE_FILE = "/var/lib/homelab-platform/state.json";
         HOMELAB_API_TOKEN_FILE = "/run/credentials/homelab-platform.service/access_token";
+      } // lib.optionalAttrs (cfg.calendarURLFile != null) {
+        HOMELAB_CALENDAR_URL_FILE = "/run/credentials/homelab-platform.service/calendar_url";
       } // (lib.foldl' (acc: name:
         let
           integration = cfg.integrations.${name};
@@ -80,6 +87,7 @@ in
         StateDirectoryMode = "0700";
         LoadCredential =
           [ "access_token:${cfg.tokenFile}" ]
+          ++ lib.optional (cfg.calendarURLFile != null) "calendar_url:${cfg.calendarURLFile}"
           ++ lib.concatMap (name:
             lib.optional (cfg.integrations.${name}.tokenFile != null)
               "${name}_token:${cfg.integrations.${name}.tokenFile}"
