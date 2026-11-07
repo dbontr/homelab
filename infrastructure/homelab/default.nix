@@ -1,6 +1,7 @@
 { workspaceMcp, ... }:
 {
   imports = [
+    ../../nixosModules/platform.nix
     ./shared.nix
     ./cloudflare.nix
     ./mcp-ingress.nix
