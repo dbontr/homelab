@@ -1,31 +1,27 @@
 # Architecture
 
-## One system, multiple failure boundaries
+## One system
 
-The platform exposes a single personal operating model to its owner. Projects, goals, tasks, research outputs, learning evidence, health observations, computing resources, and media assets are related through stable identifiers. The user-facing distinction is by capability, not by application ownership.
+The repository describes one personal computing system. Its owner interacts with a single catalog of capabilities, operations and resources through a common Go API and MCP endpoint. Tasks, goals, projects, Git repositories, shared libraries, learning evidence, health records, computing resources and media may refer to each other using stable identifiers. A project is not defined by its Git repository.
 
-All capabilities are implemented independently of their user-interface adapters. HTTP, MCP, and future native interfaces invoke the same Go operations; they do not define separate business logic. The primary MCP gateway aggregates capabilities without granting every process a shared administrator identity.
+The `system/` tree is the application's source of truth. It contains a primary Go module and independently buildable implementation modules. Module boundaries exist for reliability, toolchain constraints and distinct state ownership; they must not become separate assistant identities, duplicate records or inconsistent interfaces. Go operations remain usable without an AI client. A future native UI invokes those same operations.
 
-## Components
+Nix provides the root flake, host configuration, deployment definitions, credential loading and component activation. Saturn runs routing, the K3s control plane and persistent lightweight applications. Jupiter, Venus, Mercury and Janus execute authorized compute work. Specialized processes may be upgraded separately, but the user-facing interface remains one system. One process is not required for one product.
 
-- The Nix flake composes five hosts from infrastructure/ and includes the locally owned Workspace source.
-- The Go platform supplies personal tasks, goals, constraints, activity-derived reporting, a native API, and a primary MCP entry point.
-- Workspace provides Git, project repositories and libraries, compute scheduling, artifacts, Kubernetes workers, and approved hardware allocation.
-- Learning supplies adaptive teaching, knowledge graph and independent assessment.
-- Health supplies longitudinal observations, fitness, nutrition, meal planning, and RecipeSage integration.
-- Media and monitoring remain infrastructure-managed services. The native Seerr adapter exposes a constrained media interface without duplicating Seerr's own state.
-- The finance capability is not active.
+## Capabilities
 
-Saturn hosts networking, the K3s control plane, and persistent low-cost application services. Jupiter, Venus, Mercury, and Janus receive approved compute jobs. Stateful storage is managed at the service boundary rather than placed in a shared universal database.
+The system implements personal planning, task reports, compute and Git workspaces, research libraries, adaptive learning, health and nutrition, media requests, and infrastructure observation. Quantitative finance is not active. Seerr owns movie and television requests; the assistant exposes those capabilities without duplicating Seerr's database.
 
-## Resource identity
+A single capability registry and consistent authorization rules govern tool discovery and execution. Operations use native Go interfaces. An MCP transport is an adapter rather than the business-logic owner. The platform must distinguish a successful operation from one merely queued, accepted or unobserved.
 
-Resource references use stable identifiers independent of source repositories. A project can refer to many Git repositories, libraries, research artifacts, tasks, and learning goals. A repository does not define a project. Links across services must tolerate temporary unavailability without changing the underlying record.
+## Hardware and privilege
 
-## Integration and deployment
+The declared inventory is in `hardware.nix`, validated by the Go `system/devices` package and presented through the native API and MCP. An inventory entry is not proof of physical connectivity. The borrowed Kria KV260 is declared SSH-only for connection and inspection. It is not eligible for automatic compute enrollment, USB/JTAG access, firmware modification, bitstream programming, or unattended operation.
 
-The gateway uses explicit, configured downstream service connections. Each backend retains its own authorization and state. Gateway unavailability does not prevent independently hosted services from operating.
+Go is the primary systems language. Rust may be introduced for owned device interfaces requiring precise hardware control, accelerator buffers or WebAssembly, with a stable native boundary and Nix packaging. An SSH-only FPGA does not require a Rust agent.
 
-Infrastructure deployment is owned by a separate release process, currently administered through NanoKVM. The primary MCP can request authorized operations but does not own its own deployment credentials or modify the release controller. Credentials are read from protected runtime files and excluded from Git.
+The main assistant process never owns deployment or unrestricted cluster credentials. A separately trusted executor must authorize sensitive operations at the actual enforcement boundary. External credentials and media files remain outside Git.
 
-The initial platform is an integration worktree, not a declaration that every imported component is production-ready. Source parity does not imply operational parity; native operations, MCP discovery, authorization, Nix evaluations, worker acceptance, and data continuity require independent tests.
+## Deployment
+
+Source availability is not evidence of successful deployment. Builds, Nix evaluations, live authentication, state continuity, capability parity and rollback require verification before cutover. The active fleet and media remain unchanged until that acceptance succeeds.
