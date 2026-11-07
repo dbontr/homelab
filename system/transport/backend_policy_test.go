@@ -19,7 +19,7 @@ func TestUnadvertisedBackendToolIsNeverForwarded(t *testing.T){
   if err:=json.NewDecoder(r.Body).Decode(&req);err!=nil{t.Fatal(err)}
   w.Header().Set("Content-Type","application/json")
   if req.Method=="tools/list"{
-   _,_=w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"list_projects","description":"List","inputSchema":{"type":"object"}}]}}`))
+   _,_=w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"list_projects","description":"List","inputSchema":{"type":"object"}},{"name":"worker_revoke","description":"Revoke worker","inputSchema":{"type":"object"}}]}}`))
    return
   }
   calls++
