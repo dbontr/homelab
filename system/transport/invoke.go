@@ -14,12 +14,12 @@ func (s *Server) invoke(ctx context.Context,name string,args json.RawMessage,id 
  if name=="workspace__workspace_create" || name=="workspace__task_compute_submit" {
    if err:=s.deviceCatalog.ValidateAllocation(args);err!=nil{return toolError(err.Error())}
  }
- if output,allowed:=s.checkPrivilege(name,args);!allowed{return output}
  for _,b:=range s.backend {
    prefix:=b.Name+"__"
    if strings.HasPrefix(name,prefix) {
      toolName:=strings.TrimPrefix(name,prefix)
      if !s.backendHasTool(ctx,b,toolName){return toolError("backend tool unavailable or not advertised")}
+     if output,allowed:=s.checkPrivilege(name,args);!allowed{return output}
      params:=map[string]any{"name":toolName,"arguments":json.RawMessage(args)}
      raw,_:=json.Marshal(params)
      var remote any
@@ -30,6 +30,7 @@ func (s *Server) invoke(ctx context.Context,name string,args json.RawMessage,id 
      return output
    }
  }
+ if output,allowed:=s.checkPrivilege(name,args);!allowed{return output}
  v,err:=s.localTool(ctx,name,args)
  if err!=nil{return toolError(err.Error())}
  return result(v)

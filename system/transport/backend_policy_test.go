@@ -1,6 +1,7 @@
 package transport
 
 import (
+ "context"
  "encoding/json"
  "net/http"
  "net/http/httptest"
@@ -53,6 +54,6 @@ func TestFederatedRejectsOversizedAndMismatchedResponses(t *testing.T){
  s,err:=New(db,strings.Repeat("t",40),[]Backend{{Name:"learning",URL:backend.URL}});if err!=nil{t.Fatal(err)}
  b:=s.backend[0]
  var out any
- if err:=s.forward(t.Context(),b,rpcRequest{JSONRPC:"2.0",ID:json.RawMessage("1"),Method:"large"},&out);err==nil{t.Fatal("oversized reply accepted")}
- if err:=s.forward(t.Context(),b,rpcRequest{JSONRPC:"2.0",ID:json.RawMessage("1"),Method:"tools/list"},&out);err==nil{t.Fatal("mismatched response ID accepted")}
+ if err:=s.forward(context.Background(),b,rpcRequest{JSONRPC:"2.0",ID:json.RawMessage("1"),Method:"large"},&out);err==nil{t.Fatal("oversized reply accepted")}
+ if err:=s.forward(context.Background(),b,rpcRequest{JSONRPC:"2.0",ID:json.RawMessage("1"),Method:"tools/list"},&out);err==nil{t.Fatal("mismatched response ID accepted")}
 }

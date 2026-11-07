@@ -54,10 +54,10 @@ func TestFederatedToolCalls(t *testing.T){
   default:http.Error(w,"unknown",400)
   }
  }));defer downstream.Close()
- h:=makeTestServer(t,[]Backend{{Name:"workspace",URL:downstream.URL,Token:"internal-secret"}})
+ h:=makeTestServer(t,[]Backend{{Name:"learning",URL:downstream.URL,Token:"internal-secret"}})
  token:=strings.Repeat("a",40)
  w:=request(h,"POST","/mcp",`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`,token)
- if !strings.Contains(w.Body.String(),"workspace__echo"){t.Fatalf("federated list %s",w.Body.String())}
- w=request(h,"POST","/mcp",`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"workspace__echo","arguments":{}}}`,token)
+ if !strings.Contains(w.Body.String(),"learning__echo"){t.Fatalf("federated list %s",w.Body.String())}
+ w=request(h,"POST","/mcp",`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"learning__echo","arguments":{}}}`,token)
  if !strings.Contains(w.Body.String(),"forwarded"){t.Fatalf("federated call %s",w.Body.String())}
 }
