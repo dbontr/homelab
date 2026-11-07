@@ -10,6 +10,7 @@ import (
     "strings"
     "time"
 
+    "github.com/dbontr/homelab-new/platform/media"
     "github.com/dbontr/homelab-new/platform/store"
     "github.com/dbontr/homelab-new/platform/transport"
 )
@@ -37,10 +38,18 @@ func main(){
         v,enabled,e:=configuredBackend(b.name,b.upper);if e!=nil{log.Fatal(e)};if enabled{backends=append(backends,v)}
     }
     server,e:=transport.New(db,token,backends);if e!=nil{log.Fatal(e)}
+    if url:=os.Getenv("HOMELAB_SEERR_URL");url!=""{
+        path:=os.Getenv("HOMELAB_SEERR_API_KEY_FILE")
+        if path==""{log.Fatal("Seerr API credential file required")}
+        raw,e:=os.ReadFile(path);if e!=nil{log.Fatal(e)}
+        client,e:=media.NewSeerr(url,strings.TrimSpace(string(raw)));if e!=nil{log.Fatal(e)}
+        server.ConfigureMedia(client)
+    }else if os.Getenv("HOMELAB_SEERR_API_KEY_FILE")!=""{log.Fatal("Seerr URL required")}
     if file:=os.Getenv("HOMELAB_CALENDAR_URL_FILE");file!=""{
         raw,e:=os.ReadFile(file);if e!=nil{log.Fatal(e)}
         if e:=server.SetCalendarURL(strings.TrimSpace(string(raw)));e!=nil{log.Fatal(e)}
     }
+    serveApprovals(server,os.Getenv("HOMELAB_APPROVAL_SOCKET"))
     addr:=os.Getenv("HOMELAB_LISTEN_ADDR");if addr==""{addr="127.0.0.1:8300"}
     host,_,e:=net.SplitHostPort(addr);if e!=nil{log.Fatal(e)}
     if host!="127.0.0.1"&&host!="::1"&&host!="localhost"{log.Fatal("homelab-platform must listen on loopback behind an authenticated ingress")}
