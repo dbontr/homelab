@@ -124,10 +124,9 @@ in
         HOMELAB_APPROVAL_SOCKET = "/run/homelab-platform/approval.sock";
         HOMELAB_STATE_FILE = "/var/lib/homelab-platform/state.json";
         HOMELAB_PROFILES_FILE = "/var/lib/homelab-platform/profiles.json";
+        HOMELAB_API_TOKEN_FILE = "/run/credentials/homelab-platform.service/access_token";
       } // lib.optionalAttrs (cfg.consolePassphraseFile != null) {
         HOMELAB_CONSOLE_PASSPHRASE_FILE = "/run/credentials/homelab-platform.service/console_passphrase";
-      } // {
-        HOMELAB_API_TOKEN_FILE = "/run/credentials/homelab-platform.service/access_token";
       } // lib.optionalAttrs (cfg.seerr.url != "") {
         HOMELAB_SEERR_URL = cfg.seerr.url;
         HOMELAB_SEERR_API_KEY_FILE = "/run/credentials/homelab-platform.service/seerr_api_key";

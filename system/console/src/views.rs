@@ -388,7 +388,7 @@ pub fn Software() -> Element {
 #[component]
 fn SoftwareCollection(title: String, description: String, records: Vec<Value>) -> Element {
     rsx! {
-        Card {title,description,
+        Card {title: title,description: description,
             if records.is_empty() {
                 Empty {title:"No entries available".to_owned(),description:"The software service returned an empty collection.".to_owned()}
             } else {

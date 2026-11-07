@@ -17,3 +17,5 @@
 - [OWASP API Security Top 10](https://owasp.org/API-Security/editions/2023/en/0x11-t10/) — OWASP. Used for: function-level authorization, bounded downstream responses and unsafe external API consumption.
 - [shadcn/ui](https://github.com/shadcn-ui/ui) — shadcn/ui project. Used for: semantic component composition, design vocabulary, and accessible interaction patterns in the Rust console.
 - [Dioxus 0.7 Documentation](https://dioxuslabs.com/learn/0.7/) — Dioxus project. Used for: Rust RSX components, WASM rendering and future desktop packaging.
+- [OWASP Session Management Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html) — OWASP. Used for: short-lived browser sessions, HttpOnly/Secure/SameSite cookies, credential separation and session invalidation.
+- [Dioxus Styling and Assets](https://dioxuslabs.com/learn/0.7/essentials/ui/styling/) — Dioxus project. Used for: RSX, CSS assets and native SVG controls in the Rust console.
