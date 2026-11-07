@@ -1,0 +1,16 @@
+[package]
+name = "homelab-console"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Rust web console for the unified homelab"
+
+[dependencies]
+dioxus = { version = "0.7.0", default-features = false, features = ["web"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+reqwest = { version = "0.12", default-features = false, features = ["json"] }
+web-sys = { version = "0.3", features = ["Window", "Location"] }
+
+[features]
+default = []
