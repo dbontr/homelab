@@ -31,6 +31,26 @@ in
         description = "Protected path containing the Seerr API key.";
       };
     };
+    devices = lib.mkOption {
+      type = lib.types.listOf (lib.types.submodule {
+        options = {
+          id = lib.mkOption { type = lib.types.str; };
+          kind = lib.mkOption { type = lib.types.enum [ "fpga" "gpu" "npu" "other" ]; };
+          ownership = lib.mkOption { type = lib.types.enum [ "owned" "borrowed" ]; };
+          connection = lib.mkOption { type = lib.types.enum [ "ssh" "usb" "pcie" "local" ]; };
+          allowedOperations = lib.mkOption {
+            type = lib.types.listOf lib.types.str;
+            default = [];
+          };
+          eligibleForCompute = lib.mkOption {
+            type = lib.types.bool;
+            default = false;
+          };
+        };
+      });
+      default = import ../hardware.nix;
+      description = "Declared hardware inventory. Transport does not imply connectivity or permission to modify devices.";
+    };
     calendarURLFile = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
       default = null;
@@ -73,6 +93,7 @@ in
       environment = {
         HOMELAB_LISTEN_ADDR = cfg.listenAddress;
         HOMELAB_TIME_ZONE = cfg.timeZone;
+        HOMELAB_DEVICES_FILE = pkgs.writeText "homelab-hardware.json" (builtins.toJSON cfg.devices);
         HOMELAB_APPROVAL_SOCKET = "/run/homelab-platform/approval.sock";
         HOMELAB_STATE_FILE = "/var/lib/homelab-platform/state.json";
         HOMELAB_API_TOKEN_FILE = "/run/credentials/homelab-platform.service/access_token";
