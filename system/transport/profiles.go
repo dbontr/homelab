@@ -1,6 +1,7 @@
 package transport
 
 import (
+ "context"
  "encoding/json"
  "errors"
  "net/http"
@@ -40,7 +41,7 @@ func (s *Server) profileRoutes(w http.ResponseWriter, r *http.Request) {
  writeJSON(w,http.StatusOK,p)
 }
 
-func (s *Server) profileTool(name string,raw json.RawMessage)(any,error) {
+func (s *Server) profileTool(ctx context.Context,name string,raw json.RawMessage)(any,error) {
  if s.profiles==nil{return nil,errors.New("compute profiles are not configured")}
  switch name {
  case "compute_profile_list": return s.profiles.List(),nil
@@ -48,6 +49,8 @@ func (s *Server) profileTool(name string,raw json.RawMessage)(any,error) {
    var input struct {ID string `json:"id"`; Version int `json:"version"`}
    if err:=json.Unmarshal(raw,&input);err!=nil{return nil,err}
    return s.profiles.Get(input.ID,input.Version)
+ case "compute_profile_plan":
+   return s.planProfile(ctx,raw)
  case "compute_profile_save":
    var input profileInput
    if err:=json.Unmarshal(raw,&input);err!=nil{return nil,err}

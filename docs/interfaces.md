@@ -19,6 +19,7 @@ The Go platform exposes authenticated loopback HTTP endpoints. Native JSON and M
 - GET /v1/compute/profiles: list reusable, versioned build configurations
 - GET /v1/compute/profiles/{id}?version={n}: read a saved revision, or the latest if no version is supplied
 - PUT /v1/compute/profiles/{id}: save a profile with an exact `expected_version` revision guard
+- POST /v1/compute/profiles/{id}/plan: request advisory Workspace resource planning without reserving resources
 - GET /v1/media/search: Seerr movie and television search, when configured
 - GET /v1/media/requests and POST /v1/media/requests: list and submit requests
 

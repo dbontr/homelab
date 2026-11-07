@@ -67,6 +67,7 @@ func(s *Server) Handler()http.Handler{
  mux.HandleFunc("GET /v1/compute/profiles",s.profileRoutes)
  mux.HandleFunc("GET /v1/compute/profiles/{id}",s.profileRoutes)
  mux.HandleFunc("PUT /v1/compute/profiles/{id}",s.profileRoutes)
+ mux.HandleFunc("POST /v1/compute/profiles/{id}/plan",s.profilePlanRoute)
  mux.HandleFunc("GET /v1/media/search",s.mediaSearch)
  mux.HandleFunc("GET /v1/media/requests",s.mediaRequests)
  mux.HandleFunc("POST /v1/media/requests",s.mediaRequests)
@@ -194,7 +195,8 @@ func(s *Server)localTools()[]map[string]any{
  if s.profiles!=nil {tools=append(tools,
   tool("compute_profile_list","List saved reusable build configurations",map[string]any{}),
   tool("compute_profile_get","Read a saved build configuration revision",map[string]any{"id":prop("string"),"version":prop("integer")},"id"),
-  tool("compute_profile_save","Save an immutable build profile revision",map[string]any{"spec":prop("object"),"expected_version":prop("integer")},"spec","expected_version"))}
+  tool("compute_profile_save","Save an immutable build profile revision",map[string]any{"spec":prop("object"),"expected_version":prop("integer")},"spec","expected_version"),
+  tool("compute_profile_plan","Check available Workspace resources for a saved profile without scheduling",map[string]any{"id":prop("string"),"version":prop("integer"),"project_id":prop("string"),"node_id":prop("string")},"id","project_id"))}
  if s.calendarURL!=""{tools=append(tools,tool("calendar_feed","Read Proton Calendar event definitions; recurrence rules are not expanded",map[string]any{}))}
  if s.media!=nil{tools=append(tools,
   tool("media_search","Search movies and television through Seerr",map[string]any{"query":prop("string")},"query"),
@@ -223,7 +225,7 @@ func(s *Server)toolList(r *http.Request)[]map[string]any{
 }
 func(s *Server)localTool(ctx context.Context,name string,raw json.RawMessage)(any,error){
  if s.media!=nil&&(name=="media_search"||name=="media_request"||name=="media_requests"){return s.mediaTool(ctx,name,raw)}
- if name=="compute_profile_list"||name=="compute_profile_get"||name=="compute_profile_save" {return s.profileTool(name,raw)}
+ if name=="compute_profile_list"||name=="compute_profile_get"||name=="compute_profile_save"||name=="compute_profile_plan" {return s.profileTool(ctx,name,raw)}
  var args struct{
   store.TaskInput
   ID string `json:"id"`
