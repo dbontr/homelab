@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Health · Workout planning</title>
+<style>
+:root{color-scheme:light dark;font:14px/1.5 system-ui,sans-serif;--border:#9aa4ad;--accent:#1c776f}
+*{box-sizing:border-box}body{margin:0;padding:16px;color:CanvasText;background:Canvas}
+main{max-width:900px;margin:auto}h1{font-size:21px;margin:0 0 5px}h2{font-size:16px;margin:18px 0 6px}
+p{margin:3px 0 12px}.muted{color:GrayText}label{display:grid;gap:3px;font-weight:600}
+input,select,button{font:inherit;border:1px solid var(--border);border-radius:7px;padding:7px;color:CanvasText;background:Canvas}
+input{width:100%;min-width:0}button{cursor:pointer}button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.primary{background:var(--accent);color:white}.toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin:12px 0}
+.toolbar>label{flex:1;min-width:160px}section{border:1px solid var(--border);border-radius:10px;padding:13px;margin:12px 0}
+.session{display:grid;gap:9px}.line{display:grid;grid-template-columns:minmax(0,1.6fr) repeat(2,minmax(0,.7fr)) minmax(0,1fr) auto;gap:7px;align-items:end;margin:7px 0}
+.row{display:grid;grid-template-columns:1fr 2fr auto;gap:8px;align-items:end}.status{min-height:25px}
+@media(max-width:670px){.line{grid-template-columns:1fr 1fr}.line label:first-child{grid-column:1/-1}.row{grid-template-columns:1fr 1fr}.row label:nth-child(2){grid-column:1/-1}}
+</style>
+</head>
+<body>
+<main>
+<header><h1>Workout planner</h1><p class="muted">Edit saved sessions, exercises, and training targets. Concurrent edits require review.</p></header>
+<div class="toolbar">
+<label>Workout plan<select id="plans"></select></label>
+<button id="refresh" type="button">Refresh plans</button>
+<button id="create" type="button">Create workout plan</button>
+</div>
+<section>
+<label>Plan name<input id="title" type="text" maxlength="200" placeholder="Training program"></label>
+<p id="revision" class="muted"></p>
+<h2>Scheduled sessions</h2>
+<div id="sessions"></div>
+<div class="toolbar"><button id="addSession" type="button">Add session</button><button id="save" class="primary" type="button">Save plan</button></div>
+</section>
+<p id="status" class="status" role="status" aria-live="polite"></p>
+</main>
+<script>
+'use strict';
+const $=id=>document.getElementById(id);
+const pending=new Map();let seq=1;let initialized=false;let buffered=null;
+let all=[];let current={id:'',kind:'workout',title:'',sessions:[],revision:0};
+function request(method,params={}){
+ const id=seq++;
+ return new Promise((resolve,reject)=>{
+  pending.set(id,{resolve,reject});
+  window.parent.postMessage({jsonrpc:'2.0',id,method,params},'*');
+  setTimeout(()=>{if(pending.has(id)){pending.delete(id);reject(new Error('Host did not respond'));}},12000);
+ });
+}
+function notify(method,params={}){window.parent.postMessage({jsonrpc:'2.0',method,params},'*');}
+function parseResult(r){
+ if(r?.isError)throw new Error(r.content?.[0]?.text||'Request failed');
+ if(r?.structuredContent)return r.structuredContent;
+ const text=r?.content?.find?.(x=>x.type==='text')?.text;
+ if(typeof text==='string')return JSON.parse(text);
+ return {};
+}
+async function tool(name,args={}){return parseResult(await request('tools/call',{name,arguments:args}));}
+function say(text,fail=false){$('status').textContent=text;$('status').style.color=fail?'#bc4b4b':'';}
+function fresh(){
+ current={id:'',kind:'workout',title:'',sessions:[],revision:0};
+ render();say('Unsaved workout plan.');
+}
+function choose(id){
+ const match=all.find(p=>p.id===id);
+ if(!match)return fresh();
+ current=structuredClone(match);render();say('');
+}
+function render(){
+ const picker=$('plans'),selection=current.id;
+ picker.replaceChildren();
+ for(const p of all){
+  const o=document.createElement('option');o.value=p.id;o.textContent=p.title;picker.append(o);
+ }
+ if(selection && all.some(p=>p.id===selection))picker.value=selection;
+ $('title').value=current.title;
+ $('revision').textContent=current.id?'Revision '+current.revision:'Not saved yet';
+ const area=$('sessions');area.replaceChildren();
+ current.sessions.forEach((s,i)=>{
+  const wrap=document.createElement('section');wrap.className='session';
+  const fields=document.createElement('div');fields.className='row';
+  fields.append(makeField('Date','date',s.date,v=>s.date=v),makeField('Session','text',s.title,v=>s.title=v));
+  fields.querySelector('input[type=date]').value=s.date;
+  fields.append(button('Remove',()=>{current.sessions.splice(i,1);render();}));
+  wrap.append(fields);
+  const label=document.createElement('h2');label.textContent='Exercises';wrap.append(label);
+  s.exercises??=[];
+  s.exercises.forEach((e,j)=>{
+   const line=document.createElement('div');line.className='line';
+   line.append(makeField('Exercise','text',e.name,v=>e.name=v),makeField('Sets','number',e.sets??0,v=>e.sets=Number(v)),makeField('Reps','number',e.repetitions??0,v=>e.repetitions=Number(v)),makeField('Target','text',e.target||'',v=>e.target=v),button('Remove',()=>{s.exercises.splice(j,1);render();}));
+   line.querySelectorAll('input[type=number]').forEach(input=>{input.min='0';input.step='1';});
+   wrap.append(line);
+  });
+  wrap.append(button('Add exercise',()=>{s.exercises.push({name:'',sets:3,repetitions:8,target:''});render();}));
+  area.append(wrap);
+ });
+}
+function makeField(name,type,value,change){
+ const l=document.createElement('label');l.textContent=name;
+ const input=document.createElement('input');input.type=type;input.value=String(value??'');
+ input.oninput=()=>change(input.value);l.append(input);return l;
+}
+function button(name,action){const b=document.createElement('button');b.type='button';b.textContent=name;b.onclick=action;return b;}
+async function reload(selected=''){
+ const list=await tool('health_plan_list');all=(Array.isArray(list)?list:[]).filter(x=>x.kind==='workout');
+ if(selected && all.some(x=>x.id===selected))choose(selected);
+ else if(all.length)choose(all[0].id);
+ else fresh();
+}
+$('plans').onchange=e=>choose(e.target.value);
+$('title').oninput=e=>current.title=e.target.value;
+$('refresh').onclick=()=>reload(current.id).catch(e=>say(e.message,true));
+$('create').onclick=()=>fresh();
+$('addSession').onclick=()=>{
+ const id='s'+Math.random().toString(36).slice(2)+Date.now().toString(36);
+ current.sessions.push({id,date:new Date().toISOString().slice(0,10),title:'Training session',exercises:[]});render();
+};
+$('save').onclick=async()=>{
+ try{
+  if(!current.title.trim())throw new Error('Plan name is required.');
+  for(const session of current.sessions){
+   if(!session.title.trim())throw new Error('Every session needs a name.');
+   if(session.exercises?.some(e=>!e.name.trim()))throw new Error('Every exercise needs a name.');
+  }
+  const saved=await tool('health_plan_save',{id:current.id||undefined,kind:'workout',title:current.title,sessions:current.sessions,expected_revision:current.revision});
+  say('Saved revision '+saved.revision+'.');await reload(saved.id);
+ }catch(e){say(e.message+' Refresh and review before retrying.',true);}
+};
+window.addEventListener('message',e=>{
+ if(e.source!==window.parent||e.data?.jsonrpc!=='2.0')return;
+ const m=e.data;
+ if(m.id!==undefined&&pending.has(m.id)){
+  const p=pending.get(m.id);pending.delete(m.id);
+  if(m.error)p.reject(new Error(m.error.message));else p.resolve(m.result);return;
+ }
+ if(m.method==='ui/notifications/tool-result'){
+  if(!initialized){buffered=m.params;return;}
+  renderInitial(m.params);
+ }
+});
+function renderInitial(r){
+ try{
+  const data=parseResult(r);
+  if(data?.view!=='workout_editor')return;
+  all=data.plans||[];
+  if(all.length)choose(all[0].id);else fresh();
+ }catch(e){say(e.message,true);}
+}
+(async()=>{
+ try{
+  await request('ui/initialize',{appInfo:{name:'Health',version:'0.1.0'},appCapabilities:{availableDisplayModes:['inline','fullscreen']},protocolVersion:'2026-01-26'});
+  initialized=true;notify('ui/notifications/initialized');
+  if(buffered){renderInitial(buffered);buffered=null;}else await reload();
+ }catch(e){say(e.message,true);}
+})();
+</script>
+</body></html>

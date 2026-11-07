@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Health · Workout companion</title>
+<style>
+:root{color-scheme:light dark;font:14px/1.48 system-ui,sans-serif;--edge:#86939b;--accent:#197c6d}
+*{box-sizing:border-box}body{padding:14px;margin:0;background:Canvas;color:CanvasText}
+main{max-width:900px;margin:auto}h1{font-size:20px;margin:0}
+p{color:GrayText;margin:5px 0 11px}
+label{display:grid;gap:4px;font-weight:600;font-size:12px}
+input,select,button{background:Canvas;color:CanvasText;font:inherit;border:1px solid var(--edge);border-radius:7px;padding:7px}
+button{cursor:pointer}button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button.primary{background:var(--accent);color:#fff}
+section{padding:13px;border:1px solid var(--edge);border-radius:10px;margin:12px 0}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:8px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin:11px 0}
+.fields{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:7px;margin:8px 0}
+.fields label{min-width:0}.fields input{min-width:0;width:100%}
+small{font-size:12px;color:GrayText}
+.status{min-height:24px}h2{font-size:16px;margin:3px 0 8px}
+@media(max-width:650px){.fields{grid-template-columns:repeat(3,minmax(0,1fr))}}
+</style></head>
+<body><main>
+<h1>Workout companion</h1>
+<p>Log actual work, not planned work. Exercise loads and performance estimates remain separate from your program targets.</p>
+<section class="grid">
+<label>Workout plan<select id="plans"></select></label>
+<label>Session<select id="sessions"></select></label>
+<label>Minutes completed<input id="elapsed" type="number" min="0" step="1" value="0"></label>
+</section>
+<div id="exercises"></div>
+<section><h2>Rest timer</h2>
+<div class="row"><label>Rest seconds<input id="rest" type="number" min="15" max="600" step="5" value="90"></label>
+<button id="startRest">Start rest</button><button id="stopRest">Stop</button>
+<strong id="countdown" aria-live="polite">—</strong></div></section>
+<section>
+<h2>Session completion</h2>
+<p>Recording individual sets does not automatically claim that the entire workout is complete.</p>
+<div class="row"><button class="primary" id="complete">Confirm completed workout</button><button id="reload">Refresh history</button></div>
+<small id="existing">Choose a workout to inspect logs.</small>
+</section>
+<p id="status" class="status" role="status" aria-live="polite"></p>
+</main>
+<script>
+'use strict';
+const $=id=>document.getElementById(id);
+let seq=1,pending=new Map(),plans=[],currentPlan=null,currentSession=null,restTimer=null,remaining=0;
+function rpc(method,params={}){
+ const id=seq++;return new Promise((resolve,reject)=>{
+  pending.set(id,{resolve,reject});window.parent.postMessage({jsonrpc:'2.0',id,method,params},'*');
+  setTimeout(()=>{if(pending.has(id)){pending.delete(id);reject(Error('Host did not respond'));}},12000);
+ });
+}
+function notify(method,params={}){window.parent.postMessage({jsonrpc:'2.0',method,params},'*');}
+async function call(name,args={}){
+ const result=await rpc('tools/call',{name,arguments:args});
+ if(result?.isError)throw Error(result.content?.[0]?.text||'Tool failed');
+ return result.structuredContent||JSON.parse(result.content?.[0]?.text||'{}');
+}
+function status(t,error=false){$('status').textContent=t;$('status').style.color=error?'#be4949':'';}
+const clock=()=>new Date().toISOString();
+function makeLabel(name,type,defaultValue,attr={}){
+ const label=document.createElement('label');label.textContent=name;
+ const input=document.createElement('input');input.type=type;input.value=String(defaultValue??'');
+ Object.entries(attr).forEach(([k,v])=>input.setAttribute(k,String(v)));
+ label.append(input);return {label,input};
+}
+function choosePlan(id){
+ currentPlan=plans.find(p=>p.id===id)||null;
+ const options=$('sessions');options.replaceChildren();
+ if(currentPlan){
+  for(const session of currentPlan.sessions||[]){
+   const o=document.createElement('option');o.value=session.id;o.textContent=session.date+' — '+session.title;
+   options.append(o);
+  }
+ }
+ chooseSession(options.value);
+}
+function chooseSession(id){
+ currentSession=currentPlan?.sessions?.find(s=>s.id===id)||null;
+ const body=$('exercises');body.replaceChildren();
+ if(!currentSession){$('existing').textContent='No scheduled session selected.';return;}
+ (currentSession.exercises||[]).forEach((exercise,i)=>{
+  const card=document.createElement('section');const title=document.createElement('h2');
+  title.textContent=exercise.name||'Unnamed exercise';card.append(title);
+  const description=document.createElement('p');
+  description.textContent=(exercise.sets||0)+' planned sets · '+(exercise.repetitions||0)+' planned reps'+
+   (exercise.target?' · target '+exercise.target:'');
+  card.append(description);
+  const fields=document.createElement('div');fields.className='fields';
+  const reps=makeLabel('Reps','number',exercise.repetitions||0,{min:0,max:100000,step:1});
+  const load=makeLabel('Load (kg)','number','',{min:0,step:'any'});
+  const duration=makeLabel('Seconds','number','',{min:0,step:'any'});
+  const distance=makeLabel('Meters','number','',{min:0,step:'any'});
+  const rpe=makeLabel('RPE (0–10)','number','',{min:0,max:10,step:'0.5'});
+  for(const element of [reps,load,duration,distance,rpe])fields.append(element.label);
+  card.append(fields);
+  const actions=document.createElement('div');actions.className='row';
+  const setNumber=makeLabel('Set number','number','1',{min:0,step:1});actions.append(setNumber.label);
+  const save=document.createElement('button');save.textContent='Log actual set';save.className='primary';
+  const activity=makeLabel('Activity','text',exercise.target&&/pace|distance|km|run|bike/i.test(exercise.target)?'cardio':'strength');
+  const select=document.createElement('select');
+  ['strength','cardio','mobility'].forEach(a=>{const o=document.createElement('option');o.value=a;o.textContent=a;select.append(o);});
+  select.value=activity.input.value;
+  const activityLabel=document.createElement('label');activityLabel.textContent='Type';activityLabel.append(select);
+  actions.append(activityLabel,save);card.append(actions);
+  const msg=document.createElement('small');msg.setAttribute('role','status');card.append(msg);
+  save.onclick=async()=>{
+   if(!currentPlan||!currentSession)return;
+   const outcome={plan_id:currentPlan.id,session_id:currentSession.id,
+    exercise:exercise.name,activity:select.value,
+    set_number:Number(setNumber.input.value),repetitions:Number(reps.input.value),
+    at:clock(),source:'manual'};
+   for(const [key,input]of [['load_kg',load.input],['duration_seconds',duration.input],
+    ['distance_meters',distance.input],['rpe',rpe.input]]){
+    if(input.value.trim()!=='')outcome[key]=Number(input.value);
+   }
+   if(!Number.isInteger(outcome.set_number)||outcome.set_number<0||
+      !Number.isInteger(outcome.repetitions)||outcome.repetitions<0){
+    msg.textContent='Set number and repetitions must be nonnegative integers.';return;
+   }
+   save.disabled=true;
+   try{
+    const result=await call('health_training_set_log',outcome);
+    msg.textContent='Logged set '+outcome.set_number+' at '+new Date(result.at).toLocaleTimeString()+'.';
+    setNumber.input.value=String(outcome.set_number+1);
+   }catch(error){msg.textContent=error.message;}finally{save.disabled=false;}
+  };
+  body.append(card);
+ });
+ refreshHistory();
+}
+async function refreshHistory(){
+ if(!currentPlan||!currentSession)return;
+ try{
+  const records=await call('health_training_set_list',{plan_id:currentPlan.id,limit:500});
+  const matching=(records||[]).filter(r=>r.session_id===currentSession.id);
+  $('existing').textContent=matching.length+' set/interval records for this session identity. A previous session date may have been rescheduled.';
+ }catch(error){$('existing').textContent=error.message;}
+}
+async function refresh(){
+ const all=await call('health_plan_list');
+ plans=(Array.isArray(all)?all:[]).filter(p=>p.kind==='workout');
+ const picker=$('plans');picker.replaceChildren();
+ for(const plan of plans){const o=document.createElement('option');o.value=plan.id;o.textContent=plan.title;picker.append(o);}
+ choosePlan(picker.value);
+}
+$('plans').onchange=e=>choosePlan(e.target.value);
+$('sessions').onchange=e=>chooseSession(e.target.value);
+$('reload').onclick=()=>refreshHistory().catch(e=>status(e.message,true));
+$('startRest').onclick=()=>{
+ clearInterval(restTimer);
+ remaining=Math.max(15,Math.min(600,Number($('rest').value)||90));
+ $('countdown').textContent=remaining+' seconds';
+ restTimer=setInterval(()=>{
+  remaining=Math.max(0,remaining-1);$('countdown').textContent=remaining+' seconds';
+  if(remaining<=0){clearInterval(restTimer);restTimer=null;$('countdown').textContent='Rest complete';}
+ },1000);
+};
+$('stopRest').onclick=()=>{clearInterval(restTimer);restTimer=null;$('countdown').textContent='Stopped';};
+$('complete').onclick=async()=>{
+ if(!currentPlan||!currentSession){status('Select a scheduled workout.',true);return;}
+ const elapsed=Number($('elapsed').value);
+ if(!Number.isFinite(elapsed)||elapsed<0||elapsed>1440){status('Invalid duration.',true);return;}
+ if(!confirm('Record this session as completed? Make sure you did the workout; saved sets alone do not establish completion.'))return;
+ const button=$('complete');button.disabled=true;
+ try{
+  await call('health_workout_log',{plan_id:currentPlan.id,session_id:currentSession.id,
+    at:clock(),duration_minutes:elapsed,confirm:true});
+  status('Session completion recorded.');
+  await refreshHistory();
+ }catch(e){status(e.message,true)}finally{button.disabled=false;}
+};
+window.addEventListener('message',event=>{
+ if(event.source!==window.parent||event.data?.jsonrpc!=='2.0')return;
+ const m=event.data;
+ if(m.id!==undefined&&pending.has(m.id)){
+  const p=pending.get(m.id);pending.delete(m.id);
+  if(m.error)p.reject(Error(m.error.message));else p.resolve(m.result);
+ }
+});
+(async()=>{
+ try{
+  await rpc('ui/initialize',{appInfo:{name:'Health Workout Companion',version:'0.1.0'},
+   appCapabilities:{availableDisplayModes:['inline','fullscreen']},protocolVersion:'2026-01-26'});
+  notify('ui/notifications/initialized');await refresh();
+ }catch(e){status(e.message,true);}
+})();
+</script></body></html>
