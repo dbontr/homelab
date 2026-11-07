@@ -10,6 +10,7 @@ import (
     "strings"
     "time"
 
+    "github.com/dbontr/homelab-new/system/devices"
     "github.com/dbontr/homelab-new/system/media"
     "github.com/dbontr/homelab-new/system/store"
     "github.com/dbontr/homelab-new/system/transport"
@@ -38,6 +39,10 @@ func main(){
         v,enabled,e:=configuredBackend(b.name,b.upper);if e!=nil{log.Fatal(e)};if enabled{backends=append(backends,v)}
     }
     server,e:=transport.New(db,token,backends);if e!=nil{log.Fatal(e)}
+    if file:=os.Getenv("HOMELAB_DEVICES_FILE");file!=""{
+        catalog,e:=devices.Load(file);if e!=nil{log.Fatal(e)}
+        server.SetDeviceCatalog(catalog)
+    }
     if url:=os.Getenv("HOMELAB_SEERR_URL");url!=""{
         path:=os.Getenv("HOMELAB_SEERR_API_KEY_FILE")
         if path==""{log.Fatal("Seerr API credential file required")}
