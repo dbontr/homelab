@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>Workspace MCP</title>
+<style>
+:root{font-family:system-ui,-apple-system,sans-serif;color-scheme:dark;background:#111720;color:#f1f5f9}
+*{box-sizing:border-box}body{margin:0;padding:2rem;max-width:1120px;margin:auto}
+h1{font-size:1.65rem;letter-spacing:-.03em}p,small{color:#94a3b8}
+form{display:flex;flex-wrap:wrap;gap:.7rem;margin:1.5rem 0}input,button,select{font:inherit;border:1px solid #334155;border-radius:.55rem;padding:.65rem .85rem;background:#1e293b;color:#f1f5f9}
+input:not([type=checkbox]){flex:1;min-width:180px}select{min-width:180px}label{display:flex;align-items:center;gap:.5rem}.usb-warning{color:#fcd34d}#usb-options[hidden]{display:none}button{cursor:pointer;background:#2563eb;border-color:#2563eb}button:hover{filter:brightness(1.12)}
+main{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1rem}
+section{background:#19232f;border:1px solid #334155;border-radius:.8rem;padding:1.2rem;min-height:150px}
+h2{font-size:1.1rem;margin-top:0}ul{list-style:none;margin:0;padding:0}li{padding:.65rem 0;border-top:1px solid #334155;overflow-wrap:anywhere}
+strong{color:#f8fafc}.muted{color:#94a3b8}#notice{min-height:1.2rem;color:#fb7185}#plan-result{white-space:pre-wrap;overflow-wrap:anywhere;color:#94a3b8;font:inherit;font-size:.9rem}details{padding:.5rem 0;border-top:1px solid #334155}summary{cursor:pointer;font-weight:600}.control-note{font-size:.9rem}
+</style>
+</head>
+<body>
+<header><h1>Workspace MCP</h1><p>Projects, compute resources, and durable workspaces.</p></header>
+<form id="auth"><input id="token" type="password" required placeholder="Administrator token" aria-label="Administrator token" autocomplete="off"><button>Connect</button></form>
+<p id="notice" role="status" aria-live="polite"></p>
+<section aria-label="Create workspace">
+  <h2>Create workspace</h2>
+  <form id="create">
+    <select id="project-select" aria-label="Project" required><option value="">Connect to select a project</option></select>
+    <input id="cpu" type="number" step="0.5" min="0.5" max="32" value="1" aria-label="CPU cores" required>
+    <input id="memory" type="number" step="128" min="128" max="131072" value="1024" aria-label="Memory in MiB" required>
+    <select id="node-target" aria-label="Requested compute node"><option value="">Automatic node selection</option></select>
+    <select id="arch-target" aria-label="Required architecture"><option value="">Any architecture</option><option value="amd64">amd64</option><option value="arm64">arm64</option></select>
+    <select id="gpu-count" aria-label="Required GPU count"><option value="0">No GPU</option><option value="1">One GPU</option></select>
+    <input id="min-gpu-memory" type="number" min="0" max="1000000" value="0" step="1024" aria-label="Minimum GPU memory in MiB">
+    <label><input id="usb-toggle" type="checkbox"> Enable USB passthrough</label>
+    <div id="usb-options" hidden>
+      <label for="usb-device">USB device to attach</label>
+      <select id="usb-device"><option value="">Select a USB device</option></select>
+      <small class="usb-warning">A workspace with USB access can overwrite the selected device. Select the exact device intended for flashing. All mounted disks are rejected.</small>
+    </div>
+    <button type="button" id="preview-workspace">Preview resource eligibility</button>
+    <button type="submit">Create workspace</button>
+  </form>
+  <pre id="plan-result" role="status" aria-live="polite"></pre>
+</section>
+<section aria-label="GitHub planning integration">
+  <h2>GitHub Projects planning</h2>
+  <p>Link an existing GitHub Project. Its issues, status fields, and roadmap remain authoritative on GitHub.</p>
+  <form id="planning-link">
+    <select id="planning-project" required aria-label="Local project"></select>
+    <input id="planning-url" type="url" required placeholder="https://github.com/users/owner/projects/1" aria-label="GitHub Project URL">
+    <button type="submit">Link GitHub Project</button>
+  </form>
+</section>
+<section aria-label="Program catalog administration">
+  <h2>Software catalog</h2>
+  <p>Register approved OCI images, curate apt package sets, and review software requests. Disabling or retiring an entry prevents new catalog allocations; it does not uninstall applications from existing environments.</p>
+  <details>
+    <summary>Add an OCI image</summary>
+    <form id="image-register">
+      <input id="image-id" required placeholder="Catalog ID, e.g. ubuntu-base" aria-label="Image catalog ID">
+      <input id="image-ref" required placeholder="OCI reference, e.g. ubuntu:24.04" aria-label="OCI reference">
+      <input id="image-description" placeholder="Description" aria-label="Image description">
+      <select id="image-arch" aria-label="Architecture"><option value="">Any architecture</option><option value="amd64">amd64</option><option value="arm64">arm64</option></select>
+      <button type="submit">Register image</button>
+    </form>
+  </details>
+  <details>
+    <summary>Add an approved apt package collection</summary>
+    <form id="package-register">
+      <input id="package-id" required placeholder="Software ID, e.g. spice-tools" aria-label="Software catalog ID">
+      <select id="package-image" required aria-label="Approved Debian or Ubuntu image"></select>
+      <input id="package-names" required placeholder="Packages, separated by commas" aria-label="Apt package names">
+      <input id="package-description" placeholder="Description" aria-label="Package collection description">
+      <button type="submit">Register packages</button>
+    </form>
+  </details>
+  <details>
+    <summary>Request or register a program</summary>
+    <form id="program-propose">
+      <input id="program-id" required placeholder="Program ID, e.g. ltspice" aria-label="Program ID">
+      <input id="program-name" required placeholder="Program name" aria-label="Program name">
+      <input id="program-version" placeholder="Version" aria-label="Program version">
+      <select id="program-platform" aria-label="Target platform">
+        <option value="linux-container">Linux container</option>
+        <option value="windows-native">Windows native</option>
+        <option value="macos-native">macOS native</option>
+      </select>
+      <select id="program-delivery" aria-label="Installation route">
+        <option value="apt">Approved apt packages</option><option value="oci">Approved OCI image</option><option value="native">Native installer (requires adapter)</option>
+      </select>
+      <input id="program-source" type="url" required placeholder="https://publisher.example/software" aria-label="Official publisher page">
+      <input id="program-license" placeholder="License and use restrictions for operator review" aria-label="License notes">
+      <input id="program-description" placeholder="Purpose" aria-label="Program description">
+      <button type="submit">Create program request</button>
+    </form>
+  </details>
+  <details>
+    <summary>Disable, reactivate, or retire catalog entries</summary>
+    <form id="entry-change">
+      <select id="entry-select" required aria-label="Catalog entry"></select>
+      <select id="entry-state" aria-label="New entry status"><option value="disabled">Disable</option><option value="active">Reactivate</option><option value="retired">Retire permanently</option></select>
+      <input id="entry-reason" required placeholder="Reason" aria-label="Reason for catalog change">
+      <button type="submit">Apply status</button>
+    </form>
+  </details>
+  <details>
+    <summary>Review a requested program</summary>
+    <form id="program-review">
+      <select id="review-program" required aria-label="Program to review"></select>
+      <select id="review-state" aria-label="Review decision">
+        <option value="reviewed">Reviewed</option><option value="available">Make available</option>
+        <option value="disabled">Disable</option><option value="rejected">Reject</option><option value="retired">Retire permanently</option>
+      </select>
+      <select id="review-pool-kind" aria-label="Approved execution source"><option value="">No execution source</option><option value="software">Apt collection</option><option value="image">OCI image</option></select>
+      <input id="review-pool-id" placeholder="Linked approved pool ID (for available)" aria-label="Pool entry ID">
+      <input id="review-note" required placeholder="License review, validation, or decision reason" aria-label="Review decision reason">
+      <button type="submit">Record review</button>
+    </form>
+    <small class="control-note">A program marked reviewed is not installed. Native Windows/macOS applications cannot be marked available until a separately verified native adapter exists.</small>
+  </details>
+</section>
+<main>
+  <section><h2>OCI image pool</h2><ul id="pool-images"><li class="muted">Connect to view approved images.</li></ul></section>
+  <section><h2>Apt package pool</h2><ul id="pool-software"><li class="muted">Connect to view approved packages.</li></ul></section>
+  <section><h2>Program requests</h2><ul id="pool-programs"><li class="muted">Connect to view registered programs.</li></ul></section>
+  <section><h2>Projects</h2><ul id="projects"><li class="muted">Connect to view projects.</li></ul></section>
+  <section><h2>Compute nodes</h2><ul id="nodes"><li class="muted">Connect to view workers.</li></ul></section>
+  <section><h2>Active workspaces</h2><ul id="workspaces"><li class="muted">Connect to view workspaces.</li></ul></section>
+  <section><h2>Stored artifacts</h2><ul id="artifacts"><li class="muted">Connect to view artifacts.</li></ul></section>
+  <section><h2>GitHub planning boards</h2><ul id="planning"><li class="muted">Connect to view planning boards.</li></ul></section>
+  <section><h2>Shared libraries</h2><ul id="libraries"><li class="muted">Connect to view research libraries.</li></ul></section>
+</main>
+<script>
+let credential='';
+let availableUSB=[];
+let poolImages=[],poolSoftware=[],poolPrograms=[];
+const el=id=>document.getElementById(id);
+function item(parent,header,detail){let li=document.createElement('li');let a=document.createElement('strong');a.textContent=header;let b=document.createElement('div');b.className='muted';b.textContent=detail;li.append(a,b);parent.append(li)}
+function render(id,rows,show){let box=el(id);box.replaceChildren();if(!rows.length)item(box,'None','No entries');else rows.forEach(x=>item(box,...show(x)))}
+async function get(path){let response=await fetch(path,{headers:{Authorization:'Bearer '+credential},cache:'no-store'});if(!response.ok)throw new Error('Request '+response.status+' for '+path);return response.json()}
+async function post(path,payload){
+  const response=await fetch(path,{method:'POST',headers:{Authorization:'Bearer '+credential,'Content-Type':'application/json'},body:JSON.stringify(payload)});
+  const body=await response.json();if(!response.ok)throw new Error(body.detail||'Request failed: '+response.status);return body;
+}
+function pickOptions(id,entries){
+  const select=el(id),previous=select.value;select.replaceChildren();
+  for(const [value,label] of entries){const option=document.createElement('option');option.value=value;option.textContent=label;select.append(option)}
+  if(entries.some(([value])=>value===previous))select.value=previous;
+}
+async function submitPool(event,operation){
+  event.preventDefault();
+  if(!credential){el('notice').textContent='Connect first';return}
+  try{const result=await operation();await refresh();el('notice').textContent='Catalog saved: '+(result.id||result.name||result.status)}
+  catch(error){el('notice').textContent=error.message}
+}
+async function refresh(){
+  const projects=await get('/api/projects');const nodes=await get('/api/nodes');
+  pickOptions('node-target',[['','Automatic node selection'],...nodes.map(n=>[n.id,n.id+(n.online?' (online)':' (offline)')])]);
+  const projectSelect=el('project-select');const selectedProject=projectSelect.value;
+  const planningSelect=el('planning-project');const selectedPlanning=planningSelect.value;
+  planningSelect.replaceChildren();
+  projectSelect.replaceChildren();
+  for(const p of projects){const option=document.createElement('option');option.value=p.id;option.textContent=p.title+' ('+p.id+')';projectSelect.append(option);
+    const planningOption=document.createElement('option');planningOption.value=p.id;planningOption.textContent=p.title+' ('+p.id+')';planningSelect.append(planningOption)}
+  if(projects.some(p=>p.id===selectedPlanning))planningSelect.value=selectedPlanning;
+  if(projects.some(p=>p.id===selectedProject))projectSelect.value=selectedProject;
+  [poolImages,poolSoftware,poolPrograms]=await Promise.all([get('/api/pool/images'),get('/api/pool/software'),get('/api/pool/programs')]);
+  render('pool-images',poolImages,p=>[p.id+' · '+p.status,p.image+' · '+(p.available_nodes||[]).length+' eligible workers · revision '+p.revision]);
+  render('pool-software',poolSoftware,p=>[p.id+' · '+p.status,p.packages.join(', ')+' · '+p.image_id+' · revision '+p.revision]);
+  render('pool-programs',poolPrograms,p=>[p.name+' · '+p.status,p.platform+' / '+p.distribution+' · '+p.id+' · revision '+p.revision]);
+  pickOptions('package-image',poolImages.filter(x=>x.status==='active').map(x=>[x.id,x.id+' ('+x.image+')']));
+  pickOptions('entry-select',[
+    ...poolImages.filter(x=>x.status!=='retired').map(x=>['image:'+x.id,'Image: '+x.id+' · '+x.status]),
+    ...poolSoftware.filter(x=>x.status!=='retired').map(x=>['software:'+x.id,'Packages: '+x.id+' · '+x.status])
+  ]);
+  pickOptions('review-program',poolPrograms.filter(x=>!['retired','rejected'].includes(x.status)).map(x=>[x.id,x.name+' · '+x.status]));
+  const hardware=await get('/api/hardware');
+  availableUSB=hardware.filter(d=>d.kind==='usb'&&d.online&&!d.leased_to);
+  const deviceSelect=el('usb-device');const previous=deviceSelect.value;
+  deviceSelect.replaceChildren();
+  const none=document.createElement('option');none.value='';none.textContent='Select a USB device';deviceSelect.append(none);
+  for(let i=0;i<availableUSB.length;i++){
+    const d=availableUSB[i],option=document.createElement('option');
+    option.value=d.node+'::'+d.id;option.textContent=d.node+' / '+(d.model||d.id)+' ('+d.id+')';deviceSelect.append(option)
+  }
+  if(availableUSB.some(d=>d.node+'::'+d.id===previous))deviceSelect.value=previous;
+  render('projects',projects,p=>[p.title,p.id]);
+  render('nodes',nodes,n=>[n.id,n.online?'Online · '+(n.capabilities.cpu||0)+' CPU · '+(n.capabilities.memory_mb||0)+' MiB available':'Offline']);
+  const workspaces=[];const artifacts=[];const boards=[];
+  for(const p of projects){
+    for(const w of await get('/api/projects/'+encodeURIComponent(p.id)+'/workspaces'))workspaces.push([p.id,w]);
+    for(const a of await get('/api/projects/'+encodeURIComponent(p.id)+'/artifacts'))artifacts.push([p.id,a]);
+    const response=await fetch('/api/projects/'+encodeURIComponent(p.id)+'/planning',{headers:{Authorization:'Bearer '+credential},cache:'no-store'});
+    if(response.ok){boards.push([p.id,await response.json()])}else if(response.status!==400){throw new Error('Planning lookup failed: '+response.status)}
+  }
+  render('workspaces',workspaces.filter(([_,w])=>!['stopped','failed'].includes(w.status)),([p,w])=>[w.id.slice(0,12)+' · '+w.status,p+' · '+w.node]);
+  render('artifacts',artifacts.slice(-30),([p,a])=>[a.name,p+' · '+a.size+' bytes · SHA256 '+a.sha256.slice(0,12)]);
+  render('planning',boards,([p,b])=>[b.title,p+' · '+b.url]);
+  const libraries=await get('/api/libraries');
+  render('libraries',libraries,l=>[l.title,l.kind+' · '+l.id]);
+  el('notice').textContent='';
+}
+el('program-platform').addEventListener('change',()=>{el('program-delivery').value=el('program-platform').value==='linux-container'?'apt':'native'});
+el('image-register').addEventListener('submit',event=>submitPool(event,()=>post('/api/pool/images',{
+  id:el('image-id').value,image:el('image-ref').value,description:el('image-description').value,architecture:el('image-arch').value
+})));
+el('package-register').addEventListener('submit',event=>submitPool(event,()=>post('/api/pool/software',{
+  id:el('package-id').value,image_id:el('package-image').value,
+  description:el('package-description').value,packages:el('package-names').value.split(',').map(x=>x.trim()).filter(Boolean)
+})));
+el('program-propose').addEventListener('submit',event=>submitPool(event,()=>post('/api/pool/programs',{
+  id:el('program-id').value,name:el('program-name').value,version:el('program-version').value,
+  platform:el('program-platform').value,distribution:el('program-delivery').value,
+  source_url:el('program-source').value,license_notes:el('program-license').value,
+  description:el('program-description').value
+})));
+el('entry-change').addEventListener('submit',event=>submitPool(event,()=>{
+  const [kind,id]=el('entry-select').value.split(':');
+  const entry=(kind==='image'?poolImages:poolSoftware).find(x=>x.id===id);
+  if(!entry)throw new Error('Choose an entry');
+  return post('/api/pool/'+(kind==='image'?'images':'software')+'/'+encodeURIComponent(id)+'/state',{
+    status:el('entry-state').value,reason:el('entry-reason').value,expected_revision:entry.revision
+  })
+}));
+el('program-review').addEventListener('submit',event=>submitPool(event,()=>{
+  const program=poolPrograms.find(x=>x.id===el('review-program').value);
+  if(!program)throw new Error('Choose a program');
+  return post('/api/pool/programs/'+encodeURIComponent(program.id)+'/review',{
+    status:el('review-state').value,expected_revision:program.revision,review_note:el('review-note').value,
+    pool_kind:el('review-pool-kind').value,pool_id:el('review-pool-id').value
+  })
+}));
+el('planning-link').addEventListener('submit',async event=>{
+  event.preventDefault();
+  if(!credential){el('notice').textContent='Connect first';return}
+  const project=el('planning-project').value;
+  const url=el('planning-url').value;
+  try{
+    const response=await fetch('/api/projects/'+encodeURIComponent(project)+'/planning',{
+      method:'POST',headers:{Authorization:'Bearer '+credential,'Content-Type':'application/json'},
+      body:JSON.stringify({url})});
+    const data=await response.json();
+    if(!response.ok)throw new Error(data.detail||'GitHub Project link failed');
+    await refresh();el('notice').textContent='Linked '+data.title+' to '+project;
+  }catch(e){el('notice').textContent=e.message}
+});
+el('usb-toggle').addEventListener('change' ,()=>{el('usb-options').hidden=!el('usb-toggle').checked});
+function workspaceRequest(){
+  const usb=el('usb-toggle').checked;
+  const device=availableUSB.find(d=>d.node+'::'+d.id===el('usb-device').value);
+  if(usb&&!device)throw new Error('Select the exact USB device to reserve');
+  const gpu=Number(el('gpu-count').value),vram=Number(el('min-gpu-memory').value);
+  if(vram>0&&gpu===0)throw new Error('Select a GPU when specifying GPU memory');
+  const request={project_id:el('project-select').value,cpu:Number(el('cpu').value),
+    memory_mb:Number(el('memory').value),usb_passthrough:usb};
+  if(el('node-target').value)request.node_id=el('node-target').value;
+  if(el('arch-target').value)request.architecture=el('arch-target').value;
+  const hardware={};if(gpu)hardware.gpu=gpu;
+  if(usb){hardware.usb=1;request.usb_node=device.node;request.usb_device_id=device.id}
+  if(Object.keys(hardware).length)request.hardware=hardware;
+  if(vram>0)request.min_gpu_memory_mb=vram;
+  return request;
+}
+el('preview-workspace').addEventListener('click',async()=>{
+  if(!credential){el('notice').textContent='Connect first';return}
+  try{
+    const request=workspaceRequest();
+    const plan=await post('/api/projects/'+encodeURIComponent(request.project_id)+'/resource-plan',request);
+    const lines=(plan.candidates||[]).map(c=>c.node+': '+(c.eligible?'eligible':'not eligible')+
+      (c.reasons.length?' — '+c.reasons.join('; '):''));
+    el('plan-result').textContent=(plan.recommended_node?'Suggested worker: '+plan.recommended_node:'No eligible worker')+
+      '\\n'+(lines.join('\\n')||'No registered workers')+'\\nAdvisory only; no resources reserved.';
+    el('notice').textContent='';
+  }catch(error){el('notice').textContent=error.message}
+});
+el('create').addEventListener('submit',async event=>{
+  event.preventDefault();
+  if(!credential){el('notice').textContent='Connect first';return}
+  try{
+    const request=workspaceRequest();
+    const body=await post('/api/workspaces',request);
+    await refresh();el('notice').textContent='Workspace '+body.id.slice(0,12)+' scheduled';
+  }catch(error){el('notice').textContent=error.message}
+});
+el('auth').addEventListener('submit',async event=>{event.preventDefault();credential=el('token').value;el('token').value='';try{await refresh()}catch(e){credential='';el('notice').textContent=e.message}});
+</script>
+</body>
+</html>
