@@ -8,7 +8,10 @@ import (
 )
 
 func (s *Server) invoke(ctx context.Context,name string,args json.RawMessage,id json.RawMessage) map[string]any {
- if name=="workspace__workspace_create" || name=="workspace__resource_plan" || name=="workspace__task_compute_submit" {
+ if name=="workspace__resource_plan" {
+   if err:=s.deviceCatalog.ValidatePlan(args);err!=nil{return toolError(err.Error())}
+ }
+ if name=="workspace__workspace_create" || name=="workspace__task_compute_submit" {
    if err:=s.deviceCatalog.ValidateAllocation(args);err!=nil{return toolError(err.Error())}
  }
  if output,allowed:=s.checkPrivilege(name,args);!allowed{return output}

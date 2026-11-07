@@ -33,3 +33,5 @@ Agentless access must not install workers, controllers or system services, modif
 Managed GPU, NPU, FPGA and USB hardware must be associated with an enrolled worker. Its device permissions and `eligibleForCompute` status determine whether it can be considered for allocation. The executor must bind the declared ID to the physical device, validate permission at execution time and fail closed when the inventory or identity changes.
 
 Permissions never depend on manufacturer, model or ownership. Enrollment changes require the same independent acceptance checks as other infrastructure changes.
+
+Resource planning may consider an unpinned accelerator requirement only when at least one enrolled node has sufficient declared eligible devices. Creating or submitting a workload with an accelerator still requires a concrete node and independent executor-side device authorization.
