@@ -5,7 +5,7 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/dbontr/homelab-new/platform/approval"
+	"github.com/dbontr/homelab-new/system/approval"
 )
 
 // AdminHandler must only be served over an operator-restricted Unix socket.

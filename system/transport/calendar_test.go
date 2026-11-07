@@ -6,7 +6,7 @@ import (
  "path/filepath"
  "strings"
  "testing"
- "github.com/dbontr/homelab-new/platform/store"
+ "github.com/dbontr/homelab-new/system/store"
 )
 func TestReadOnlyCalendarFeed(t *testing.T){
  shared:=httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){

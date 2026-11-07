@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/dbontr/homelab-new/platform/store"
+	"github.com/dbontr/homelab-new/system/store"
 )
 
 func TestClusterChangeRequiresExactOneTimeApproval(t *testing.T) {

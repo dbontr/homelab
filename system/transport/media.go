@@ -6,7 +6,7 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/dbontr/homelab-new/platform/media"
+	"github.com/dbontr/homelab-new/system/media"
 )
 
 func (s *Server) ConfigureMedia(client *media.Client) {

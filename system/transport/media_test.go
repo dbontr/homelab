@@ -8,8 +8,8 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/dbontr/homelab-new/platform/media"
-	"github.com/dbontr/homelab-new/platform/store"
+	"github.com/dbontr/homelab-new/system/media"
+	"github.com/dbontr/homelab-new/system/store"
 )
 
 func TestMediaOperationsShareNativeAndMCPInterfaces(t *testing.T) {

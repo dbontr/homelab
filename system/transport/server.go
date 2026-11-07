@@ -13,10 +13,10 @@ import (
  "strconv"
  "strings"
  "time"
- "github.com/dbontr/homelab-new/platform/approval"
- "github.com/dbontr/homelab-new/platform/calendar"
- "github.com/dbontr/homelab-new/platform/media"
- "github.com/dbontr/homelab-new/platform/store"
+ "github.com/dbontr/homelab-new/system/approval"
+ "github.com/dbontr/homelab-new/system/calendar"
+ "github.com/dbontr/homelab-new/system/media"
+ "github.com/dbontr/homelab-new/system/store"
 )
 type Backend struct { Name string; URL string; Token string }
 type Server struct { db *store.Store; token string; backend []Backend; client *http.Client; calendarURL string; gate *approval.Gate; media *media.Client }
