@@ -24,17 +24,7 @@ func (c *Catalog) ValidateAllocation(raw json.RawMessage) error {
 		return errors.New("USB devices are not available for automatic assignment")
 	}
 	if request.Hardware["fpga"] > 0 {
-		approved := 0
-		if c != nil {
-			for _, d := range c.items {
-				if d.Kind == "fpga" && d.Ownership == "owned" && d.EligibleForCompute {
-					approved++
-				}
-			}
-		}
-		if approved < request.Hardware["fpga"] {
-			return errors.New("FPGA allocation requires explicitly approved owned hardware")
-		}
+		return errors.New("FPGA devices are not available for automatic assignment")
 	}
 	return nil
 }
