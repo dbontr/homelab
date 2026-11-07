@@ -23,3 +23,9 @@ Existing Cloudflare Access protects external ingress. It is not exposed as a gen
 The primary assistant can request authorized application operations. The development and deployment pipeline is a separate principal and never inherits the primary MCP's token. Changes to network routing, firewall, machine identity, K3s admission, or host software need operator confirmation and independent service-level authorization.
 
 Media data and all runtime credentials remain outside Git. The absence of automatic backups is an explicit operational risk; repository reproducibility cannot reconstruct missing personal data.
+
+## Borrowed equipment
+
+The hardware inventory is declarative and is not proof of connectivity. The borrowed Kria KV260 can be configured only for SSH connection and inspection. It is not automatically available to compute jobs. The catalog has no hostname or secret until the owner configures one in an approved management channel. The SSH account does not imply permission to install software, elevate privileges, reprogram the FPGA, change firmware, or use USB/JTAG. The actual device executor must enforce its own authorization; an inventory policy is not sufficient by itself.
+
+An owned GPU, NPU, FPGA or other accelerator may use Rust for narrowly scoped device work when necessary. Rust does not confer any additional operating-system permissions.
