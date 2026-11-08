@@ -17,10 +17,11 @@ import (
  "github.com/dbontr/homelab-new/system/calendar"
  "github.com/dbontr/homelab-new/system/devices"
  "github.com/dbontr/homelab-new/system/media"
+ "github.com/dbontr/homelab-new/system/profiles"
  "github.com/dbontr/homelab-new/system/store"
 )
 type Backend struct { Name string; URL string; Token string }
-type Server struct { db *store.Store; token string; backend []Backend; client *http.Client; calendarURL string; gate *approval.Gate; media *media.Client; deviceCatalog *devices.Catalog }
+type Server struct { db *store.Store; token string; backend []Backend; client *http.Client; calendarURL string; gate *approval.Gate; media *media.Client; deviceCatalog *devices.Catalog; nodeCatalog *devices.NodeCatalog; profiles *profiles.Registry }
 
 func New(db *store.Store,token string,backends []Backend)(*Server,error){
  if db==nil||token==""{return nil,errors.New("store and access token are required")}
@@ -35,6 +36,8 @@ func New(db *store.Store,token string,backends []Backend)(*Server,error){
  return &Server{db:db,token:token,backend:backends,gate:approval.New(),client:&http.Client{Timeout:120*time.Second,CheckRedirect:func(_ *http.Request,_ []*http.Request)error{return errors.New("backend redirects are disabled")}}},nil
 }
 func(s *Server) SetDeviceCatalog(catalog *devices.Catalog) { s.deviceCatalog = catalog }
+func(s *Server) SetNodeCatalog(catalog *devices.NodeCatalog) { s.nodeCatalog = catalog }
+func(s *Server) SetProfiles(registry *profiles.Registry) { s.profiles = registry }
 func(s *Server) SetCalendarURL(raw string)error{
  if err:=calendar.ValidateURL(raw);err!=nil{return err}
  s.calendarURL=raw
@@ -44,6 +47,11 @@ func(s *Server) Handler()http.Handler{
  mux:=http.NewServeMux()
  mux.HandleFunc("GET /healthz",func(w http.ResponseWriter,_ *http.Request){writeJSON(w,200,map[string]string{"status":"ok"})})
  mux.HandleFunc("POST /mcp",s.mcp)
+ mux.HandleFunc("GET /v1/software",s.softwareLibrary)
+ mux.HandleFunc("GET /v1/tools",func(w http.ResponseWriter,r *http.Request) {
+  writeJSON(w,200,map[string]any{"tools":s.toolList(r)})
+ })
+ mux.HandleFunc("POST /v1/tools/{name}/call",s.nativeToolCall)
  mux.HandleFunc("GET /v1/tasks",s.tasks)
  mux.HandleFunc("POST /v1/tasks",s.tasks)
  mux.HandleFunc("POST /v1/tasks/{id}/complete",s.complete)
@@ -55,6 +63,11 @@ func(s *Server) Handler()http.Handler{
  mux.HandleFunc("GET /v1/reports/weekly",s.weekly)
  mux.HandleFunc("GET /v1/calendar",s.calendarEvents)
  mux.HandleFunc("GET /v1/devices",func(w http.ResponseWriter,_ *http.Request){writeJSON(w,200,s.deviceCatalog.List())})
+ mux.HandleFunc("GET /v1/nodes",func(w http.ResponseWriter,_ *http.Request){writeJSON(w,200,s.nodeCatalog.List())})
+ mux.HandleFunc("GET /v1/compute/profiles",s.profileRoutes)
+ mux.HandleFunc("GET /v1/compute/profiles/{id}",s.profileRoutes)
+ mux.HandleFunc("PUT /v1/compute/profiles/{id}",s.profileRoutes)
+ mux.HandleFunc("POST /v1/compute/profiles/{id}/plan",s.profilePlanRoute)
  mux.HandleFunc("GET /v1/media/search",s.mediaSearch)
  mux.HandleFunc("GET /v1/media/requests",s.mediaRequests)
  mux.HandleFunc("POST /v1/media/requests",s.mediaRequests)
@@ -153,24 +166,7 @@ func(s *Server)mcp(w http.ResponseWriter,r *http.Request){
  case "tools/call":
   var p struct {Name string `json:"name"`; Arguments json.RawMessage `json:"arguments"`}
   if e:=json.Unmarshal(req.Params,&p);e!=nil||p.Name==""{s.rpc(w,req.ID,nil,failure(-32602,"tool name required"));return}
-  if p.Name=="workspace__workspace_create" || p.Name=="workspace__resource_plan" || p.Name=="workspace__task_compute_submit" {
-   if e:=s.deviceCatalog.ValidateAllocation(p.Arguments);e!=nil{s.rpc(w,req.ID,toolError(e.Error()),nil);return}
-  }
-  if output,allowed:=s.checkPrivilege(p.Name,p.Arguments);!allowed{s.rpc(w,req.ID,output,nil);return}
-  for _,b:=range s.backend{
-   prefix:=b.Name+"__"
-   if strings.HasPrefix(p.Name,prefix){
-    args:=map[string]any{"name":strings.TrimPrefix(p.Name,prefix),"arguments":json.RawMessage(p.Arguments)}
-    raw,_:=json.Marshal(args)
-    var remote any
-    e:=s.forward(r.Context(),b,rpcRequest{JSONRPC:"2.0",ID:req.ID,Method:"tools/call",Params:raw},&remote)
-    if e!=nil{s.rpc(w,req.ID,toolError(e.Error()),nil);return}
-    s.rpc(w,req.ID,remote,nil);return
-   }
-  }
-  v,e:=s.localTool(r.Context(),p.Name,p.Arguments)
-  if e!=nil{s.rpc(w,req.ID,toolError(e.Error()),nil);return}
-  s.rpc(w,req.ID,result(v),nil)
+  s.rpc(w,req.ID,s.invoke(r.Context(),p.Name,p.Arguments,req.ID),nil)
  default:s.rpc(w,req.ID,nil,failure(-32601,"method not found"))
  }
 }
@@ -181,7 +177,7 @@ func tool(name,description string,properties map[string]any,required ...string)m
 func prop(kind string)map[string]any{return map[string]any{"type":kind}}
 func(s *Server)localTools()[]map[string]any{
  tools:=[]map[string]any{
-  tool("task_add","Create a personal task",map[string]any{"title":prop("string"),"notes":prop("string"),"goal_id":prop("string"),"due":prop("string"),"minutes":prop("integer"),"energy":prop("string"),"location":prop("string"),"priority":prop("integer")},"title"),
+  tool("task_add","Create a personal task",map[string]any{"parent_id":prop("string"),"depends_on":map[string]any{"type":"array","items":prop("string")},"title":prop("string"),"notes":prop("string"),"goal_id":prop("string"),"due":prop("string"),"minutes":prop("integer"),"energy":prop("string"),"location":prop("string"),"priority":prop("integer")},"title"),
   tool("task_complete","Mark a task complete",map[string]any{"id":prop("string")},"id"),
   tool("task_list","List personal tasks",map[string]any{"status":prop("string")}),
   tool("task_suggest","Recommend tasks by time, mental effort, location, or quick-win mode",map[string]any{"minutes":prop("integer"),"energy":prop("string"),"location":prop("string"),"mode":prop("string"),"limit":prop("integer")}),
@@ -193,7 +189,14 @@ func(s *Server)localTools()[]map[string]any{
   tool("system_status","List configured integrations",map[string]any{}),
   tool("approval_status","Check an administrator approval",map[string]any{"id":prop("string")},"id"),
   tool("device_inventory","List declared hardware access and constraints; this is not an online device probe",map[string]any{}),
+  tool("node_inventory","List declarative management modes and roles without probing machines",map[string]any{}),
  }
+ if s.hasBackend("workspace") {tools=append(tools,tool("software_catalog","List approved images, software collections, and program requests",map[string]any{}))}
+ if s.profiles!=nil {tools=append(tools,
+  tool("compute_profile_list","List saved reusable build configurations",map[string]any{}),
+  tool("compute_profile_get","Read a saved build configuration revision",map[string]any{"id":prop("string"),"version":prop("integer")},"id"),
+  tool("compute_profile_save","Save an immutable build profile revision",map[string]any{"spec":prop("object"),"expected_version":prop("integer")},"spec","expected_version"),
+  tool("compute_profile_plan","Check available Workspace resources for a saved profile without scheduling",map[string]any{"id":prop("string"),"version":prop("integer"),"project_id":prop("string"),"node_id":prop("string")},"id","project_id"))}
  if s.calendarURL!=""{tools=append(tools,tool("calendar_feed","Read Proton Calendar event definitions; recurrence rules are not expanded",map[string]any{}))}
  if s.media!=nil{tools=append(tools,
   tool("media_search","Search movies and television through Seerr",map[string]any{"query":prop("string")},"query"),
@@ -222,6 +225,7 @@ func(s *Server)toolList(r *http.Request)[]map[string]any{
 }
 func(s *Server)localTool(ctx context.Context,name string,raw json.RawMessage)(any,error){
  if s.media!=nil&&(name=="media_search"||name=="media_request"||name=="media_requests"){return s.mediaTool(ctx,name,raw)}
+ if name=="compute_profile_list"||name=="compute_profile_get"||name=="compute_profile_save"||name=="compute_profile_plan" {return s.profileTool(ctx,name,raw)}
  var args struct{
   store.TaskInput
   ID string `json:"id"`
@@ -246,9 +250,11 @@ func(s *Server)localTool(ctx context.Context,name string,raw json.RawMessage)(an
  case "weekly_report":return s.db.Report(args.WeekOf)
  case "approval_status":return s.privilegeStatus(args.ID)
  case "device_inventory":return s.deviceCatalog.List(),nil
+ case "node_inventory":return s.nodeCatalog.List(),nil
  case "calendar_feed":
   if s.calendarURL==""{return nil,errors.New("calendar is not configured")}
   return calendar.Fetch(ctx,s.client,s.calendarURL)
+ case "software_catalog":return s.softwareEntries(ctx)
  case "system_status":
   statuses:=map[string]string{}
   for _,b:=range s.backend{

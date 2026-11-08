@@ -1,12 +1,12 @@
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, hardwareNode, ... }:
 {
   imports = [ ./hardware-configuration.nix ./homelab-worker.nix ../common/eda-build-vm.nix ./eda-node-settings.nix ];
   boot.loader.systemd-boot.enable = true;
   boot.loader.efi.canTouchEfiVariables = true;
-  networking.hostName = "janus";
+  networking.hostName = hardwareNode.id;
   networking.useDHCP = false;
-  networking.interfaces.enp0s31f6.ipv4.addresses = [
-    { address = "10.77.30.232"; prefixLength = 24; }
+  networking.interfaces.${hardwareNode.lanInterface}.ipv4.addresses = [
+    { address = hardwareNode.nodeIP; prefixLength = 24; }
   ];
   networking.defaultGateway = "10.77.30.1";
   networking.nameservers = [ "10.77.30.1" "1.1.1.1" ];

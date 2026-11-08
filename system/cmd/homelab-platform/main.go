@@ -7,11 +7,13 @@ import (
     "net"
     "net/http"
     "os"
+    "path/filepath"
     "strings"
     "time"
 
     "github.com/dbontr/homelab-new/system/devices"
     "github.com/dbontr/homelab-new/system/media"
+    "github.com/dbontr/homelab-new/system/profiles"
     "github.com/dbontr/homelab-new/system/store"
     "github.com/dbontr/homelab-new/system/transport"
 )
@@ -39,9 +41,21 @@ func main(){
         v,enabled,e:=configuredBackend(b.name,b.upper);if e!=nil{log.Fatal(e)};if enabled{backends=append(backends,v)}
     }
     server,e:=transport.New(db,token,backends);if e!=nil{log.Fatal(e)}
+    profileFile:=os.Getenv("HOMELAB_PROFILES_FILE")
+    if profileFile=="" {profileFile=filepath.Join(filepath.Dir(state),"profiles.json")}
+    registry,e:=profiles.Open(profileFile);if e!=nil{log.Fatal(e)}
+    server.SetProfiles(registry)
     if file:=os.Getenv("HOMELAB_DEVICES_FILE");file!=""{
         catalog,e:=devices.Load(file);if e!=nil{log.Fatal(e)}
         server.SetDeviceCatalog(catalog)
+    }
+    if file:=os.Getenv("HOMELAB_NODES_FILE");file!="" {
+        nodes,err:=devices.LoadNodes(file);if err!=nil {log.Fatal(err)}
+        server.SetNodeCatalog(nodes)
+        if catalogFile:=os.Getenv("HOMELAB_DEVICES_FILE");catalogFile!="" {
+            catalog,err:=devices.Load(catalogFile);if err!=nil {log.Fatal(err)}
+            if err:=catalog.ValidateNodes(nodes);err!=nil {log.Fatal(err)}
+        }
     }
     if url:=os.Getenv("HOMELAB_SEERR_URL");url!=""{
         path:=os.Getenv("HOMELAB_SEERR_API_KEY_FILE")

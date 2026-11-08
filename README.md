@@ -16,6 +16,8 @@ Compute, teaching and health implementations retain independent operating-system
 
 ## Development
 
+Compute profiles are stored with immutable revisions, resource requirements and operator-approved software identifiers; profile resource planning is advisory and never schedules a job. SSH-mode equipment uses ordinary-user inspection probes without remote agents. The native tool-call API and MCP dispatch share the same application authorization layer. Credential encryption and independent executor grants exist as library contracts but have no live account or cluster-authority configuration.
+
 The core Go module is in `system/`; specialist executables and packages are in its compute, learning and health implementation directories. The Go workspace at the repository root composes those modules. Build the core using the Go toolchain from `system/`:
 
 ```sh

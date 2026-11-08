@@ -165,6 +165,8 @@ func ScopeFor(name string) string {
 	switch name {
 	case "workspace__worker_revoke", "workspace__github_account_archive":
 		return "cluster.modify"
+	case "workspace__pool_register_image", "workspace__pool_register_software", "workspace__pool_review_program", "workspace__pool_update_entry":
+		return "software.manage"
 	}
 	return ""
 }

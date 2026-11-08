@@ -1,0 +1,142 @@
+package security
+
+import (
+ "crypto/aes"
+ "crypto/cipher"
+ "crypto/rand"
+ "encoding/base64"
+ "encoding/json"
+ "errors"
+ "fmt"
+ "os"
+ "path/filepath"
+ "sort"
+ "strings"
+ "sync"
+ "time"
+)
+
+type CredentialHandle struct {
+ ID string `json:"id"`
+ Provider string `json:"provider"`
+ CreatedAt time.Time `json:"created_at"`
+}
+
+type storedCredential struct {
+ CredentialHandle
+ Nonce string `json:"nonce"`
+ Data string `json:"data"`
+}
+
+// Vault is owned by a trusted local credential process, not the MCP gateway.
+type Vault struct {
+ mu sync.Mutex
+ key [32]byte
+ path string
+ records map[string]storedCredential
+}
+
+func OpenVault(path string, secret []byte)(*Vault,error){
+ if len(secret)!=32||path==""||!filepath.IsAbs(path){
+   return nil,errors.New("credential vault requires an absolute path and 256-bit key")
+ }
+ v:=&Vault{path:path,records:map[string]storedCredential{}}
+ copy(v.key[:],secret)
+ info,err:=os.Lstat(path)
+ if err==nil&&(!info.Mode().IsRegular()||info.Mode().Perm()&0077!=0){
+   return nil,errors.New("credential vault must be an owner-only regular file")
+ }
+ if errors.Is(err,os.ErrNotExist){return v,nil}
+ if err!=nil{return nil,err}
+ data,err:=os.ReadFile(path);if err!=nil{return nil,err}
+ if len(data)>8<<20{return nil,errors.New("credential vault exceeds size limit")}
+ if err:=json.Unmarshal(data,&v.records);err!=nil||v.records==nil{
+   return nil,errors.New("invalid credential vault")
+ }
+ for id,rec:=range v.records{
+   if id!=rec.ID||rec.Provider==""||rec.Nonce==""||rec.Data==""{
+     return nil,errors.New("invalid credential record")
+   }
+ }
+ return v,nil
+}
+
+func(v *Vault)seal(provider,id string,secret []byte)(storedCredential,error){
+ block,err:=aes.NewCipher(v.key[:]);if err!=nil{return storedCredential{},err}
+ gcm,err:=cipher.NewGCM(block);if err!=nil{return storedCredential{},err}
+ nonce:=make([]byte,gcm.NonceSize())
+ if _,err:=rand.Read(nonce);err!=nil{return storedCredential{},err}
+ ciphertext:=gcm.Seal(nil,nonce,secret,[]byte(provider+":"+id))
+ return storedCredential{
+  CredentialHandle:CredentialHandle{ID:id,Provider:provider,CreatedAt:time.Now().UTC()},
+  Nonce:base64.RawStdEncoding.EncodeToString(nonce),
+  Data:base64.RawStdEncoding.EncodeToString(ciphertext),
+ },nil
+}
+
+func(v *Vault)Store(provider string,secret []byte)(CredentialHandle,error){
+ if provider==""||len(provider)>64||strings.ContainsAny(provider,"\n\r\t/:\\")||len(secret)==0||len(secret)>32768{
+   return CredentialHandle{},errors.New("invalid credential metadata")
+ }
+ v.mu.Lock();defer v.mu.Unlock()
+ if len(v.records)>=1024{return CredentialHandle{},errors.New("credential vault is full")}
+ id,err:=randomURLToken(24);if err!=nil{return CredentialHandle{},err}
+ rec,err:=v.seal(provider,id,secret);if err!=nil{return CredentialHandle{},err}
+ next:=make(map[string]storedCredential,len(v.records)+1)
+ for k,entry:=range v.records{next[k]=entry}
+ next[id]=rec
+ if err:=v.persist(next);err!=nil{return CredentialHandle{},err}
+ v.records=next
+ return rec.CredentialHandle,nil
+}
+
+func(v *Vault)WithCredential(handle,provider string,use func([]byte)error)error{
+ if use==nil{return errors.New("credential operation is required")}
+ v.mu.Lock()
+ rec,ok:=v.records[handle]
+ v.mu.Unlock()
+ if !ok||rec.Provider!=provider{return os.ErrNotExist}
+ block,err:=aes.NewCipher(v.key[:]);if err!=nil{return err}
+ gcm,err:=cipher.NewGCM(block);if err!=nil{return err}
+ nonce,err:=base64.RawStdEncoding.DecodeString(rec.Nonce)
+ if err!=nil{return errors.New("invalid encrypted credential")}
+ data,err:=base64.RawStdEncoding.DecodeString(rec.Data)
+ if err!=nil{return errors.New("invalid encrypted credential")}
+ plain,err:=gcm.Open(nil,nonce,data,[]byte(provider+":"+handle))
+ if err!=nil{return errors.New("credential could not be decrypted")}
+ defer func(){for i:=range plain{plain[i]=0}}()
+ return use(plain)
+}
+
+func(v *Vault)List()[]CredentialHandle{
+ v.mu.Lock();defer v.mu.Unlock()
+ out:=make([]CredentialHandle,0,len(v.records))
+ for _,item:=range v.records{out=append(out,item.CredentialHandle)}
+ sort.Slice(out,func(i,j int)bool{return out[i].ID<out[j].ID})
+ return out
+}
+
+func(v *Vault)Delete(handle string)error{
+ v.mu.Lock();defer v.mu.Unlock()
+ if _,ok:=v.records[handle];!ok{return os.ErrNotExist}
+ next:=make(map[string]storedCredential,len(v.records)-1)
+ for id,item:=range v.records{if id!=handle{next[id]=item}}
+ if err:=v.persist(next);err!=nil{return err}
+ v.records=next
+ return nil
+}
+
+func(v *Vault)persist(next map[string]storedCredential)error{
+ if err:=os.MkdirAll(filepath.Dir(v.path),0700);err!=nil{return err}
+ encoded,err:=json.Marshal(next);if err!=nil{return err}
+ if len(encoded)>8<<20{return errors.New("credential vault exceeds size limit")}
+ f,err:=os.CreateTemp(filepath.Dir(v.path),".credentials-*");if err!=nil{return err}
+ defer os.Remove(f.Name())
+ if err:=f.Chmod(0600);err!=nil{f.Close();return err}
+ if _,err:=f.Write(encoded);err!=nil{f.Close();return err}
+ if err:=f.Sync();err!=nil{f.Close();return err}
+ if err:=f.Close();err!=nil{return err}
+ if err:=os.Rename(f.Name(),v.path);err!=nil{return fmt.Errorf("persist credential vault: %w",err)}
+ if dir,err:=os.Open(filepath.Dir(v.path));err==nil{_=dir.Sync();_=dir.Close()}
+ return nil
+}

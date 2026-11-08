@@ -8,3 +8,8 @@
 - [Kubernetes Documentation](https://kubernetes.io/docs/) — Kubernetes project. Used for: scheduled compute workers and workload isolation.
 - [Seerr API: Create New Request](https://docs.seerr.dev/api/create-new-request/) — Seerr project. Used for: media request payloads and supported movie/TV media types.
 - [Seerr OpenAPI](https://github.com/seerr-team/seerr/blob/develop/seerr-api.yml) — Seerr project. Used for: authenticated media search, request listing, and API key headers.
+- [RFC 7636: Proof Key for Code Exchange by OAuth Public Clients](https://www.rfc-editor.org/rfc/rfc7636) — IETF. Used for: OAuth authorization-code PKCE and one-time state.
+- [RFC 6749: The OAuth 2.0 Authorization Framework](https://www.rfc-editor.org/rfc/rfc6749) — IETF. Used for: provider authorization-code flow boundaries.
+- [RFC 2104: HMAC: Keyed-Hashing for Message Authentication](https://www.rfc-editor.org/rfc/rfc2104) — IETF. Used for: operation-bound approval grants.
+- [NIST SP 800-38D: Recommendation for Block Cipher Modes of Operation — Galois/Counter Mode (GCM)](https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication800-38d.pdf) — NIST. Used for: authenticated encryption of locally stored provider credentials.
+- [RFC 8018: PKCS #5 Password-Based Cryptography Specification, Version 2.1](https://www.rfc-editor.org/rfc/rfc8018) — IETF. Used for: PBKDF2-HMAC-SHA256 owner passphrase verification.
