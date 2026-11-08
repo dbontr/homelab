@@ -281,6 +281,13 @@ main.content { max-width: 94rem; margin: 0 auto; padding: 2rem; }
 .recipe-purchased { color: var(--muted-foreground); text-decoration: line-through; }
 
 
+.recipe-list-entry { display: flex; align-items: center; gap: .75rem; width: 100%; min-width: 0; }
+.recipe-list-copy { display: flex; flex-direction: column; gap: .25rem; min-width: 0; }
+.recipe-list-thumbnail {
+  flex: 0 0 3.5rem; width: 3.5rem; height: 3.5rem;
+  object-fit: cover; border-radius: calc(var(--radius) * .8);
+  background: var(--muted); border: 1px solid var(--border);
+}
 .recipe-image-upload { display: grid; gap: .625rem; }
 .recipe-file-input { height: auto; min-height: 2.25rem; padding: .4rem .5rem; }
 .recipe-file-input::file-selector-button {
