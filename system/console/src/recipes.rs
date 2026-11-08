@@ -120,9 +120,16 @@ fn RecipeChoice(record: Recipe, active_id: String, on_select: EventHandler<Strin
         button { class: "recipe-list-item",
             aria_pressed: if active_id == record.id { "true" } else { "false" },
             onclick: move |_| on_select.call(id.clone()),
-            span { class: "recipe-list-title", "{record.title}" }
-            span { class: "small muted",
-                "{record.servings} servings · {record.prep_minutes+record.cook_minutes} min"
+            div { class: "recipe-list-entry",
+                if !record.image_ref.is_empty() {
+                    img { class: "recipe-list-thumbnail", src: "{record.image_ref}", alt: "", loading: "lazy" }
+                }
+                div { class: "recipe-list-copy",
+                    span { class: "recipe-list-title", "{record.title}" }
+                    span { class: "small muted",
+                        "{record.servings} servings · {record.prep_minutes+record.cook_minutes} min"
+                    }
+                }
             }
         }
     }
