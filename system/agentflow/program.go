@@ -25,6 +25,7 @@ type Program struct {
  ExpectedHead string `json:"expected_head"`
  Objective string `json:"objective"`
  ContextPaths []string `json:"context_paths,omitempty"`
+ AllowedPaths []string `json:"allowed_paths,omitempty"`
  Changes map[string]string `json:"changes,omitempty"`
  Checks []string `json:"checks"`
  ImagePoolID string `json:"image_pool_id"`
@@ -48,11 +49,13 @@ func (p Program) validate() error {
  !validID(p.ImagePoolID)||p.CPU<0.1||p.CPU>8||p.MemoryMB<256||p.MemoryMB>16384||
  p.DurationMinutes<10||p.DurationMinutes>180||
  len(p.Checks)==0||len(p.Checks)>8||len(p.Changes)>16||
- len(p.ContextPaths)>16||len(p.Title)==0||len(p.Title)>256||len(p.Description)>8192 {
+ len(p.ContextPaths)>16||len(p.AllowedPaths)>16||len(p.Title)==0||len(p.Title)>256||len(p.Description)>8192 {
   return errors.New("invalid engineering program or resource limits")
  }
  for _,s:=range p.Checks{if strings.TrimSpace(s)==""||len(s)>512||strings.ContainsAny(s,"\x00\r\n"){return errors.New("invalid verification command")}}
  for _,s:=range p.ContextPaths{if !validSourcePath(s){return errors.New("invalid source context path")}}
+ for _,s:=range p.AllowedPaths{if !validSourcePath(s){return errors.New("invalid editable path")}}
+ if len(p.Changes)==0&&len(p.AllowedPaths)==0{return errors.New("automatic authoring requires a finite editable file list")}
  for path,body:=range p.Changes{if !validSourcePath(path)||len(body)==0||len(body)>24000{return errors.New("invalid source change")}}
  return nil
 }
@@ -76,7 +79,7 @@ func Compile(p Program)(Workflow,error){
  add("provision","provision",nil,map[string]any{"image_pool_id":p.ImagePoolID,"cpu":p.CPU,"memory_mb":p.MemoryMB,"duration_minutes":p.DurationMinutes})
  add("checkout","checkout",[]string{"provision"},map[string]any{"repository":p.Repository,"ref":p.Revision})
  add("inspect","inspect",[]string{"checkout"},map[string]any{"repository":p.Repository,"paths":p.ContextPaths})
- add("author","author",[]string{"inspect"},map[string]any{"objective":p.Objective,"changes":p.Changes})
+ add("author","author",[]string{"inspect"},map[string]any{"objective":p.Objective,"changes":p.Changes,"allowed_paths":p.AllowedPaths})
  add("apply","apply",[]string{"author"},map[string]any{})
  add("verify","verify",[]string{"apply"},map[string]any{"commands":p.Checks})
  add("export","export",[]string{"verify"},map[string]any{})
