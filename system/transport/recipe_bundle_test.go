@@ -66,7 +66,9 @@ func TestRecipeBundleOwnerSessionAndPhotoRoundTrip(t *testing.T) {
 		t.Fatalf("anonymous ZIP download accepted: %d", read.Code)
 	}
 	exported := call("GET", "/v1/recipes/bundle", nil, "", cookie, "")
-	if exported.Code != 200 || exported.Header().Get("Content-Type") != "application/zip" {
+	if exported.Code != 200 || exported.Header().Get("Content-Type") != "application/zip" ||
+		exported.Header().Get("Cache-Control") != "no-store" ||
+		exported.Header().Get("X-Content-Type-Options") != "nosniff" {
 		t.Fatalf("ZIP export failed: %d %s", exported.Code, exported.Body.String())
 	}
 	bundle := exported.Body.Bytes()
