@@ -38,12 +38,12 @@ type Program struct {
 
 func validSourcePath(p string) bool {
  if len(p)==0||len(p)>255||path.IsAbs(p)||strings.ContainsAny(p,"\\\x00\r\n")||path.Clean(p)!=p{return false}
- for _,segment:=range strings.Split(p,"/"){if segment==""||segment=="."||segment==".."||strings.HasPrefix(segment,".git"){return false}}
+ for _,segment:=range strings.Split(p,"/"){if segment==""||segment=="."||segment==".."||segment==".git"{return false}}
  return true
 }
 func (p Program) validate() error {
  if !validID(p.Project)||!repositoryName.MatchString(p.Repository)||!commitName.MatchString(p.Revision)||
- !commitName.MatchString(p.ExpectedHead)||!branchName.MatchString(p.BaseBranch)||strings.Contains(p.BaseBranch,"..")||
+ !commitName.MatchString(p.ExpectedHead)||p.Revision!=p.ExpectedHead||!branchName.MatchString(p.BaseBranch)||strings.Contains(p.BaseBranch,"..")||
  strings.Contains(p.BaseBranch,"//")||strings.HasSuffix(p.BaseBranch,".lock")||
  strings.TrimSpace(p.Objective)==""||len(p.Objective)>4096||
  !validID(p.ImagePoolID)||p.CPU<0.1||p.CPU>8||p.MemoryMB<256||p.MemoryMB>16384||
@@ -56,7 +56,9 @@ func (p Program) validate() error {
  for _,s:=range p.ContextPaths{if !validSourcePath(s){return errors.New("invalid source context path")}}
  for _,s:=range p.AllowedPaths{if !validSourcePath(s){return errors.New("invalid editable path")}}
  if len(p.Changes)==0&&len(p.AllowedPaths)==0{return errors.New("automatic authoring requires a finite editable file list")}
- for path,body:=range p.Changes{if !validSourcePath(path)||len(body)==0||len(body)>24000{return errors.New("invalid source change")}}
+ total:=0
+ for path,body:=range p.Changes{if !validSourcePath(path)||len(body)==0||len(body)>24000{return errors.New("invalid source change")};total+=len(path)+len(body)}
+ if total>56<<10{return errors.New("source change set exceeds the durable result limit")}
  return nil
 }
 func encodeStep(v any)json.RawMessage{raw,_:=json.Marshal(v);return raw}
