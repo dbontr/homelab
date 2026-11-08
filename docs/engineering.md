@@ -13,7 +13,7 @@ Runs are compiled into these dependency-ordered operations:
 3. Read only the specified source context files.
 4. Obtain a bounded set of complete source files, either from the owner or an operator-configured source model.
 5. Apply edits only to approved repository-relative paths.
-6. Execute the declared verification commands in the isolated workspace and record confirmed exit codes.
+6. Execute the declared verification commands in the isolated workspace and record confirmed exit codes. If a check fails and a source model is configured, permit up to two bounded repairs of files already modified and explicitly included in the owner's `allowed_paths`. Repeat all checks after each repair; any unresolved failure blocks publication. Only the failing command and exit code, not raw test logs, are included in model repair feedback.
 7. Export the verified files as immutable project artifacts.
 8. Prepare a revision-guarded **draft pull request**. A run cannot merge it or activate a release.
 
