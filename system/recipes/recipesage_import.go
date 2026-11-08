@@ -86,7 +86,96 @@ func schemaCategory(value any) []string {
 	return result
 }
 
-var sageNutritionAmount = regexp.MustCompile(`(?i)^\s*(\d+(?:\.\d+)?)\s*(kcal|g|mg|mcg)\s*$`)
+var sageNutritionAmount = regexp.MustCompile(`(?i)^\s*(\d+(?:\.\d+)?)\s*(kcal|g|mg|mcg)\s*package recipes
+
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"math"
+	"net/url"
+	"regexp"
+	"strconv"
+	"strings"
+	"time"
+)
+
+const MaxRecipeSageExportBytes = 8 << 20
+const maxRecipeSageEntries = 1000
+
+type RecipeSageCandidate struct {
+	Key      string   `json:"key"`
+	Recipe   Recipe   `json:"recipe"`
+	Status   string   `json:"status"`
+	Warnings []string `json:"warnings,omitempty"`
+}
+
+type RecipeSagePreview struct {
+	Digest     string                `json:"digest"`
+	Total      int                   `json:"total"`
+	Ready      int                   `json:"ready"`
+	Candidates []RecipeSageCandidate `json:"candidates"`
+}
+
+type RecipeSageImportResult struct {
+	Imported int      `json:"imported"`
+	IDs      []string `json:"ids"`
+}
+
+func validRecipeSageRef(ref string) bool {
+	const prefix = "recipesage:"
+	if !strings.HasPrefix(ref, prefix) || len(ref) != len(prefix)+64 {
+		return false
+	}
+	for _, digit := range ref[len(prefix):] {
+		if (digit < '0' || digit > '9') && (digit < 'a' || digit > 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+func recipeSageKey(record map[string]any, raw json.RawMessage) string {
+	identifier := schemaString(record["identifier"])
+	if identifier != "" {
+		raw = []byte("identifier:" + identifier)
+	} else {
+		// Canonical JSON is stable across whitespace changes in the export.
+		normalized, err := json.Marshal(record)
+		if err == nil {
+			raw = normalized
+		}
+	}
+	digest := sha256.Sum256(raw)
+	return "recipesage:" + hex.EncodeToString(digest[:])
+}
+
+func schemaCategory(value any) []string {
+	var result []string
+	switch entries := value.(type) {
+	case string:
+		for _, part := range strings.Split(entries, ",") {
+			if label := strings.TrimSpace(part); label != "" {
+				result = append(result, label)
+			}
+		}
+	case []any:
+		for _, item := range entries {
+			if node, ok := item.(map[string]any); ok {
+				item = node["name"]
+			}
+			if label := schemaString(item); label != "" {
+				result = append(result, label)
+			}
+		}
+	}
+	return result
+}
+
+)
+var sageSupplementalNutrition = regexp.MustCompile(`(?i)(Added sugars|Vitamin D|Calcium|Iron|Potassium):\s*(\d+(?:\.\d+)?)\s*(g|mg|mcg)\b`)
 
 func parseSageNutrition(value any) (*Nutrition, []string) {
 	info, ok := value.(map[string]any)
@@ -136,6 +225,28 @@ func parseSageNutrition(value any) (*Nutrition, []string) {
 		out.PerServing = append(out.PerServing, Nutrient{
 			Name: field.Name, Amount: amount, Unit: field.Unit,
 		})
+	}
+	if description := schemaString(info["description"]); description != "" {
+		accepted := map[string]string{
+			"added sugars": "g",
+			"vitamin d": "mcg",
+			"calcium": "mg",
+			"iron": "mg",
+			"potassium": "mg",
+		}
+		seen := make(map[string]bool)
+		for _, matched := range sageSupplementalNutrition.FindAllStringSubmatch(description, -1) {
+			name := strings.ToLower(matched[1])
+			if !strings.EqualFold(matched[3], accepted[name]) || seen[name] {
+				continue
+			}
+			amount, err := strconv.ParseFloat(matched[2], 64)
+			if err != nil || math.IsNaN(amount) || math.IsInf(amount, 0) || amount < 0 {
+				continue
+			}
+			out.PerServing = append(out.PerServing, Nutrient{Name: name, Amount: amount, Unit: accepted[name]})
+			seen[name] = true
+		}
 	}
 	if len(out.PerServing) == 0 {
 		return nil, warnings
