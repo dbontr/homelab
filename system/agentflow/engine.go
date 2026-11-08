@@ -8,6 +8,7 @@ import (
  "fmt"
  "path"
  "sort"
+ "sync"
  "strings"
  "time"
 )
@@ -24,6 +25,8 @@ type Engine struct {
  Compute ToolCaller
  Author Author
  AllowedProjects map[string]bool
+ activeMu sync.Mutex
+ active map[string]context.CancelFunc
 }
 func (e *Engine) Submit(p Program)(RunSummary,error){
  if e==nil||e.Store==nil||e.Compute==nil{return RunSummary{},errors.New("engineering service not configured")}
@@ -48,7 +51,11 @@ func (e *Engine) List()([]RunSummary,error){
 func (e *Engine) Cancel(id string,revision uint64)error{
  w,err:=e.Store.Get(id);if err!=nil{return err}
  if !e.AllowedProjects[w.Project]{return errors.New("engineering project not authorized")}
- return e.Store.Cancel(id,revision)
+ if err:=e.Store.Cancel(id,revision);err!=nil{return err}
+ e.activeMu.Lock()
+ if cancel:=e.active[id];cancel!=nil{cancel()}
+ e.activeMu.Unlock()
+ return nil
 }
 func resultObject(w Workflow,id string)(map[string]any,error){
  for _,st:=range w.Steps{
@@ -228,6 +235,9 @@ func (e *Engine) Dispatch(ctx context.Context,key,kind string,input json.RawMess
   }
   out=map[string]any{"artifacts":artifacts}
  case "publish":
+  current,e2:=e.Store.Get(w.ID)
+  if e2!=nil{return nil,e2}
+  if current.Cancelled{return nil,errors.New("engineering run cancelled")}
   verification,e2:=resultObject(w,"verify");if e2!=nil{return nil,e2}
   if verification["passed"]!=true{return nil,errors.New("verification is not confirmed")}
   exported,e2:=resultObject(w,"export");if e2!=nil{return nil,e2}
