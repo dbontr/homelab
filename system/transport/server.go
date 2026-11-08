@@ -266,7 +266,7 @@ func(s *Server)localTools()[]map[string]any{
  if s.recipes!=nil {tools=append(tools,
   tool("recipe_import_url_preview","Fetch a public HTTPS recipe page and return an unsaved schema.org recipe draft",map[string]any{"url":prop("string")},"url"),
   tool("recipe_sage_preview","Inspect a RecipeSage JSON-LD export without changing records",map[string]any{"source":prop("string")},"source"),
-  tool("recipe_sage_import","Import selected valid RecipeSage JSON-LD recipes using an unchanged preview digest",map[string]any{"source":prop("string"),"digest":prop("string"),"keys":map[string]any{"type":"array","items":prop("string")}},"source","digest","keys"),
+  tool("recipe_sage_import","Import selected valid RecipeSage JSON-LD recipes using an unchanged preview digest",map[string]any{"source":prop("string"),"digest":prop("string"),"keys":map[string]any{"type":"array","items":prop("string")},"overrides":prop("object")},"source","digest","keys"),
   tool("recipe_list","Find saved recipes",map[string]any{"query":prop("string")}),
   tool("recipe_get","Read a recipe",map[string]any{"id":prop("string")},"id"),
   tool("recipe_history","List current and previous recipe revisions",map[string]any{"id":prop("string")},"id"),
