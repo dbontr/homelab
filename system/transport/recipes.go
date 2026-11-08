@@ -124,6 +124,7 @@ func (s *Server) recipeTool(ctx context.Context, name string, raw json.RawMessag
 		Source   string         `json:"source"`
 		Digest   string         `json:"digest"`
 		Keys     []string       `json:"keys"`
+		Overrides map[string]recipes.Recipe `json:"overrides"`
 		Servings float64        `json:"servings"`
 		Start    string         `json:"start"`
 		End      string         `json:"end"`
@@ -139,7 +140,7 @@ func (s *Server) recipeTool(ctx context.Context, name string, raw json.RawMessag
 	switch name {
 	case "recipe_import_url_preview": return recipes.FetchSchemaOrgURL(ctx, input.URL)
 	case "recipe_sage_preview": return s.recipes.PreviewRecipeSage([]byte(input.Source))
-	case "recipe_sage_import": return s.recipes.ImportRecipeSage([]byte(input.Source), input.Digest, input.Keys)
+	case "recipe_sage_import": return s.recipes.ImportRecipeSage([]byte(input.Source), input.Digest, input.Keys, input.Overrides)
 	case "recipe_list": return s.recipes.List(input.Query), nil
 	case "recipe_get": return s.recipes.Get(input.ID)
 	case "recipe_history": return s.recipes.History(input.ID)
