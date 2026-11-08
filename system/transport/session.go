@@ -28,6 +28,11 @@ func (s *Server) sessionReadAllowed(r *http.Request) bool {
         "/v1/tasks/agenda":true,
         "/v1/tasks/conflicts":true,
         "/v1/groceries/board":true,
+        "/v1/groceries":true,
+        "/v1/recipes":true,
+        "/v1/recipes/health-goals":true,
+        "/v1/recipes/export":true,
+        "/v1/meals":true,
         "/v1/learning/summary":true,
         "/v1/learning/sessions":true,
         "/v1/learning/reviews":true,
@@ -49,6 +54,8 @@ func (s *Server) sessionReadAllowed(r *http.Request) bool {
 		"/v1/workspace/nodes":true,
 	}
 	if !permitted[p] && !strings.HasPrefix(p,"/v1/compute/profiles/") &&
+    !(strings.HasPrefix(p,"/v1/recipes/") && ((len(strings.Split(p,"/"))==4 && p!="/v1/recipes/import" && p!="/v1/recipes/parse")||
+      (len(strings.Split(p,"/"))==5 && strings.HasSuffix(p,"/nutrition")))) &&
     !(strings.HasPrefix(p,"/v1/workspace/projects/") && len(strings.Split(p,"/"))==6 && (strings.HasSuffix(p,"/jobs")||strings.HasSuffix(p,"/workspaces"))) &&
     !(strings.HasPrefix(p,"/v1/learning/sessions/") && (len(strings.Split(p,"/"))==5 || len(strings.Split(p,"/"))==6 && strings.HasSuffix(p,"/pending"))) {
 		return false
