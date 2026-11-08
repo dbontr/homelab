@@ -432,7 +432,10 @@ func(s *Server)toolList(r *http.Request)[]map[string]any{
    t,ok:=item.(map[string]any);if !ok{continue}
    name,ok:=t["name"].(string);if !ok||!validBackendToolName(name){continue}
    if s.privilegeClient!=nil && approval.ScopeFor(b.Name+"__"+name)!=""{continue}
-   t["name"]=b.Name+"__"+name
+   if b.Name=="workspace" && (name=="github_merge_pull_request" || name=="github_mark_pull_request_ready" || name=="github_repository_api" || name=="github_cleanup_merged_branch"){continue}
+   namespace:=b.Name
+   if namespace=="workspace"{namespace="compute"}
+   t["name"]=namespace+"__"+name
    out=append(out,t)
   }
  }
@@ -514,7 +517,9 @@ func(s *Server)localTool(ctx context.Context,name string,raw json.RawMessage)(an
    var output any
    e:=s.forward(checkCtx,b,rpcRequest{JSONRPC:"2.0",ID:json.RawMessage("1"),Method:"tools/list"},&output)
    cancel()
-   if e!=nil{statuses[b.Name]="unavailable"}else{statuses[b.Name]="available"}
+   namespace:=b.Name
+   if namespace=="workspace"{namespace="compute"}
+   if e!=nil{statuses[namespace]="unavailable"}else{statuses[namespace]="available"}
   }
   return map[string]any{"integrations":statuses,"local":"available"},nil
  default:return nil,fmt.Errorf("unknown tool: %s",name)
