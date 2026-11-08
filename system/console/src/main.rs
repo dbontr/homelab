@@ -9,6 +9,7 @@ mod calendar;
 mod planner;
 mod books;
 mod activity;
+mod engineering;
 
 use dioxus::prelude::*;
 use components::Icon;
@@ -19,6 +20,7 @@ static CSS: Asset = asset!("/assets/main.css");
 enum Page {
     Overview,
     Projects,
+    EngineeringRuns,
     Compute,
     Software,
     Monitoring,
@@ -39,6 +41,7 @@ impl Page {
         match self {
             Self::Overview => "Overview",
             Self::Projects => "Projects",
+            Self::EngineeringRuns => "Engineering runs",
             Self::Compute => "Compute",
             Self::Software => "Software library",
             Self::Monitoring => "Monitoring",
@@ -59,6 +62,7 @@ impl Page {
 const ENGINEERING: &[(Page, &str, &str)] = &[
     (Page::Overview, "Overview", "overview"),
     (Page::Projects, "Projects", "projects"),
+    (Page::EngineeringRuns, "Engineering runs", "tasks"),
     (Page::Compute, "Compute", "compute"),
     (Page::Software, "Software library", "software"),
 ];
@@ -278,6 +282,7 @@ fn App() -> Element {
                             match page() {
                                 Page::Overview => rsx! { views::Overview {} },
                                 Page::Projects => rsx! { views::Projects {} },
+                                Page::EngineeringRuns => rsx! { engineering::EngineeringRuns {} },
                                 Page::Compute => rsx! { views::Compute {} },
                                 Page::Software => rsx! { views::Software {} },
                                 Page::Monitoring => rsx! { monitoring::Monitoring {} },
