@@ -54,6 +54,11 @@ func (s *Server) sessionReadAllowed(r *http.Request) bool {
 		"/v1/tools":true,
 		"/v1/workspace/projects":true,
 		"/v1/workspace/nodes":true,
+        "/v1/monitoring/summary":true,
+        "/v1/monitoring/targets":true,
+        "/v1/monitoring/alerts":true,
+        "/v1/monitoring/series":true,
+        "/v1/monitoring/logs":true,
 	}
 	if !permitted[p] && !strings.HasPrefix(p,"/v1/compute/profiles/") &&
     !(strings.HasPrefix(p,"/v1/recipes/") && ((len(strings.Split(p,"/"))==5 && strings.HasPrefix(p,"/v1/recipes/images/")) ||
