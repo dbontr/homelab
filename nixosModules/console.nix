@@ -17,15 +17,30 @@ in
       default = false;
       description = "Use the console on the existing homepage origin and port instead of the legacy dashboard.";
     };
+    publicOrigin = lib.mkOption {
+      type = lib.types.str;
+      default = "https://dbontr.me";
+      description = "Exact HTTPS origin for the console when replacing the public homepage.";
+    };
   };
 
   config = lib.mkMerge [
     {
-      assertions = lib.optional cfg.enable {
-        assertion = cfg.package != null && config.services.homelabPlatform.enable;
-        message = "The console requires its built web package and an enabled Go platform API.";
-      };
+      assertions =
+        lib.optional cfg.enable {
+          assertion = cfg.package != null && config.services.homelabPlatform.enable;
+          message = "The console requires its built web package and an enabled Go platform API.";
+        }
+        ++ lib.optional (cfg.enable && cfg.replaceHomepage) {
+          assertion = lib.elem cfg.publicOrigin config.services.homelabPlatform.allowedOrigins;
+          message = "The console's publicOrigin must be included in homelabPlatform.allowedOrigins for browser login.";
+        };
     }
+    (lib.mkIf (cfg.enable && cfg.replaceHomepage) {
+      # Keep the public browser Origin enabled by default on a cutover. An
+      # explicit custom allowlist overrides this default and must include it.
+      services.homelabPlatform.allowedOrigins = lib.mkDefault [ cfg.publicOrigin ];
+    })
     (lib.mkIf (cfg.enable && cfg.package != null) {
       services.nginx.enable = true;
       services.nginx.virtualHosts."homelab-console-loopback" = {
@@ -41,14 +56,14 @@ in
         locations."/v1/" = {
           proxyPass = api;
           extraConfig = ''
-            proxy_set_header Host $host;
+            proxy_set_header Host $http_host;
             proxy_set_header X-Forwarded-Proto https;
           '';
         };
         locations."/ui/" = {
           proxyPass = api;
           extraConfig = ''
-            proxy_set_header Host $host;
+            proxy_set_header Host $http_host;
             proxy_set_header X-Forwarded-Proto https;
           '';
         };
