@@ -99,6 +99,8 @@ func(s *Server) Handler()http.Handler{
  mux.HandleFunc("GET /v1/groceries",s.recipeGroceries)
  mux.HandleFunc("GET /v1/groceries/board",s.groceryBoard)
  mux.HandleFunc("PUT /v1/groceries/items/{key}",s.groceryUpdate)
+ mux.HandleFunc("GET /v1/activity",s.uiActivity)
+ mux.HandleFunc("GET /v1/resources/{kind}/{id}",s.uiResource)
  mux.HandleFunc("GET /v1/workspace/nodes",s.uiComputeNodes)
  for _,path:=range []string{"/v1/monitoring/summary","/v1/monitoring/targets",
    "/v1/monitoring/alerts","/v1/monitoring/series","/v1/monitoring/logs"} {
@@ -265,6 +267,8 @@ func(s *Server)localTools()[]map[string]any{
   tool("rule_set","Store a personal constraint or preference; only structured rules are mechanically enforced",map[string]any{"key":prop("string"),"text":prop("string"),"kind":prop("string")},"key","text","kind"),
   tool("rule_list","List personal rules",map[string]any{}),
   tool("weekly_report","Summarize recorded task completions",map[string]any{"week_of":prop("string")}),
+  tool("activity_recent","List confirmed personal activity from canonical records, without fabricating unobserved actions",map[string]any{"limit":prop("integer")}),
+  tool("resource_get","Resolve a canonical local resource identity from its owning store",map[string]any{"kind":prop("string"),"id":prop("string")},"kind","id"),
   tool("system_status","List configured integrations",map[string]any{}),
   tool("approval_status","Check an administrator approval",map[string]any{"id":prop("string")},"id"),
   tool("device_inventory","List declared hardware access and constraints; this is not an online device probe",map[string]any{}),
@@ -350,6 +354,7 @@ func(s *Server)localTool(ctx context.Context,name string,raw json.RawMessage)(an
   Text string `json:"text"`
   Kind string `json:"kind"`
   WeekOf string `json:"week_of"`
+  ResourceKind string `json:"kind"`
  }
  if len(raw)>0{if e:=json.Unmarshal(raw,&args);e!=nil{return nil,e}}
  switch name{
@@ -362,6 +367,12 @@ func(s *Server)localTool(ctx context.Context,name string,raw json.RawMessage)(an
  case "rule_set":return s.db.SetRule(args.Key,args.Text,args.Kind)
  case "rule_list":return s.db.Rules(),nil
  case "weekly_report":return s.db.Report(args.WeekOf)
+ case "activity_recent":
+  n:=args.Limit
+  if n==0{n=50}
+  if n<1||n>200{return nil,errors.New("activity limit must be 1 through 200")}
+  return s.activity(n,time.Time{}),nil
+ case "resource_get":return s.resource(args.ResourceKind,args.ID)
  case "approval_status":return s.privilegeStatus(args.ID)
  case "device_inventory":return s.deviceCatalog.List(),nil
  case "node_inventory":return s.nodeCatalog.List(),nil
