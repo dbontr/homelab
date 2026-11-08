@@ -163,8 +163,8 @@ func(p *WorkspacePolicy)Call(ctx context.Context,operation string,fields map[str
   len(output.Error)>0||len(output.Result)==0||bytes.Equal(output.Result,[]byte("null")){
   return errors.New("Workspace controller operation was not accepted")
  }
- var result struct{IsError bool `json:"isError"`}
- if err:=json.Unmarshal(output.Result,&result);err!=nil||result.IsError{
+ var result struct{IsError *bool `json:"isError"`}
+ if err:=json.Unmarshal(output.Result,&result);err!=nil||result.IsError==nil||*result.IsError{
   return errors.New("Workspace controller operation was not accepted")
  }
  return nil
