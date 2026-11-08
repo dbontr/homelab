@@ -16,8 +16,17 @@ func (e *Engine) RunAvailable(ctx context.Context)(int,error){
  for _,run:=range runs{
   if err:=ctx.Err();err!=nil{return processed,err}
   if run.Status==Succeeded||run.Status==Failed||run.Status==Cancelled{continue}
+  runCtx,cancel:=context.WithCancel(ctx)
+  e.activeMu.Lock()
+  if e.active==nil{e.active=make(map[string]context.CancelFunc)}
+  e.active[run.ID]=cancel
+  e.activeMu.Unlock()
   runner:=Runner{Store:e.Store,Worker:e,Lease:30*time.Minute}
-  advanced,err:=runner.RunOne(ctx,run.ID)
+  advanced,err:=runner.RunOne(runCtx,run.ID)
+  e.activeMu.Lock()
+  delete(e.active,run.ID)
+  e.activeMu.Unlock()
+  cancel()
   if err!=nil{return processed,err}
   if advanced{processed++}
  }
