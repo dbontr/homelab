@@ -259,7 +259,7 @@ func ParseRecipeSageExport(body []byte) (RecipeSagePreview, error) {
 		Total: len(document.Recipes),
 		Candidates: make([]RecipeSageCandidate, 0, len(document.Recipes)),
 	}
-	seen := make(map[string]bool, len(document.Recipes))
+	counts := make(map[string]int, len(document.Recipes))
 	for _, raw := range document.Recipes {
 		var data map[string]any
 		_ = json.Unmarshal(raw, &data)
@@ -277,15 +277,18 @@ func ParseRecipeSageExport(body []byte) (RecipeSagePreview, error) {
 				candidate.Warnings = append(candidate.Warnings, "Recipe requires review: "+err.Error())
 			}
 		}
-		if seen[key] {
+		counts[key]++
+		preview.Candidates = append(preview.Candidates, candidate)
+	}
+	for i := range preview.Candidates {
+		candidate := &preview.Candidates[i]
+		if counts[candidate.Key] > 1 {
 			candidate.Status = "duplicate"
 			candidate.Warnings = append(candidate.Warnings, "Repeated recipe identity in export")
 		}
-		seen[key] = true
 		if candidate.Status == "ready" {
 			preview.Ready++
 		}
-		preview.Candidates = append(preview.Candidates, candidate)
 	}
 	return preview, nil
 }
@@ -321,12 +324,12 @@ func (s *Store) PreviewRecipeSage(body []byte) (RecipeSagePreview, error) {
 // ImportRecipeSage re-parses the original document and creates only selected,
 // valid records in one atomic transaction. A preview digest fences the file
 // that the owner inspected, and source identities remain immutable after import.
-func (s *Store) ImportRecipeSage(body []byte, digest string, keys []string) (RecipeSageImportResult, error) {
+func (s *Store) ImportRecipeSage(body []byte, digest string, keys []string, overrides map[string]Recipe) (RecipeSageImportResult, error) {
 	preview, err := ParseRecipeSageExport(body)
 	if err != nil {
 		return RecipeSageImportResult{}, err
 	}
-	if digest == "" || preview.Digest != digest || len(keys) == 0 || len(keys) > preview.Ready {
+	if digest == "" || preview.Digest != digest || len(keys) == 0 || len(keys) > len(preview.Candidates) || len(overrides) > len(keys) {
 		return RecipeSageImportResult{}, errors.New("recipe import requires an unchanged preview and selected valid entries")
 	}
 	selected := make(map[string]bool, len(keys))
@@ -335,6 +338,15 @@ func (s *Store) ImportRecipeSage(body []byte, digest string, keys []string) (Rec
 			return RecipeSageImportResult{}, errors.New("invalid or repeated recipe selection")
 		}
 		selected[key] = true
+	}
+	for key, override := range overrides {
+		if !selected[key] || override.ID != "" || override.Revision != 0 ||
+			override.ImportRef != "" || !override.CreatedAt.IsZero() || !override.UpdatedAt.IsZero() {
+			return RecipeSageImportResult{}, errors.New("invalid edited recipe selection")
+		}
+		if err := validateRecipe(override); err != nil {
+			return RecipeSageImportResult{}, fmt.Errorf("edited recipe requires review: %w", err)
+		}
 	}
 
 	s.mu.Lock()
@@ -352,7 +364,7 @@ func (s *Store) ImportRecipeSage(body []byte, digest string, keys []string) (Rec
 		if !selected[candidate.Key] {
 			continue
 		}
-		if candidate.Status != "ready" {
+		if candidate.Status == "duplicate" || (candidate.Status != "ready" && overrides[candidate.Key].Title == "") {
 			return RecipeSageImportResult{}, errors.New("selected recipe requires review")
 		}
 		if existing[candidate.Key] {
@@ -363,6 +375,9 @@ func (s *Store) ImportRecipeSage(body []byte, digest string, keys []string) (Rec
 			return RecipeSageImportResult{}, err
 		}
 		recipe := copyRecipe(candidate.Recipe)
+		if edited, ok := overrides[candidate.Key]; ok {
+			recipe = copyRecipe(edited)
+		}
 		recipe.ID = id
 		recipe.ImportRef = candidate.Key
 		recipe.Revision = 1
