@@ -201,6 +201,7 @@ pub fn Recipes(csrf: String) -> Element {
     let mut confirm_delete = use_signal(|| false);
     let mut import_text = use_signal(String::new);
     let mut schema_text = use_signal(String::new);
+    let mut source_url = use_signal(String::new);
 
     let records = recipes.cloned().and_then(Result::ok).unwrap_or_default();
     let query = search().trim().to_lowercase();
@@ -777,6 +778,63 @@ pub fn Recipes(csrf: String) -> Element {
                 }
             },
             Tab::Transfer => rsx! {
+                section { class: "card",
+                    div { class: "card-header",
+                        h2 { class: "card-title", "Import from a recipe URL" }
+                        p { class: "card-description",
+                            "Retrieve a public HTTPS page containing schema.org Recipe markup. Review the draft before saving; embedded scripts and images are not loaded."
+                        }
+                    }
+                    div { class: "card-body stack",
+                        div { class: "form-row",
+                            label { class: "label", for: "recipe-url", "Recipe page URL" }
+                            input { id: "recipe-url", class: "field", type: "url",
+                                placeholder: "https://example.com/recipes/...",
+                                value: "{source_url}",
+                                oninput: move |event| source_url.set(event.value()),
+                            }
+                        }
+                        div {
+                            button { class: "btn btn-outline",
+                                disabled: busy() || !source_url().trim().starts_with("https://"),
+                                onclick: move |_| {
+                                    let url = source_url().trim().to_owned();
+                                    let token = csrf();
+                                    busy.set(true);
+                                    error.set(String::new());
+                                    spawn(async move {
+                                        match api::write::<Recipe, _>(
+                                            Method::POST, "/v1/recipes/import-url", &token,
+                                            &serde_json::json!({"url": url})
+                                        ).await {
+                                            Ok(parsed) => {
+                                                tags.set(parsed.tags.join(", "));
+                                                equipment.set(parsed.equipment.join(", "));
+                                                nutrients.set(nutrient_lines(&parsed));
+                                                if let Some(ref nutrition) = parsed.nutrition {
+                                                    nutrition_method.set(nutrition.method.clone());
+                                                    nutrition_source.set(nutrition.source.clone());
+                                                } else {
+                                                    nutrition_method.set("estimated".to_owned());
+                                                    nutrition_source.set(String::new());
+                                                }
+                                                draft.set(parsed);
+                                                editing.set(true);
+                                                cooking.set(false);
+                                                tab.set(Tab::Library);
+                                                notice.set("Review ingredient amounts and instructions before saving".to_owned());
+                                                source_url.set(String::new());
+                                            }
+                                            Err(message) => error.set(message),
+                                        }
+                                        busy.set(false);
+                                    });
+                                },
+                                "Preview recipe from URL"
+                            }
+                        }
+                    }
+                }
                 section { class: "card",
                     div { class: "card-header",
                         h2 { class: "card-title", "Import from recipe markup" }

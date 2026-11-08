@@ -78,6 +78,7 @@ func(s *Server) Handler()http.Handler{
  mux.HandleFunc("GET /v1/recipes/health-goals",s.uiHealthGoals)
  mux.HandleFunc("GET /v1/recipes/export",s.recipeArchive)
  mux.HandleFunc("POST /v1/recipes/parse",s.recipeParse)
+ mux.HandleFunc("POST /v1/recipes/import-url",s.recipeImportURL)
  mux.HandleFunc("POST /v1/recipes/import",s.recipeArchive)
  mux.HandleFunc("GET /v1/recipes/{id}",s.recipeItem)
  mux.HandleFunc("PUT /v1/recipes/{id}",s.recipeItem)
@@ -257,6 +258,7 @@ func(s *Server)localTools()[]map[string]any{
   tool("compute_profile_save","Save an immutable build profile revision",map[string]any{"spec":prop("object"),"expected_version":prop("integer")},"spec","expected_version"),
   tool("compute_profile_plan","Check available Workspace resources for a saved profile without scheduling",map[string]any{"id":prop("string"),"version":prop("integer"),"project_id":prop("string"),"node_id":prop("string")},"id","project_id"))}
  if s.recipes!=nil {tools=append(tools,
+  tool("recipe_import_url_preview","Fetch a public HTTPS recipe page and return an unsaved schema.org recipe draft",map[string]any{"url":prop("string")},"url"),
   tool("recipe_list","Find saved recipes",map[string]any{"query":prop("string")}),
   tool("recipe_get","Read a recipe",map[string]any{"id":prop("string")},"id"),
   tool("recipe_save","Create or revise a recipe with revision control",map[string]any{"recipe":prop("object")},"recipe"),

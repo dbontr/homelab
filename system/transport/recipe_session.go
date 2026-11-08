@@ -14,7 +14,7 @@ func (s *Server) sessionOwnerWriteAllowed(r *http.Request) bool {
 	path := r.URL.Path
 	allowed := false
 	switch {
-	case r.Method == http.MethodPost && (path == "/v1/recipes" || path == "/v1/recipes/import" || path == "/v1/recipes/parse" || path == "/v1/meals" || path == "/v1/tasks" || path == "/v1/tasks/capture" || path == "/v1/goals"):
+	case r.Method == http.MethodPost && (path == "/v1/recipes" || path == "/v1/recipes/import" || path == "/v1/recipes/parse" || path == "/v1/recipes/import-url" || path == "/v1/meals" || path == "/v1/tasks" || path == "/v1/tasks/capture" || path == "/v1/goals"):
         allowed = true
     case r.Method == http.MethodPost && path == "/v1/learning/sessions":
         allowed = true
