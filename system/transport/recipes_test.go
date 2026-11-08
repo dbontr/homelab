@@ -67,6 +67,16 @@ func TestRecipeRoutesAndScopedBrowserWrites(t *testing.T) {
 	if r:=call("GET","/v1/groceries","",cookie,"");r.Code!=200 || !strings.Contains(r.Body.String(),`"amount":2`) {
 		t.Fatalf("consolidated grocery list: %s",r.Body.String())
 	}
+	blockedURL := `{"url":"https://127.0.0.1/latest/meta-data"}`
+	if r:=call("POST","/v1/recipes/import-url",blockedURL,nil,"");r.Code!=401 {
+		t.Fatalf("unauthenticated URL import accepted: %d",r.Code)
+	}
+	if r:=call("POST","/v1/recipes/import-url",blockedURL,cookie,"");r.Code!=401 {
+		t.Fatalf("URL import without CSRF accepted: %d",r.Code)
+	}
+	if r:=call("POST","/v1/recipes/import-url",blockedURL,cookie,sessionInfo.CSRF);r.Code!=422 {
+		t.Fatalf("local-network URL import accepted: %d %s",r.Code,r.Body.String())
+	}
 	if r:=call("DELETE","/v1/recipes/"+recipe.ID,"",cookie,sessionInfo.CSRF);r.Code!=428 {
 		t.Fatal("delete without revision accepted")
 	}
