@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -66,13 +67,16 @@ func (a *AdminSessions) OwnerHandler() http.Handler {
 		}
 		status, err := a.Authenticate(input.Password, input.TOTP)
 		if err != nil {
+			log.Print("security audit owner_authentication denied")
 			http.Error(w, "authentication denied", 401)
 			return
 		}
+		log.Print("security audit owner_session opened")
 		respondJSON(w, 200, status)
 	})
 	mux.HandleFunc("DELETE /v1/session", func(w http.ResponseWriter, _ *http.Request) {
 		a.Revoke()
+		log.Print("security audit owner_session revoked")
 		respondJSON(w, 200, SessionStatus{Active: false})
 	})
 	mux.HandleFunc("GET /v1/confirmations", func(w http.ResponseWriter, _ *http.Request) { respondJSON(w, 200, a.Pending()) })
@@ -86,9 +90,11 @@ func (a *AdminSessions) OwnerHandler() http.Handler {
 			return
 		}
 		if err := a.Confirm(r.PathValue("id"), input.Password, input.TOTP); err != nil {
+			log.Print("security audit owner_confirmation denied")
 			http.Error(w, "confirmation denied", 403)
 			return
 		}
+		log.Print("security audit owner_confirmation accepted")
 		respondJSON(w, 200, map[string]bool{"confirmed": true})
 	})
 	return privateHeaders(mux)
@@ -101,6 +107,7 @@ func (a *AdminSessions) ClientHandler() http.Handler {
 	mux.HandleFunc("GET /v1/session", func(w http.ResponseWriter, _ *http.Request) { respondJSON(w, 200, a.Status()) })
 	mux.HandleFunc("DELETE /v1/session", func(w http.ResponseWriter, _ *http.Request) {
 		a.Revoke()
+		log.Print("security audit owner_session revoked")
 		respondJSON(w, 200, SessionStatus{Active: false})
 	})
 	mux.HandleFunc("POST /v1/authorize", func(w http.ResponseWriter, r *http.Request) {
