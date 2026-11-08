@@ -7,6 +7,7 @@ mod views;
 mod monitoring;
 mod calendar;
 mod planner;
+mod books;
 
 use dioxus::prelude::*;
 use components::Icon;
@@ -26,6 +27,7 @@ enum Page {
     Learning,
     Health,
     Recipes,
+    Books,
     Media,
     Administration,
 }
@@ -44,6 +46,7 @@ impl Page {
             Self::Learning => "Learning",
             Self::Health => "Health",
             Self::Recipes => "Recipes",
+            Self::Books => "Books",
             Self::Media => "Media",
             Self::Administration => "Administration",
         }
@@ -63,6 +66,7 @@ const PERSONAL: &[(Page, &str, &str)] = &[
     (Page::Learning, "Learning", "learning"),
     (Page::Health, "Health", "health"),
     (Page::Recipes, "Recipes", "recipes"),
+    (Page::Books, "Books", "books"),
     (Page::Media, "Media", "media"),
 ];
 
@@ -279,6 +283,7 @@ fn App() -> Element {
                                 Page::Learning => rsx! { personal::Learning { csrf: csrf.clone() } },
                                 Page::Health => rsx! { personal::Health { csrf: csrf.clone() } },
                                 Page::Recipes => rsx! { recipes::Recipes { csrf: csrf.clone() } },
+                                Page::Books => rsx! { books::Books { csrf: csrf.clone() } },
                                 Page::Media => rsx! { views::Media {} },
                                 Page::Administration => rsx! { views::Administration {} },
                             }
