@@ -89,6 +89,11 @@ func (s *Store) PutImage(content []byte, declaredType string) (string, error) {
 	directory := s.imageDirectory()
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// Decode only after bounding dimensions, and serialize the allocation for
+	// concurrent uploads handled by this store.
+	if _, decodedFormat, err := image.Decode(bytes.NewReader(content)); err != nil || decodedFormat != format {
+		return "", ErrInvalidImage
+	}
 
 	if err := os.MkdirAll(directory, 0700); err != nil {
 		return "", err
