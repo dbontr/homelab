@@ -293,6 +293,8 @@ pub fn Health(csrf: String) -> Element{
     let mut sets=use_resource(||async{api::get::<Value>("/v1/health/training-sets").await});
     let mut exercise=use_signal(String::new);
     let mut activity=use_signal(||"strength".to_owned());
+    let mut training_plan=use_signal(String::new);
+    let mut training_session=use_signal(String::new);
     let mut set_number=use_signal(||"1".to_owned());
     let mut repetitions=use_signal(||"8".to_owned());
     let mut load=use_signal(String::new);
@@ -349,7 +351,8 @@ pub fn Health(csrf: String) -> Element{
                         health_error.set("Invalid RPE".to_owned());return
                     };
                     let payload=serde_json::json!({
-                        "exercise":exercise(),"activity":activity(),"set_number":index,
+                        "exercise":exercise(),"activity":activity(),"plan_id":training_plan(),
+                        "session_id":training_session(),"set_number":index,
                         "repetitions":reps,"load_kg":load_kg,"duration_seconds":seconds,
                         "distance_meters":meters,"rpe":exertion
                     });
@@ -364,6 +367,14 @@ pub fn Health(csrf: String) -> Element{
                     });
                 },
                 div{class:"task-field-grid",
+                    label{class:"form-row",
+                        span{class:"label","Plan ID (optional)"}
+                        input{class:"field",value:"{training_plan()}",oninput:move |e|training_plan.set(e.value())}
+                    }
+                    label{class:"form-row",
+                        span{class:"label","Session ID (optional)"}
+                        input{class:"field",value:"{training_session()}",oninput:move |e|training_session.set(e.value())}
+                    }
                     label{class:"form-row",
                         span{class:"label","Exercise"}
                         input{class:"field",required:true,maxlength:"200",
