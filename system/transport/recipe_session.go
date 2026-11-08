@@ -26,7 +26,6 @@ func (s *Server) sessionOwnerWriteAllowed(r *http.Request) bool {
         allowed = len(strings.Split(path, "/")) == 5
     case r.Method == http.MethodPut && strings.HasPrefix(path, "/v1/tasks/"):
         allowed = len(strings.Split(path, "/")) == 4
-		allowed = true
 	case (r.Method == http.MethodPut || r.Method == http.MethodDelete) && strings.HasPrefix(path, "/v1/recipes/"):
 		allowed = len(strings.Split(path, "/")) == 4 && path != "/v1/recipes/export"
 	case r.Method == http.MethodDelete && strings.HasPrefix(path, "/v1/meals/"):

@@ -201,6 +201,9 @@ pub fn property(value: &Value, keys: &[&str]) -> String {
             if let Some(number) = item.as_i64() {
                 return number.to_string();
             }
+            if let Some(number) = item.as_f64() {
+                return number.to_string();
+            }
         }
     }
     "—".to_owned()

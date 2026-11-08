@@ -16,7 +16,8 @@ func (s *Server) sessionCookie(r *http.Request) string {
 	return cookie.Value
 }
 
-// The browser session is read-only; write operations require separately scoped authorization.
+// Browser reads are restricted to allowlisted routes. Owner writes require
+// independent path authorization, a valid session, Origin and CSRF token.
 func (s *Server) sessionReadAllowed(r *http.Request) bool {
 	if r.Method != http.MethodGet || s.sessions == nil { return false }
 	p := r.URL.Path

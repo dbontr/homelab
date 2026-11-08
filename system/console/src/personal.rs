@@ -100,6 +100,7 @@ pub fn Learning() -> Element {
 
 #[component]
 pub fn Health(csrf: String) -> Element{
+    let csrf = use_signal(|| csrf);
     let mut proposals=use_resource(||async{api::get::<Value>("/v1/health/food-proposals").await});
     let mut health_busy=use_signal(||false);
     let mut health_error=use_signal(String::new);
@@ -137,7 +138,7 @@ pub fn Health(csrf: String) -> Element{
                                             span{class:"small muted",{api::property(&item,&["portion"])}}
                                             span{class:"small muted",{api::property(&item,&["notes"])}}
                                             span{class:"small muted",
-                                                "Nutrient amounts: {api::property(&item,&["nutrients"])}"
+                                                "Nutrients: ", {item.get("nutrients").map(|n|n.to_string()).unwrap_or_else(||"Unavailable".to_owned())}
                                             }
                                         }
                                         if api::property(&item,&["status"])=="pending"{
