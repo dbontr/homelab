@@ -315,6 +315,10 @@ func(s *Server)localTools()[]map[string]any{
  }
  if s.executorClient!=nil {
   tools=append(tools,
+   tool("infrastructure__workspace_stop","Stop an allowlisted Workspace project instance via the privileged Workspace bridge",map[string]any{"host":prop("string"),"project_id":prop("string"),"workspace_id":prop("string")},"host","project_id","workspace_id"),
+   tool("infrastructure__workspace_build_environment","Queue an approved project environment build in Workspace",map[string]any{"host":prop("string"),"project_id":prop("string"),"workspace_id":prop("string"),"name":prop("string")},"host","project_id","workspace_id","name"),
+   tool("infrastructure__workspace_register_software","Register an operator-approved immutable Workspace package collection",map[string]any{"host":prop("string"),"image_id":prop("string"),"software_id":prop("string"),"packages":map[string]any{"type":"array","items":prop("string")},"description":prop("string")},"host","image_id","software_id","packages"),
+   tool("infrastructure__workspace_revoke_worker","Revoke one operator-approved Workspace worker identity",map[string]any{"host":prop("string"),"node_id":prop("string")},"host","node_id"),
    tool("infrastructure__service_start","Start one configured non-critical local service through the independent executor",map[string]any{"host":prop("string"),"service":prop("string")},"host","service"),
    tool("infrastructure__service_stop","Stop one configured non-critical local service through the independent executor",map[string]any{"host":prop("string"),"service":prop("string")},"host","service"),
    tool("infrastructure__service_reload","Reload one configured non-critical local service through the independent executor",map[string]any{"host":prop("string"),"service":prop("string")},"host","service"),
