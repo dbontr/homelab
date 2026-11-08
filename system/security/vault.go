@@ -149,6 +149,45 @@ func(v *Vault)WithCredentialVersion(handle,provider,version string,use func([]by
  return use(plain)
 }
 
+// UpdateCredential applies a trusted transformation to a decrypted secret,
+// then atomically replaces the ciphertext only if that exact record is still
+// current. Network work occurs outside the vault mutex so revocation remains
+// responsive; a concurrent rotation or deletion causes a fail-closed conflict.
+func(v *Vault)UpdateCredential(handle,provider string,transform func([]byte)([]byte,error))error{
+ if transform==nil{return errors.New("credential update requires a trusted transformation")}
+ v.mu.Lock()
+ current,ok:=v.records[handle]
+ v.mu.Unlock()
+ if !ok||current.Provider!=provider{return os.ErrNotExist}
+ block,err:=aes.NewCipher(v.key[:]);if err!=nil{return err}
+ gcm,err:=cipher.NewGCM(block);if err!=nil{return err}
+ nonce,err:=base64.RawStdEncoding.DecodeString(current.Nonce)
+ if err!=nil{return errors.New("invalid encrypted credential")}
+ ciphertext,err:=base64.RawStdEncoding.DecodeString(current.Data)
+ if err!=nil{return errors.New("invalid encrypted credential")}
+ plaintext,err:=gcm.Open(nil,nonce,ciphertext,[]byte(provider+":"+handle))
+ if err!=nil{return errors.New("credential could not be decrypted")}
+ defer func(){for i:=range plaintext{plaintext[i]=0}}()
+ nextSecret,err:=transform(plaintext)
+ if err!=nil{return err}
+ defer func(){for i:=range nextSecret{nextSecret[i]=0}}()
+ if len(nextSecret)==0||len(nextSecret)>32768{return errors.New("invalid updated credential size")}
+ v.mu.Lock();defer v.mu.Unlock()
+ latest,exists:=v.records[handle]
+ if !exists||latest.Provider!=provider||latest.Nonce!=current.Nonce||latest.Data!=current.Data{
+  return errors.New("credential changed during protected update")
+ }
+ sealed,err:=v.seal(provider,handle,nextSecret)
+ if err!=nil{return err}
+ sealed.CreatedAt=current.CreatedAt
+ next:=make(map[string]storedCredential,len(v.records))
+ for id,entry:=range v.records{next[id]=entry}
+ next[handle]=sealed
+ if err:=v.persist(next);err!=nil{return err}
+ v.records=next
+ return nil
+}
+
 func(v *Vault)List()[]CredentialHandle{
  v.mu.Lock();defer v.mu.Unlock()
  out:=make([]CredentialHandle,0,len(v.records))
