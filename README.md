@@ -10,7 +10,7 @@ A self-hosted personal computing system managed through one source repository. G
 - `hardware.nix` declares nodes and devices; `flake.nix` derives enrolled NixOS hosts and pins reproducible dependencies through `flake.lock`.
 - `docs/` records current architecture, security, operating procedures and engineering standards.
 
-The unified interface supports tasks, goals, configurable personal rules, quick-win recommendations, weekly progress reporting, bounded recurrence-aware calendar availability, and advisory weekly task planning. Movie and television search and requests use Seerr when configured. Additional capabilities are attached through Go interfaces. Projects can link multiple repositories and shared libraries; a repository does not define a project.
+The unified interface supports tasks, goals, configurable personal rules, quick-win recommendations, weekly progress reporting, bounded recurrence-aware calendar availability, advisory weekly task planning, on-demand book discovery, private acquisition requests and a canonical record-derived activity feed. Movie and television search and requests use Seerr when configured. Additional capabilities are attached through Go interfaces. Projects can link multiple repositories and shared libraries; a repository does not define a project.
 
 Compute, teaching and health implementations retain independent operating-system and database boundaries where necessary for reliability. Their separation must not require the user to choose between assistants, endpoints or inconsistent project identifiers.
 
