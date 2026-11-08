@@ -18,7 +18,7 @@ The Go service must have `HOMELAB_CONSOLE_PASSPHRASE_FILE` pointing to an owner-
 
 ## Views
 
-Overview, Projects, Compute, Software Library, Tasks, Learning, Health, Recipes, Media and Administration consume live API responses. The Recipes view supports structured editing, serving scaling, step-by-step cooking, planned meals, grocery consolidation, and versioned JSON import/export. Nutrition values retain measured/estimated/reported provenance. They are not automatically imported into Health food logs. Unconfigured services return unavailable states; the UI does not fabricate readings, cluster health or demonstration data. Compute modes distinguish declared enrollment from verified online status.
+Overview, Projects, Compute, Software Library, Tasks, Learning, Health, Recipes, Media and Administration consume live API responses. The Tasks view supports quick capture, recurrence, scheduled timeboxes, a date-aware agenda and owner-scoped edits. Projects can inspect isolated Workspace jobs and environments without triggering execution. Learning supports creating and inspecting sessions and submitting ungraded answers. Health supports manual observations, plans, goals, and explicit meal proposal confirmation. The Recipes view supports structured editing, serving scaling, step-by-step cooking, planned meals, persistent grocery checkmarks, pasted schema.org JSON-LD previews and versioned JSON import/export. Nutrition values retain measured/estimated/reported provenance. They are not automatically imported into Health food logs. Unconfigured services return unavailable states; the UI does not fabricate readings, cluster health or demonstration data. Compute modes distinguish declared enrollment from verified online status.
 
 ## Fidelity
 
