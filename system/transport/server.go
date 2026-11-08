@@ -121,6 +121,7 @@ func(s *Server) Handler()http.Handler{
  mux.HandleFunc("PUT /v1/rules/{key}",s.rules)
  mux.HandleFunc("GET /v1/recommendations",s.recommendations)
  mux.HandleFunc("GET /v1/reports/weekly",s.weekly)
+ mux.HandleFunc("GET /v1/planning/week",s.uiWeekPlan)
  mux.HandleFunc("GET /v1/calendar",s.calendarEvents)
  mux.HandleFunc("GET /v1/calendar/occurrences",s.calendarOccurrences)
  mux.HandleFunc("GET /v1/devices",func(w http.ResponseWriter,_ *http.Request){writeJSON(w,200,s.deviceCatalog.List())})
