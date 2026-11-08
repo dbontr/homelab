@@ -40,6 +40,7 @@ type Config struct{
  AllowedServices []string
  AllowRelease bool
  Kubernetes *KubernetesPolicy
+ Workspace *WorkspacePolicy
  Auth Authorizer
  Run Run
  Releases Actuator
@@ -79,6 +80,7 @@ func New(cfg Config)(*Executor,error){
  if !nodePattern.MatchString(cfg.Host)||!filepath.IsAbs(cfg.Systemctl)||cfg.Auth==nil||cfg.Run==nil||
  cfg.Releases==nil||len(cfg.AllowedServices)>64{return nil,errors.New("invalid executor configuration")}
  if err:=cfg.Kubernetes.validate();err!=nil{return nil,err}
+ if err:=cfg.Workspace.validate();err!=nil{return nil,err}
  services:=make(map[string]bool,len(cfg.AllowedServices))
  for _,service:=range cfg.AllowedServices{
   if !unitPattern.MatchString(service)||services[service]{
@@ -114,6 +116,13 @@ func(e *Executor) Execute(ctx context.Context,operation,target string,args json.
   }
   host,ok:=fields["host"].(string)
   if !ok||host!=target{return security.Authorization{Reason:"host mismatch"},nil}
+ case "infrastructure__workspace_stop","infrastructure__workspace_build_environment",
+ "infrastructure__workspace_register_software","infrastructure__workspace_revoke_worker":
+  host,ok:=fields["host"].(string)
+  if !ok||host!=target{return security.Authorization{Reason:"host mismatch"},nil}
+  if _,_,err:=e.cfg.Workspace.operationArgs(operation,fields);err!=nil{
+   return security.Authorization{Reason:"Workspace resource policy denied operation"},nil
+  }
  case "infrastructure__release_activate","infrastructure__release_revert":
   if !e.cfg.AllowRelease{return security.Authorization{Reason:"release activation not enabled for this host"},nil}
   if len(fields)!=2{return security.Authorization{Reason:"unexpected arguments"},nil}
@@ -138,8 +147,12 @@ func(e *Executor) Execute(ctx context.Context,operation,target string,args json.
  switch operation{
  case "infrastructure__service_start","infrastructure__service_stop","infrastructure__service_reload","infrastructure__service_restart":
   err=e.cfg.Run(ctx,e.cfg.Systemctl,verb,fields["service"].(string))
+ case "infrastructure__workspace_stop","infrastructure__workspace_build_environment",
+ "infrastructure__workspace_register_software","infrastructure__workspace_revoke_worker":
+  err=e.cfg.Workspace.Call(ctx,operation,fields)
  case "infrastructure__release_activate":
   err=e.cfg.Releases.Activate(ctx,fields["release_id"].(string))
+
  case "infrastructure__release_revert":
   err=e.cfg.Releases.Revert(ctx,fields["release_id"].(string))
  case "cluster__deployment_restart","cluster__deployment_scale":
