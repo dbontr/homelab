@@ -18,6 +18,9 @@ func (s *Server) uiLearningReviews(w http.ResponseWriter,r *http.Request){
 func (s *Server) uiHealthPlans(w http.ResponseWriter,r *http.Request){
  s.uiBackendRead(w,r,"health","health_plan_list")
 }
+func (s *Server) uiHealthTrainingList(w http.ResponseWriter,r *http.Request){
+ s.uiBackendRead(w,r,"health","health_training_set_list")
+}
 func (s *Server) uiHealthRecords(w http.ResponseWriter,r *http.Request){
  s.uiBackendRead(w,r,"health","health_record_list")
 }
