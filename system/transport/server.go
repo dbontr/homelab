@@ -285,7 +285,17 @@ func(s *Server)localTools()[]map[string]any{
   tool("recipe_meal_remove","Remove a scheduled meal",map[string]any{"id":prop("string")},"id"),
   tool("recipe_groceries","Consolidate meal-plan ingredients by name and unit",map[string]any{"start":prop("string"),"end":prop("string")}),
   tool("recipe_nutrition_preview","Preview reported or estimated recipe nutrients without logging consumption",map[string]any{"id":prop("string"),"servings":prop("number")},"id","servings"))}
- if s.calendarURL!=""{tools=append(tools,tool("calendar_feed","Read Proton Calendar event definitions; recurrence rules are not expanded",map[string]any{}))}
+ if s.calendarURL!=""{tools=append(tools,
+  tool("calendar_feed","Read read-only calendar event definitions",map[string]any{}),
+  tool("calendar_occurrences","Expand supported iCalendar recurrences into a bounded time window with explicit limitations",map[string]any{"start":prop("string"),"end":prop("string")}))}
+ tools=append(tools,tool("weekly_plan","Propose task timeboxes from recorded durations, prerequisites and calendar reservations without changing any records",map[string]any{"from":prop("string"),"daily_minutes":prop("integer"),"start_hour":prop("integer")}))
+ if s.observability!=nil {tools=append(tools,
+  tool("monitoring_summary","Inspect measured CPU, memory, disk, GPU and collector telemetry without inventing missing readings",map[string]any{}),
+  tool("monitoring_targets","Inspect Prometheus collector availability and last scrape reports",map[string]any{}),
+  tool("monitoring_alerts","List Prometheus firing and pending alert rules",map[string]any{}),
+  tool("monitoring_series","Inspect a selected fixed monitoring metric and bounded time range",map[string]any{"metric":prop("string"),"range":prop("string")},"metric"),
+  tool("monitoring_logs","Read a bounded Loki system journal with literal search text",map[string]any{"range":prop("string"),"search":prop("string"),"limit":prop("integer")}))}
+
  if s.media!=nil{tools=append(tools,
   tool("media_search","Search movies and television through Seerr",map[string]any{"query":prop("string")},"query"),
   tool("media_requests","List Seerr media requests",map[string]any{}),
@@ -312,6 +322,8 @@ func(s *Server)toolList(r *http.Request)[]map[string]any{
  return out
 }
 func(s *Server)localTool(ctx context.Context,name string,raw json.RawMessage)(any,error){
+ if strings.HasPrefix(name,"monitoring_"){return s.monitoringTool(ctx,name,raw)}
+ if name=="calendar_occurrences"||name=="weekly_plan"{return s.calendarTool(ctx,name,raw)}
  if strings.HasPrefix(name,"recipe_"){return s.recipeTool(ctx,name,raw)}
  if s.media!=nil&&(name=="media_search"||name=="media_request"||name=="media_requests"){return s.mediaTool(ctx,name,raw)}
  if name=="compute_profile_list"||name=="compute_profile_get"||name=="compute_profile_save"||name=="compute_profile_plan" {return s.profileTool(ctx,name,raw)}
