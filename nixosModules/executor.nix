@@ -26,6 +26,34 @@ in
       default = false;
       description = "Explicitly allow an owner-confirmed local NixOS generation switch through the executor.";
     };
+    remote = {
+      enable = lib.mkEnableOption "mutually authenticated private release-agent endpoint";
+      listenAddress = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Explicit private IP address and TCP port. Never use a wildcard or public IP.";
+      };
+      certificateFile = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Protected host TLS certificate chain.";
+      };
+      keyFile = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Protected host TLS private key.";
+      };
+      clientCAFile = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Protected CA roots for verifying trusted coordinator certificates.";
+      };
+      coordinatorDNS = lib.mkOption {
+        type = lib.types.str;
+        default = "";
+        description = "Exact DNS subject alternative name required in the coordinator client certificate.";
+      };
+    };
     kubernetes = {
       enable = lib.mkEnableOption "explicit Kubernetes deployment operations";
       kubeconfigFile = lib.mkOption {
@@ -61,6 +89,13 @@ in
         assertion = config.services.homelabSecurity.enable &&
           config.services.homelabSecurity.access.gatewayAudience != "";
         message = "Independent executor requires signed owner verification in homelab-securityd.";
+      }
+      {
+        assertion = !cfg.remote.enable ||
+          (cfg.remote.listenAddress != null &&
+           cfg.remote.certificateFile != null && cfg.remote.keyFile != null &&
+           cfg.remote.clientCAFile != null && cfg.remote.coordinatorDNS != "");
+        message = "Remote executor requires an explicit private listener, TLS certificate, key, client CA and coordinator identity.";
       }
       {
         assertion = cfg.healthServices != [];
@@ -115,6 +150,12 @@ in
         HOMELAB_EXECUTOR_SYSTEMCTL = "${pkgs.systemd}/bin/systemctl";
         HOMELAB_EXECUTOR_SERVICES_FILE = pkgs.writeText "homelab-executor-services.json" (builtins.toJSON cfg.allowedServices);
         HOMELAB_EXECUTOR_HEALTH_FILE = pkgs.writeText "homelab-executor-health.json" (builtins.toJSON cfg.healthServices);
+      } // lib.optionalAttrs cfg.remote.enable {
+        HOMELAB_EXECUTOR_REMOTE_LISTEN = cfg.remote.listenAddress;
+        HOMELAB_EXECUTOR_REMOTE_CERT = "/run/credentials/homelab-executord.service/remote-cert";
+        HOMELAB_EXECUTOR_REMOTE_KEY = "/run/credentials/homelab-executord.service/remote-key";
+        HOMELAB_EXECUTOR_REMOTE_CA = "/run/credentials/homelab-executord.service/remote-ca";
+        HOMELAB_EXECUTOR_REMOTE_COORDINATOR = cfg.remote.coordinatorDNS;
       } // lib.optionalAttrs cfg.kubernetes.enable {
         HOMELAB_EXECUTOR_KUBECTL = "${pkgs.kubectl}/bin/kubectl";
         HOMELAB_EXECUTOR_KUBECONFIG = "/run/credentials/homelab-executord.service/kubeconfig";
@@ -135,12 +176,16 @@ in
         ExecStart = "${cfg.package}/bin/homelab-executord";
         LoadCredential = lib.optionals cfg.kubernetes.enable [
           "kubeconfig:${cfg.kubernetes.kubeconfigFile}"
+        ] ++ lib.optionals cfg.remote.enable [
+          "remote-cert:${cfg.remote.certificateFile}"
+          "remote-key:${cfg.remote.keyFile}"
+          "remote-ca:${cfg.remote.clientCAFile}"
         ];
         Restart = "on-failure";
         RestartSec = "5s";
         UMask = "0077";
         NoNewPrivileges = !cfg.allowReleaseActivation;
-        PrivateNetwork = !(cfg.kubernetes.enable || cfg.allowReleaseActivation);
+        PrivateNetwork = !(cfg.kubernetes.enable || cfg.allowReleaseActivation || cfg.remote.enable);
         PrivateTmp = true;
         ProtectSystem = if cfg.allowReleaseActivation then false else "strict";
         ReadWritePaths = [ "/nix/var/nix/profiles" cfg.stateDirectory ];
@@ -150,7 +195,7 @@ in
         ProtectKernelModules = !cfg.allowReleaseActivation;
         ProtectControlGroups = !cfg.allowReleaseActivation;
         CapabilityBoundingSet = lib.mkIf (!cfg.allowReleaseActivation) "";
-        RestrictAddressFamilies = [ "AF_UNIX" ] ++ lib.optionals (cfg.kubernetes.enable || cfg.allowReleaseActivation) [ "AF_INET" "AF_INET6" ];
+        RestrictAddressFamilies = [ "AF_UNIX" ] ++ lib.optionals (cfg.kubernetes.enable || cfg.allowReleaseActivation || cfg.remote.enable) [ "AF_INET" "AF_INET6" ];
         RestrictNamespaces = !cfg.allowReleaseActivation;
         RestrictSUIDSGID = true;
         LockPersonality = true;
