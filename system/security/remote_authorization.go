@@ -42,6 +42,15 @@ func NewRemoteAuthorizationClient(cfg RemoteAuthorizationConfig)(*RemoteAuthoriz
 // Authorize consults the independent owner's current revocable session.
 // Network errors and malformed decisions always deny authorization.
 func(c *RemoteAuthorizationClient)Authorize(ctx context.Context,operation,target string,arguments json.RawMessage)(Authorization,error){
+ return c.requestDecision(ctx,"/v1/authorize",operation,target,arguments)
+}
+
+// Preview consults the same independent policy without consuming approval.
+func(c *RemoteAuthorizationClient)Preview(ctx context.Context,operation,target string,arguments json.RawMessage)(Authorization,error){
+ return c.requestDecision(ctx,"/v1/preview",operation,target,arguments)
+}
+
+func(c *RemoteAuthorizationClient)requestDecision(ctx context.Context,path,operation,target string,arguments json.RawMessage)(Authorization,error){
  assertion:=AccessAssertion(ctx)
  if c==nil||assertion==""{return Authorization{},errors.New("signed owner assertion required")}
  payload,err:=json.Marshal(struct{
@@ -50,7 +59,7 @@ func(c *RemoteAuthorizationClient)Authorize(ctx context.Context,operation,target
   Arguments json.RawMessage `json:"arguments"`
  }{operation,target,arguments})
  if err!=nil{return Authorization{},err}
- request,err:=http.NewRequestWithContext(ctx,http.MethodPost,c.endpoint+"/v1/authorize",bytes.NewReader(payload))
+ request,err:=http.NewRequestWithContext(ctx,http.MethodPost,c.endpoint+path,bytes.NewReader(payload))
  if err!=nil{return Authorization{},err}
  request.Header.Set("Content-Type","application/json")
  request.Header.Set("Cf-Access-Jwt-Assertion",assertion)
@@ -91,6 +100,7 @@ func(a *AdminSessions)ServeAuthorizationTLS(ctx context.Context,address string,s
  }
  mux:=http.NewServeMux()
  mux.Handle("POST /v1/authorize",a.ClientHandler())
+ mux.Handle("POST /v1/preview",a.ClientHandler())
  server:=&http.Server{Handler:mux,ReadHeaderTimeout:5*time.Second,ReadTimeout:10*time.Second,WriteTimeout:10*time.Second}
  stopped:=make(chan struct{})
  go func(){select{case <-ctx.Done():_=server.Close();case <-stopped:}}()
