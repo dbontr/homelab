@@ -313,6 +313,7 @@ func(s *Server)localTools()[]map[string]any{
   tools=append(tools,
    tool("infrastructure__service_restart","Restart one configured local service through the independent executor",map[string]any{"host":prop("string"),"service":prop("string")},"host","service"),
    tool("infrastructure__release_activate","Activate a staged and verified local generation with rollback through the independent executor",map[string]any{"host":prop("string"),"release_id":prop("string")},"host","release_id"),
+   tool("infrastructure__release_revert","Restore the previous verified local generation from the active release journal",map[string]any{"host":prop("string"),"release_id":prop("string")},"host","release_id"),
    tool("cluster__deployment_restart","Restart an explicitly allowlisted Kubernetes deployment through the independent executor",map[string]any{"host":prop("string"),"namespace":prop("string"),"deployment":prop("string")},"host","namespace","deployment"),
    tool("cluster__deployment_scale","Scale an explicitly allowlisted Kubernetes deployment with a bounded replica count",map[string]any{"host":prop("string"),"namespace":prop("string"),"deployment":prop("string"),"replicas":prop("integer")},"host","namespace","deployment","replicas"))
  }
