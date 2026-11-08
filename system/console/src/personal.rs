@@ -290,6 +290,16 @@ pub fn Health(csrf: String) -> Element{
     let mut plans=use_resource(||async{api::get::<Value>("/v1/health/plans").await});
     let mut records=use_resource(||async{api::get::<Value>("/v1/health/records").await});
     let mut goals=use_resource(||async{api::get::<Value>("/v1/health/goals").await});
+    let mut sets=use_resource(||async{api::get::<Value>("/v1/health/training-sets").await});
+    let mut exercise=use_signal(String::new);
+    let mut activity=use_signal(||"strength".to_owned());
+    let mut set_number=use_signal(||"1".to_owned());
+    let mut repetitions=use_signal(||"8".to_owned());
+    let mut load=use_signal(String::new);
+    let mut duration=use_signal(String::new);
+    let mut distance=use_signal(String::new);
+    let mut rpe=use_signal(String::new);
+    let mut progression=use_signal(||None::<Value>);
     let mut obs_domain=use_signal(||"biometric".to_owned());
     let mut obs_metric=use_signal(||"weight".to_owned());
     let mut obs_value=use_signal(String::new);
@@ -300,10 +310,143 @@ pub fn Health(csrf: String) -> Element{
             title:"Health".to_owned(),
             description:"Training plans, recorded observations, and nutrient goals.".to_owned(),
             button{class:"btn btn-outline",onclick:move |_|{
-                plans.restart();records.restart();goals.restart();proposals.restart();
+                plans.restart();records.restart();goals.restart();proposals.restart();sets.restart();
             },"Refresh"}
         }
         if !health_error().is_empty(){Notice{message:health_error()}}
+        section{class:"card",
+            div{class:"card-header",
+                h2{class:"card-title","Log training"}
+                p{class:"card-description","Record performed work; missing logs are not interpreted as missed workouts."}
+            }
+            form{class:"card-body task-editor-fields",
+                onsubmit:move |event|{
+                    event.prevent_default();
+                    if health_busy(){return}
+                    let Some(index)=set_number().parse::<i64>().ok() else {
+                        health_error.set("Enter a valid set number".to_owned());return
+                    };
+                    let Some(reps)=repetitions().parse::<i64>().ok() else {
+                        health_error.set("Enter valid repetitions".to_owned());return
+                    };
+                    let parse_optional=|value:String| -> Result<Option<f64>,String>{
+                        if value.trim().is_empty(){return Ok(None)}
+                        match value.parse::<f64>(){
+                            Ok(n) if n.is_finite()&&n>=0.0 => Ok(Some(n)),
+                            _=>Err("Training measurements must be finite and nonnegative".to_owned()),
+                        }
+                    };
+                    let Ok(load_kg)=parse_optional(load()) else {
+                        health_error.set("Invalid load".to_owned());return
+                    };
+                    let Ok(seconds)=parse_optional(duration()) else {
+                        health_error.set("Invalid duration".to_owned());return
+                    };
+                    let Ok(meters)=parse_optional(distance()) else {
+                        health_error.set("Invalid distance".to_owned());return
+                    };
+                    let Ok(exertion)=parse_optional(rpe()) else {
+                        health_error.set("Invalid RPE".to_owned());return
+                    };
+                    let payload=serde_json::json!({
+                        "exercise":exercise(),"activity":activity(),"set_number":index,
+                        "repetitions":reps,"load_kg":load_kg,"duration_seconds":seconds,
+                        "distance_meters":meters,"rpe":exertion
+                    });
+                    let token=csrf();
+                    health_error.set(String::new);health_busy.set(true);
+                    spawn(async move{
+                        match api::write::<Value,_>(reqwest::Method::POST,"/v1/health/training-sets",&token,&payload).await{
+                            Ok(_)=>{sets.restart();},
+                            Err(e)=>health_error.set(e),
+                        }
+                        health_busy.set(false);
+                    });
+                },
+                div{class:"task-field-grid",
+                    label{class:"form-row",
+                        span{class:"label","Exercise"}
+                        input{class:"field",required:true,maxlength:"200",
+                            placeholder:"Squat, rowing, mobility...",
+                            value:"{exercise()}",oninput:move |e|exercise.set(e.value())}
+                    }
+                    label{class:"form-row",
+                        span{class:"label","Activity"}
+                        select{class:"field",value:"{activity()}",
+                            onchange:move |e|activity.set(e.value()),
+                            option{value:"strength","Strength"}
+                            option{value:"cardio","Cardio"}
+                            option{value:"mobility","Mobility"}
+                        }
+                    }
+                    label{class:"form-row",
+                        span{class:"label","Set number"}
+                        input{class:"field",r#type:"number",min:"0",max:"1000",value:"{set_number()}",
+                            oninput:move |e|set_number.set(e.value())}
+                    }
+                    label{class:"form-row",
+                        span{class:"label","Repetitions"}
+                        input{class:"field",r#type:"number",min:"0",value:"{repetitions()}",
+                            oninput:move |e|repetitions.set(e.value())}
+                    }
+                    label{class:"form-row",
+                        span{class:"label","Load (kg)"}
+                        input{class:"field",r#type:"number",min:"0",step:"any",
+                            value:"{load()}",oninput:move |e|load.set(e.value())}
+                    }
+                    label{class:"form-row",
+                        span{class:"label","Duration (seconds)"}
+                        input{class:"field",r#type:"number",min:"0",step:"any",
+                            value:"{duration()}",oninput:move |e|duration.set(e.value())}
+                    }
+                    label{class:"form-row",
+                        span{class:"label","Distance (meters)"}
+                        input{class:"field",r#type:"number",min:"0",step:"any",
+                            value:"{distance()}",oninput:move |e|distance.set(e.value())}
+                    }
+                    label{class:"form-row",
+                        span{class:"label","RPE (0–10)"}
+                        input{class:"field",r#type:"number",min:"0",max:"10",step:"any",
+                            value:"{rpe()}",oninput:move |e|rpe.set(e.value())}
+                    }
+                }
+                button{class:"btn btn-primary",disabled:health_busy(),"Save set or interval"}
+            }
+        }
+        Card{title:"Recent training".to_owned(),
+            description:"Logged training entries with their original source and intensity.".to_owned(),
+            match sets.cloned(){
+                None=>rsx!{Loading{}},
+                Some(Err(e))=>rsx!{Notice{message:e}},
+                Some(Ok(value))=>{
+                    let items=api::list(&value,&["sets","items"]);
+                    rsx!{
+                        if items.is_empty(){Empty{
+                            title:"No recorded training".to_owned(),
+                            description:"Log a performed set or interval above.".to_owned()
+                        }}
+                        else{
+                            div{class:"table-clip",
+                                table{class:"table",
+                                    thead{tr{th{"Exercise"}th{"Reps"}th{"Load"}th{"RPE"}th{"Source"}}}
+                                    tbody{
+                                        for item in items.into_iter().take(50){
+                                            tr{
+                                                td{ {api::property(&item,&["exercise"])} }
+                                                td{ {api::property(&item,&["repetitions"])} }
+                                                td{ {api::property(&item,&["load_kg"])} }
+                                                td{ {api::property(&item,&["rpe"])} }
+                                                td{class:"muted",{api::property(&item,&["source"])} }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
         section{class:"card",
             div{class:"card-header",
                 h2{class:"card-title","Record an observation"}
