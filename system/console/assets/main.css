@@ -308,3 +308,23 @@ main.content { max-width: 94rem; margin: 0 auto; padding: 2rem; }
   aspect-ratio: 16 / 9; max-height: 26rem;
 }
 .recipe-cover img { width: 100%; height: 100%; display: block; object-fit: cover; }
+
+.recipe-history-panel {
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--card); padding: 1rem; display: grid; gap: .75rem;
+}
+.recipe-history-panel .section-title { margin-bottom: 0; }
+.recipe-history-list { display: grid; gap: .375rem; }
+.recipe-version {
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+  min-width: 0; padding: .625rem .75rem; border: 1px solid var(--border);
+  border-radius: calc(var(--radius) * .8);
+}
+.recipe-version-details { display: flex; flex-direction: column; min-width: 0; gap: .125rem; }
+.recipe-version-details strong { font-weight: 600; }
+.recipe-restore-confirm {
+  display: grid; gap: .75rem; padding: .75rem 1rem;
+  border: 1px solid var(--border); border-radius: calc(var(--radius) * .8);
+  background: var(--muted);
+}
+.recipe-restore-confirm p { margin: 0; }
