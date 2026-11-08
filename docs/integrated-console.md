@@ -24,8 +24,8 @@ treat local personal tasks as Workspace compute tasks.
   read authorization. Review up to 20 earlier recipe versions and restore a
   retained snapshot only with the current revision, preserving the prior state.
   Review a RecipeSage JSON-LD export as a bounded batch, inspect per-recipe
-  conversion warnings, and select eligible records for an atomic first-party
-  import. The original RecipeSage database and export remain unchanged.
+  conversion warnings, correct incomplete entries in the same recipe editor,
+  and select validated records for an atomic first-party import. The original RecipeSage database and export remain unchanged.
   Mark groceries as purchased
   through a revision-fenced persistent record.
 - **Food and Health:** Nutrition associated with a first-party recipe may be
