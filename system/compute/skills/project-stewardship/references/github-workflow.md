@@ -9,11 +9,11 @@ Keep separate concepts:
 | Authority | Intended contents | Suitable provider |
 | --- | --- | --- |
 | Source Git | Code, tests, environment definitions, release tags | GitHub; approved local bare Git; verified remote Git adapter |
-| Knowledge Git | Decisions, findings, experiments, source manifests and handoffs | Same Git repo or a selected separate Git repo |
+| Project knowledge | Revisioned context, decisions, findings and handoffs | Workspace SQLite and project grants; optionally an explicit Git knowledge authority |
 | Planning | Issues, owners, status, priorities, milestones, PR reviews | GitHub Projects V2/Issues, or another explicitly supported system; optional |
 | Artifact storage | Large verified outputs and original binaries | Content-addressed object/artifact service, verified Git LFS where authorized |
 
-A project can use **local Git for code and knowledge** and a separate GitHub repository for Issues/Projects. Link that actual GitHub repository with role `planning`. This does not make local branches GitHub pull requests. A PR against the planning repository cannot be treated as a review of code that exists only on another Git remote; use verified local Git commits and the chosen local peer-review workflow instead.
+A project can use **local Git for code**, Workspace-local knowledge, and a separate GitHub repository for Issues/Projects. Projects explicitly configured for Git-backed knowledge may use local Git as their knowledge authority. Link that actual GitHub repository with role `planning`. This does not make local branches GitHub pull requests. A PR against the planning repository cannot be treated as a review of code that exists only on another Git remote; use verified local Git commits and the chosen local peer-review workflow instead.
 
 ## Native GitHub capabilities across repositories
 

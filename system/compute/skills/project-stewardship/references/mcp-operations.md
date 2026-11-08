@@ -1,6 +1,6 @@
 # Project Workspace MCP Operations
 
-Use this reference for live Project Workspace MCP operations. The controller owns project metadata, task coordination, worker leases and artifact routing; Git remains authoritative for code and opt-in project knowledge. Tool names identify capabilities, not permission grants. Inspect the connected server's `tools/list` and schemas before invoking a tool; versions and available adapters can differ.
+Use this reference for live Project Workspace MCP operations. The controller owns project metadata, task coordination, worker leases and artifact routing; Git owns code revisions; Workspace owns local project knowledge and shared library objects. Tool names identify capabilities, not permission grants. Inspect the connected server's `tools/list` and schemas before invoking a tool; versions and available adapters can differ.
 
 ## Establish identity and scope
 
@@ -11,15 +11,15 @@ Use this reference for live Project Workspace MCP operations. The controller own
 
 ## Project identity and relationships
 
-The Workspace project ID is the durable boundary; it is not a repository. A project may link several `source`, `research`, `documentation`, `hardware` or `planning` repositories and independent shared libraries. Its knowledge repository and GitHub Projects V2 board are optional separate relationships. Use `repository_memberships`, `library_list`, `library_link`, `library_resolve`, `knowledge_policy`, `github_project_board` and the live provider readback to resolve the actual configuration. Repository names are mutable; bind or reconcile by verified GitHub repository ID, using owner-authorized account tools for changes. Consult [project-model.md](project-model.md).
+The Workspace project ID is the durable boundary; it is not a repository. A project may link several `source`, `research`, `documentation`, `hardware` or `planning` repositories and independent shared libraries. Its project knowledge is stored locally by default; an external knowledge Git repository and GitHub Projects V2 board are optional separate relationships. Use `repository_memberships`, `library_list`, `library_link`, `library_resolve`, `knowledge_policy`, `github_project_board` and the live provider readback to resolve the actual configuration. Repository names are mutable; bind or reconcile by verified GitHub repository ID, using owner-authorized account tools for changes. Consult [project-model.md](project-model.md).
 
-For private knowledge, verify GitHub's `private: true` on the chosen project-named repository before `knowledge_configure` or publication. No branch in a public repository is private. Never infer this status from the linked source repositories.
+For controller-local knowledge, enforce the project's owner/editor/viewer grants independently of code-repository permissions. If a project explicitly selects Git knowledge, verify that repository's confidentiality and permissions before publication. No branch in a public repository is private.
 
 ## Publishing a reusable library from its own project
 
 When a proof collection, reusable source tree or research corpus is a first-class deliverable, create a **library project** through `create_library_project` (project ID, title, library kind, optional description), or `POST /api/projects` with `kind=library`. The controller atomically creates a separate published library and self-link; `project_published_library` identifies it. Link its development repositories and knowledge to the **publisher project** only.
 
-To consume it, use `library_link` in each authorized consuming project, then `library_resolve` for exact Git revisions and object hashes. A consumer does not inherit the publisher's private GitHub knowledge, project owner grant, or source repository write permission. An ordinary project may link several libraries and remains an ordinary project; independently created libraries remain supported. A library's current published revision is shared across its consumers, so consuming builds should additionally record their resolved exact SHA. See [project-model.md](project-model.md).
+To consume it, use `library_link` in each authorized consuming project, then `library_resolve` for exact object hashes and optional Git revisions. A consumer does not inherit the publisher's private project knowledge, project owner grant, or source repository write permission. An ordinary project may link several libraries and remains an ordinary project; independently created libraries remain supported. A library's current published revision is shared across its consumers, so consuming builds should additionally record their resolved exact SHA. See [project-model.md](project-model.md).
 
 ## Project and Git operations
 
@@ -63,10 +63,10 @@ For smaller files, `artifact_send_base64`, `artifact_read_base64` and `workspace
 
 ## Research and shared libraries
 
-- Use `library_create`, `library_link`, `library_resolve`, `library_add_source` and `library_read_file` for intentionally shared sources. Only read libraries actually linked to the authorized project; retain pinned Git revisions and original object digests.
+- Use `library_create`, `library_link`, `library_resolve`, `library_document_publish`, `library_documents` and `library_document_read` for first-party shared collections. A publishing project can add immutable Markdown, JSON or text; linked consumers can read exact SHA-256 versions. `library_add_source` and `library_read_file` remain appropriate for pinned source code.
 - `research_register_source`, `research_ingest_passages`, `research_search`, `research_topics` and `research_read_passage` operate on a source-linked index. Index metadata, derived passages and FTS search results are not proof that an original PDF or claim was verified. Check the source document and stable locator before quotation.
 - `library_attachment_send` and `study_pack_prepare` accept actual verified attachment bytes or prepared source references only through supported client transport. Do not invent page numbers, transcript text or document contents.
-- The optional Git knowledge policy is separate: `knowledge_policy` defaults to `none`; only an explicitly configured `git` policy permits `knowledge_git_publish`. Use `knowledge_git_read` and revision-guarded publication under the chosen prefix. Historical local note and contribution APIs are read-only migration sources, not a new persistence destination. Follow [knowledge-standard.md](knowledge-standard.md) for record structure and publication.
+- Project knowledge defaults to `local`. Use `read_project_note` and version-guarded `write_project_note` for canonical notes; use `knowledge_contribute`, `knowledge_contributions` and `knowledge_context` for immutable evidence and working context. `none` disables canonical knowledge access. Explicit `git` projects retain pinned reads and expected-head publication. Follow [knowledge-standard.md](knowledge-standard.md) for record structure and migration.
 
 ## Provider authentication, catalog and recovery
 

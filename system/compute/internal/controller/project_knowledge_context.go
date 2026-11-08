@@ -5,8 +5,8 @@ import (
 	"strings"
 )
 
-// ProjectKnowledgeContext reads the selected knowledge authority. Operational
-// records remain in SQLite, but no local note is treated as project knowledge.
+// ProjectKnowledgeContext reads the selected project knowledge authority.
+// Only the local policy exposes controller-held notes and contributions.
 func (s *Server) ProjectKnowledgeContext(project string) (map[string]any, error) {
 	policy, err := s.DB.KnowledgePolicy(project)
 	if err != nil {
@@ -35,6 +35,16 @@ func (s *Server) ProjectKnowledgeContext(project string) (map[string]any, error)
 	}
 	if result["authority"] == "none" {
 		return result, nil
+	}
+	if result["authority"] == "local" {
+		context, err := s.DB.ProjectContext(project)
+		if err != nil { return nil, err }
+		libraries, err := s.DB.ProjectLibraries(project)
+		if err != nil { return nil, err }
+		context["authority"] = "local"
+		context["libraries"] = libraries
+		context["policy_version"] = policy["version"]
+		return context, nil
 	}
 	if result["authority"] != "git" {
 		return nil, errors.New("unsupported project knowledge authority")

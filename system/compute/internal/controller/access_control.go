@@ -70,7 +70,7 @@ var readableTools = map[string]bool{
 	"github_get_pull_request": true, "github_verify_pull_request": true,
 	"github_project_board": true, "github_project_items": true, "github_project_fields": true,
 	"repository_memberships": true, "library_resolve": true,
-	"library_read_file": true,
+	"library_read_file": true, "library_documents": true, "library_document_read": true,
 }
 var rootTools = map[string]bool{
 	"create_project": true, "create_library_project": true, "list_compute_nodes": true, "worker_revoke": true, "list_hardware": true,

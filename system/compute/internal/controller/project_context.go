@@ -17,6 +17,15 @@ type ContributionRequest struct {
 
 var contributionArtifactID = regexp.MustCompile(`^[0-9a-f]{32}$`)
 
+func validKnowledgeAuthor(principal string) bool {
+	if principal == "controller-owner" || validPrincipal(principal) {
+		return true
+	}
+	return strings.HasPrefix(principal, "cloudflare-access:") &&
+		strings.Contains(principal, "#") && len(principal) <= 1024 &&
+		!strings.ContainsAny(principal, "\x00\r\n")
+}
+
 func validContributionKind(kind string) bool {
 	switch kind {
 	case "handoff", "decision", "finding", "note":
@@ -32,7 +41,7 @@ func (db *Database) ContributeProject(project string, p ContributionRequest, pri
 	if !validID.MatchString(project) || !validContributionKind(p.Kind) ||
 		strings.TrimSpace(p.Title) == "" || len(p.Title) > 160 ||
 		strings.TrimSpace(p.Body) == "" || len(p.Body) > 128<<10 ||
-		(principal != "controller-owner" && !validPrincipal(principal)) {
+		!validKnowledgeAuthor(principal) {
 		return nil, errors.New("invalid project contribution")
 	}
 	if (p.Repository == "") != (p.Revision == "") {
@@ -50,6 +59,11 @@ func (db *Database) ContributeProject(project string, p ContributionRequest, pri
 	err := db.transaction(func() error {
 		if err := requireProject(db, project); err != nil {
 			return err
+		}
+		policy, err := db.lockedOne("SELECT mode FROM project_knowledge_policies WHERE project=?", project)
+		if err != nil { return err }
+		if policy != nil && asString(policy["mode"]) != "local" {
+			return errors.New("local knowledge is not enabled for this project")
 		}
 		if p.Repository != "" {
 			row, err := db.lockedOne("SELECT full_name FROM repositories WHERE project=? AND full_name=?", project, p.Repository)

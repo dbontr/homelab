@@ -25,10 +25,18 @@ func (s *Server) handleProjectKnowledge(w http.ResponseWriter, r *http.Request, 
 				fail(w, 405, "method not allowed")
 				return true
 			}
+			if err := s.DB.RequireLocalKnowledge(project); err != nil {
+				send(w, nil, err)
+				return true
+			}
 			rows, err := s.DB.ProjectContributionSearch(project, r.URL.Query().Get("q"))
 			send(w, rows, err)
 			return true
 		case "contributions":
+			if err := s.DB.RequireLocalKnowledge(project); err != nil {
+				send(w, nil, err)
+				return true
+			}
 			switch r.Method {
 			case http.MethodGet:
 				limit := 50
@@ -43,7 +51,13 @@ func (s *Server) handleProjectKnowledge(w http.ResponseWriter, r *http.Request, 
 				rows, err := s.DB.ProjectContributions(project, r.URL.Query().Get("kind"), limit)
 				send(w, rows, err)
 			case http.MethodPost:
-				fail(w, http.StatusConflict, "local contributions are read-only; use the configured Git knowledge remote")
+				var input ContributionRequest
+				if err := bodyJSON(r, &input); err != nil {
+					fail(w, 400, err.Error())
+					return true
+				}
+				result, err := s.DB.ContributeProject(project, input, who.Principal)
+				send(w, result, err)
 			default:
 				fail(w, 405, "method not allowed")
 			}
@@ -51,6 +65,10 @@ func (s *Server) handleProjectKnowledge(w http.ResponseWriter, r *http.Request, 
 		}
 	}
 	if len(p) == 6 && p[4] == "contributions" && r.Method == http.MethodGet {
+		if err := s.DB.RequireLocalKnowledge(project); err != nil {
+			send(w, nil, err)
+			return true
+		}
 		row, err := s.DB.ProjectContribution(project, p[5])
 		send(w, row, err)
 		return true

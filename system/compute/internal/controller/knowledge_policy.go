@@ -21,7 +21,7 @@ func (db *Database) KnowledgePolicy(project string) (map[string]any, error) {
 		if check == nil {
 			return nil, errors.New("project not found")
 		}
-		return map[string]any{"project": project, "mode": "none",
+		return map[string]any{"project": project, "mode": "local",
 			"repository": "", "branch": "", "prefix": "", "version": 0}, nil
 	}
 	row["project"] = project
@@ -29,12 +29,12 @@ func (db *Database) KnowledgePolicy(project string) (map[string]any, error) {
 }
 
 func (db *Database) ConfigureKnowledgePolicy(project, mode, repo, branch, prefix string, expected int) (map[string]any, error) {
-	if !validID.MatchString(project) || expected < 0 || (mode != "none" && mode != "git") {
+	if !validID.MatchString(project) || expected < 0 || (mode != "none" && mode != "local" && mode != "git") {
 		return nil, errors.New("invalid project knowledge policy")
 	}
-	if mode == "none" {
+	if mode != "git" {
 		if repo != "" || branch != "" || prefix != "" {
-			return nil, errors.New("disabled knowledge cannot have a destination")
+			return nil, errors.New("local or disabled knowledge cannot have a Git destination")
 		}
 	} else {
 		if !validKnowledgeRepository(repo) || !validateBranch(branch) ||
@@ -76,4 +76,13 @@ func (db *Database) ConfigureKnowledgePolicy(project, mode, repo, branch, prefix
 		return nil
 	})
 	return out, err
+}
+
+func (db *Database) RequireLocalKnowledge(project string) error {
+	policy, err := db.KnowledgePolicy(project)
+	if err != nil { return err }
+	if asString(policy["mode"]) != "local" {
+		return errors.New("local project knowledge is not enabled")
+	}
+	return nil
 }

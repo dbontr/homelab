@@ -9,13 +9,13 @@ import (
 	"testing"
 )
 
-func TestKnowledgePolicyRequiresExplicitGitMode(t *testing.T) {
+func TestKnowledgePolicyAllowsLocalAuthorityWithoutGit(t *testing.T) {
 	db, _, _ := fixture(t)
 	if _, err := db.CreateProject("research", "Research"); err != nil {
 		t.Fatal(err)
 	}
 	initial, err := db.KnowledgePolicy("research")
-	if err != nil || initial["mode"] != "none" || asInt(initial["version"]) != 0 {
+	if err != nil || initial["mode"] != "local" || asInt(initial["version"]) != 0 {
 		t.Fatalf("default knowledge mode: %v %v", initial, err)
 	}
 	if _, err := db.ConfigureKnowledgePolicy("research", "git", "example/notes", "main",
@@ -34,6 +34,20 @@ func TestKnowledgePolicyRequiresExplicitGitMode(t *testing.T) {
 	disabled, err := db.ConfigureKnowledgePolicy("research", "none", "", "", "", 1)
 	if err != nil || disabled["mode"] != "none" {
 		t.Fatalf("disable knowledge: %v %v", disabled, err)
+	}
+	if _, err := db.WriteNote("research", "context", "hidden", 0); err == nil {
+		t.Fatal("disabled policy accepted local knowledge")
+	}
+	local, err := db.ConfigureKnowledgePolicy("research", "local", "", "", "", 2)
+	if err != nil || local["mode"] != "local" { t.Fatalf("local authority: %v %v", local, err) }
+	if _, err := db.WriteNote("research", "context", "first saved context", 0); err != nil {
+		t.Fatalf("local knowledge not writable: %v", err)
+	}
+	if _, err := db.WriteNote("research", "context", "stale", 0); err == nil {
+		t.Fatal("stale local edit was accepted")
+	}
+	if _, err := db.ConfigureKnowledgePolicy("research", "local", "example/notes", "", "", 3); err == nil {
+		t.Fatal("local authority accepted remote destination")
 	}
 }
 

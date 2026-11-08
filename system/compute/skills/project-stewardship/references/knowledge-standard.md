@@ -1,139 +1,116 @@
-# Versioned Project Knowledge Standard
+# Project Knowledge Standard
 
-This convention applies **only** when the project owner has selected `knowledge=git`. A Workspace project is independent of its source repositories and can link several of them. Code remains in its chosen Git source repositories even when knowledge is disabled. Use the established layout of an existing repository when equivalent; avoid redundant migrations or empty directories.
+## Authority
 
-## Privacy and project-level ownership
+Project knowledge is private by default to the controller's authenticated project grants. A Workspace project is a durable identity separate from its source repositories, planned compute work, linked libraries and GitHub boards.
 
-Prefer **one private GitHub knowledge repository per Workspace project**, named for the project's stable ID (for example `OWNER/PROJECT-ID-knowledge`), not for any linked source repository. The project may link multiple public or private code repositories and one or more shared libraries without changing its knowledge repository. A project title or source repository rename does not automatically rename its knowledge destination.
+The controller's `knowledge_policy` has three modes:
 
-Before selecting a GitHub knowledge destination, verify with the authenticated provider that the **repository itself** reports `private: true` and the controller has write permission. Recheck confidentiality before committing sensitive knowledge. The branch name `knowledge` does not make a branch private inside a public repository. A shared knowledge repository with independent project prefixes is permitted only with deliberately approved shared access; do not infer that one project grants access to another.
+- **`local` (default):** canonical notes and immutable contributions are held in the Workspace controller's private SQLite database.
+- **`none`:** no canonical knowledge is exposed or accepted; existing data is retained unless independently removed through an authorized procedure.
+- **`git` (explicit):** a verified repository, branch and prefix own knowledge for that project. It may be GitHub or an approved local bare Git repository. A previously configured Git destination remains authoritative until a verified migration is completed.
 
-Never publish private research reasoning, unpublished findings, project context, full private knowledge paths, secrets or data to a public README, issue, PR comment, GitHub Project field, Actions log, package metadata, Release or artifact with broader access. If a private knowledge repository is not configured, keep knowledge mode `none` and report the missing destination; do not write private knowledge into a public source repository as a fallback. A move out of public Git history cannot erase copies already fetched.
+Never substitute a public code repository for a private knowledge store. A GitHub branch is no more private than its parent repository. Do not place private reasoning, unsubmitted findings or private paths in issues, PR comments, GitHub Projects fields or workflow logs.
 
-## Authority and location
+## Local project records
 
-- Choose the approved Git repository, branch and knowledge prefix explicitly. A project may use `source=github` with `knowledge=local-git`, both on GitHub, or both in one local bare Git repository. Verify provider access before first publication.
-- Use Markdown in one configured prefix (typically `knowledge/`). Do not create a second database of canonical decisions. SQLite can hold operational indexes and cached search state, never the authoritative project knowledge in this mode.
-- For concurrent authors, commit on independent branches or independent record files, then merge/reconcile against the verified latest head. Never force-write a stale `Context.md`.
-- Store large datasets, images, bitstreams and model weights in an authorized artifact/object store. A Git record must include the immutable artifact ID, SHA-256, size and location; use Git LFS only when the provider supports and the user approves it. Confirm restore ability before removing originals.
+The controller stores editable notes by stable `project_id` and `name`, with a required expected version. Two conventional names identify the main documents:
 
-## Canonical layout
+- **`project`:** charter, scope, acceptance criteria, durable external authorities and linked library purposes.
+- **`context`:** verified state, work in progress, blockers, next action and exact source references.
 
-```text
-knowledge/
-  Project.md                 # project charter, durable scope and success criteria
-  Context.md                 # current verified state and immediate next action
-  decisions/                 # technical choices and tradeoffs
-    2026-11-05-storage-authority.md
-  findings/                  # claims with reproducible evidence
-    2026-11-05-dma-bandwidth.md
-  experiments/               # methods and measurements
-    2026-11-05-transfer-test.md
-  handoffs/                  # concise continuation records
-    2026-11-05-checkout-review.md
-  sources/                   # immutable provenance and artifact manifests
-    sample-dataset.md
+Use `read_project_note` before `write_project_note`, and supply the returned `version` as `expected_version`. Never overwrite a concurrent edit by guessing a revision. A missing note begins at revision 0. A successful write increments the revision; it is not a Git commit.
+
+Immutable contributions preserve findings and handoffs separately from the current context. Use `knowledge_contribute` with `kind=handoff|decision|finding|note`, a meaningful title, and a body containing the relevant evidence. The controller binds the authenticated principal and body SHA-256; do not supply a claimed author or alter provenance after publication. Optional `repository` and `revision` must identify a linked source repository at an exact commit; an optional artifact ID must belong to the project.
+
+A complete contribution gives a reader enough information to distinguish **observed evidence**, **derived results**, **hypotheses**, and **accepted decisions**. Use specific numerical units, limitations, uncertainty and reproducible procedures where applicable. A completed experiment is not automatically a verified scientific conclusion. Record corrections and conflicting evidence in later contributions rather than altering immutable records.
+
+### Project note example
+
+```markdown
+# Project
+
+## Purpose
+Develop a verified numerical library for bounded operators.
+
+## Scope
+Implementation, proofs and numerical acceptance tests.
+
+## Acceptance criteria
+State the measurable conditions and the evidence that demonstrates them.
+
+## Authorities
+Workspace project ID, linked code repositories, pinned library sources and relevant artifact digests.
 ```
 
-Create only folders and files justified by actual records. One `Project.md` and one `Context.md` per knowledge scope, not per chat or worker. The parent repository's `README.md` explains the software; root `REFERENCES.md` lists authoritative external technical sources. `knowledge/sources` tracks specific research evidence and immutable project input identities. These purposes are distinct.
+### Context note example
 
-### Project.md
+```markdown
+# Context
 
-The charter identifies the **Workspace project**, not a single GitHub repository. Under `Authorities`, list all authorized source repositories by role, their provider-reported stable repository IDs where available, selected private Git knowledge repository and branch, GitHub Projects V2 board if present, linked libraries and artifact store. Keep project IDs durable across source repository or display-name changes. Do not create a separate charter for each linked repository.
+## Verified state
+Link results to exact source commits, reports and immutable object hashes.
 
-Use these headings: `# Project`, `## Purpose`, `## Scope`, `## Acceptance criteria`, `## Authorities`. Under `Authorities`, identify linked code repositories, the configured knowledge repository/ref, planning provider if present and binary artifact store. Do not embed tokens or internal-only credentials. The charter should be stable, not an activity log.
+## In progress
+Describe the active task without guessing its outcome.
 
-### Context.md
+## Blockers
+Identify unverified dependencies and missing resources.
 
-Use `# Context`, `## Verified state`, `## In progress`, `## Blockers`, `## Next action`, `## References`. Link exact commit SHAs, issue or PR identifiers and artifact digests. Distinguish provider-reported state from independently verified behavior. Keep this file concise enough to orient an operator; do not paste transcript, scratchpad, entire test logs or guessed hardware state. A stale context file must be corrected by reviewing the latest remote head, not by overwriting it blindly.
+## Next action
+Specify one concrete operation and its acceptance criterion.
 
-## Record syntax
+## References
+Use exact source identities or citation records.
+```
 
-Use UTF-8 Markdown with this frontmatter on each record in `decisions/`, `findings/`, `experiments/`, `handoffs/` and `sources/`:
+The examples establish structure; they do not imply that a project has those results. Keep notes concise and factual. Do not paste chat transcripts, fabricated test data, whole logs or temporary scratchpads.
+
+## Shared libraries
+
+A library is a separately published, reusable collection, not a directory in a project's code repository. A `library` project publishes its own named library; other projects can link it through `library_link` without gaining permission to edit the publisher.
+
+Shared library content uses the Workspace content-addressed object store and exact SHA-256 digests. Publish documents through `library_document_publish` (UTF-8 Markdown, JSON or plain text up to 128 KiB). Readers use `library_documents` and `library_document_read` only for libraries linked to their project. Names are immutable: a revised theorem, proof or dataset description receives its own versioned name or edition identifier, and consumers can cite the exact digest. The system does not silently rewrite published objects.
+
+Large papers, datasets, model weights, bitstreams and saved experiment outputs belong in the verified object/artifact store. The companion document can contain their immutable object identifier, digest, size, original locator, acquisition date and permitted use. Research passages are secondary indexes with explicit original-source provenance, not replacements for the original source.
+
+Pinned Git repositories remain appropriate for **source-code libraries**. `library_add_source` may register an exact code commit without moving the project's private knowledge to GitHub. A consumer sees the published source revision and the locally stored objects through `library_resolve`. Do not infer that linking a library grants permissions in the original code repository.
+
+## Reproducibility and scientific provenance
+
+For technical findings, preserve the exact relevant facts:
+- Source commit, versioned OCI image or environment specification.
+- Input source, immutable SHA-256 identifier, location and permitted scope.
+- Hardware and device allocation actually used, not merely declared inventory.
+- Driver/toolchain versions, relevant environment variables without secret values, and the command or method.
+- Measured outputs, units, sample size and uncertainty.
+- Reproduction instructions, failure modes and acceptance criteria.
+
+Use verified citations and links to original material. Never invent pages, DOI values, terminal outputs, commits, results or timestamps. If the evidence is unavailable, state that the finding remains provisional.
+
+## Git-backed knowledge where explicitly configured
+
+Projects in `git` mode use the approved repository, branch and knowledge prefix. Prefer a private destination for confidential material. Common portable record filenames include `Project.md`, `Context.md`, `decisions/`, `findings/`, `experiments/`, `handoffs/` and `sources/`. A record may use frontmatter such as:
 
 ```yaml
 ---
-id: dma-transfer-20261105
+id: transfer-study-20261105
 kind: experiment
 status: provisional
 date: 2026-11-05
 ---
 ```
 
-`id` is a unique, stable, lowercase hyphenated identifier across the knowledge scope. `kind` must match the directory: `decision`, `finding`, `experiment`, `handoff` or `source`. `status` is one of `proposed`, `provisional`, `verified`, `superseded`, `archived`. `date` is the original ISO 8601 calendar date of the record; do not change it when editing. Optional plain-string fields include `owner`, `updated` (ISO date), `supersedes` (another record ID) and `issue` (provider issue URL). For more complex provenance, use normal Markdown tables or fenced JSON in the body rather than nested ad hoc frontmatter.
+The record's immutable ID, date and evidence must remain consistent. Valid scientific record states include `proposed`, `provisional`, `verified`, `superseded` and `archived`. A `verified` finding requires reproducible evidence, not merely a successful computation.
 
-A `verified` finding requires evidence and a repeatable method. A completed experiment is not necessarily a `verified` scientific conclusion. A decision's status describes acceptance of the decision, not experimental certainty. When a conclusion is superseded, retain the old record with `status: superseded` and link its successor; never erase contradictory evidence merely to simplify the narrative.
+Git publication requires the expected branch head, a non-forced update and verified readback. Local controller notes are not authoritative while a project's mode is `git`; do not mix both modes in one claimed history. Git-backed records remain optional and do not replace the Workspace shared library object store.
 
-## Required record sections
+## Migration and independent recovery
 
-| Directory | Markdown heading | Required sections |
-| --- | --- | --- |
-| `decisions/` | `# Decision: ...` | `## Context`, `## Decision`, `## Alternatives`, `## Consequences`, `## Evidence` |
-| `findings/` | `# Finding: ...` | `## Claim`, `## Method`, `## Evidence`, `## Limitations` |
-| `experiments/` | `# Experiment: ...` | `## Question`, `## Reproduction`, `## Results`, `## Interpretation`, `## Artifacts` |
-| `handoffs/` | `# Handoff: ...` | `## Current state`, `## Verified`, `## Blockers`, `## Next actions` |
-| `sources/` | `# Source: ...` | `## Identity`, `## Locator`, `## Integrity`, `## Usage` |
+Before changing a Git-backed project to `local`, enumerate the approved knowledge tree at a pinned commit and preserve its original file identities, hashes and source histories. Import intended project and context notes with revision guards; import findings or handoffs as immutable local contributions with explicit provenance. Read back and compare the new records, verify that linked artifacts remain accessible, and test restoration before switching the authoritative policy. Do not silently convert historical documents into accepted facts.
 
-For evidence, record which claims are **observed**, which are **derived**, and which are **hypotheses**. Include units, sample sizes and uncertainty where relevant. A source reference should contain a DOI, URL, repository commit SHA or artifact ID, an access date when appropriate, plus a SHA-256 digest for preserved binaries. Do not fabricate citations, page numbers, experiment results, tests or provenance.
+Reconfiguring a policy never copies or deletes content automatically. Keep the original repository and data until an owner-authorized removal procedure succeeds. Database and object-store recovery must be tested together; a local copy without off-host recoverability is not a backup.
 
-### Experiment reproduction block
+## Professional record hygiene
 
-A reproducible test should identify, when applicable, the exact source commit, versioned OCI image (prefer digest), entrypoint/command, input artifact SHAs, software/driver versions, node or hardware device model, allocation type, environment variables that affect the result (never their secret values), start/stop condition, observed outputs and failure modes.
-
-Example:
-
-```markdown
-## Reproduction
-
-- Source: `owner/repo@0123456789abcdef0123456789abcdef01234567`
-- Image: `registry.example/research@sha256:<verified-digest>`
-- Hardware: GPU device lease `node/device`, verified by scheduler
-- Input: artifact `dataset-id`, SHA-256 `<verified-digest>`
-- Command: `./tests/transfer --iterations 100`
-- Acceptance: independently check the exact output hash and measured units
-```
-
-Angle brackets in the sample are placeholders, not actual evidence. Replace them with verified data before committing a record.
-
-## Documentation hygiene
-
-Write only enduring project information. Do not record a conversation, instructions to an assistant, self-referential compliance statements, invented test evidence, temporary progress narration or a transcript of failed approaches. A current-state change should update the canonical record without preserving obsolete wording solely to prove a correction occurred. Use Git history for authentic history; preserve legally required attribution and actual evidence. Do not add knowledge records just because an automated task ran.
-
-## Publication and migration
-
-1. Inspect `knowledge_policy`; do nothing when mode is `none`.
-2. Read the latest approved knowledge branch and the target file. Protect concurrent edits with its expected head SHA.
-3. Write a complete record or carefully update `Context.md`; check its citations and source links. Run the structural checker against a local checkout when available.
-4. Publish to Git. Read back the exact commit and file content and compare their hashes. Report the new immutable revision.
-5. For migrations, read old controller-local notes, map records into this layout with their real provenance, verify the Git commit and restore ability, then retire legacy writes. Do not silently reinterpret operational cache entries as accepted findings.
-
-## Access control and independent recovery
-
-- `knowledge_policy` begins at `none`. Only the project owner may approve a change to `git`; use `knowledge_configure` with the expected policy version, explicit repository, branch and prefix. Configuration is separate from publication and must not create records automatically.
-- Verify the connected provider's repository permission before a write. GitHub requires a scoped authorized credential; `local:OWNER/REPOSITORY` requires an operator-approved bare Git root and defined author identity. Do not expose controller credentials to workspaces, notebooks, Git records, logs or external resource adapters.
-- For `knowledge_git_publish`, supply the expected branch head and verify the returned commit ID, then independently read back the document. A revision conflict requires examining both versions and an intentional merge. Never overwrite a concurrent author's `Context.md` or force-push to resolve it.
-- A locally hosted bare Git repository is not an independent off-host backup. Periodically verify both repository restoration and any Git LFS or external artifact objects it references. GitHub or GitLab hosting does not itself prove an independent organizational backup. Preserve the original knowledge source until the chosen destination and referenced objects pass an actual restore check.
-- Treat indexed passages, search caches, workspace snapshots and operational task files as auxiliary records. Unless the project specifically authorizes their durable publication in the configured Git repository, they are not canonical project knowledge. Maintain exact source identity and revision for reproducible claims.
-- When knowledge is `none`, do not populate this layout as a side effect of task completion or cluster operation. A user-requested portable handoff may still be returned in the current conversation without creating permanent project knowledge.
-
-## Example: decision
-
-```markdown
----
-id: source-authority-20261105
-kind: decision
-status: verified
-date: 2026-11-05
----
-# Decision: Source authority
-## Context
-The controller executes temporary workspaces; canonical source must survive their deletion.
-## Decision
-Keep source code in the chosen Git remote. Keep knowledge optional.
-## Alternatives
-Preserving authoritative source in a worker volume was rejected because it couples durability to workload life.
-## Consequences
-All release claims must identify and verify a reachable Git commit.
-## Evidence
-The repository's verified branch head and publication response are the record of source identity.
-```
+Knowledge files and notes contain enduring project information, not evidence that an assistant was involved in writing them. Respect existing author attribution, required licenses and audit trails; do not fabricate or erase provenance. Store secrets only in the credential manager, not notes, documents, Git history, object manifests or logs. Keep decisions at their true scope and do not duplicate live GitHub issue state in local research notes.
