@@ -315,6 +315,9 @@ func(s *Server)localTools()[]map[string]any{
  }
  if s.executorClient!=nil {
   tools=append(tools,
+   tool("infrastructure__service_start","Start one configured non-critical local service through the independent executor",map[string]any{"host":prop("string"),"service":prop("string")},"host","service"),
+   tool("infrastructure__service_stop","Stop one configured non-critical local service through the independent executor",map[string]any{"host":prop("string"),"service":prop("string")},"host","service"),
+   tool("infrastructure__service_reload","Reload one configured non-critical local service through the independent executor",map[string]any{"host":prop("string"),"service":prop("string")},"host","service"),
    tool("infrastructure__service_restart","Restart one configured local service through the independent executor",map[string]any{"host":prop("string"),"service":prop("string")},"host","service"),
    tool("infrastructure__release_activate","Activate a staged and verified local generation with rollback through the independent executor",map[string]any{"host":prop("string"),"release_id":prop("string")},"host","release_id"),
    tool("infrastructure__release_revert","Restore the previous verified local generation from the active release journal",map[string]any{"host":prop("string"),"release_id":prop("string")},"host","release_id"),
