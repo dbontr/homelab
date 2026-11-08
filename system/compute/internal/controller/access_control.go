@@ -70,7 +70,7 @@ var readableTools = map[string]bool{
 	"github_get_pull_request": true, "github_verify_pull_request": true,
 	"github_project_board": true, "github_project_items": true, "github_project_fields": true,
 	"repository_memberships": true, "library_resolve": true,
-	"library_read_file": true,
+	"library_read_file": true, "library_documents": true, "library_document_read": true,
 }
 var rootTools = map[string]bool{
 	"create_project": true, "create_library_project": true, "list_compute_nodes": true, "worker_revoke": true, "list_hardware": true,
@@ -192,6 +192,12 @@ func (s *Server) authorizeREST(r *http.Request, p []string, who caller) bool {
 		}
 		if len(p) == 4 && p[3] == "resource-plan" && r.Method == http.MethodPost {
 			needed = 1
+		}
+		if len(p) == 6 && p[3] == "libraries" && p[5] == "documents" &&
+			r.Method == http.MethodPost {
+			allowed := s.authorizedFor(project, who, 2)
+			s.DB.AuditAccess(who.Principal, project, "rest:"+r.Method+":"+r.URL.Path, allowed)
+			return allowed
 		}
 		if len(p) >= 4 && (p[3] == "github" || p[3] == "planning" || p[3] == "libraries") && r.Method != http.MethodGet {
 			s.DB.AuditAccess(who.Principal, project, "rest:"+r.Method+":"+r.URL.Path, false)

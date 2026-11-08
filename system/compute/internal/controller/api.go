@@ -178,6 +178,7 @@ func (s *Server) handleAdmin(w http.ResponseWriter, r *http.Request, p []string)
 			}
 		case "search":
 			if method == "GET" {
+				if e := db.RequireLocalKnowledge(project); e != nil { send(w, nil, e); return }
 				v, e := db.SearchNotes(project, r.URL.Query().Get("q"))
 				send(w, v, e)
 				return
@@ -188,12 +189,19 @@ func (s *Server) handleAdmin(w http.ResponseWriter, r *http.Request, p []string)
 		switch p[3] {
 		case "notes":
 			if method == "GET" {
+				if e := db.RequireLocalKnowledge(project); e != nil { send(w, nil, e); return }
 				v, e := db.ReadNote(project, p[4])
 				send(w, v, e)
 				return
 			}
 			if method == "POST" {
-				fail(w, http.StatusConflict, "local notes are read-only; use the configured Git knowledge remote")
+				var input struct {
+					Body string `json:"body"`
+					ExpectedVersion int `json:"expected_version"`
+				}
+				if err := bodyJSON(r, &input); err != nil { fail(w, 400, err.Error()); return }
+				v, e := db.WriteNote(project, p[4], input.Body, input.ExpectedVersion)
+				send(w, v, e)
 				return
 			}
 		case "artifacts":

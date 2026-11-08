@@ -17,6 +17,13 @@ func TestProjectKnowledgeContextUsesOnlySelectedGitAuthority(t *testing.T) {
 	if _, err := db.WriteNote("research", "project", "stale local content", 0); err != nil {
 		t.Fatal(err)
 	}
+	local, err := controller.ProjectKnowledgeContext("research")
+	if err != nil || local["authority"] != "local" || local["project_document"] == nil {
+		t.Fatalf("local knowledge was not selected: %v %v", local, err)
+	}
+	if _, err := db.ConfigureKnowledgePolicy("research", "none", "", "", "", 0); err != nil {
+		t.Fatal(err)
+	}
 	disabled, err := controller.ProjectKnowledgeContext("research")
 	if err != nil || disabled["authority"] != "none" || disabled["project_document"] != nil {
 		t.Fatalf("disabled knowledge disclosed local notes: %v %v", disabled, err)
@@ -43,7 +50,7 @@ func TestProjectKnowledgeContextUsesOnlySelectedGitAuthority(t *testing.T) {
 	defer remote.Close()
 	controller.GitHub = NewGitHub("test-token")
 	controller.GitHub.API = remote.URL
-	if _, err := db.ConfigureKnowledgePolicy("research", "git", "example/knowledge", "main", "knowledge", 0); err != nil {
+	if _, err := db.ConfigureKnowledgePolicy("research", "git", "example/knowledge", "main", "knowledge", 1); err != nil {
 		t.Fatal(err)
 	}
 	context, err := controller.ProjectKnowledgeContext("research")

@@ -21,15 +21,15 @@ var tools = []toolDefinition{
 	{"create_project", "Create a project", []string{"project_id", "title"}, nil},
 	{"create_library_project", "Create a standalone library-centered project that publishes a reusable library with the same stable ID", []string{"project_id", "title", "library_kind"}, []string{"description"}},
 	{"project_published_library", "Resolve the library published by this Workspace project", []string{"project_id"}, nil},
-	{"read_project_note", "Read a versioned note", []string{"project_id", "name"}, nil},
-	{"write_project_note", "Write a note with a revision guard", []string{"project_id", "name", "body", "expected_version"}, nil},
+	{"read_project_note", "Read a revisioned project note from the local knowledge store", []string{"project_id", "name"}, nil},
+	{"write_project_note", "Save a local project note using its expected revision", []string{"project_id", "name", "body", "expected_version"}, nil},
 	{"search_project_knowledge", "Search project notes", []string{"project_id", "query"}, nil},
 	{"knowledge_policy", "Read the project\u0027s selected knowledge persistence policy", []string{"project_id"}, nil},
-	{"knowledge_git_read", "Read a project knowledge document from its configured GitHub repository at a verified commit", []string{"project_id", "path"}, nil},
-	{"knowledge_configure", "Choose disabled knowledge or an authorized GitHub knowledge repository", []string{"project_id", "mode", "expected_version"}, []string{"repository", "branch", "prefix"}},
+	{"knowledge_git_read", "Read an explicitly configured Git-backed knowledge document at a pinned commit", []string{"project_id", "path"}, nil},
+	{"knowledge_configure", "Select local, disabled or explicitly configured Git-backed project knowledge", []string{"project_id", "mode", "expected_version"}, []string{"repository", "branch", "prefix"}},
 	{"knowledge_git_publish", "Publish an explicitly selected project knowledge document with exact Git revision verification", []string{"project_id", "path", "body", "expected_head", "message"}, nil},
-	{"knowledge_context", "Read canonical project and context notes, latest handoff, decisions and linked repositories", []string{"project_id"}, nil},
-	{"knowledge_contribute", "Append an immutable project handoff, decision, finding or note with source provenance", []string{"project_id", "kind", "title", "body"}, []string{"repository", "revision", "artifact_id"}},
+	{"knowledge_context", "Read canonical project context from the selected knowledge authority", []string{"project_id"}, nil},
+	{"knowledge_contribute", "Save an immutable local project handoff, decision, finding or note with provenance", []string{"project_id", "kind", "title", "body"}, []string{"repository", "revision", "artifact_id"}},
 	{"knowledge_contributions", "List immutable project contributions and provenance", []string{"project_id"}, []string{"kind", "limit"}},
 	{"knowledge_contribution", "Read a checksum-verified immutable project contribution", []string{"project_id", "contribution_id"}, nil},
 	{"knowledge_search_contributions", "Search project handoffs, decisions and findings", []string{"project_id", "query"}, nil},
@@ -172,6 +172,9 @@ var tools = []toolDefinition{
 	{"library_sources", "List pinned GitHub sources for a shared library", []string{"library_id"}, nil},
 	{"library_link", "Reference a shared library from a project without copying it", []string{"project_id", "library_id"}, nil},
 	{"library_resolve", "Resolve linked library sources and content hashes", []string{"project_id", "library_id"}, nil},
+	{"library_document_publish", "Publish immutable Markdown, JSON or text to a library owned by this project", []string{"project_id", "library_id", "name", "body"}, nil},
+	{"library_documents", "List locally stored library documents from a linked library", []string{"project_id", "library_id"}, nil},
+	{"library_document_read", "Read a digest-verified local document from a linked library", []string{"project_id", "library_id", "name"}, nil},
 	{"library_read_file", "Read a file from an authorized pinned shared library source", []string{"project_id", "library_id", "repository", "file"}, []string{"source_path"}},
 	{"library_import_object", "Import a shared large object into an isolated workspace", []string{"project_id", "library_id", "workspace_id", "name", "path"}, nil},
 	{"library_checkout_source", "Checkout a pinned shared library source into a workspace", []string{"project_id", "library_id", "workspace_id", "repository"}, []string{"source_path"}},
@@ -353,10 +356,12 @@ func (s *Server) callToolFor(who caller, name string, a map[string]any) (any, er
 	case "project_published_library":
 		return db.PublishedProjectLibrary(project)
 	case "read_project_note":
+		if err := db.RequireLocalKnowledge(project); err != nil { return nil, err }
 		return db.ReadNote(project, get("name"))
 	case "write_project_note":
-		return nil, errors.New("local project note writes are disabled; configure Git knowledge and use knowledge_git_publish")
+		return db.WriteNote(project, get("name"), get("body"), asInt(a["expected_version"]))
 	case "search_project_knowledge":
+		if err := db.RequireLocalKnowledge(project); err != nil { return nil, err }
 		return db.SearchNotes(project, get("query"))
 	case "knowledge_policy":
 		return db.KnowledgePolicy(project)
@@ -447,16 +452,23 @@ func (s *Server) callToolFor(who caller, name string, a map[string]any) (any, er
 	case "knowledge_context":
 		return s.ProjectKnowledgeContext(project)
 	case "knowledge_contribute":
-		return nil, errors.New("local project contributions are read-only; publish a versioned document to the configured Git knowledge remote")
+		return db.ContributeProject(project, ContributionRequest{
+			Kind: get("kind"), Title: get("title"), Body: get("body"),
+			Repository: get("repository"), Revision: get("revision"),
+			ArtifactID: get("artifact_id"),
+		}, who.Principal)
 	case "knowledge_contributions":
+		if err := db.RequireLocalKnowledge(project); err != nil { return nil, err }
 		limit := asInt(a["limit"])
 		if limit == 0 {
 			limit = 50
 		}
 		return db.ProjectContributions(project, get("kind"), limit)
 	case "knowledge_contribution":
+		if err := db.RequireLocalKnowledge(project); err != nil { return nil, err }
 		return db.ProjectContribution(project, get("contribution_id"))
 	case "knowledge_search_contributions":
+		if err := db.RequireLocalKnowledge(project); err != nil { return nil, err }
 		return db.ProjectContributionSearch(project, get("query"))
 	case "list_compute_nodes":
 		return db.Nodes()
@@ -842,6 +854,12 @@ func (s *Server) callToolFor(who caller, name string, a map[string]any) (any, er
 		return db.LinkLibrary(project, get("library_id"))
 	case "library_resolve":
 		return db.ResolveLibrary(project, get("library_id"))
+	case "library_document_publish":
+		return db.PublishLibraryDocument(project, get("library_id"), get("name"), get("body"))
+	case "library_documents":
+		return db.LibraryDocuments(project, get("library_id"))
+	case "library_document_read":
+		return db.ReadLibraryDocument(project, get("library_id"), get("name"))
 	case "library_read_file":
 		if !db.libraryAttached(project, get("library_id")) {
 			return nil, errors.New("library not linked to project")

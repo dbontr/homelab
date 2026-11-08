@@ -10,6 +10,9 @@ import (
 // StoreMCPResearchAttachment accepts bytes supplied by an authenticated MCP
 // client; a chat attachment is inaccessible until the client transmits it.
 func (db *Database) StoreMCPResearchAttachment(library, name, kind, digest, encoded string) (map[string]any, error) {
+	if kind == "document" {
+		return nil, errors.New("text documents must use the library document publication API")
+	}
 	if !shaPattern.MatchString(digest) || len(encoded) > (maxMCPArtifactBytes*4/3)+8 {
 		return nil, errors.New("invalid attachment digest or MCP size")
 	}

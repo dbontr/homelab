@@ -64,6 +64,29 @@ func (s *Server) handleCatalog(w http.ResponseWriter, r *http.Request, p []strin
 			}
 			return true
 		}
+		if len(p) == 6 && p[5] == "documents" {
+			switch r.Method {
+			case http.MethodGet:
+				v, e := s.DB.LibraryDocuments(project, p[4])
+				send(w, v, e)
+			case http.MethodPost:
+				var input struct {
+					Name string `json:"name"`
+					Body string `json:"body"`
+				}
+				if e := bodyJSON(r, &input); e != nil { fail(w, 400, e.Error()); return true }
+				v, e := s.DB.PublishLibraryDocument(project, p[4], input.Name, input.Body)
+				send(w, v, e)
+			default:
+				fail(w, 405, "method not allowed")
+			}
+			return true
+		}
+		if len(p) == 7 && p[5] == "documents" && r.Method == http.MethodGet {
+			v, e := s.DB.ReadLibraryDocument(project, p[4], p[6])
+			send(w, v, e)
+			return true
+		}
 		if len(p) == 6 && p[5] == "resolve" && r.Method == "GET" {
 			v, e := s.DB.ResolveLibrary(project, p[4])
 			send(w, v, e)

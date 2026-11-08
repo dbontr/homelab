@@ -43,7 +43,7 @@ func TestLibraryProjectPublishesAReusableLeanLibrary(t *testing.T) {
 			t.Fatalf("library consumer %s inherited source-repository permissions", project)
 		}
 		policy, err := db.KnowledgePolicy(project)
-		if err != nil || policy["mode"] != "none" {
+		if err != nil || policy["mode"] != "local" {
 			t.Fatalf("library link changed knowledge policy for %s: %v %v", project, policy, err)
 		}
 	}

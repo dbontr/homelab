@@ -35,6 +35,9 @@ func (db *Database) StartLibraryUpload(library, name, kind, sha string, size, ma
 	if e := requireID(library); e != nil {
 		return nil, e
 	}
+	if kind == "document" {
+		return nil, errors.New("text documents must use the library document publication API")
+	}
 	if !validArtifactName.MatchString(name) || !objectKinds[kind] || !shaPattern.MatchString(sha) || size <= 0 || size > maxBytes || maxBytes > 100<<30 {
 		return nil, errors.New("invalid library upload metadata or size")
 	}

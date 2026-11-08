@@ -228,6 +228,11 @@ func (db *Database) WriteNote(project, name, body string, version int) (map[stri
 	if len(exists) == 0 {
 		return nil, errors.New("unknown project")
 	}
+	policy, err := db.queryLocked("SELECT mode FROM project_knowledge_policies WHERE project=?", project)
+	if err != nil { return nil, err }
+	if len(policy) > 0 && asString(policy[0]["mode"]) != "local" {
+		return nil, errors.New("local knowledge is not enabled for this project")
+	}
 	now := float64(time.Now().UnixNano()) / 1e9
 	if err := db.execLocked(`INSERT INTO notes VALUES(?,?,?,?,?) ON CONFLICT(project,name) DO UPDATE SET body=excluded.body,version=excluded.version,updated=excluded.updated`, project, name, body, version+1, now); err != nil {
 		return nil, err

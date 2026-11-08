@@ -134,26 +134,18 @@ func TestMCPHandshakeAndKnowledge(t *testing.T) {
 		return gitObj(result["structuredContent"])
 	}
 	invoke("create_project", map[string]any{"project_id": "demo", "title": "Demo"})
-	code, rejected := call(t, srv, "POST", "/mcp/", testOwner, map[string]any{
-		"jsonrpc": "2.0", "id": 4, "method": "tools/call",
-		"params": map[string]any{"name": "write_project_note", "arguments": map[string]any{
-			"project_id": "demo", "name": "plan", "body": "unconfigured local data", "expected_version": 0,
-		}},
+	saved := invoke("write_project_note", map[string]any{
+		"project_id": "demo", "name": "plan",
+		"body": "Go-native persistent context", "expected_version": 0,
 	})
-	wantOK(t, code, rejected)
-	if !asBool(gitObj(rejected["result"])["isError"]) {
-		t.Fatal("MCP accepted a local knowledge write without Git storage")
-	}
-	if _, err := db.ReadNote("demo", "plan"); err == nil {
-		t.Fatal("rejected knowledge write left persisted state")
-	}
-	// Historical SQLite notes remain readable for explicit migration.
-	if _, err := db.WriteNote("demo", "plan", "Go-native persistent context", 0); err != nil {
-		t.Fatal(err)
-	}
+	if asInt(saved["version"]) != 1 { t.Fatalf("local note revision missing: %v", saved) }
 	got := invoke("read_project_note", map[string]any{"project_id": "demo", "name": "plan"})
 	if got["body"] != "Go-native persistent context" || asInt(got["version"]) != 1 {
 		t.Fatalf("note mismatch: %v", got)
+	}
+	persisted, err := db.ReadNote("demo", "plan")
+	if err != nil || asString(persisted["body"]) != "Go-native persistent context" {
+		t.Fatalf("local note not persisted: %v %v", persisted, err)
 	}
 }
 func TestWorkspaceLeasesAndArtifacts(t *testing.T) {
@@ -255,13 +247,13 @@ func TestProjectAuthorizationAndDatabaseCompatibility(t *testing.T) {
 		t.Fatalf("stale notes allowed: %d %v", c, r)
 	}
 	c, r = call(t, srv, "POST", "/api/projects/demo/notes/legacy", testOwner, map[string]any{"body": "correct revision", "expected_version": 3})
-	if c != http.StatusConflict {
-		t.Fatalf("local knowledge overwrite accepted: %d %v", c, r)
+	if c != http.StatusOK {
+		t.Fatalf("matching local knowledge revision rejected: %d %v", c, r)
 	}
 	c, r = call(t, srv, "GET", "/api/projects/demo/notes/legacy", testOwner, nil)
 	wantOK(t, c, r)
-	if asString(r["body"]) != "existing SQLite note" || asInt(r["version"]) != 3 {
-		t.Fatalf("historic note changed: %v", r)
+	if asString(r["body"]) != "correct revision" || asInt(r["version"]) != 4 {
+		t.Fatalf("local note revision was not committed: %v", r)
 	}
 	c, r = call(t, srv, "GET", "/api/projects/demo/notes/legacy", "wrong-token", nil)
 	if c != 401 {
