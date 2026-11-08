@@ -135,6 +135,44 @@ fn RecipeChoice(record: Recipe, active_id: String, on_select: EventHandler<Strin
     }
 }
 
+#[component]
+fn RevisionChoice(
+    version: Recipe,
+    current_revision: i32,
+    confirmation: Option<i32>,
+    on_prepare: EventHandler<i32>,
+    on_restore: EventHandler<i32>,
+    on_cancel: EventHandler<()>,
+) -> Element {
+    let revision = version.revision;
+    rsx! {
+        div { class: "recipe-version",
+            div { class: "recipe-version-details",
+                strong { "Version {revision}" }
+                span { "{version.title}" }
+                span { class: "small muted", "{version.ingredients.len()} ingredients · {version.steps.len()} steps" }
+            }
+            if revision == current_revision {
+                span { class: "small muted", "Current" }
+            } else {
+                button { class: "btn btn-outline btn-sm", disabled: confirmation.is_some(),
+                    onclick: move |_| on_prepare.call(revision), "Restore" }
+            }
+        }
+        if confirmation == Some(revision) {
+            div { class: "recipe-restore-confirm", role: "group", aria_label: "Confirm recipe restoration",
+                p { "Restore version {revision} as the next revision? The current version remains in history." }
+                div { class: "inline-row",
+                    button { class: "btn btn-primary btn-sm", onclick: move |_| on_restore.call(revision),
+                        "Confirm restore" }
+                    button { class: "btn btn-outline btn-sm", onclick: move |_| on_cancel.call(()),
+                        "Cancel" }
+                }
+            }
+        }
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Tab {
     Library,
