@@ -257,9 +257,26 @@ func(s *Server)mcp(w http.ResponseWriter,r *http.Request){
  }
  switch req.Method{
  case "initialize":
-  s.rpc(w,req.ID,map[string]any{"protocolVersion":"2025-06-18","capabilities":map[string]any{"tools":map[string]any{"listChanged":false}},"serverInfo":map[string]string{"name":"homelab","version":"0.1.0"}},nil)
+  caps:=map[string]any{"tools":map[string]any{"listChanged":false}}
+  if s.privilegeClient!=nil&&s.securityLoginURL!="" {caps["resources"]=map[string]any{"listChanged":false}}
+  s.rpc(w,req.ID,map[string]any{"protocolVersion":"2025-06-18","capabilities":caps,"serverInfo":map[string]string{"name":"homelab","version":"0.1.0"}},nil)
  case "ping":s.rpc(w,req.ID,map[string]any{},nil)
  case "tools/list":s.rpc(w,req.ID,map[string]any{"tools":s.toolList(r)},nil)
+ case "resources/list":
+  if s.privilegeClient==nil||s.securityLoginURL==""{s.rpc(w,req.ID,map[string]any{"resources":[]any{}},nil);return}
+  s.rpc(w,req.ID,map[string]any{"resources":[]any{map[string]any{"uri":"ui://homelab/security-login.html","name":"Homelab owner authentication","mimeType":"text/html;profile=mcp-app"}}},nil)
+ case "resources/read":
+  var p struct{URI string `json:"uri"`}
+  if err:=json.Unmarshal(req.Params,&p);err!=nil||s.privilegeClient==nil||s.securityLoginURL==""||p.URI!="ui://homelab/security-login.html"{
+   s.rpc(w,req.ID,nil,failure(-32602,"unknown UI resource"));return
+  }
+  s.rpc(w,req.ID,map[string]any{"contents":[]any{map[string]any{
+   "uri":p.URI,"mimeType":"text/html;profile=mcp-app","text":s.securityLoginWidget(),
+   "_meta":map[string]any{
+    "ui":map[string]any{"csp":map[string]any{"connectDomains":[]string{},"resourceDomains":[]string{}}},
+    "openai/widgetCSP":map[string]any{"redirect_domains":[]string{s.securityLoginURL}},
+   },
+  }}},nil)
  case "tools/call":
   var p struct {Name string `json:"name"`; Arguments json.RawMessage `json:"arguments"`}
   if e:=json.Unmarshal(req.Params,&p);e!=nil||p.Name==""{s.rpc(w,req.ID,nil,failure(-32602,"tool name required"));return}
@@ -345,6 +362,16 @@ func(s *Server)localTools()[]map[string]any{
 }
 func(s *Server)toolList(r *http.Request)[]map[string]any{
  out:=s.localTools()
+ if s.privilegeClient!=nil&&s.securityLoginURL!="" {
+  for _,item:=range out {
+   if item["name"]=="security_session_open" {
+    item["_meta"]=map[string]any{
+     "ui":map[string]any{"resourceUri":"ui://homelab/security-login.html"},
+     "openai/outputTemplate":"ui://homelab/security-login.html",
+    }
+   }
+  }
+ }
  for _,b:=range s.backend{
   var remote any
   ctx,cancel:=context.WithTimeout(r.Context(),4*time.Second)
