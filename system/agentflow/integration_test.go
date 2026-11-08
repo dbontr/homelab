@@ -32,8 +32,8 @@ func TestModelAuthorAcceptsOnlyApprovedFiles(t *testing.T){
 }
 func TestModelAuthorRejectsRemotePlainHTTPAndRedirects(t *testing.T){
  if _,err:=NewModelAuthor("http://example.net/v1/chat/completions","model","");err==nil{t.Fatal("remote HTTP model accepted")}
- remote:=httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter,_ *http.Request){
-  http.Redirect(w,&http.Request{}, "http://example.org/",http.StatusFound)
+ remote:=httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){
+  http.Redirect(w,r, "http://example.org/",http.StatusFound)
  }))
  defer remote.Close()
  author,err:=NewModelAuthor(remote.URL+"/v1/chat/completions","model","");if err!=nil{t.Fatal(err)}
