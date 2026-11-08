@@ -361,6 +361,7 @@ func(s *Server)localTools()[]map[string]any{
   tool("monitoring_summary","Inspect measured CPU, memory, disk, GPU and collector telemetry without inventing missing readings",map[string]any{}),
   tool("monitoring_targets","Inspect Prometheus collector availability and last scrape reports",map[string]any{}),
   tool("monitoring_alerts","List Prometheus firing and pending alert rules",map[string]any{}),
+  tool("monitoring_security","Summarize security authentication and revocation signals from collected journal events",map[string]any{}),
   tool("monitoring_series","Inspect a selected fixed monitoring metric and bounded time range",map[string]any{"metric":prop("string"),"range":prop("string")},"metric"),
   tool("monitoring_logs","Read a bounded Loki system journal with literal search text",map[string]any{"range":prop("string"),"search":prop("string"),"limit":prop("integer")}))}
 
