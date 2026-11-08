@@ -58,9 +58,14 @@ in {
           preStart = ''
             ${pkgs.coreutils}/bin/install -d -m 0755 /srv/homelab/stacks/monitoring
             ${pkgs.coreutils}/bin/install -m 0644 /etc/nixos/homelab/stacks/monitoring/compose.yaml /srv/homelab/stacks/monitoring/compose.yaml
+            ${pkgs.coreutils}/bin/install -d -m 0755 /srv/homelab/stacks/monitoring/config
+            ${pkgs.coreutils}/bin/install -m 0644 /etc/nixos/homelab/stacks/monitoring/config/prometheus.yml /srv/homelab/stacks/monitoring/config/prometheus.yml
+            ${pkgs.coreutils}/bin/install -m 0644 /etc/nixos/homelab/stacks/monitoring/config/cluster-alerts.yml /srv/homelab/stacks/monitoring/config/cluster-alerts.yml
           '';
           serviceConfig.ExecStart =
             "${compose} --profile logs --profile storage-health -f compose.yaml up -d --pull never";
+          serviceConfig.ExecReload =
+            "${compose} --profile logs --profile storage-health -f compose.yaml kill -s HUP prometheus";
         });
 
     systemd.services.saturn-media = lib.mkIf cfg.media.enable
