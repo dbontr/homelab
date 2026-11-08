@@ -71,7 +71,7 @@ func TestRecipeSagePreviewAndSelectiveImport(t *testing.T) {
 	first := preview.Candidates[0]
 	if first.Recipe.PrepMinutes != 15 || first.Recipe.CookMinutes != 25 ||
 		first.Recipe.Servings != 2 || first.Recipe.SourceURL != "https://example.org/recipes/rice" ||
-		len(first.Recipe.Tags) != 2 || len(first.Recipe.Nutrition.PerServing) != 3 ||
+		len(first.Recipe.Tags) != 2 || len(first.Recipe.Nutrition.PerServing) != 4 ||
 		!strings.Contains(first.Recipe.Notes, "Keep the heat low") ||
 		!strings.Contains(first.Recipe.Notes, "Original cook") ||
 		!strings.Contains(first.Recipe.Notes, "Vitamin D") {
