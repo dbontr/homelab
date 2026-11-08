@@ -19,6 +19,7 @@ type FleetStageTarget struct {
 }
 
 type FleetStagePlan struct {
+ ID string `json:"id,omitempty"`
  Revision string `json:"revision"`
  Targets []FleetTarget `json:"targets"`
  Manifests []Manifest `json:"manifests"`
