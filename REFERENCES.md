@@ -22,3 +22,4 @@
 - [RFC 9110: HTTP Semantics, If-Match](https://www.rfc-editor.org/rfc/rfc9110#section-13.1.1) — IETF. Used for: revision-qualified deletion of first-party recipe records.
 - [SQLite Write-Ahead Logging](https://www.sqlite.org/wal.html) — SQLite project. Used for: durable controller-local project knowledge and metadata with concurrent reads.
 - [Schema.org Recipe](https://schema.org/Recipe) — Schema.org. Used for: parsing user-provided structured recipe JSON-LD without automatically saving inferred ingredients.
+- [OWASP Server-Side Request Forgery Prevention Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html) — OWASP. Used for: public-network destination checks, restricted redirects and proxies, DNS pinning and bounded server-side recipe imports.
