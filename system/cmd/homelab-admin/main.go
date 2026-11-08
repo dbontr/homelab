@@ -77,6 +77,11 @@ func enroll(args []string) error {
 	if *owner == "" || *passwordPath == "" || *totpPath == "" || *passwordPath == *totpPath {
 		return errors.New("owner and distinct protected credential paths are required")
 	}
+	tty, err := os.OpenFile("/dev/tty", os.O_WRONLY, 0)
+	if err != nil {
+		return errors.New("enrollment requires a trusted interactive terminal")
+	}
+	defer tty.Close()
 	first, err := secretPrompt("Homelab administrative password:")
 	if err != nil {
 		return err
@@ -109,11 +114,6 @@ func enroll(args []string) error {
 		return err
 	}
 	// Display the enrollment secret only on the physically trusted terminal.
-	tty, err := os.OpenFile("/dev/tty", os.O_WRONLY, 0)
-	if err != nil {
-		return errors.New("enrollment created; inspect the TOTP credential securely on the host terminal")
-	}
-	defer tty.Close()
 	enrollment := url.URL{Scheme: "otpauth", Host: "totp", Path: "Homelab:" + *owner}
 	query := url.Values{"secret": {secret}, "issuer": {"Homelab"}, "digits": {"6"}, "period": {"30"}}
 	enrollment.RawQuery = query.Encode()
