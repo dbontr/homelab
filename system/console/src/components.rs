@@ -8,6 +8,7 @@ pub fn Icon(name: String) -> Element {
         "compute" => "M6 6h12v12H6z M9 9h6v6H9z M9 2v4 M15 2v4 M9 18v4 M15 18v4 M2 9h4 M2 15h4 M18 9h4 M18 15h4",
         "software" => "M12 2 3 7l9 5 9-5-9-5z M3 12l9 5 9-5 M3 17l9 5 9-5",
         "tasks" => "M4 4h16v16H4z M8 12l3 3 5-6",
+        "calendar" => "M3 6h18v15H3z M7 3v6 M17 3v6 M3 11h18 M8 15h3 M13 15h3",
         "learning" => "M3 19V5a2 2 0 0 1 2-2h14v18H5a2 2 0 0 1 0-4h14 M7 7h8",
         "health" => "M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8z",
         "media" => "M3 3h18v18H3z M7 3v18 M17 3v18 M3 8h4 M17 8h4 M3 16h4 M17 16h4",
