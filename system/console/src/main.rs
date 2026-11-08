@@ -5,6 +5,7 @@ mod tasks;
 mod personal;
 mod views;
 mod monitoring;
+mod calendar;
 
 use dioxus::prelude::*;
 use components::Icon;
@@ -18,6 +19,7 @@ enum Page {
     Compute,
     Software,
     Monitoring,
+    Calendar,
     Tasks,
     Learning,
     Health,
@@ -34,6 +36,7 @@ impl Page {
             Self::Compute => "Compute",
             Self::Software => "Software library",
             Self::Monitoring => "Monitoring",
+            Self::Calendar => "Calendar",
             Self::Tasks => "Tasks",
             Self::Learning => "Learning",
             Self::Health => "Health",
@@ -52,6 +55,7 @@ const WORKSPACE: &[(Page, &str, &str)] = &[
 ];
 const PERSONAL: &[(Page, &str, &str)] = &[
     (Page::Tasks, "Tasks", "tasks"),
+    (Page::Calendar, "Calendar", "calendar"),
     (Page::Learning, "Learning", "learning"),
     (Page::Health, "Health", "health"),
     (Page::Recipes, "Recipes", "recipes"),
@@ -265,6 +269,7 @@ fn App() -> Element {
                                 Page::Compute => rsx! { views::Compute {} },
                                 Page::Software => rsx! { views::Software {} },
                                 Page::Monitoring => rsx! { monitoring::Monitoring {} },
+                                Page::Calendar => rsx! { calendar::Calendar {} },
                                 Page::Tasks => rsx! { tasks::Tasks { csrf: csrf.clone() } },
                                 Page::Learning => rsx! { personal::Learning { csrf: csrf.clone() } },
                                 Page::Health => rsx! { personal::Health { csrf: csrf.clone() } },
