@@ -46,11 +46,26 @@ func remoteIdentity()(tls.Certificate,*x509.CertPool,error){
  return cert,roots,nil
 }
 
+func authorizationClient()(privileged.Authorizer,error){
+ if endpoint:=os.Getenv("HOMELAB_EXECUTOR_AUTH_ENDPOINT");endpoint!=""{
+  cert,err:=tls.LoadX509KeyPair(required("HOMELAB_EXECUTOR_AUTH_CERT"),required("HOMELAB_EXECUTOR_AUTH_KEY"))
+  if err!=nil{return nil,errors.New("cannot load executor authorization identity")}
+  rootsData,err:=os.ReadFile(required("HOMELAB_EXECUTOR_AUTH_CA"))
+  if err!=nil{return nil,errors.New("cannot load authorization trust roots")}
+  roots:=x509.NewCertPool()
+  if !roots.AppendCertsFromPEM(rootsData){return nil,errors.New("invalid authorization trust roots")}
+  return security.NewRemoteAuthorizationClient(security.RemoteAuthorizationConfig{
+   Endpoint:endpoint,ServerName:required("HOMELAB_EXECUTOR_AUTH_SERVER_NAME"),
+   TrustRoots:roots,Certificate:cert,
+  })
+ }
+ return security.NewAdminClient(required("HOMELAB_EXECUTOR_SECURITY_SOCKET"))
+}
+
 func main(){
  log.SetFlags(log.LstdFlags|log.LUTC)
  host:=required("HOMELAB_EXECUTOR_HOST")
- socket:=required("HOMELAB_EXECUTOR_SECURITY_SOCKET")
- client,err:=security.NewAdminClient(socket)
+ client,err:=authorizationClient()
  if err!=nil{log.Fatal(err)}
  policyFile:=required("HOMELAB_EXECUTOR_SERVICES_FILE")
  data,err:=os.ReadFile(policyFile);if err!=nil{log.Fatal(err)}
