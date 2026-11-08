@@ -99,7 +99,10 @@ pub fn Learning() -> Element {
 }
 
 #[component]
-pub fn Health() -> Element{
+pub fn Health(csrf: String) -> Element{
+    let mut proposals=use_resource(||async{api::get::<Value>("/v1/health/food-proposals").await});
+    let mut health_busy=use_signal(||false);
+    let mut health_error=use_signal(String::new);
     let mut plans=use_resource(||async{api::get::<Value>("/v1/health/plans").await});
     let mut records=use_resource(||async{api::get::<Value>("/v1/health/records").await});
     let mut goals=use_resource(||async{api::get::<Value>("/v1/health/goals").await});
@@ -108,8 +111,69 @@ pub fn Health() -> Element{
             title:"Health".to_owned(),
             description:"Training plans, recorded observations, and nutrient goals.".to_owned(),
             button{class:"btn btn-outline",onclick:move |_|{
-                plans.restart();records.restart();goals.restart();
+                plans.restart();records.restart();goals.restart();proposals.restart();
             },"Refresh"}
+        }
+        if !health_error().is_empty(){Notice{message:health_error()}}
+        Card{
+            title:"Food proposals".to_owned(),
+            description:"Confirm identification, portions, and nutrient evidence before adding the meal to Health.".to_owned(),
+            match proposals.cloned(){
+                None=>rsx!{Loading{}},
+                Some(Err(e))=>rsx!{Notice{message:e}},
+                Some(Ok(value))=>{
+                    let items=api::list(&value,&["proposals","items"]);
+                    rsx!{
+                        if items.is_empty(){Empty{
+                            title:"No food proposals".to_owned(),
+                            description:"A recipe proposal or other unconfirmed food will appear here.".to_owned()
+                        }}
+                        else{
+                            div{class:"task-items",
+                                for item in items{
+                                    div{class:"task-item",
+                                        div{class:"task-information",
+                                            span{class:"task-title",{api::property(&item,&["food"])}}
+                                            span{class:"small muted",{api::property(&item,&["portion"])}}
+                                            span{class:"small muted",{api::property(&item,&["notes"])}}
+                                            span{class:"small muted",
+                                                "Nutrient amounts: {api::property(&item,&["nutrients"])}"
+                                            }
+                                        }
+                                        if api::property(&item,&["status"])=="pending"{
+                                            button{
+                                                class:"btn btn-outline btn-sm",disabled:health_busy(),
+                                                onclick:{
+                                                    let id=api::property(&item,&["id"]);
+                                                    let token=csrf();
+                                                    move |_|{
+                                                        let id=id.clone();
+                                                        let token=token.clone();
+                                                        health_busy.set(true);
+                                                        health_error.set(String::new());
+                                                        spawn(async move{
+                                                            match api::write::<Value,_>(
+                                                                reqwest::Method::POST,
+                                                                &format!("/v1/health/food-proposals/{id}/confirm"),
+                                                                &token,&serde_json::json!({"confirm":true})
+                                                            ).await{
+                                                                Ok(_) => {proposals.restart();records.restart();},
+                                                                Err(e) => health_error.set(e),
+                                                            }
+                                                            health_busy.set(false);
+                                                        });
+                                                    }
+                                                },
+                                                "Confirm meal"
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
         Card{
             title:"Health goals".to_owned(),

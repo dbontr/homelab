@@ -256,7 +256,7 @@ fn App() -> Element {
                                 Page::Software => rsx! { views::Software {} },
                                 Page::Tasks => rsx! { tasks::Tasks { csrf: csrf.clone() } },
                                 Page::Learning => rsx! { personal::Learning {} },
-                                Page::Health => rsx! { personal::Health {} },
+                                Page::Health => rsx! { personal::Health { csrf: csrf.clone() } },
                                 Page::Recipes => rsx! { recipes::Recipes { csrf: csrf.clone() } },
                                 Page::Media => rsx! { views::Media {} },
                                 Page::Administration => rsx! { views::Administration {} },

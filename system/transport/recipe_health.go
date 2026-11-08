@@ -19,7 +19,9 @@ func (s *Server) uiRecipeNutritionProposal(w http.ResponseWriter,r *http.Request
   ObservedAt string `json:"observed_at"`
  }
  if err:=decode(r,&req);err!=nil{writeError(w,400,err.Error());return}
- instant,err:=time.Parse(time.RFC3339,req.ObservedAt)
+ instant:=time.Now().UTC()
+ var err error
+ if req.ObservedAt!=""{instant,err=time.Parse(time.RFC3339,req.ObservedAt)}
  if err!=nil||instant.After(time.Now().Add(24*time.Hour)){
   writeError(w,400,"a valid meal time is required");return
  }

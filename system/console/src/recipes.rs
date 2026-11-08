@@ -583,6 +583,33 @@ pub fn Recipes(csrf: String) -> Element {
                                                     }
                                                 }
                                             }
+                                            button {
+                                                class: "btn btn-outline",
+                                                disabled: busy(),
+                                                onclick: move |_| {
+                                                    let Some(record) = current_record(
+                                                        &recipes.cloned().and_then(Result::ok).unwrap_or_default(),
+                                                        selected(), &search().trim().to_lowercase()
+                                                    ) else { return };
+                                                    let token=csrf();
+                                                    let value=portion();
+                                                    let path=format!("/v1/recipes/{}/nutrition-proposal",record.id);
+                                                    busy.set(true);error.set(String::new());
+                                                    spawn(async move {
+                                                        match api::write::<serde_json::Value,_>(
+                                                            Method::POST,&path,&token,
+                                                            &serde_json::json!({"servings":value})
+                                                        ).await {
+                                                            Ok(_) => notice.set(
+                                                                "Food proposal sent to Health; confirm it before nutrient logging".to_owned()
+                                                            ),
+                                                            Err(e) => error.set(e),
+                                                        }
+                                                        busy.set(false);
+                                                    });
+                                                },
+                                                "Propose as a meal consumed now"
+                                            }
                                         }
                                     }
                                     div { class: "divider" }
