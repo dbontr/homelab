@@ -129,6 +129,25 @@ pub fn Overview() -> Element {
 pub fn Projects() -> Element {
     let mut data = use_resource(|| async { api::get::<Value>("/v1/workspace/projects").await });
     let mut filter = use_signal(String::new);
+    let mut selected = use_signal(||None::<String>);
+    let mut jobs = use_resource(||{
+        let project=selected();
+        async move{
+            match project{
+                Some(id)=>api::get::<Value>(&format!("/v1/workspace/projects/{id}/jobs")).await,
+                None=>Ok(Value::Null),
+            }
+        }
+    });
+    let mut workspaces = use_resource(||{
+        let project=selected();
+        async move{
+            match project{
+                Some(id)=>api::get::<Value>(&format!("/v1/workspace/projects/{id}/workspaces")).await,
+                None=>Ok(Value::Null),
+            }
+        }
+    });
     let rows = data.cloned().and_then(Result::ok)
         .map(|value| api::list(&value, &["projects", "items", "results"]))
         .unwrap_or_default();
@@ -143,38 +162,121 @@ pub fn Projects() -> Element {
     rsx! {
         Heading {
             title: "Projects".to_owned(),
-            description: "Research, engineering, and other project workspaces.".to_owned(),
-            button { class: "btn btn-outline", onclick: move |_| data.restart(),
+            description: "Research, engineering and isolated development workspaces.".to_owned(),
+            button { class: "btn btn-outline", onclick: move |_| {
+                data.restart();jobs.restart();workspaces.restart();
+            },
                 Icon { name: "refresh".to_owned() } "Refresh"
             }
         }
         div { class: "inline-row", style: "margin-bottom: 1rem; max-width: 20rem;",
             input {
                 class: "field",
-                type: "search",
+                r#type: "search",
                 placeholder: "Filter projects...",
                 aria_label: "Filter projects",
                 value: "{filter}",
                 oninput: move |event| filter.set(event.value()),
             }
         }
-        Card { title: "Project directory".to_owned(), description: "Read directly from Workspace.".to_owned(),
+        Card { title: "Project directory".to_owned(),
+            description: "Projects may link multiple Git repositories and private research libraries.".to_owned(),
             if let Some(Err(error)) = data.cloned() {
                 Notice { message: error }
             } else if data.cloned().is_none() {
                 Loading {}
             } else if filtered.is_empty() {
-                Empty { title: "No projects match".to_owned(), description: "No project records match your filter, or none have been returned.".to_owned() }
+                Empty { title: "No projects match".to_owned(),
+                    description: "No project records match your filter, or none have been returned.".to_owned() }
             } else {
                 div { class: "table-clip",
                     table { class: "table",
-                        thead { tr { th { "Project" } th { "Identifier" } th { "Description" } } }
+                        thead { tr { th { "Project" } th { "Identifier" } th { "Description" } th { "Inspect" } } }
                         tbody {
                             for (index, project) in filtered.iter().enumerate() {
                                 tr { key: "{index}",
                                     td { {api::property(project, &["name", "title", "id"])} }
                                     td { class: "mono muted", {api::property(project, &["id", "project_id"])} }
                                     td { class: "muted", {api::property(project, &["description", "summary"])} }
+                                    td {
+                                        button { class: "btn btn-outline btn-sm",
+                                            onclick: {
+                                                let id=api::property(project,&["id","project_id"]);
+                                                move |_|selected.set(Some(id.clone()))
+                                            },
+                                            "Inspect"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if let Some(id) = selected() {
+            Card {
+                title: "Execution jobs".to_owned(),
+                description:format!("Project {id}; observed jobs only. Agent execution is not controlled here."),
+                match jobs.cloned(){
+                    None=>rsx!{Loading{}},
+                    Some(Err(e))=>rsx!{Notice{message:e}},
+                    Some(Ok(value))=>{
+                        let items=api::list(&value,&["jobs","items","results"]);
+                        rsx!{
+                            if items.is_empty(){Empty{
+                                title:"No jobs reported".to_owned(),
+                                description:"Only jobs returned by Workspace appear here.".to_owned()
+                            }}
+                            else{
+                                div{class:"table-clip",
+                                    table{class:"table",
+                                        thead{tr{th{"Job"}th{"Status"}th{"Worker"}th{"Created"}}}
+                                        tbody{
+                                            for item in items{
+                                                tr{
+                                                    td{class:"mono muted",{api::property(&item,&["id","job_id"])}}
+                                                    td{Badge{text:api::property(&item,&["status"])}}
+                                                    td{class:"muted",{api::property(&item,&["node","worker","node_id"])}}
+                                                    td{class:"muted",{api::property(&item,&["created","created_at"])}}
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Card {
+                title: "Isolated workspaces".to_owned(),
+                description:"Workspace state comes from the distributed controller; this view never invokes a command.".to_owned(),
+                match workspaces.cloned(){
+                    None=>rsx!{Loading{}},
+                    Some(Err(e))=>rsx!{Notice{message:e}},
+                    Some(Ok(value))=>{
+                        let items=api::list(&value,&["workspaces","items","results"]);
+                        rsx!{
+                            if items.is_empty(){Empty{
+                                title:"No workspaces reported".to_owned(),
+                                description:"Start and manage compute workspaces through the approved Workspace MCP.".to_owned()
+                            }}
+                            else{
+                                div{class:"table-clip",
+                                    table{class:"table",
+                                        thead{tr{th{"Workspace"}th{"Status"}th{"Node"}th{"Image"}}}
+                                        tbody{
+                                            for item in items{
+                                                tr{
+                                                    td{class:"mono muted",{api::property(&item,&["id","workspace_id"])}}
+                                                    td{Badge{text:api::property(&item,&["status"])}}
+                                                    td{class:"muted",{api::property(&item,&["node","node_id"])}}
+                                                    td{class:"muted",{api::property(&item,&["image"])}}
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
