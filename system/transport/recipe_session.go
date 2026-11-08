@@ -14,12 +14,14 @@ func (s *Server) sessionOwnerWriteAllowed(r *http.Request) bool {
 	path := r.URL.Path
 	allowed := false
 	switch {
-	case r.Method == http.MethodPost && (path == "/v1/recipes" || path == "/v1/recipes/import" || path == "/v1/recipes/parse" || path == "/v1/recipes/import-url" || path == "/v1/recipes/recipesage/preview" || path == "/v1/recipes/recipesage/import" || path == "/v1/recipes/images" || path == "/v1/meals" || path == "/v1/tasks" || path == "/v1/tasks/capture" || path == "/v1/goals"):
+	case r.Method == http.MethodPost && (path == "/v1/recipes" || path == "/v1/recipes/import" || path == "/v1/recipes/parse" || path == "/v1/recipes/import-url" || path == "/v1/recipes/recipesage/preview" || path == "/v1/recipes/recipesage/import" || path == "/v1/recipes/images" || path == "/v1/meals" || path == "/v1/books/requests" || path == "/v1/tasks" || path == "/v1/tasks/capture" || path == "/v1/goals"):
         allowed = true
     case r.Method == http.MethodPost && path == "/v1/learning/sessions":
         allowed = true
     case r.Method == http.MethodPost && strings.HasPrefix(path, "/v1/learning/questions/"):
         allowed = len(strings.Split(path, "/"))==6 && strings.HasSuffix(path, "/answer")
+    case r.Method == http.MethodPut && strings.HasPrefix(path, "/v1/books/requests/"):
+        allowed = len(strings.Split(path, "/")) == 5
     case r.Method == http.MethodPost && path == "/v1/health/training-sets":
         allowed = true
     case r.Method == http.MethodPost && path == "/v1/health/records":
