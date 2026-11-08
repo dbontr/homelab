@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/dbontr/Adaptive-Teaching-MCP/internal/polynomial"
-	"github.com/dbontr/Adaptive-Teaching-MCP/internal/verification"
+	"github.com/dbontr/homelab-new/system/learning/internal/polynomial"
+	"github.com/dbontr/homelab-new/system/learning/internal/verification"
 )
 
 func writeFixture(t *testing.T, path string, v any) {

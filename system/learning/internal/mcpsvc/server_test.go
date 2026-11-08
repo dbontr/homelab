@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dbontr/Adaptive-Teaching-MCP/internal/store"
+	"github.com/dbontr/homelab-new/system/learning/internal/store"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
