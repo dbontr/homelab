@@ -34,6 +34,16 @@ sudo homelab-admin close
 
 `pending` returns redacted argument previews and full SHA-256 digests. The owner must inspect the action and target before confirmation. The initial TOTP counter cannot be reused for a destructive step-up; wait for the authenticator's next 30-second code. All owner requests use the owner-only Unix socket. No browser or public ingress route is configured by the security daemon.
 
+## ChatGPT-initiated browser authentication
+
+The platform MCP tool `security_session_open` returns the configured HTTPS sign-in URL and current non-secret session status. ChatGPT can present that URL as a link or an external-open action. The user enters the owner password and six-digit TOTP on the separate trusted page. Neither the credential form nor a reusable administrator token is part of an MCP tool argument or result. Once authenticated, the user can return to ChatGPT and retry an allowed operation. The MCP also exposes session status and immediate closure.
+
+The optional `services.homelabSecurity.browser.enable` NixOS setting publishes the credential portal through a localhost-only Nginx listener and a separate Unix socket accessible to the Nginx group. The default hostname is `auth.dbontr.me`. **Before enabling it**, create a dedicated Cloudflare Access application for that exact hostname, with an owner-only identity policy, and set `services.homelabSecurity.browser.audience` to that application's verified audience. The tunnel validates the signed Access assertion before proxying, and the NixOS module requires an audience to be configured. Configure `services.homelabPlatform.securityLoginURL = "https://auth.dbontr.me"` only when the portal is reachable and access denial has been tested.
+
+The credential-entry page is a top-level browser destination opened from ChatGPT, rather than an ordinary ChatGPT form. It rejects foreign Host and Origin headers, requires short-lived single-use CSRF values, disables framing and caching, uses no third-party JavaScript, and displays the exact destructive-operation digest before confirmation. A separate Unix socket and operating-system group prevent the MCP gateway from reaching the owner form directly. The browser proxy can reach only the restricted portal endpoint; it cannot access the owner CLI socket or ordinary executor credentials.
+
+Do not let the credential portal share a Cloudflare Access application with the MCP gateway, accept broad email-domain rules, or bypass authentication for preflight/health routes. The application is disabled by default. Never enable the public hostname until the Access identity policy and origin JWT validation are verified using both authorized and unauthorized sessions.
+
 ## Enforcement boundary
 
 The gateway can query authorization and request revocation but cannot authenticate the owner, approve a destructive operation, issue a session credential, change the configured policy, or extend the absolute lifetime. Socket access relies on operating-system user and group isolation. The daemon validates the configured operation and target for every request, canonicalizes arguments with duplicate-key rejection, and fails closed if the service is unreachable.
