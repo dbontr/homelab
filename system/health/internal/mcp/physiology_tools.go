@@ -9,7 +9,7 @@ import(
  "sort"
  "time"
 
- "github.com/dbontr/personal-health-mcp/internal/health"
+ "github.com/dbontr/homelab-new/system/health/internal/health"
 )
 
 func midpointStats(points []float64)(float64,float64) {

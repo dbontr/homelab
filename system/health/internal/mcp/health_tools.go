@@ -9,7 +9,7 @@ import (
  "strings"
  "time"
 
- "github.com/dbontr/personal-health-mcp/internal/health"
+ "github.com/dbontr/homelab-new/system/health/internal/health"
 )
 
 func decodeFields(a map[string]json.RawMessage,v any) error {
