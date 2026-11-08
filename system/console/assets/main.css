@@ -461,3 +461,23 @@ main.content { max-width: 94rem; margin: 0 auto; padding: 2rem; }
   .book-search-controls { align-items: stretch; }
   .book-search-controls .form-row { flex-basis: 100%; }
 }
+
+
+/* Canonical resource and activity inspection */
+.activity-layout { display: grid; grid-template-columns: minmax(0,1.4fr) minmax(18rem, .85fr); gap: 1rem; align-items: start; }
+.activity-items { display: grid; gap: .375rem; max-height: 50rem; overflow-y: auto; }
+.activity-item {
+  text-align: left; display: grid; gap: .3rem; width: 100%;
+  border: 1px solid var(--border); border-radius: calc(var(--radius) * .8);
+  padding: .75rem; background: var(--card); color: var(--foreground);
+}
+.activity-item:hover, .activity-item:focus-visible { background: var(--accent); }
+.activity-item strong { font-weight: 600; overflow-wrap: anywhere; }
+.activity-item-top { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+.activity-resource { display: grid; gap: .625rem; min-width: 0; }
+.activity-resource > .badge { justify-self: start; }
+.activity-resource strong { overflow-wrap: anywhere; }
+.activity-resource .mono { overflow-wrap: anywhere; }
+.activity-link { display: grid; gap: .15rem; padding: .5rem 0; border-bottom: 1px solid var(--border); }
+.activity-link:last-child { border-bottom: 0; }
+@media (max-width: 900px) { .activity-layout { grid-template-columns: 1fr; } }
