@@ -1,10 +1,6 @@
 package transport
 
-import (
-	"net/http"
-
-	"github.com/dbontr/homelab-new/system/recipes"
-)
+import "net/http"
 
 func (s *Server) recipeHistory(w http.ResponseWriter, r *http.Request) {
 	if s.recipes == nil {
@@ -40,5 +36,3 @@ func (s *Server) recipeRestore(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, version)
 }
 
-// Assert the response contract is based on the first-party recipe model.
-var _ = recipes.Recipe{}
