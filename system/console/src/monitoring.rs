@@ -119,7 +119,7 @@ fn line_path(points: &[Point]) -> String {
         let x = 8.0 + (i as f64 / denom) * 684.0;
         let y = 141.0 - (point.value - min) / range * 122.0;
         format!("{}{x:.1},{y:.1}", if i == 0 {"M"} else {" L"})
-    }).collect()
+    }).collect::<Vec<_>>().join("")
 }
 
 #[component]
@@ -175,7 +175,7 @@ fn HistoryChart(measurement: Measurement) -> Element {
                                     class: "monitoring-sparkline",
                                     role: "img",
                                     aria_label: "Recorded history for {series_name(series)}",
-                                    view_box: "0 0 700 160",
+                                    viewBox: "0 0 700 160",
                                     preserve_aspect_ratio: "none",
                                     line { x1: "8", y1: "141", x2: "692", y2: "141", stroke: "currentColor", stroke_opacity: "0.15" }
                                     path { d: "{line_path(&series.points)}", fill: "none", stroke: "currentColor",
