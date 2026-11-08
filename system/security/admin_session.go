@@ -435,7 +435,19 @@ func (a *AdminSessions) Authorize(client,operation,target string,args json.RawMe
 }
 
 // AuthorizeFor checks the identity bound to the active session on each call.
+// AuthorizeFor rechecks the owner session and consumes a matching confirmed
+// challenge at the actual executor operation boundary.
 func (a *AdminSessions) AuthorizeFor(principal,client,operation,target string,args json.RawMessage) Authorization {
+ return a.evaluateFor(principal,client,operation,target,args,true)
+}
+
+// PreviewFor checks the same policy and records pending confirmations without
+// consuming an approved challenge or refreshing session activity.
+func (a *AdminSessions) PreviewFor(principal,client,operation,target string,args json.RawMessage) Authorization {
+ return a.evaluateFor(principal,client,operation,target,args,false)
+}
+
+func (a *AdminSessions) evaluateFor(principal,client,operation,target string,args json.RawMessage,consume bool) Authorization {
  a.mu.Lock()
  defer a.mu.Unlock()
  now:=a.now().UTC()
@@ -466,15 +478,15 @@ func (a *AdminSessions) AuthorizeFor(principal,client,operation,target string,ar
 	sum := sha256.Sum256(canonical)
 	digest := hex.EncodeToString(sum[:])
 	if !rule.Destructive {
-		a.session.lastActivity = now
+		if consume { a.session.lastActivity = now }
 		return Authorization{Allowed: true}
 	}
 	a.pruneConfirmations(now)
 	for id, item := range a.pending {
 		if item.sessionID == a.session.id && item.Operation == operation && item.Target == target && item.ArgumentsSHA256 == digest {
 			if item.Confirmed {
-				delete(a.pending, id)
-				a.session.lastActivity = now
+				if consume { delete(a.pending, id) }
+				if consume { a.session.lastActivity = now }
 				return Authorization{Allowed: true}
 			}
 			return Authorization{Reason: "confirmation required", ConfirmationID: id, ConfirmationExpiresAt: item.ExpiresAt}
