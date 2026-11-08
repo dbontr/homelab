@@ -14,7 +14,7 @@ func (s *Server) sessionOwnerWriteAllowed(r *http.Request) bool {
 	path := r.URL.Path
 	allowed := false
 	switch {
-	case r.Method == http.MethodPost && (path == "/v1/recipes" || path == "/v1/recipes/import" || path == "/v1/recipes/parse" || path == "/v1/recipes/import-url" || path == "/v1/meals" || path == "/v1/tasks" || path == "/v1/tasks/capture" || path == "/v1/goals"):
+	case r.Method == http.MethodPost && (path == "/v1/recipes" || path == "/v1/recipes/import" || path == "/v1/recipes/parse" || path == "/v1/recipes/import-url" || path == "/v1/recipes/images" || path == "/v1/meals" || path == "/v1/tasks" || path == "/v1/tasks/capture" || path == "/v1/goals"):
         allowed = true
     case r.Method == http.MethodPost && path == "/v1/learning/sessions":
         allowed = true
@@ -42,7 +42,10 @@ func (s *Server) sessionOwnerWriteAllowed(r *http.Request) bool {
 	if !allowed { return false }
 	if r.Method != http.MethodDelete {
 		mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
-		if err != nil || mediaType != "application/json" { return false }
+		if err != nil { return false }
+		if path == "/v1/recipes/images" {
+			if mediaType != "image/png" && mediaType != "image/jpeg" { return false }
+		} else if mediaType != "application/json" { return false }
 	}
 	csrf, _, valid := s.sessions.Check(s.sessionCookie(r))
 	supplied := r.Header.Get("X-CSRF-Token")
