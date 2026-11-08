@@ -439,3 +439,25 @@ main.content { max-width: 94rem; margin: 0 auto; padding: 2rem; }
 @media (max-width: 600px) {
   .planner-slot { grid-template-columns: 1fr; gap: .375rem; }
 }
+
+
+/* Book catalog and request queue */
+.book-search-controls {
+  display: flex; flex-wrap: wrap; gap: .625rem; align-items: end; margin-bottom: 1.25rem;
+}
+.book-search-controls .form-row { display: grid; gap: .375rem; flex: 1 1 12rem; }
+.book-search-controls .form-row:first-child { flex-basis: 19rem; }
+.book-list { display: grid; gap: 0; }
+.book-entry { display: flex; justify-content: space-between; align-items: start; gap: 1rem; padding: .875rem 0; border-top: 1px solid var(--border); }
+.book-entry:first-child { border-top: 0; }
+.book-description { display: grid; gap: .2rem; min-width: 0; }
+.book-description strong { overflow-wrap: anywhere; font-weight: 600; }
+.book-actions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+.book-catalog-link { width: fit-content; text-decoration: underline; text-underline-offset: 3px; }
+.book-catalog-link:hover { color: var(--foreground); }
+@media (max-width: 600px) {
+  .book-entry { flex-direction: column; align-items: stretch; }
+  .book-entry > button { align-self: flex-start; }
+  .book-search-controls { align-items: stretch; }
+  .book-search-controls .form-row { flex-basis: 100%; }
+}
