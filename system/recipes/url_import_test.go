@@ -44,7 +44,7 @@ func TestRecipeNetworksRejectInternalAndSpecialRanges(t *testing.T) {
 		"169.254.169.254", "172.16.0.1", "192.168.0.1",
 		"192.0.2.1", "198.19.0.1", "198.51.100.2",
 		"203.0.113.4", "224.0.0.1", "::1", "fc00::1",
-		"fe80::1", "2001:db8::1", "::ffff:127.0.0.1",
+		"fe80::1", "2001:db8::1", "::ffff:127.0.0.1", "64:ff9b::a00:1",
 	} {
 		if publicRecipeAddress(netip.MustParseAddr(ip)) {
 			t.Errorf("allowed restricted destination %s", ip)
