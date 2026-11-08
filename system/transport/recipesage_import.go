@@ -9,12 +9,13 @@ import (
 	"github.com/dbontr/homelab-new/system/recipes"
 )
 
-const recipeSageRequestLimit = (10 << 20)
+const recipeSageRequestLimit = (16 << 20)
 
 type recipeSageRequest struct {
 	Source string   `json:"source"`
 	Digest string   `json:"digest,omitempty"`
 	Keys   []string `json:"keys,omitempty"`
+	Overrides map[string]recipes.Recipe `json:"overrides,omitempty"`
 }
 
 func decodeRecipeSageRequest(w http.ResponseWriter, r *http.Request) (recipeSageRequest, error) {
@@ -41,7 +42,7 @@ func (s *Server) recipeSagePreview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	request, err := decodeRecipeSageRequest(w, r)
-	if err != nil || request.Digest != "" || len(request.Keys) > 0 {
+	if err != nil || request.Digest != "" || len(request.Keys) > 0 || len(request.Overrides) > 0 {
 		writeError(w, http.StatusBadRequest, "invalid RecipeSage preview request")
 		return
 	}
@@ -63,7 +64,7 @@ func (s *Server) recipeSageImport(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid RecipeSage import request")
 		return
 	}
-	result, err := s.recipes.ImportRecipeSage([]byte(request.Source), request.Digest, request.Keys)
+	result, err := s.recipes.ImportRecipeSage([]byte(request.Source), request.Digest, request.Keys, request.Overrides)
 	if err != nil {
 		if errors.Is(err, recipes.ErrConflict) {
 			writeError(w, http.StatusConflict, "one or more selected recipes have already been imported")
