@@ -51,30 +51,23 @@ func (s *Server) taskConflicts(w http.ResponseWriter,r *http.Request){
   out.Limitations=append(out.Limitations,"External calendar unavailable; only scheduled tasks were compared")
   writeJSON(w,200,out);return
  }
- if feed.RecurrencesUnexpanded{
-  out.Limitations=append(out.Limitations,"Recurring calendar events were not expanded into occurrences")
+ expanded,err:=calendar.Expand(feed,start,end)
+ if err!=nil{
+  out.Limitations=append(out.Limitations,"External calendar occurrences could not be expanded")
+  writeJSON(w,200,out);return
  }
- skipped:=0
- for _,event:=range feed.Events{
-  from,errA:=calendarInstant(event.Start,event.TimeZone)
-  to,errB:=calendarInstant(event.End,event.TimeZone)
-  if errA!=nil||errB!=nil||!to.After(from){skipped++;continue}
+ out.Limitations=append(out.Limitations,expanded.Limitations...)
+ for _,event:=range expanded.Occurrences{
+  from,errA:=time.Parse(time.RFC3339,event.Start)
+  to,errB:=time.Parse(time.RFC3339,event.End)
+  if errA!=nil||errB!=nil||!to.After(from){
+   out.Limitations=append(out.Limitations,"Calendar occurrence has an invalid time")
+   continue
+  }
   if start.Before(to)&&from.Before(end){
    title:=event.Summary;if title==""{title="Calendar event"}
    out.Conflicts=append(out.Conflicts,Conflict{Source:"calendar",Title:title,Start:from.Format(time.RFC3339),End:to.Format(time.RFC3339)})
   }
  }
- if skipped>0{out.Limitations=append(out.Limitations,strconv.Itoa(skipped)+" calendar events could not be compared")}
  writeJSON(w,200,out)
-}
-
-func calendarInstant(value,zone string)(time.Time,error){
- if value==""{return time.Time{},errors.New("event timestamp is missing")}
- if strings.HasSuffix(value,"Z"){
-  return time.Parse("20060102T150405Z",value)
- }
- if zone==""{return time.Time{},errors.New("floating calendar event has no timezone")}
- location,err:=time.LoadLocation(zone);if err!=nil{return time.Time{},err}
- if len(value)==8{return time.ParseInLocation("20060102",value,location)}
- return time.ParseInLocation("20060102T150405",value,location)
 }
