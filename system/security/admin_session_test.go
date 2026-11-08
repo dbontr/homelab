@@ -30,6 +30,7 @@ func testSessionManager(t *testing.T) (*AdminSessions, []byte, *time.Time) {
 			{Operation: "workspace__pool_register_image", Targets: []string{"jupiter", "venus"}},
 			{Operation: "workspace__workspace_create", Targets: []string{"jupiter", "venus"}},
 			{Operation: "cluster__configure", Targets: []string{"saturn"}, Destructive: true},
+			{Operation: "workspace__github_merge_pull_request", Targets: []string{"dbontr/homelab-new"}},
 		},
 	}
 	a, err := NewAdminSessions(cfg)
@@ -352,4 +353,36 @@ func privateDir(t *testing.T) string {
 		t.Fatal(err)
 	}
 	return dir
+}
+
+func TestConfirmationPreviewsRedactSecrets(t *testing.T) {
+	a, key, now := testSessionManager(t)
+	loginAt(t, a, key, now)
+	args := json.RawMessage(`{"password":"private-example-value","config":{"api_key":"secret-example","force":true}}`)
+	pending := a.Authorize("platform-gateway", "cluster__configure", "saturn", args)
+	if pending.ConfirmationID == "" {
+		t.Fatal("missing destructive confirmation")
+	}
+	entries := a.Pending()
+	if len(entries) != 1 {
+		t.Fatalf("expected one pending confirmation, got %d", len(entries))
+	}
+	preview := entries[0].Arguments
+	if strings.Contains(preview, "private-example-value") || strings.Contains(preview, "secret-example") || !strings.Contains(preview, "[REDACTED]") {
+		t.Fatalf("credential leaked through confirmation preview: %s", preview)
+	}
+	if entries[0].ArgumentsSHA256 == "" {
+		t.Fatal("full argument digest missing")
+	}
+}
+
+func TestDangerousOperationsRequireConfirmationEvenWhenNotMarked(t *testing.T) {
+	a, key, now := testSessionManager(t)
+	loginAt(t, a, key, now)
+	// A repository merge requires confirmation even when its declarative
+	// policy has an omitted destructive flag.
+	decision := a.Authorize("platform-gateway", "workspace__github_merge_pull_request", "dbontr/homelab-new", json.RawMessage(`{"pr":12}`))
+	if decision.Allowed || decision.ConfirmationID == "" {
+		t.Fatal("dangerous operation bypassed confirmation")
+	}
 }
