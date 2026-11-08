@@ -51,6 +51,11 @@ func NewAuthority(key []byte, replayFile string) (*Authority,error) {
  if errors.Is(err,os.ErrNotExist) {return a,nil}
  if err!=nil{return nil,err}
  defer f.Close()
+ opened,err:=f.Stat()
+ if err!=nil{return nil,err}
+ if !opened.Mode().IsRegular()||opened.Mode().Perm()&0077!=0{
+  return nil,errors.New("executor replay file must be an owner-only regular file")
+ }
  b,err:=io.ReadAll(io.LimitReader(f,(1<<20)+1))
  if err!=nil{return nil,err}
  if len(b)>1<<20{return nil,errors.New("executor replay state exceeds size limit")}
