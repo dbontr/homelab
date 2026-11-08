@@ -119,9 +119,11 @@ func (s *Store) PlanWeek(day string,dailyMinutes,startHour int,external []BusyWi
    cursor:=time.Date(date.Year(),date.Month(),date.Day(),startHour,0,0,0,s.zone)
    cutoff:=cursor.Add(8*time.Hour)
    if cursor.Before(now){
+    if !now.Before(cutoff){continue}
     cursor=now.Truncate(time.Minute).Add(time.Minute)
     cursor=cursor.Add(time.Duration((15-cursor.Minute()%15)%15)*time.Minute)
    }
+   if !cursor.Before(cutoff){continue}
    for move:=0;move<100&&cursor.Add(duration).Before(cutoff.Add(time.Nanosecond));move++{
     next:=cursor.Add(duration)
     blocked:=false
