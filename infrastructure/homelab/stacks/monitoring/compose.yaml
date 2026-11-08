@@ -14,6 +14,7 @@ services:
     volumes:
       - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./config/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - ./config/cluster-alerts.yml:/etc/prometheus/cluster-alerts.yml:ro
       - prometheus-data:/prometheus
   grafana:
     image: grafana/grafana@sha256:dbbc38ea21103cefb50396340cd88afec779c7e070b0a7bf5a75b4ce46651d3f
