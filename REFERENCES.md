@@ -37,3 +37,5 @@
 - [BuildKit rootless deployment](https://github.com/moby/buildkit/blob/master/docs/rootless.md) — Moby BuildKit maintainers. Used for: project-scoped OCI image builds without exposing a host Docker socket.
 - [OCI Image Specification](https://github.com/opencontainers/image-spec) — Open Containers Initiative. Used for: digest-qualified image identities in the registry build pipeline.
 - [Dioxus 0.7 Deployment](https://dioxuslabs.com/learn/0.7/guides/deploy/) — Dioxus project. Used for: packaging static Rust/WASM console assets for an independent native release.
+- [Open Library Search API](https://openlibrary.org/dev/docs/api/search) — Open Library/Internet Archive. Used for: bounded on-demand work discovery, stable work identifiers, authors and publication metadata.
+- [Open Library API Usage Guidelines](https://openlibrary.org/developers/api) — Open Library/Internet Archive. Used for: identified human-initiated requests, conservative one-request-per-second pacing, and short-lived search caching.
