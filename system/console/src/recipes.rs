@@ -247,6 +247,11 @@ pub fn Recipes(csrf: String) -> Element {
     let mut import_text = use_signal(String::new);
     let mut schema_text = use_signal(String::new);
     let mut source_url = use_signal(String::new);
+    let mut history_open = use_signal(|| false);
+    let mut history_loading = use_signal(|| false);
+    let mut history_record = use_signal(String::new);
+    let mut history = use_signal(Vec::<Recipe>::new);
+    let mut confirm_restore = use_signal(|| Option::<i32>::None);
 
     let records = recipes.cloned().and_then(Result::ok).unwrap_or_default();
     let query = search().trim().to_lowercase();
@@ -276,6 +281,7 @@ pub fn Recipes(csrf: String) -> Element {
                 nutrition_source.set(String::new());
                 error.set(String::new()); notice.set(String::new());
                 editing.set(true); cooking.set(false); confirm_delete.set(false);
+                history_open.set(false); confirm_restore.set(None);
                 tab.set(Tab::Library);
             }, "Add recipe" }
         }
@@ -322,7 +328,7 @@ pub fn Recipes(csrf: String) -> Element {
                                     match api::write::<Recipe, _>(method, &path, &csrf, &value).await {
                                         Ok(saved) => {
                                             selected.set(Some(saved.id));
-                                            editing.set(false); cooking.set(false);
+                                            editing.set(false); cooking.set(false); history_open.set(false);
                                             notice.set("Recipe saved".to_owned());
                                             recipes.restart();
                                         }
@@ -572,6 +578,7 @@ pub fn Recipes(csrf: String) -> Element {
                                                 on_select: move |id: String| {
                                                     selected.set(Some(id));
                                                     cooking.set(false); confirm_delete.set(false); notice.set(String::new());
+                                                    history_open.set(false); confirm_restore.set(None);
                                                 }
                                             }
                                         }
