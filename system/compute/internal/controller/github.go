@@ -61,7 +61,7 @@ func (g *GitHub) request(method, path string, query map[string]any, body any) (a
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
-	req.Header.Set("User-Agent", "workspace-mcp")
+	req.Header.Set("User-Agent", "homelab-engineering")
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
@@ -259,7 +259,7 @@ func (g *GitHub) Snapshot(repo, ref string) (string, []byte, error) {
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("User-Agent", "workspace-mcp")
+	req.Header.Set("User-Agent", "homelab-engineering")
 	noRedirect := &http.Client{Timeout: 60 * time.Second, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}
 	first, e := noRedirect.Do(req)
 	if e != nil {
@@ -277,7 +277,7 @@ func (g *GitHub) Snapshot(repo, ref string) (string, []byte, error) {
 	if e != nil {
 		return "", nil, e
 	}
-	rawReq.Header.Set("User-Agent", "workspace-mcp")
+	rawReq.Header.Set("User-Agent", "homelab-engineering")
 	res, e := noRedirect.Do(rawReq)
 	if e != nil {
 		return "", nil, e
@@ -353,7 +353,7 @@ func (g *GitHub) Publish(repo, branch, expected string, files map[string][]byte,
 			return nil, errors.New("GitHub did not confirm the authenticated commit identity")
 		}
 	}
-	newBranch := "pwm/" + randomHex(8)
+	newBranch := "engineering/" + randomHex(8)
 	_, e = g.request("POST", prefix+"/git/refs", nil, map[string]any{"ref": "refs/heads/" + newBranch, "sha": sha})
 	if e != nil {
 		return nil, e
