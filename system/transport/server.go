@@ -80,6 +80,8 @@ func(s *Server) Handler()http.Handler{
  mux.HandleFunc("POST /v1/recipes",s.recipeCollection)
  mux.HandleFunc("GET /v1/recipes/health-goals",s.uiHealthGoals)
  mux.HandleFunc("GET /v1/recipes/export",s.recipeArchive)
+ mux.HandleFunc("GET /v1/recipes/bundle",s.recipeBundle)
+ mux.HandleFunc("POST /v1/recipes/bundle",s.recipeBundle)
  mux.HandleFunc("POST /v1/recipes/parse",s.recipeParse)
  mux.HandleFunc("POST /v1/recipes/import-url",s.recipeImportURL)
  mux.HandleFunc("POST /v1/recipes/recipesage/preview",s.recipeSagePreview)
