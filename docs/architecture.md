@@ -4,13 +4,13 @@
 
 The repository describes one personal computing system. Its owner interacts with a single catalog of capabilities, operations and resources through a common Go API and MCP endpoint. Tasks, goals, projects, Git repositories, shared libraries, learning evidence, health records, computing resources and media may refer to each other using stable identifiers. A project is not defined by its Git repository.
 
-The `system/` tree is the application's source of truth. It contains a primary Go module and independently buildable implementation modules. Module boundaries exist for reliability, toolchain constraints and distinct state ownership; they must not become separate assistant identities, duplicate records or inconsistent interfaces. Go operations remain usable without an AI client. A future native UI invokes those same operations.
+The `system/` tree is the application's source of truth. It contains a primary Go module and independently buildable implementation modules. Module boundaries exist for reliability, toolchain constraints and distinct state ownership; they must not become separate assistant identities, duplicate records or inconsistent interfaces. Go operations remain usable without an AI client. The Rust/Dioxus console invokes those same native operations through narrowly scoped owner-session routes.
 
 Nix provides the root flake, host configuration, deployment definitions, credential loading and component activation. Saturn runs routing, the K3s control plane and persistent lightweight applications. Jupiter, Venus, Mercury and Janus execute authorized compute work. Specialized processes may be upgraded separately, but the user-facing interface remains one system. One process is not required for one product.
 
 ## Capabilities
 
-The system implements personal planning, task reports, compute and Git workspaces, research libraries, adaptive learning, health and nutrition, media requests, and infrastructure observation. Quantitative finance is not active. Seerr owns movie and television requests; the assistant exposes those capabilities without duplicating Seerr's database.
+The system implements personal planning, recurrence-aware calendar availability, advisory weekly allocation, task reports, compute and Git workspaces, research libraries, adaptive learning, health and nutrition, media requests, and infrastructure observation. Its custom Rust monitoring views consume a bounded Go adapter over Prometheus metrics and Loki journal data; established collectors retain responsibility for telemetry and historical storage. Quantitative finance is not active. Seerr owns movie and television requests; the assistant exposes those capabilities without duplicating Seerr's database.
 
 A single capability registry and consistent authorization rules govern tool discovery and execution. Operations use native Go interfaces. An MCP transport is an adapter rather than the business-logic owner. The platform must distinguish a successful operation from one merely queued, accepted or unobserved.
 
@@ -24,4 +24,4 @@ The main assistant process never owns deployment or unrestricted cluster credent
 
 ## Deployment
 
-Source availability is not evidence of successful deployment. Builds, Nix evaluations, live authentication, state continuity, capability parity and rollback require verification before cutover. The active fleet and media remain unchanged until that acceptance succeeds.
+Local release staging and project-scoped OCI image-building source are included, but operator-managed credentials, protected service activation and live acceptance remain separate responsibilities. Source availability is not evidence of successful deployment. Builds, Nix evaluations, live authentication, state continuity, capability parity and rollback require verification before cutover. The active fleet and media remain unchanged until that acceptance succeeds.
