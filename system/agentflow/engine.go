@@ -253,5 +253,7 @@ func validateChanges(files map[string]string)error{
  total:=0
  for name,data:=range files{if !validSourcePath(name)||len(data)==0||len(data)>24000{return errors.New("invalid authored source change")};total+=len(name)+len(data)}
  if total>56<<10{return errors.New("authored source exceeds persistent result limit")}
+ encoded,err:=json.Marshal(map[string]any{"changes":files})
+ if err!=nil||len(encoded)>64<<10{return errors.New("authored source exceeds encoded result limit")}
  return nil
 }
