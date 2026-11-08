@@ -35,6 +35,7 @@ var reservedRecipeNetworks = []netip.Prefix{
 	netip.MustParsePrefix("224.0.0.0/4"),
 	netip.MustParsePrefix("240.0.0.0/4"),
 	netip.MustParsePrefix("::/96"),
+	netip.MustParsePrefix("64:ff9b::/96"),
 	netip.MustParsePrefix("64:ff9b:1::/48"),
 	netip.MustParsePrefix("100::/64"),
 	netip.MustParsePrefix("2001::/23"),
@@ -60,8 +61,8 @@ func publicRecipeAddress(addr netip.Addr) bool {
 }
 
 func recipeURL(raw string) (*url.URL, error) {
-	if len(raw) == 0 || len(raw) > 2048 || strings.TrimSpace(raw) != raw {
-		return nil, errors.New("recipe URL must be 1-2048 characters")
+	if len(raw) == 0 || len(raw) > 2000 || strings.TrimSpace(raw) != raw {
+		return nil, errors.New("recipe URL must be 1-2000 characters")
 	}
 	u, err := url.Parse(raw)
 	if err != nil || u.Scheme != "https" || u.Opaque != "" ||
@@ -157,7 +158,7 @@ func FetchSchemaOrgURL(ctx context.Context, raw string) (Recipe, error) {
 	request.Header.Set("User-Agent", "HomelabRecipeImporter/1.0")
 	response, err := client.Do(request)
 	if err != nil {
-		return Recipe{}, fmt.Errorf("recipe page could not be fetched: %w", err)
+		return Recipe{}, errors.New("recipe page could not be fetched")
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
