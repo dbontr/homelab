@@ -22,10 +22,11 @@ import (
  "github.com/dbontr/homelab-new/system/profiles"
  "github.com/dbontr/homelab-new/system/recipes"
  "github.com/dbontr/homelab-new/system/session"
+ "github.com/dbontr/homelab-new/system/security"
  "github.com/dbontr/homelab-new/system/store"
 )
 type Backend struct { Name string; URL string; Token string }
-type Server struct { db *store.Store; token string; backend []Backend; client *http.Client; calendarURL string; gate *approval.Gate; allowedOrigins map[string]struct{}; media *media.Client; deviceCatalog *devices.Catalog; nodeCatalog *devices.NodeCatalog; profiles *profiles.Registry; recipes *recipes.Store; sessions *session.Manager; observability *observability.Client; bookCatalog *books.Catalog; inflight chan struct{} }
+type Server struct { db *store.Store; token string; backend []Backend; client *http.Client; calendarURL string; gate *approval.Gate; privilegeClient *security.AdminClient; allowedOrigins map[string]struct{}; media *media.Client; deviceCatalog *devices.Catalog; nodeCatalog *devices.NodeCatalog; profiles *profiles.Registry; recipes *recipes.Store; sessions *session.Manager; observability *observability.Client; bookCatalog *books.Catalog; inflight chan struct{} }
 
 func New(db *store.Store,token string,backends []Backend)(*Server,error){
  if db==nil||len(token)<32||strings.ContainsAny(token,"\r\n\t"){return nil,errors.New("store and a strong access token are required")}
@@ -45,6 +46,7 @@ func(s *Server) SetNodeCatalog(catalog *devices.NodeCatalog) { s.nodeCatalog = c
 func(s *Server) SetProfiles(registry *profiles.Registry) { s.profiles = registry }
 func(s *Server) SetBookCatalog(catalog *books.Catalog) { s.bookCatalog = catalog }
 func(s *Server) SetSessions(manager *session.Manager) { s.sessions = manager }
+func(s *Server) SetPrivilegeClient(client *security.AdminClient) { s.privilegeClient = client }
 func(s *Server) SetCalendarURL(raw string)error{
  if err:=calendar.ValidateURL(raw);err!=nil{return err}
  s.calendarURL=raw
@@ -274,9 +276,14 @@ func(s *Server)localTools()[]map[string]any{
   tool("activity_recent","List confirmed personal activity from canonical records, without fabricating unobserved actions",map[string]any{"limit":prop("integer")}),
   tool("resource_get","Resolve a canonical local resource identity from its owning store",map[string]any{"kind":prop("string"),"id":prop("string")},"kind","id"),
   tool("system_status","List configured integrations",map[string]any{}),
-  tool("approval_status","Check an administrator approval",map[string]any{"id":prop("string")},"id"),
   tool("device_inventory","List declared hardware access and constraints; this is not an online device probe",map[string]any{}),
   tool("node_inventory","List declarative management modes and roles without probing machines",map[string]any{}),
+ }
+ if s.privilegeClient!=nil {
+  tools=append(tools,tool("security_session_status","Inspect the independent owner administrative session without revealing credentials",map[string]any{}),
+    tool("security_session_close","Immediately revoke the active owner administrative session",map[string]any{}))
+ } else {
+  tools=append(tools,tool("approval_status","Check an administrator approval",map[string]any{"id":prop("string")},"id"))
  }
  if s.hasBackend("workspace") {tools=append(tools,tool("software_catalog","List approved images, software collections, and program requests",map[string]any{}))}
  if s.profiles!=nil {tools=append(tools,
@@ -383,6 +390,13 @@ func(s *Server)localTool(ctx context.Context,name string,raw json.RawMessage)(an
   return s.activity(n,time.Time{}),nil
  case "resource_get":return s.resource(args.ResourceKind,args.ID)
  case "approval_status":return s.privilegeStatus(args.ID)
+ case "security_session_status":
+  if s.privilegeClient==nil{return nil,errors.New("independent security service not configured")}
+  return s.privilegeClient.Status(ctx)
+ case "security_session_close":
+  if s.privilegeClient==nil{return nil,errors.New("independent security service not configured")}
+  if err:=s.privilegeClient.Revoke(ctx);err!=nil{return nil,err}
+  return map[string]bool{"active":false},nil
  case "device_inventory":return s.deviceCatalog.List(),nil
  case "node_inventory":return s.nodeCatalog.List(),nil
  case "calendar_feed":
