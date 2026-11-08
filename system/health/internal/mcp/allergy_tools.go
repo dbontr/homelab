@@ -6,7 +6,7 @@ import(
  "errors"
  "strings"
 
- "github.com/dbontr/personal-health-mcp/internal/health"
+ "github.com/dbontr/homelab-new/system/health/internal/health"
 )
 type Allergy struct{
  Ingredient string `json:"ingredient"`

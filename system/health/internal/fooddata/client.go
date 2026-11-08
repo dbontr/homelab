@@ -42,7 +42,7 @@ func (c *Client)request(ctx context.Context,uri string)(json.RawMessage,error){
  req,err:=http.NewRequestWithContext(ctx,http.MethodGet,uri,nil)
  if err!=nil{return nil,err}
  req.Header.Set("Accept","application/json")
- req.Header.Set("User-Agent","personal-health-mcp/0.1 (https://github.com/dbontr/personal-health-mcp)")
+ req.Header.Set("User-Agent","personal-health-mcp/0.1 (https://github.com/dbontr/homelab-new/system/health)")
  resp,err:=c.http.Do(req)
  if err!=nil{return nil,err}
  defer resp.Body.Close()
