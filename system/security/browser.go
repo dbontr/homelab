@@ -22,19 +22,20 @@ import (
 type BrowserPortal struct {
  manager *AdminSessions
  origin string
+ verify func(string)(string,error)
  mu sync.Mutex
  csrf map[string]time.Time
 }
 
-func NewBrowserPortal(manager *AdminSessions, origin string) (*BrowserPortal,error) {
+func NewBrowserPortal(manager *AdminSessions, origin string, verify func(string)(string,error)) (*BrowserPortal,error) {
  u,e:=url.Parse(origin)
- if manager==nil||e!=nil||u.Scheme!="https"||u.Host==""||u.User!=nil||u.RawQuery!=""||u.Fragment!=""||(u.Path!=""&&u.Path!="/"){
+ if manager==nil||verify==nil||e!=nil||u.Scheme!="https"||u.Host==""||u.User!=nil||u.RawQuery!=""||u.Fragment!=""||(u.Path!=""&&u.Path!="/"){
   return nil,errors.New("browser portal requires an exact HTTPS origin")
  }
  if u.Hostname()=="localhost"||net.ParseIP(u.Hostname())!=nil||strings.Contains(u.Host,"@"){
   return nil,errors.New("browser portal requires a named HTTPS host")
  }
- return &BrowserPortal{manager:manager,origin:"https://"+u.Host,csrf:map[string]time.Time{}},nil
+ return &BrowserPortal{manager:manager,verify:verify,origin:"https://"+u.Host,csrf:map[string]time.Time{}},nil
 }
 
 var browserPage=template.Must(template.New("owner").Parse(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Homelab administration</title><style>
@@ -66,11 +67,11 @@ func(b *BrowserPortal) take(token string)bool{
  expires,ok:=b.csrf[token];delete(b.csrf,token)
  return ok&&time.Now().Before(expires)
 }
-func(b *BrowserPortal) render(w http.ResponseWriter,code int,message string){
+func(b *BrowserPortal) render(w http.ResponseWriter,code int,message,principal string){
  token,err:=b.token()
  if err!=nil{http.Error(w,"authentication temporarily unavailable",http.StatusServiceUnavailable);return}
  data:=struct{Session SessionStatus;Pending []PendingConfirmation;CSRF,Message string}{
-  Session:b.manager.Status(),Pending:b.manager.Pending(),CSRF:token,Message:message,
+  Session:b.manager.StatusFor(principal),Pending:b.manager.PendingFor(principal),CSRF:token,Message:message,
  }
  w.Header().Set("Content-Type","text/html; charset=utf-8")
  w.WriteHeader(code)
@@ -84,7 +85,9 @@ func(b *BrowserPortal) ServeHTTP(w http.ResponseWriter,r *http.Request){
  w.Header().Set("X-Frame-Options","DENY")
  w.Header().Set("Content-Security-Policy","default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'")
  if r.Host!=strings.TrimPrefix(b.origin,"https://"){http.Error(w,"wrong host",http.StatusMisdirectedRequest);return}
- if r.Method==http.MethodGet&&r.URL.Path=="/"{b.render(w,200,"");return}
+ principal,err:=b.verify(r.Header.Get("Cf-Access-Jwt-Assertion"))
+ if err!=nil||principal==""{http.Error(w,"verified owner identity required",http.StatusForbidden);return}
+ if r.Method==http.MethodGet&&r.URL.Path=="/"{b.render(w,200,"",principal);return}
  if r.Method!=http.MethodPost||(r.URL.Path!="/login"&&r.URL.Path!="/close"&&!strings.HasPrefix(r.URL.Path,"/confirm/")){
   http.NotFound(w,r);return
  }
@@ -98,20 +101,20 @@ func(b *BrowserPortal) ServeHTTP(w http.ResponseWriter,r *http.Request){
  }
  switch{
  case r.URL.Path=="/login":
-  if _,err:=b.manager.Authenticate(r.PostForm.Get("password"),r.PostForm.Get("totp"));err!=nil{
+  if _,err:=b.manager.AuthenticateFor(principal,r.PostForm.Get("password"),r.PostForm.Get("totp"));err!=nil{
    log.Print("security audit web_authentication denied")
-   b.render(w,http.StatusUnauthorized,"Authentication denied");return
+   b.render(w,http.StatusUnauthorized,"Authentication denied",principal);return
   }
   log.Print("security audit web_session opened")
  case r.URL.Path=="/close":
-  b.manager.Revoke()
+  b.manager.RevokeFor(principal)
   log.Print("security audit web_session revoked")
  default:
   id:=strings.TrimPrefix(r.URL.Path,"/confirm/")
   if len(id)!=48||strings.ContainsRune(id,'/'){http.NotFound(w,r);return}
-  if err:=b.manager.Confirm(id,r.PostForm.Get("password"),r.PostForm.Get("totp"));err!=nil{
+  if err:=b.manager.ConfirmFor(principal,id,r.PostForm.Get("password"),r.PostForm.Get("totp"));err!=nil{
    log.Print("security audit web_confirmation denied")
-   b.render(w,http.StatusForbidden,"Confirmation denied");return
+   b.render(w,http.StatusForbidden,"Confirmation denied",principal);return
   }
   log.Print("security audit web_confirmation accepted")
  }

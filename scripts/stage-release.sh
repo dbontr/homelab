@@ -38,6 +38,8 @@ build_go() {
 build_go system ./cmd/homelab-platform homelab-platform
 build_go system ./cmd/homelab-approve homelab-approve
 build_go system ./cmd/homelab-securityd homelab-securityd
+build_go system ./cmd/homelab-executord homelab-executord
+build_go system ./cmd/homelab-release homelab-release
 build_go system ./cmd/homelab-admin homelab-admin
 build_go system/compute ./cmd/project-workspace-controller project-workspace-controller
 build_go system/compute ./cmd/project-workspace-worker project-workspace-worker

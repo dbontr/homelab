@@ -61,13 +61,16 @@ func privilegeTarget(name string, args json.RawMessage) string {
 	return "platform"
 }
 
-func (s *Server) checkPrivilege(name string, args json.RawMessage) (map[string]any, bool) {
+func (s *Server) checkPrivilege(name string,args json.RawMessage)(map[string]any,bool){
+ return s.checkPrivilegeContext(context.Background(),name,args)
+}
+func (s *Server) checkPrivilegeContext(ctx context.Context,name string,args json.RawMessage)(map[string]any,bool){
 	scope := approval.ScopeFor(name)
 	if scope == "" {
 		return nil, true
 	}
 	if s.privilegeClient != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
 		decision, err := s.privilegeClient.Authorize(ctx, name, privilegeTarget(name, args), args)
 		if err != nil {

@@ -3,6 +3,7 @@
   imports = [
     ../../nixosModules/platform.nix
     ../../nixosModules/security.nix
+    ../../nixosModules/executor.nix
     ../../nixosModules/console.nix
     ./shared.nix
     ./cloudflare.nix

@@ -55,6 +55,17 @@ func main() {
 	if err != nil {
 		log.Fatal("cannot initialize security service: ", err)
 	}
+ var verifier *security.AccessVerifier
+ gatewayAudience:=os.Getenv("HOMELAB_SECURITY_ACCESS_GATEWAY_AUD")
+ if gatewayAudience!="" {
+  jwks,err:=readRequiredFile("HOMELAB_SECURITY_ACCESS_JWKS_FILE")
+  if err!=nil{log.Fatal("Access JWKS unavailable: ",err)}
+  email,err:=readRequiredFile("HOMELAB_SECURITY_ACCESS_OWNER_FILE")
+  if err!=nil{log.Fatal("owner identity unavailable: ",err)}
+  verifier,err=security.NewAccessVerifier(os.Getenv("HOMELAB_SECURITY_ACCESS_ISSUER"),strings.TrimSpace(string(email)),jwks)
+  if err!=nil{log.Fatal("invalid verified owner identity configuration: ",err)}
+  if err:=manager.SetAccessVerifier(verifier,gatewayAudience);err!=nil{log.Fatal(err)}
+ }
 	group, err := user.LookupGroup("homelab-security-client")
 	if err != nil {
 		log.Fatal("security client group is unavailable: ", err)
@@ -71,7 +82,12 @@ func main() {
 		failures <- manager.ServeSockets(ctx, filepath.Join(dir, "owner.sock"), filepath.Join(dir, "client.sock"), gid)
 	}()
 	if origin := os.Getenv("HOMELAB_SECURITY_BROWSER_ORIGIN"); origin != "" {
-		portal, err := security.NewBrowserPortal(manager, origin)
+		if verifier==nil{log.Fatal("browser login requires independent Access identity verification")}
+  browserAudience:=os.Getenv("HOMELAB_SECURITY_ACCESS_BROWSER_AUD")
+  if browserAudience==""||browserAudience==gatewayAudience{log.Fatal("browser login needs a dedicated audience")}
+  portal, err := security.NewBrowserPortal(manager, origin,func(assertion string)(string,error){
+   return verifier.Verify(assertion,browserAudience)
+  })
 		if err != nil {
 			log.Fatal("invalid protected browser origin: ", err)
 		}

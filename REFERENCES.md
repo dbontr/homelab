@@ -27,6 +27,11 @@
 - [OpenAI Plugins UI Reference](https://developers.openai.com/plugins/reference) — OpenAI. Used for: opening a vetted owner authentication URL from a ChatGPT component without exposing credentials through tool inputs.
 - [MCP Elicitation — URL Mode](https://modelcontextprotocol.io/specification/2025-11-25/client/elicitation) — MCP project. Used for: treating password and second-factor entry as a trusted out-of-band browser interaction rather than client-side form elicitation.
 - [Cloudflare Tunnel Origin Access Settings](https://developers.cloudflare.com/tunnel/reference/origin-parameters/) — Cloudflare. Used for: validating the dedicated Cloudflare Access JWT audience before proxying owner authentication traffic.
+- [RFC 7519: JSON Web Token](https://www.rfc-editor.org/rfc/rfc7519) — IETF. Used for: signed owner identity claims, audience, issuer and expiration validation.
+- [RFC 7518: JSON Web Algorithms](https://www.rfc-editor.org/rfc/rfc7518) — IETF. Used for: RS256 verification with pinned RSA signing keys.
+- [RFC 7517: JSON Web Key](https://www.rfc-editor.org/rfc/rfc7517) — IETF. Used for: locally provisioned Cloudflare Access JWKS key validation.
+- [Cloudflare Access application tokens](https://developers.cloudflare.com/cloudflare-one/identity/authorization-cookie/validating-json/) — Cloudflare. Used for: application-audience JWT verification at the independent security boundary.
+- [NixOS systemd switching](https://nixos.org/manual/nixos/stable/#sec-changing-config) — NixOS project. Used for: locally staged system generation activation and controlled rollback.
 - [OWASP Session Management Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html) — OWASP. Used for: short-lived browser sessions, HttpOnly/Secure/SameSite cookies, credential separation and session invalidation.
 - [Dioxus Styling and Assets](https://dioxuslabs.com/learn/0.7/essentials/ui/styling/) — Dioxus project. Used for: RSX, CSS assets and native SVG controls in the Rust console.
 - [RFC 9110: HTTP Semantics, If-Match](https://www.rfc-editor.org/rfc/rfc9110#section-13.1.1) — IETF. Used for: revision-qualified deletion of first-party recipe records.

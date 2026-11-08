@@ -7,12 +7,25 @@ import (
  "strings"
 
  "github.com/dbontr/homelab-new/system/canonicaljson"
+ "github.com/dbontr/homelab-new/system/security"
+ "github.com/dbontr/homelab-new/system/approval"
 )
 
 func (s *Server) invoke(ctx context.Context,name string,args json.RawMessage,id json.RawMessage) map[string]any {
  normalized,_,err:=canonicaljson.Object(args)
  if err!=nil{return toolError(err.Error())}
  args=normalized
+ if name=="infrastructure__service_restart" || name=="infrastructure__release_activate" {
+  if s.executorClient==nil{return toolError("independent privileged executor not configured")}
+  decision,err:=s.executorClient.Execute(ctx,name,privilegeTarget(name,args),args)
+  if err!=nil{return toolError("independent privileged executor unavailable")}
+  if !decision.Allowed{
+   return result(map[string]any{"authorization_required":true,"reason":decision.Reason,
+     "confirmation_id":decision.ConfirmationID,"confirmation_expires_at":decision.ConfirmationExpiresAt,
+     "instructions":"Sign in through the protected owner page and confirm destructive changes there. Retry identical arguments."})
+  }
+  return result(map[string]bool{"executed":true})
+ }
  if name=="workspace__resource_plan" {
    if err:=s.deviceCatalog.ValidatePlan(args);err!=nil{return toolError(err.Error())}
  }
@@ -24,7 +37,10 @@ func (s *Server) invoke(ctx context.Context,name string,args json.RawMessage,id 
    if strings.HasPrefix(name,prefix) {
      toolName:=strings.TrimPrefix(name,prefix)
      if !s.backendHasTool(ctx,b,toolName){return toolError("backend tool unavailable or not advertised")}
-     if output,allowed:=s.checkPrivilege(name,args);!allowed{return output}
+     if s.privilegeClient!=nil && approval.ScopeFor(name)!="" {
+      return toolError("privileged backend operations require executor-side authorization and are not available through direct gateway forwarding")
+     }
+     if output,allowed:=s.checkPrivilegeContext(ctx,name,args);!allowed{return output}
      params:=map[string]any{"name":toolName,"arguments":json.RawMessage(args)}
      raw,_:=json.Marshal(params)
      var remote any
@@ -35,7 +51,7 @@ func (s *Server) invoke(ctx context.Context,name string,args json.RawMessage,id 
      return output
    }
  }
- if output,allowed:=s.checkPrivilege(name,args);!allowed{return output}
+ if output,allowed:=s.checkPrivilegeContext(ctx,name,args);!allowed{return output}
  v,err:=s.localTool(ctx,name,args)
  if err!=nil{return toolError(err.Error())}
  return result(v)
@@ -47,5 +63,5 @@ func (s *Server) nativeToolCall(w http.ResponseWriter,r *http.Request) {
  if err:=decode(r,&input);err!=nil {writeError(w,http.StatusBadRequest,err.Error());return}
  name:=r.PathValue("name")
  if name=="" {writeError(w,http.StatusBadRequest,"tool name required");return}
- writeJSON(w,http.StatusOK,s.invoke(r.Context(),name,input.Arguments,json.RawMessage("1")))
+ writeJSON(w,http.StatusOK,s.invoke(security.WithAccessAssertion(r.Context(),r.Header.Get("Cf-Access-Jwt-Assertion")),name,input.Arguments,json.RawMessage("1")))
 }

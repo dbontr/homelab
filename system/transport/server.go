@@ -23,10 +23,11 @@ import (
  "github.com/dbontr/homelab-new/system/recipes"
  "github.com/dbontr/homelab-new/system/session"
  "github.com/dbontr/homelab-new/system/security"
+ "github.com/dbontr/homelab-new/system/privileged"
  "github.com/dbontr/homelab-new/system/store"
 )
 type Backend struct { Name string; URL string; Token string }
-type Server struct { db *store.Store; token string; backend []Backend; client *http.Client; calendarURL string; gate *approval.Gate; privilegeClient *security.AdminClient; securityLoginURL string; allowedOrigins map[string]struct{}; media *media.Client; deviceCatalog *devices.Catalog; nodeCatalog *devices.NodeCatalog; profiles *profiles.Registry; recipes *recipes.Store; sessions *session.Manager; observability *observability.Client; bookCatalog *books.Catalog; inflight chan struct{} }
+type Server struct { db *store.Store; token string; backend []Backend; client *http.Client; calendarURL string; gate *approval.Gate; privilegeClient *security.AdminClient; executorClient *privileged.Client; securityLoginURL string; allowedOrigins map[string]struct{}; media *media.Client; deviceCatalog *devices.Catalog; nodeCatalog *devices.NodeCatalog; profiles *profiles.Registry; recipes *recipes.Store; sessions *session.Manager; observability *observability.Client; bookCatalog *books.Catalog; inflight chan struct{} }
 
 func New(db *store.Store,token string,backends []Backend)(*Server,error){
  if db==nil||len(token)<32||strings.ContainsAny(token,"\r\n\t"){return nil,errors.New("store and a strong access token are required")}
@@ -47,6 +48,7 @@ func(s *Server) SetProfiles(registry *profiles.Registry) { s.profiles = registry
 func(s *Server) SetBookCatalog(catalog *books.Catalog) { s.bookCatalog = catalog }
 func(s *Server) SetSessions(manager *session.Manager) { s.sessions = manager }
 func(s *Server) SetPrivilegeClient(client *security.AdminClient) { s.privilegeClient = client }
+func(s *Server) SetExecutorClient(client *privileged.Client) {s.executorClient=client}
 func(s *Server) SetSecurityLoginURL(raw string) error {
  u,err:=url.Parse(raw)
  if err!=nil || u.Scheme!="https" || u.Host=="" || u.User!=nil || u.RawQuery!="" || u.Fragment!="" || (u.Path!=""&&u.Path!="/") {
@@ -280,7 +282,7 @@ func(s *Server)mcp(w http.ResponseWriter,r *http.Request){
  case "tools/call":
   var p struct {Name string `json:"name"`; Arguments json.RawMessage `json:"arguments"`}
   if e:=json.Unmarshal(req.Params,&p);e!=nil||p.Name==""{s.rpc(w,req.ID,nil,failure(-32602,"tool name required"));return}
-  s.rpc(w,req.ID,s.invoke(r.Context(),p.Name,p.Arguments,req.ID),nil)
+  s.rpc(w,req.ID,s.invoke(security.WithAccessAssertion(r.Context(),r.Header.Get("Cf-Access-Jwt-Assertion")),p.Name,p.Arguments,req.ID),nil)
  default:s.rpc(w,req.ID,nil,failure(-32601,"method not found"))
  }
 }
@@ -306,6 +308,11 @@ func(s *Server)localTools()[]map[string]any{
   tool("system_status","List configured integrations",map[string]any{}),
   tool("device_inventory","List declared hardware access and constraints; this is not an online device probe",map[string]any{}),
   tool("node_inventory","List declarative management modes and roles without probing machines",map[string]any{}),
+ }
+ if s.executorClient!=nil {
+  tools=append(tools,
+   tool("infrastructure__service_restart","Restart one configured local service through the independent executor",map[string]any{"host":prop("string"),"service":prop("string")},"host","service"),
+   tool("infrastructure__release_activate","Activate a staged and verified local generation with rollback through the independent executor",map[string]any{"host":prop("string"),"release_id":prop("string")},"host","release_id"))
  }
  if s.privilegeClient!=nil {
   tools=append(tools,tool("security_session_status","Inspect the independent owner administrative session without revealing credentials",map[string]any{}),
@@ -383,6 +390,7 @@ func(s *Server)toolList(r *http.Request)[]map[string]any{
   for _,item:=range list{
    t,ok:=item.(map[string]any);if !ok{continue}
    name,ok:=t["name"].(string);if !ok||!validBackendToolName(name){continue}
+   if s.privilegeClient!=nil && approval.ScopeFor(b.Name+"__"+name)!=""{continue}
    t["name"]=b.Name+"__"+name
    out=append(out,t)
   }

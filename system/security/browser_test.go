@@ -3,6 +3,7 @@ package security
 import (
  "encoding/json"
  "time"
+ "io"
  "net/http"
  "net/http/httptest"
  "net/url"
@@ -11,12 +12,21 @@ import (
  "testing"
 )
 
+func browserRequest(token,method,path string,body io.Reader)*http.Request{
+ req:=httptest.NewRequest(method,path,body)
+ req.Header.Set("Cf-Access-Jwt-Assertion",token)
+ return req
+}
+
 func TestBrowserPortalDirectAuthenticationAndRevocation(t *testing.T){
  manager,key,now:=testSessionManager(t)
- portal,err:=NewBrowserPortal(manager,"https://auth.example.test")
+ verifier,assertion,_:=accessFixture(t,"browser-aud")
+ verify:=func(token string)(string,error){return verifier.Verify(token,"browser-aud")}
+
+ portal,err:=NewBrowserPortal(manager,"https://auth.example.test",verify)
  if err!=nil{t.Fatal(err)}
  get:=func(host string)*httptest.ResponseRecorder{
-  r:=httptest.NewRequest(http.MethodGet,"https://auth.example.test/",nil)
+  r:=browserRequest(assertion,http.MethodGet,"https://auth.example.test/",nil)
   r.Host=host
   out:=httptest.NewRecorder()
   portal.ServeHTTP(out,r)
@@ -31,7 +41,7 @@ func TestBrowserPortalDirectAuthenticationAndRevocation(t *testing.T){
  code:=TOTPCode(key,now.Unix()/30)
  post:=func(path,origin,token string,fields url.Values)*httptest.ResponseRecorder{
   fields.Set("csrf",token)
-  req:=httptest.NewRequest(http.MethodPost,"https://auth.example.test"+path,strings.NewReader(fields.Encode()))
+  req:=browserRequest(assertion,http.MethodPost,"https://auth.example.test"+path,strings.NewReader(fields.Encode()))
   req.Header.Set("Content-Type","application/x-www-form-urlencoded")
   req.Header.Set("Origin",origin)
   req.Header.Set("Sec-Fetch-Site","same-origin")
@@ -52,16 +62,19 @@ func TestBrowserPortalDirectAuthenticationAndRevocation(t *testing.T){
 
 func TestBrowserPortalRejectsUnsafeOriginAndExpiry(t *testing.T){
  manager,key,now:=testSessionManager(t)
+ verifier,assertion,_:=accessFixture(t,"browser-aud")
+ verify:=func(token string)(string,error){return verifier.Verify(token,"browser-aud")}
+
  for _,origin:=range []string{"http://auth.example.test","https://auth.example.test/path","https://user:pass@auth.example.test","https://127.0.0.1","https://auth.example.test/?next=x"}{
-  if _,err:=NewBrowserPortal(manager,origin);err==nil{t.Fatal("unsafe origin allowed",origin)}
+  if _,err:=NewBrowserPortal(manager,origin,verify);err==nil{t.Fatal("unsafe origin allowed",origin)}
  }
- portal,_:=NewBrowserPortal(manager,"https://auth.example.test")
- get:=httptest.NewRequest(http.MethodGet,"https://auth.example.test/",nil)
+ portal,_:=NewBrowserPortal(manager,"https://auth.example.test",verify)
+ get:=browserRequest(assertion,http.MethodGet,"https://auth.example.test/",nil)
  page:=httptest.NewRecorder()
  portal.ServeHTTP(page,get)
  csrf:=regexp.MustCompile(`name="csrf" value="([a-f0-9]{48})"`).FindStringSubmatch(page.Body.String())[1]
  payload:=url.Values{"csrf":{csrf},"password":{testOwnerPassword},"totp":{TOTPCode(key,now.Unix()/30)}}
- login:=httptest.NewRequest(http.MethodPost,"https://auth.example.test/login",strings.NewReader(payload.Encode()))
+ login:=browserRequest(assertion,http.MethodPost,"https://auth.example.test/login",strings.NewReader(payload.Encode()))
  login.Header.Set("Origin","https://auth.example.test")
  login.Header.Set("Content-Type","application/x-www-form-urlencoded")
  out:=httptest.NewRecorder()
@@ -73,25 +86,28 @@ func TestBrowserPortalRejectsUnsafeOriginAndExpiry(t *testing.T){
 
 func TestBrowserPortalDestructiveConfirmation(t *testing.T){
  manager,key,now:=testSessionManager(t)
- loginAt(t,manager,key,now)
+ verifier,assertion,principal:=accessFixture(t,"browser-aud")
+ verify:=func(token string)(string,error){return verifier.Verify(token,"browser-aud")}
+
+ if _,err:=manager.AuthenticateFor(principal,testOwnerPassword,TOTPCode(key,now.Unix()/30));err!=nil{t.Fatal(err)}
  operation:="cluster__configure"
  args:=json.RawMessage(`{"revision":7,"node":"saturn"}`)
- pending:=manager.Authorize("platform-gateway",operation,"saturn",args)
+ pending:=manager.AuthorizeFor(principal,"platform-gateway",operation,"saturn",args)
  if pending.Allowed||pending.ConfirmationID==""{t.Fatal("confirmation missing")}
  *now=now.Add(30*time.Second)
- portal,err:=NewBrowserPortal(manager,"https://auth.example.test")
+ portal,err:=NewBrowserPortal(manager,"https://auth.example.test",verify)
  if err!=nil{t.Fatal(err)}
  page:=httptest.NewRecorder()
- portal.ServeHTTP(page,httptest.NewRequest("GET","https://auth.example.test/",nil))
+ portal.ServeHTTP(page,browserRequest(assertion,"GET","https://auth.example.test/",nil))
  if !strings.Contains(page.Body.String(),pending.ConfirmationID){t.Fatal("challenge not presented")}
  token:=regexp.MustCompile(`name="csrf" value="([a-f0-9]{48})"`).FindStringSubmatch(page.Body.String())[1]
  form:=url.Values{"csrf":{token},"password":{testOwnerPassword},"totp":{TOTPCode(key,now.Unix()/30)}}
- request:=httptest.NewRequest("POST","https://auth.example.test/confirm/"+pending.ConfirmationID,strings.NewReader(form.Encode()))
+ request:=browserRequest(assertion,"POST","https://auth.example.test/confirm/"+pending.ConfirmationID,strings.NewReader(form.Encode()))
  request.Header.Set("Origin","https://auth.example.test")
  request.Header.Set("Content-Type","application/x-www-form-urlencoded")
  result:=httptest.NewRecorder()
  portal.ServeHTTP(result,request)
  if result.Code!=303{t.Fatal("valid confirmation rejected",result.Code)}
- if next:=manager.Authorize("platform-gateway",operation,"saturn",args);!next.Allowed{t.Fatal("confirmed operation not authorized",next.Reason)}
- if manager.Authorize("platform-gateway",operation,"saturn",args).Allowed{t.Fatal("destructive grant replayed")}
+ if next:=manager.AuthorizeFor(principal,"platform-gateway",operation,"saturn",args);!next.Allowed{t.Fatal("confirmed operation not authorized",next.Reason)}
+ if manager.AuthorizeFor(principal,"platform-gateway",operation,"saturn",args).Allowed{t.Fatal("destructive grant replayed")}
 }
