@@ -21,6 +21,17 @@ func (c *Catalog) ValidateAllocation(raw json.RawMessage) error {
 			return errors.New("invalid hardware allocation arguments")
 		}
 	}
+	for kind, count := range request.Hardware {
+		if count < 0 {
+			return fmt.Errorf("hardware count for %s must not be negative", kind)
+		}
+		if kind != "fpga" && kind != "gpu" && kind != "npu" && kind != "usb" {
+			return fmt.Errorf("unsupported hardware kind: %s", kind)
+		}
+	}
+	if request.NodeID != "" && request.USBNode != "" && request.NodeID != request.USBNode {
+		return errors.New("USB passthrough node does not match the requested worker")
+	}
 	if n := request.Hardware["fpga"]; n > 0 {
 		if request.NodeID == "" {
 			return errors.New("FPGA allocation requires a target node")
@@ -28,7 +39,7 @@ func (c *Catalog) ValidateAllocation(raw json.RawMessage) error {
 		count := 0
 		if c != nil {
 			for _, device := range c.items {
-				if device.Kind == "fpga" && device.Node == request.NodeID && device.EligibleForCompute {
+				if device.Kind == "fpga" && device.Node == request.NodeID && device.Mode == ModeEnrolled && device.EligibleForCompute {
 					count++
 				}
 			}
@@ -44,7 +55,7 @@ func (c *Catalog) ValidateAllocation(raw json.RawMessage) error {
 		permitted := false
 		if c != nil {
 			for _, device := range c.items {
-				if device.ID != request.USBDeviceID || device.Node != request.USBNode || device.Connection != "usb" || !device.EligibleForCompute {
+				if device.ID != request.USBDeviceID || device.Node != request.USBNode || device.Connection != "usb" || device.Mode != ModeEnrolled || !device.EligibleForCompute {
 					continue
 				}
 				for _, operation := range device.AllowedOperations {

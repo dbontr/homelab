@@ -10,12 +10,12 @@ The running fleet is not changed by repository commits. Saturn does not run a re
 
 The NixOS module is located at nixosModules/platform.nix and is disabled unless explicitly enabled. It packages the standard-library Go application, binds to loopback and reads credentials from systemd-protected files. Configure services.homelabPlatform.tokenFile with a token containing at least 32 characters. The optional calendarURLFile contains the read-only Proton Calendar sharing link and must not be committed.
 
-The declarative hardware inventory comes from hardware.nix; Nix supplies it to the Go application as JSON without device credentials. The service's private state is stored under /var/lib/homelab-platform. A protected local approval socket resides at /run/homelab-platform/approval.sock. A trusted Saturn administrator can review pending challenges and approve an exact operation using the homelab-approve command. The socket must never be proxied through the public ingress. Configure the optional Seerr URL and protected API key file together; private HTTP is accepted only for explicitly configured private or loopback IPs. Optional backend MCP URLs and token files are configured independently for Workspace, Learning and Health. Protected network ingress must authenticate remote clients before routing traffic to the platform.
+Device policy comes from the device entries in hardware.nix; enrolled node entries determine the NixOS hosts. SSH-mode equipment is never a deployment target. Nix supplies it to the Go application as JSON without device credentials. The service's private state is stored under /var/lib/homelab-platform. A protected local approval socket resides at /run/homelab-platform/approval.sock. A trusted Saturn administrator can review pending challenges and approve an exact operation using the homelab-approve command. The socket must never be proxied through the public ingress. Configure the optional Seerr URL and protected API key file together; private HTTP is accepted only for explicitly configured private or loopback IPs. Optional backend MCP URLs and token files are configured independently for Workspace, Learning and Health. Protected network ingress must authenticate remote clients before routing traffic to the platform.
 
 ## Validation gates
 
-1. Build and test the Go platform and each imported Go module using its declared toolchain.
-2. Evaluate every host configuration from the root Nix flake.
+1. Develop and validate without activating a NixOS generation or modifying running services. Build and test the Go platform and each imported Go module using its declared toolchain.
+2. Evaluate every enrolled host configuration from the root Nix flake.
 3. Verify API and MCP discovery, authorized/unauthorized requests, backend failure behavior and calendar access.
 4. Verify that media mount points, networking, and VPN confinement are unaffected.
 5. Validate application state behavior, independent worker failure and service rollback.

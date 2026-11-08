@@ -36,7 +36,21 @@ in
         options = {
           id = lib.mkOption { type = lib.types.str; };
           kind = lib.mkOption { type = lib.types.enum [ "fpga" "gpu" "npu" "other" ]; };
-          ownership = lib.mkOption { type = lib.types.enum [ "owned" "borrowed" ]; };
+          mode = lib.mkOption {
+            type = lib.types.enum [ "ssh" "enrolled" ];
+            description = "SSH is agentless; enrolled hardware can use managed workers.";
+          };
+          ssh = lib.mkOption {
+            type = lib.types.nullOr (lib.types.submodule {
+              options = {
+                host = lib.mkOption { type = lib.types.str; };
+                user = lib.mkOption { type = lib.types.str; };
+                port = lib.mkOption { type = lib.types.port; default = 22; };
+              };
+            });
+            default = null;
+            description = "Optional unprivileged SSH login target; credentials and host keys are external.";
+          };
           connection = lib.mkOption { type = lib.types.enum [ "ssh" "usb" "pcie" "local" ]; };
           node = lib.mkOption { type = lib.types.str; default = ""; };
           allowedOperations = lib.mkOption {
@@ -49,7 +63,7 @@ in
           };
         };
       });
-      default = import ../hardware.nix;
+      default = (import ../hardware.nix).devices;
       description = "Declared hardware inventory. Transport does not imply connectivity or permission to modify devices.";
     };
     calendarURLFile = lib.mkOption {

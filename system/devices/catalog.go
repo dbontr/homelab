@@ -1,27 +1,45 @@
 package devices
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"regexp"
 	"sort"
 )
 
+const (
+	ModeSSH      = "ssh"
+	ModeEnrolled = "enrolled"
+)
+
+// SSHConfig identifies an ordinary user login. Authentication and host-key
+// verification belong to the separately authorized connection executor.
+type SSHConfig struct {
+	Host string `json:"host"`
+	User string `json:"user"`
+	Port int    `json:"port,omitempty"`
+}
+
 type Device struct {
-	ID                 string   `json:"id"`
-	Kind               string   `json:"kind"`
-	Ownership          string   `json:"ownership"`
-	Connection         string   `json:"connection"`
-	Node               string   `json:"node,omitempty"`
-	AllowedOperations  []string `json:"allowedOperations"`
-	EligibleForCompute bool     `json:"eligibleForCompute"`
+	ID                 string     `json:"id"`
+	Kind               string     `json:"kind"`
+	Mode               string     `json:"mode"`
+	Connection         string     `json:"connection"`
+	Node               string     `json:"node,omitempty"`
+	SSH                *SSHConfig `json:"ssh,omitempty"`
+	AllowedOperations  []string   `json:"allowedOperations"`
+	EligibleForCompute bool       `json:"eligibleForCompute"`
 }
 
 type Catalog struct{ items []Device }
 
 var identifier = regexp.MustCompile(`^[a-z][a-z0-9-]{0,62}$`)
+var sshHost = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,252}$`)
+var sshUser = regexp.MustCompile(`^[a-z_][a-z0-9_-]{0,31}$`)
 
 func New(items []Device) (*Catalog, error) {
 	known := map[string]bool{}
@@ -34,8 +52,8 @@ func New(items []Device) (*Catalog, error) {
 		if d.Kind != "fpga" && d.Kind != "gpu" && d.Kind != "npu" && d.Kind != "other" {
 			return nil, fmt.Errorf("unsupported device kind for %s", d.ID)
 		}
-		if d.Ownership != "owned" && d.Ownership != "borrowed" {
-			return nil, fmt.Errorf("invalid device ownership for %s", d.ID)
+		if d.Mode != ModeSSH && d.Mode != ModeEnrolled {
+			return nil, fmt.Errorf("invalid management mode for %s", d.ID)
 		}
 		if d.Connection != "ssh" && d.Connection != "usb" && d.Connection != "pcie" && d.Connection != "local" {
 			return nil, fmt.Errorf("invalid device connection for %s", d.ID)
@@ -53,6 +71,30 @@ func New(items []Device) (*Catalog, error) {
 			}
 			operations[op] = true
 		}
+		if d.Mode == ModeSSH {
+			if d.Connection != "ssh" {
+				return nil, fmt.Errorf("SSH device %s requires an SSH connection", d.ID)
+			}
+			if d.EligibleForCompute || operations["allocate"] || operations["passthrough"] {
+				return nil, fmt.Errorf("SSH device %s cannot receive managed compute leases", d.ID)
+			}
+		}
+		if d.SSH != nil {
+			if d.Mode != ModeSSH {
+				return nil, fmt.Errorf("SSH login is not applicable to enrolled device %s", d.ID)
+			}
+			ssh := *d.SSH
+			if !sshHost.MatchString(ssh.Host) || !sshUser.MatchString(ssh.User) || ssh.User == "root" {
+				return nil, fmt.Errorf("invalid unprivileged SSH target for %s", d.ID)
+			}
+			if ssh.Port == 0 {
+				ssh.Port = 22
+			}
+			if ssh.Port < 1 || ssh.Port > 65535 {
+				return nil, fmt.Errorf("invalid SSH port for %s", d.ID)
+			}
+			d.SSH = &ssh
+		}
 		if d.EligibleForCompute && (d.Node == "" || !operations["allocate"]) {
 			return nil, fmt.Errorf("compute-eligible device %s requires a node and allocate permission", d.ID)
 		}
@@ -68,9 +110,15 @@ func Load(path string) (*Catalog, error) {
 	if err != nil {
 		return nil, err
 	}
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
 	var items []Device
-	if err := json.Unmarshal(raw, &items); err != nil {
+	if err := decoder.Decode(&items); err != nil {
 		return nil, err
+	}
+	var extra any
+	if err := decoder.Decode(&extra); err != io.EOF {
+		return nil, errors.New("device inventory must contain one JSON array")
 	}
 	return New(items)
 }
@@ -82,6 +130,10 @@ func (c *Catalog) List() []Device {
 	out := make([]Device, len(c.items))
 	for i, d := range c.items {
 		d.AllowedOperations = append([]string(nil), d.AllowedOperations...)
+		if d.SSH != nil {
+			ssh := *d.SSH
+			d.SSH = &ssh
+		}
 		out[i] = d
 	}
 	return out
