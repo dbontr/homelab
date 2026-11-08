@@ -56,7 +56,7 @@ impl Page {
     }
 }
 
-const WORKSPACE: &[(Page, &str, &str)] = &[
+const ENGINEERING: &[(Page, &str, &str)] = &[
     (Page::Overview, "Overview", "overview"),
     (Page::Projects, "Projects", "projects"),
     (Page::Compute, "Compute", "compute"),
@@ -174,10 +174,10 @@ fn App() -> Element {
                                 span { class: "brand-caption", "Personal computing" }
                             }
                         }
-                        nav { aria_label: "Workspace",
+                        nav { aria_label: "Engineering",
                             div { class: "nav-group",
-                                div { class: "nav-label", "Workspace" }
-                                for &(destination,label,icon) in WORKSPACE {
+                                div { class: "nav-label", "Engineering" }
+                                for &(destination,label,icon) in ENGINEERING {
                                     button {
                                         key: "{label}",
                                         class: "nav-item",
