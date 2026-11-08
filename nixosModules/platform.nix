@@ -24,6 +24,11 @@ in
       default = [];
       description = "Exact browser or MCP Origin values permitted by the gateway; no wildcards.";
     };
+    books.contactFile = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "Protected contact email file used to identify on-demand Open Library search requests.";
+    };
     monitoring = {
       prometheusURL = lib.mkOption {
         type = lib.types.str;
@@ -148,6 +153,8 @@ in
         HOMELAB_API_TOKEN_FILE = "/run/credentials/homelab-platform.service/access_token";
         HOMELAB_PROMETHEUS_URL = cfg.monitoring.prometheusURL;
         HOMELAB_LOKI_URL = cfg.monitoring.lokiURL;
+      } // lib.optionalAttrs (cfg.books.contactFile != null) {
+        HOMELAB_BOOKS_CONTACT_FILE = "/run/credentials/homelab-platform.service/books_contact";
       } // lib.optionalAttrs (cfg.consolePassphraseFile != null) {
         HOMELAB_CONSOLE_PASSPHRASE_FILE = "/run/credentials/homelab-platform.service/console_passphrase";
       } // lib.optionalAttrs (cfg.seerr.url != "") {
@@ -179,6 +186,7 @@ in
           [ "access_token:${cfg.tokenFile}" ]
           ++ lib.optional (cfg.calendarURLFile != null) "calendar_url:${cfg.calendarURLFile}"
           ++ lib.optional (cfg.consolePassphraseFile != null) "console_passphrase:${cfg.consolePassphraseFile}"
+          ++ lib.optional (cfg.books.contactFile != null) "books_contact:${cfg.books.contactFile}"
           ++ lib.optional (cfg.seerr.apiKeyFile != null) "seerr_api_key:${cfg.seerr.apiKeyFile}"
           ++ lib.concatMap (name:
             lib.optional (cfg.integrations.${name}.tokenFile != null)
