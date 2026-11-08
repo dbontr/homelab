@@ -209,17 +209,66 @@ func (e *Engine) Dispatch(ctx context.Context,key,kind string,input json.RawMess
   commands,_:=args["commands"].([]any)
   checkout,e2:=resultObject(w,"checkout");if e2!=nil{return nil,e2}
   repo:=str(checkout["repository"])
-  reports:=make([]map[string]any,0,len(commands))
-  for _,entry:=range commands{
-   command:=str(entry)
-   result,e2:=e.workspaceAction(ctx,w,"command",map[string]any{"command":"cd "+repoRoot(repo)+" && "+command})
-   if e2!=nil{return nil,e2}
-   code,ok:=result["exit_code"].(float64)
-   if !ok{return nil,errors.New("unconfirmed verification exit status")}
-   reports=append(reports,map[string]any{"command":command,"exit_code":code})
-   if code!=0{return nil,fmt.Errorf("verification command failed with exit code %.0f",code)}
+  if !repositoryName.MatchString(repo){return nil,errors.New("invalid checkout repository")}
+  authored,e2:=resultObject(w,"author");if e2!=nil{return nil,e2}
+  original,e2:=stringMap(authored["changes"]);if e2!=nil{return nil,e2}
+  var authorArgs struct{
+   Objective string `json:"objective"`
+   AllowedPaths []string `json:"allowed_paths"`
   }
-  out=map[string]any{"passed":true,"checks":reports}
+  for _,step:=range w.Steps{
+   if step.ID=="author"{
+    if err:=json.Unmarshal(step.Input,&authorArgs);err!=nil{return nil,err}
+    break
+   }
+  }
+  allowed:=map[string]bool{}
+  for _,name:=range authorArgs.AllowedPaths{if !validSourcePath(name){return nil,errors.New("invalid authorized edit path")};allowed[name]=true}
+  maxPasses:=1
+  if e.Author!=nil&&len(allowed)>0{maxPasses=3}
+  for pass:=1;pass<=maxPasses;pass++{
+   reports:=make([]map[string]any,0,len(commands))
+   failedCommand:=""
+   failedCode:=float64(0)
+   for _,entry:=range commands{
+    command:=str(entry)
+    result,callErr:=e.workspaceAction(ctx,w,"command",map[string]any{"command":"cd "+repoRoot(repo)+" && "+command})
+    if callErr!=nil{return nil,callErr}
+    code,ok:=result["exit_code"].(float64)
+    if !ok{return nil,errors.New("unconfirmed verification exit status")}
+    reports=append(reports,map[string]any{"command":command,"exit_code":code})
+    if code!=0{failedCommand=command;failedCode=code;break}
+   }
+   if failedCommand==""{
+    out=map[string]any{"passed":true,"checks":reports,"attempts":pass}
+    break
+   }
+   if pass==maxPasses{return nil,fmt.Errorf("verification command failed with exit code %.0f",failedCode)}
+   editable:=make([]string,0,len(original))
+   source:=map[string]string{}
+   for _,name:=range sortedPaths(original){
+    if !allowed[name]{continue}
+    result,callErr:=e.workspaceAction(ctx,w,"read_file",map[string]any{"path":path.Join(repoRoot(repo),name)})
+    if callErr!=nil{return nil,callErr}
+    body:=str(result["content"])
+    if len(body)>24000{return nil,errors.New("repair source exceeds file limit")}
+    editable=append(editable,name)
+    source[name]=body
+   }
+   if len(editable)==0{return nil,errors.New("verification failed without permitted repair paths")}
+   objective:=authorArgs.Objective
+   if len(objective)>3000{objective=objective[:3000]}
+   feedback:=fmt.Sprintf("Verification command %q exited with code %.0f. Repair only the approved source files. No other operations are permitted.",failedCommand,failedCode)
+   repair,callErr:=e.Author.Propose(ctx,objective+"\n"+feedback,source,editable)
+   if callErr!=nil{return nil,callErr}
+   if err:=validateChanges(repair);err!=nil{return nil,err}
+   for _,name:=range sortedPaths(repair){
+    if !allowed[name]||source[name]==""{return nil,errors.New("repair attempted an unauthorized source change")}
+    result,callErr:=e.workspaceAction(ctx,w,"write_file",map[string]any{"path":path.Join(repoRoot(repo),name),"content":repair[name]})
+    if callErr!=nil{return nil,callErr}
+    if code,ok:=result["exit_code"].(float64);ok&&code!=0{return nil,errors.New("repair file write failed")}
+   }
+  }
  case "export":
   authored,e2:=resultObject(w,"author");if e2!=nil{return nil,e2}
   changes,e2:=stringMap(authored["changes"]);if e2!=nil{return nil,e2}
