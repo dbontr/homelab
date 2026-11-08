@@ -158,7 +158,7 @@ func ownerRequest(ctx context.Context, method, path string, input any) ([]byte, 
 
 func run(args []string) error {
 	if len(args) == 0 {
-		return errors.New("expected enroll, vault-init, login, status, pending, confirm, close, credential-add, credential-list or credential-delete")
+		return errors.New("expected enroll, vault-init, login, status, pending, confirm, close, credential-add, credential-rotate, credential-list or credential-delete")
 	}
 	if args[0] == "enroll" {
 		return enroll(args[1:])
@@ -200,6 +200,19 @@ func run(args []string) error {
 		if err != nil { return err }
 		method, path = http.MethodPost, "/v1/credentials"
 		input = map[string]string{"provider": provider, "secret": secret, "password": password, "totp": code}
+	case "credential-rotate":
+		if len(args)!=3||args[1]==""||len(args[1])>64||
+			len(args[2])!=32||strings.Trim(args[2],"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")!="" {
+			return errors.New("credential-rotate requires provider and exact opaque handle")
+		}
+		value,err:=secretPrompt("Replacement provider credential (hidden):")
+		if err!=nil{return err}
+		password,err:=secretPrompt("Homelab administrative password:")
+		if err!=nil{return err}
+		code,err:=secretPrompt("New six-digit authenticator code:")
+		if err!=nil{return err}
+		method,path=http.MethodPut,"/v1/credentials/"+args[2]
+		input=map[string]string{"provider":args[1],"secret":value,"password":password,"totp":code}
 	case "credential-delete":
 		if len(args) != 2 || len(args[1]) != 32 || strings.Trim(args[1], "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_") != "" {
 			return errors.New("credential-delete requires an exact opaque credential handle")

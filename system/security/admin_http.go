@@ -98,6 +98,7 @@ func (a *AdminSessions) OwnerHandler() http.Handler {
 		respondJSON(w, 200, map[string]bool{"confirmed": true})
 	})
 
+ a.registerCredentialRotation(mux)
  mux.HandleFunc("GET /v1/credentials",func(w http.ResponseWriter,_ *http.Request){
   if a.vault==nil{http.Error(w,"credential vault unavailable",503);return}
   respondJSON(w,200,a.vault.List())

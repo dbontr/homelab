@@ -34,6 +34,14 @@ sudo homelab-admin close
 
 `pending` returns redacted argument previews and full SHA-256 digests. The owner must inspect the action and target before confirmation. The initial TOTP counter cannot be reused for a destructive step-up; wait for the authenticator's next 30-second code. All owner requests use the owner-only Unix socket. No browser or public ingress route is configured by the security daemon.
 
+## Credential custody and rotation
+
+The owner-only socket can list opaque credential handles, store provider credentials, revoke entries, and atomically rotate an existing entry. Each add, delete, or rotate operation requires a fresh administrative password and an unreplayed TOTP submitted directly to the trusted owner channel. The gateway does not expose any credential-inventory or plaintext-credential operation.
+
+Use the local administrative command `homelab-admin credential-rotate PROVIDER OPAQUE_HANDLE` on a trusted terminal. The program reads the replacement credential and owner factors through `systemd-ask-password` without putting them in shell history or command arguments. It sends the replacement only over the owner-only Unix socket. Successful rotation retains the provider and opaque handle but encrypts the replacement under a fresh nonce and changes the credential's revision. Previously prepared scoped credential capabilities are tied to the prior revision and fail on use after rotation; a new capability requires another current owner authorization.
+
+Provider-specific OAuth refresh and authorization-code exchange remain internal source-library operations until a configured provider runtime and independently protected browser/device flow are integrated. Do not send tokens or administrator factors to an MCP request.
+
 ## ChatGPT-initiated browser authentication
 
 The platform MCP tool `security_session_open` returns the configured HTTPS sign-in URL and current non-secret session status. ChatGPT can present that URL as a link or an external-open action. The user enters the owner password and six-digit TOTP on the separate trusted page. Neither the credential form nor a reusable administrator token is part of an MCP tool argument or result. Once authenticated, the user can return to ChatGPT and retry an allowed operation. The MCP also exposes session status and immediate closure.
