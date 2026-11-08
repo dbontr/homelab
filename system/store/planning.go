@@ -42,15 +42,21 @@ func overlap(aStart,aEnd,bStart,bEnd time.Time)bool{
  return aStart.Before(bEnd)&&bStart.Before(aEnd)
 }
 
+func (s *Store) PlanningStart(day string)(time.Time,error){
+ if day==""{day=time.Now().In(s.zone).Format("2006-01-02")}
+ first,err:=time.ParseInLocation("2006-01-02",day,s.zone)
+ if err!=nil{return time.Time{},errors.New("planning day must be YYYY-MM-DD")}
+ return first,nil
+}
+
 func (s *Store) PlanWeek(day string,dailyMinutes,startHour int,external []BusyWindow)(WeeklyPlan,error){
  if dailyMinutes<30||dailyMinutes>480||startHour<0||startHour>16{
   return WeeklyPlan{},errors.New("daily capacity must be 30..480 minutes and start hour 0..16")
  }
- if day==""{day=time.Now().In(s.zone).Format("2006-01-02")}
- first,err:=time.ParseInLocation("2006-01-02",day,s.zone)
- if err!=nil{return WeeklyPlan{},errors.New("planning day must be YYYY-MM-DD")}
+ first,err:=s.PlanningStart(day)
+ if err!=nil{return WeeklyPlan{},err}
  plan:=WeeklyPlan{
-  From:day,Until:first.AddDate(0,0,7).Format("2006-01-02"),
+  From:first.Format("2006-01-02"),Until:first.AddDate(0,0,7).Format("2006-01-02"),
   DailyMinutes:dailyMinutes,StartHour:startHour,
   Slots:[]PlannedTask{},Unplanned:[]UnplannedTask{},Limitations:[]string{},
  }
