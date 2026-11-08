@@ -95,3 +95,42 @@ func TestKnowledgeWritesUseLocalAuthorityAndCallerGrants(t *testing.T) {
 	wantOK(t, code, read)
 	if !strings.Contains(asString(read["body"]), "verified") {t.Fatal("local note was not preserved")}
 }
+
+func TestLibraryDocumentRESTUsesProjectGrants(t *testing.T) {
+	db, controller, server := fixture(t)
+	if _, err := db.CreateLibraryProject("publisher", "Publishing Project", "", "research"); err != nil { t.Fatal(err) }
+	if _, err := db.CreateProject("consumer", "Consumer"); err != nil { t.Fatal(err) }
+	if _, err := db.LinkLibrary("consumer", "publisher"); err != nil { t.Fatal(err) }
+
+	key, issuer := testOIDCIssuer(t, controller)
+	editorPrincipal := "oidc:" + issuer + "#writer"
+	readerPrincipal := "oidc:" + issuer + "#reader"
+	if _, err := db.SetProjectGrant("publisher", editorPrincipal, "editor", ""); err != nil { t.Fatal(err) }
+	if _, err := db.SetProjectGrant("consumer", readerPrincipal, "viewer", ""); err != nil { t.Fatal(err) }
+	editor := signedTestToken(t, key, issuer, "project-workspace", "writer", time.Now().Add(time.Hour).Unix())
+	reader := signedTestToken(t, key, issuer, "project-workspace", "reader", time.Now().Add(time.Hour).Unix())
+
+	path := "/api/projects/publisher/libraries/publisher/documents"
+	code, saved := call(t, server, http.MethodPost, path, editor,
+		map[string]any{"name": "research.md", "body": "# Verified research\\n"})
+	wantOK(t, code, saved)
+	if saved["sha256"] != checksum([]byte("# Verified research\\n")) {
+		t.Fatalf("publisher document lacks verified digest: %v", saved)
+	}
+	code, _ = call(t, server, http.MethodPost, path, reader,
+		map[string]any{"name": "forbidden.md", "body": "Unauthorized"})
+	if code != http.StatusForbidden { t.Fatalf("reader published a document: %d", code) }
+
+	code, got := call(t, server, http.MethodGet,
+		"/api/projects/consumer/libraries/publisher/documents/research.md", reader, nil)
+	wantOK(t, code, got)
+	if got["body"] != "# Verified research\\n" { t.Fatalf("linked project read failed: %v", got) }
+
+	if _, err := db.SetProjectGrant("consumer", editorPrincipal, "editor", ""); err != nil { t.Fatal(err) }
+	code, _ = call(t, server, http.MethodPost,
+		"/api/projects/consumer/libraries/publisher/documents", editor,
+		map[string]any{"name": "not-publisher.md", "body": "Cannot publish"})
+	if code == http.StatusOK {
+		t.Fatal("consumer's editor grant was treated as publisher ownership")
+	}
+}
