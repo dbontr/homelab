@@ -24,6 +24,18 @@ in
       default = [];
       description = "Exact browser or MCP Origin values permitted by the gateway; no wildcards.";
     };
+    monitoring = {
+      prometheusURL = lib.mkOption {
+        type = lib.types.str;
+        default = "";
+        description = "Loopback Prometheus origin for authenticated monitoring views.";
+      };
+      lokiURL = lib.mkOption {
+        type = lib.types.str;
+        default = "";
+        description = "Loopback Loki origin for authenticated journal inspection.";
+      };
+    };
     seerr = {
       url = lib.mkOption {
         type = lib.types.str;
@@ -99,6 +111,14 @@ in
         message = "Seerr requires both its origin URL and protected API key file.";
       }
       {
+        assertion = lib.all (source: source == "" ||
+          lib.hasPrefix "http://127.0.0.1:" source ||
+          lib.hasPrefix "http://[::1]:" source ||
+          lib.hasPrefix "http://localhost:" source)
+          [ cfg.monitoring.prometheusURL cfg.monitoring.lokiURL ];
+        message = "Monitoring sources must use loopback HTTP.";
+      }
+      {
         assertion = cfg.tokenFile != null;
         message = "The platform requires a protected API token file.";
       }
@@ -126,6 +146,8 @@ in
         HOMELAB_PROFILES_FILE = "/var/lib/homelab-platform/profiles.json";
         HOMELAB_RECIPES_FILE = "/var/lib/homelab-platform/recipes.json";
         HOMELAB_API_TOKEN_FILE = "/run/credentials/homelab-platform.service/access_token";
+        HOMELAB_PROMETHEUS_URL = cfg.monitoring.prometheusURL;
+        HOMELAB_LOKI_URL = cfg.monitoring.lokiURL;
       } // lib.optionalAttrs (cfg.consolePassphraseFile != null) {
         HOMELAB_CONSOLE_PASSPHRASE_FILE = "/run/credentials/homelab-platform.service/console_passphrase";
       } // lib.optionalAttrs (cfg.seerr.url != "") {
