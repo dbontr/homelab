@@ -38,6 +38,26 @@ pub struct WeeklyPlan {
     pub limitations: Vec<String>,
 }
 
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub struct ReviewEntry {
+    pub task_id: String,
+    pub title: String,
+    pub category: String,
+    #[serde(default)]
+    pub due: String,
+    #[serde(default)]
+    pub dependency_count: i32,
+    pub priority: i32,
+}
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub struct TaskReview {
+    pub at: String,
+    pub horizon_days: i32,
+    #[serde(default)]
+    pub entries: Vec<ReviewEntry>,
+    pub note: String,
+}
+
 fn short_time(time: &str) -> String {
     time.get(11..16).unwrap_or(time).to_owned()
 }
@@ -46,6 +66,9 @@ fn short_time(time: &str) -> String {
 pub fn Planner() -> Element {
     let mut daily_minutes = use_signal(|| 180_i32);
     let mut start_hour = use_signal(|| 9_i32);
+    let mut review = use_resource(|| async {
+        api::get::<TaskReview>("/v1/planning/review?days=7").await
+    });
     let mut plan = use_resource(move || {
         let minutes = daily_minutes();
         let hour = start_hour();
@@ -59,7 +82,7 @@ pub fn Planner() -> Element {
         Heading {
             title: "Weekly planner".to_owned(),
             description: "Capacity-aware timeboxes drawn from recorded tasks, prerequisites and calendar commitments.".to_owned(),
-            button { class: "btn btn-outline", onclick: move |_| plan.restart(),
+            button { class: "btn btn-outline", onclick: move |_| { plan.restart(); review.restart(); },
                 Icon { name: "refresh".to_owned() } "Recalculate"
             }
         }
@@ -97,6 +120,44 @@ pub fn Planner() -> Element {
                 }
                 p { class: "small muted",
                     "This is a proposal, not a calendar change. Tasks without durations or with unfinished prerequisites are not silently scheduled."
+                }
+            }
+        }
+        section { class: "card",
+            div { class: "card-header",
+                h2 { class: "card-title", "Deadline and prerequisite review" }
+                p { class: "card-description",
+                    "Classified only from recorded dates, dependencies and estimates. An absence of activity is not evidence of neglect."
+                }
+            }
+            div { class: "card-body",
+                match review.cloned() {
+                    None => rsx! { Loading {} },
+                    Some(Err(message)) => rsx! { Notice { message } },
+                    Some(Ok(result)) => rsx! {
+                        if result.entries.is_empty() {
+                            p { class: "small muted", "No overdue or upcoming deadlines, blocked tasks or missing estimates were found." }
+                        } else {
+                            div { class: "planner-unplanned",
+                                for entry in result.entries {
+                                    article { class: "planner-review-entry",
+                                        div { class: "inline-row",
+                                            span { class: "badge", "{entry.category}" }
+                                            strong { "{entry.title}" }
+                                        }
+                                        if !entry.due.is_empty() {
+                                            span { class: "small muted", "Due: {entry.due}" }
+                                        }
+                                        if entry.dependency_count>0 {
+                                            span { class: "small muted",
+                                                "{entry.dependency_count} incomplete prerequisites"
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
