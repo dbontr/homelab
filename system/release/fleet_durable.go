@@ -113,16 +113,20 @@ func(d *DurableFleet)Status()(FleetTransaction,error){
 
 func(d *DurableFleet)Start(ctx context.Context,targets []FleetTarget)(FleetTransaction,error){
  var tx FleetTransaction
- err:=d.locked(func()error{
-  if err:=validateFleet(targets,d.Agents);err!=nil{return err}
-  if _,err:=os.Lstat(d.StateFile);err==nil{return errors.New("existing fleet transaction requires explicit resolution")}else if !errors.Is(err,os.ErrNotExist){return err}
-  token:=make([]byte,24);if _,err:=rand.Read(token);err!=nil{return err}
-  tx=FleetTransaction{ID:hex.EncodeToString(token),Phase:"activating",Targets:append([]FleetTarget(nil),targets...)}
-  for _,target:=range targets{tx.Steps=append(tx.Steps,FleetStep{Host:target.Host,Role:target.Role,ReleaseID:target.ReleaseID,State:"pending"})}
-  if err:=d.write(&tx);err!=nil{return err}
-  return d.activate(ctx,&tx)
- })
+ err:=d.locked(func()error{var err error;tx,err=d.startLocked(ctx,targets);return err})
  return tx,err
+}
+
+// startLocked is called only while the exclusive fleet state lock is held.
+func(d *DurableFleet)startLocked(ctx context.Context,targets []FleetTarget)(FleetTransaction,error){
+ var tx FleetTransaction
+ if err:=validateFleet(targets,d.Agents);err!=nil{return tx,err}
+ if _,err:=os.Lstat(d.StateFile);err==nil{return tx,errors.New("existing fleet transaction requires explicit resolution")}else if !errors.Is(err,os.ErrNotExist){return tx,err}
+ token:=make([]byte,24);if _,err:=rand.Read(token);err!=nil{return tx,err}
+ tx=FleetTransaction{ID:hex.EncodeToString(token),Phase:"activating",Targets:append([]FleetTarget(nil),targets...)}
+ for _,target:=range targets{tx.Steps=append(tx.Steps,FleetStep{Host:target.Host,Role:target.Role,ReleaseID:target.ReleaseID,State:"pending"})}
+ if err:=d.write(&tx);err!=nil{return tx,err}
+ return tx,d.activate(ctx,&tx)
 }
 
 func(d *DurableFleet)activate(ctx context.Context,tx *FleetTransaction)error{
