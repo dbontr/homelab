@@ -159,7 +159,7 @@ func(c *Controller) Stage(ctx context.Context,revision string)(Manifest,error){
  }
  err:=c.locked(func()error{
   var active Journal
-  if err:=c.read("journal.json",&active);err==nil&&(active.Phase=="activating"||active.Phase=="rollback-failed"){
+  if err:=c.read("journal.json",&active);err==nil&&(active.Phase=="activating"||active.Phase=="reverting"||active.Phase=="rollback-failed"){
    return errors.New("interrupted deployment requires recovery")
   }else if err!=nil&&!errors.Is(err,os.ErrNotExist){return err}
   head,err:=c.Config.Run(ctx,c.Config.Git,"-C",c.Config.FlakeDir,"rev-parse","HEAD")
@@ -224,7 +224,7 @@ func(c *Controller) Activate(ctx context.Context,id string)error{
  return c.locked(func()error{
   m,err:=c.loadStage(id);if err!=nil{return err}
   var previous Journal
-  if err:=c.read("journal.json",&previous);err==nil&&(previous.Phase=="activating"||previous.Phase=="rollback-failed"){
+  if err:=c.read("journal.json",&previous);err==nil&&(previous.Phase=="activating"||previous.Phase=="reverting"||previous.Phase=="rollback-failed"){
    return errors.New("previous activation must be recovered first")
   }else if err!=nil&&!errors.Is(err,os.ErrNotExist){return err}
   current,err:=c.Config.Current()
@@ -247,12 +247,34 @@ func(c *Controller) Activate(ctx context.Context,id string)error{
  })
 }
 
+// Revert restores a completed release only when the active system is the
+// generation recorded in that release. The release ID is never accepted as a
+// free-form target path or an instruction to execute arbitrary code.
+func(c *Controller) Revert(ctx context.Context,id string)error{
+ if !idPattern.MatchString(id){return errors.New("invalid release ID")}
+ return c.locked(func()error{
+  var txn Journal
+  if err:=c.read("journal.json",&txn);err!=nil{return err}
+  if txn.Phase!="active"||txn.ID!=id||!checkStorePath(txn.Target)||!checkStorePath(txn.Previous){
+   return errors.New("release is not the active recorded generation")
+  }
+  current,err:=c.Config.Current()
+  if err!=nil||current!=txn.Target{return errors.New("active generation differs from release journal")}
+  txn.Phase="reverting"
+  if err:=c.atomic("journal.json",txn);err!=nil{return err}
+  cleanup,cancel:=context.WithTimeout(context.Background(),90*time.Second)
+  defer cancel()
+  if err:=c.rollback(cleanup,txn);err!=nil{return err}
+  return nil
+ })
+}
+
 // Recover resolves an interrupted switch, using the last proven generation.
 func(c *Controller) Recover(ctx context.Context)error{
  return c.locked(func()error{
   var txn Journal
   if err:=c.read("journal.json",&txn);err!=nil{return err}
-  if txn.Phase!="activating"&&txn.Phase!="rollback-failed"{return errors.New("no interrupted release")}
+  if txn.Phase!="activating"&&txn.Phase!="reverting"&&txn.Phase!="rollback-failed"{return errors.New("no interrupted release")}
   if !checkStorePath(txn.Previous){return errors.New("invalid recovery generation")}
   return c.rollback(ctx,txn)
  })
