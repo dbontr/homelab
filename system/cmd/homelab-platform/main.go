@@ -103,6 +103,9 @@ func main(){
         client,err:=security.NewAdminClient(socket)
         if err!=nil{log.Fatal(err)}
         server.SetPrivilegeClient(client)
+        if raw:=os.Getenv("HOMELAB_SECURITY_LOGIN_URL");raw!=""{
+            if err:=server.SetSecurityLoginURL(raw);err!=nil{log.Fatal(err)}
+        }
     }else{
         serveApprovals(server,os.Getenv("HOMELAB_APPROVAL_SOCKET"))
     }
