@@ -59,7 +59,7 @@ func(f *fakeCompute)Call(_ context.Context,name string,args map[string]any)(map[
 func sampleProgram()Program{
  return Program{
   Project:"research",Repository:"example/repo",
-  Revision:strings.Repeat("a",40),BaseBranch:"main",ExpectedHead:strings.Repeat("b",40),
+  Revision:strings.Repeat("a",40),BaseBranch:"main",ExpectedHead:strings.Repeat("a",40),
   Objective:"Correct the documentation",Changes:map[string]string{"README.md":"Correct details"},
   Checks:[]string{"go test ./..."},ImagePoolID:"debian-bookworm-slim",
   CPU:1,MemoryMB:2048,DurationMinutes:30,Title:"Repair documentation",
