@@ -58,6 +58,10 @@ The service binaries for Workspace, Adaptive Teaching and Health retain their ow
 
 Source staging is not evidence of these acceptance checks. Do not delete databases, previous application deployments, existing repositories, recovery points or media merely because a newer source build exists.
 
+## Canonical resource references
+
+The platform uses references of the form `homelab:<kind>:<id>`, where kind is `task`, `goal`, `recipe`, `meal`, or `book`. `resource_resolve` and the native `GET /v1/resources/resolve?ref=...` route resolve a reference through the owning first-party service rather than copying application records into a shadow store. Invalid or unsupported identities fail closed. Workspace project/library references remain owned by Workspace until a corresponding authenticated resolver is implemented.
+
 ## Local monitoring
 
 Monitoring reuses the private Prometheus and Loki services. The platform's monitoring adapter accepts only loopback origins, fixed PromQL expressions and bounded Loki journal queries. The Rust dashboard can replace the Grafana presentation after compilation and acceptance. The collectors, retention rules and alert evaluation remain independent of the frontend.
