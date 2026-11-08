@@ -1007,6 +1007,168 @@ pub fn Recipes(csrf: String) -> Element {
             Tab::Transfer => rsx! {
                 section { class: "card",
                     div { class: "card-header",
+                        h2 { class: "card-title", "RecipeSage export" }
+                        p { class: "card-description",
+                            "Import a RecipeSage JSON-LD export after reviewing its contents. RecipeSage and its original data are never modified."
+                        }
+                    }
+                    div { class: "card-body stack",
+                        div { class: "form-row",
+                            label { class: "label", for: "recipe-sage-file", "JSON-LD export file" }
+                            input { id: "recipe-sage-file", class: "field recipe-file-input",
+                                type: "file", accept: ".json,.jsonld,application/json,application/ld+json",
+                                disabled: busy(),
+                                onchange: move |event| {
+                                    let Some(file) = event.files().into_iter().next() else { return; };
+                                    sage_preview.set(None);
+                                    sage_selected.set(Vec::new());
+                                    sage_source.set(String::new());
+                                    sage_filename.set(file.name().to_owned());
+                                    error.set(String::new());
+                                    if file.size() > 8 * 1024 * 1024 {
+                                        error.set("RecipeSage exports must be 8 MiB or smaller".to_owned());
+                                        return;
+                                    }
+                                    busy.set(true);
+                                    spawn(async move {
+                                        match file.read_bytes().await {
+                                            Ok(data) => match String::from_utf8(data.to_vec()) {
+                                                Ok(value) => sage_source.set(value),
+                                                Err(_) => error.set("RecipeSage export is not UTF-8 JSON".to_owned()),
+                                            },
+                                            Err(_) => error.set("Could not read the RecipeSage export".to_owned()),
+                                        }
+                                        busy.set(false);
+                                    });
+                                }
+                            }
+                        }
+                        if !sage_filename().is_empty() {
+                            p { class: "small muted", "Selected: {sage_filename()}" }
+                        }
+                        div { class: "inline-row",
+                            button { class: "btn btn-outline",
+                                disabled: busy() || sage_source().is_empty(),
+                                onclick: move |_| {
+                                    let source = sage_source();
+                                    let token = csrf();
+                                    busy.set(true);
+                                    error.set(String::new());
+                                    sage_preview.set(None);
+                                    sage_selected.set(Vec::new());
+                                    spawn(async move {
+                                        match api::write::<RecipeSagePreview, _>(
+                                            Method::POST, "/v1/recipes/recipesage/preview", &token,
+                                            &serde_json::json!({"source": source})
+                                        ).await {
+                                            Ok(result) => sage_preview.set(Some(result)),
+                                            Err(message) => error.set(message),
+                                        }
+                                        busy.set(false);
+                                    });
+                                }, "Preview export" }
+                            p { class: "small muted", "Preview does not write any records." }
+                        }
+                        if let Some(preview) = sage_preview() {
+                            div { class: "recipe-sage-summary",
+                                strong { "{preview.total} recipes in export" }
+                                span { class: "muted", "{preview.ready} eligible for import" }
+                                span { class: "small muted", "Incomplete quantities, duplicate records and existing imports cannot be selected." }
+                            }
+                            div { class: "inline-row",
+                                button { class: "btn btn-outline btn-sm",
+                                    disabled: busy() || preview.ready == 0,
+                                    onclick: move |_| {
+                                        if let Some(value) = sage_preview() {
+                                            sage_selected.set(value.candidates.iter()
+                                                .filter(|candidate| candidate.status == "ready")
+                                                .map(|candidate| candidate.key.clone()).collect());
+                                        }
+                                    }, "Select eligible" }
+                                button { class: "btn btn-ghost btn-sm",
+                                    disabled: busy() || sage_selected().is_empty(),
+                                    onclick: move |_| sage_selected.set(Vec::new()), "Clear selection" }
+                            }
+                            div { class: "recipe-sage-candidates",
+                                for candidate in preview.candidates {
+                                    div { class: "recipe-sage-candidate", key: "{candidate.key}",
+                                        label { class: "recipe-sage-choice",
+                                            input { type: "checkbox",
+                                                checked: sage_selected().contains(&candidate.key),
+                                                disabled: busy() || candidate.status != "ready",
+                                                oninput: {
+                                                    let key = candidate.key.clone();
+                                                    move |event| {
+                                                        let mut selected = sage_selected();
+                                                        if event.checked() {
+                                                            if !selected.contains(&key) { selected.push(key.clone()); }
+                                                        } else {
+                                                            selected.retain(|selected_key| selected_key != &key);
+                                                        }
+                                                        sage_selected.set(selected);
+                                                    }
+                                                }
+                                            }
+                                            div { class: "recipe-sage-candidate-label",
+                                                strong {
+                                                    if candidate.recipe.title.is_empty() {
+                                                        "Untitled source record"
+                                                    } else {
+                                                        "{candidate.recipe.title}"
+                                                    }
+                                                }
+                                                span { class: "small muted", "{candidate.status} · {candidate.recipe.ingredients.len()} ingredients" }
+                                            }
+                                        }
+                                        for warning in candidate.warnings {
+                                            p { class: "small muted recipe-sage-warning", "{warning}" }
+                                        }
+                                    }
+                                }
+                            }
+                            div { class: "inline-row",
+                                button { class: "btn btn-primary",
+                                    disabled: busy() || sage_selected().is_empty(),
+                                    onclick: move |_| {
+                                        let Some(preview) = sage_preview() else { return; };
+                                        let source = sage_source();
+                                        let token = csrf();
+                                        let keys = sage_selected();
+                                        busy.set(true);
+                                        error.set(String::new());
+                                        spawn(async move {
+                                            match api::write::<RecipeSageImportResult, _>(
+                                                Method::POST, "/v1/recipes/recipesage/import", &token,
+                                                &serde_json::json!({
+                                                    "source": source,
+                                                    "digest": preview.digest,
+                                                    "keys": keys
+                                                })
+                                            ).await {
+                                                Ok(result) => {
+                                                    sage_selected.set(Vec::new());
+                                                    sage_preview.set(None);
+                                                    sage_source.set(String::new());
+                                                    sage_filename.set(String::new());
+                                                    recipes.restart();
+                                                    notice.set(format!("Imported {} RecipeSage recipes", result.imported));
+                                                }
+                                                Err(message) => {
+                                                    error.set(message);
+                                                    sage_preview.set(None);
+                                                }
+                                            }
+                                            busy.set(false);
+                                        });
+                                    },
+                                    "Import selected ({sage_selected().len()})"
+                                }
+                            }
+                        }
+                    }
+                }
+                section { class: "card",
+                    div { class: "card-header",
                         h2 { class: "card-title", "Import from a recipe URL" }
                         p { class: "card-description",
                             "Retrieve a public HTTPS page containing schema.org Recipe markup. Review the draft before saving; embedded scripts and images are not loaded."
