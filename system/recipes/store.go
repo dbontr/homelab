@@ -256,8 +256,8 @@ func validateRecipe(r Recipe) error {
 			return errors.New("source URL must use HTTPS")
 		}
 	}
-	if r.ImageRef != "" && !strings.HasPrefix(r.ImageRef, "/v1/recipes/images/") {
-		return errors.New("image reference must be a local recipe image")
+	if r.ImageRef != "" && !validImageRef(r.ImageRef) {
+		return errors.New("image reference must identify a stored recipe image")
 	}
 	if n := r.Nutrition; n != nil {
 		if n.Method != "measured" && n.Method != "estimated" && n.Method != "reported" {
