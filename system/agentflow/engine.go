@@ -250,6 +250,8 @@ func sortedPaths(files map[string]string)[]string{
 }
 func validateChanges(files map[string]string)error{
  if len(files)==0||len(files)>16{return errors.New("invalid number of authored files")}
- for name,data:=range files{if !validSourcePath(name)||len(data)==0||len(data)>24000{return errors.New("invalid authored source change")}}
+ total:=0
+ for name,data:=range files{if !validSourcePath(name)||len(data)==0||len(data)>24000{return errors.New("invalid authored source change")};total+=len(name)+len(data)}
+ if total>56<<10{return errors.New("authored source exceeds persistent result limit")}
  return nil
 }
