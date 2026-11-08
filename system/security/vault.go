@@ -32,7 +32,7 @@ type storedCredential struct {
 
 // Vault is owned by a trusted local credential process, not the MCP gateway.
 type Vault struct {
- mu sync.Mutex
+ mu sync.RWMutex
  key [32]byte
  path string
  records map[string]storedCredential
@@ -130,11 +130,13 @@ func(v *Vault)WithCredential(handle,provider string,use func([]byte)error)error{
 
 // WithCredentialVersion refuses a capability issued against a previous
 // encrypted record, including one that was rotated under the same handle.
+// A read lock serializes credential use against owner rotation and deletion.
+// Trusted callers must not mutate this vault inside the use callback.
 func(v *Vault)WithCredentialVersion(handle,provider,version string,use func([]byte)error)error{
  if use==nil{return errors.New("credential operation is required")}
- v.mu.Lock()
+ v.mu.RLock()
+ defer v.mu.RUnlock()
  rec,ok:=v.records[handle]
- v.mu.Unlock()
  if !ok||rec.Provider!=provider{return os.ErrNotExist}
  if version!=""&&credentialRevision(rec)!=version{return errors.New("credential capability invalidated by rotation")}
  block,err:=aes.NewCipher(v.key[:]);if err!=nil{return err}
