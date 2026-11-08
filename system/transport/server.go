@@ -118,6 +118,7 @@ func(s *Server) Handler()http.Handler{
  mux.HandleFunc("PUT /v1/groceries/items/{key}",s.groceryUpdate)
  mux.HandleFunc("GET /v1/activity",s.uiActivity)
  mux.HandleFunc("GET /v1/resources/{kind}/{id}",s.uiResource)
+ mux.HandleFunc("GET /v1/resources/resolve",s.uiResourceReference)
  mux.HandleFunc("GET /v1/workspace/nodes",s.uiComputeNodes)
  for _,path:=range []string{"/v1/monitoring/summary","/v1/monitoring/targets",
    "/v1/monitoring/alerts","/v1/monitoring/security","/v1/monitoring/series","/v1/monitoring/logs"} {
@@ -305,6 +306,7 @@ func(s *Server)localTools()[]map[string]any{
   tool("task_review","Inspect recorded deadlines, prerequisites and missing estimates without interpreting absent logs as neglect",map[string]any{"horizon_days":prop("integer")}),
   tool("activity_recent","List confirmed personal activity from canonical records, without fabricating unobserved actions",map[string]any{"limit":prop("integer")}),
   tool("resource_get","Resolve a canonical local resource identity from its owning store",map[string]any{"kind":prop("string"),"id":prop("string")},"kind","id"),
+  tool("resource_resolve","Resolve a homelab:kind:id reference without copying the owning service's data",map[string]any{"ref":prop("string")},"ref"),
   tool("system_status","List configured integrations",map[string]any{}),
   tool("device_inventory","List declared hardware access and constraints; this is not an online device probe",map[string]any{}),
   tool("node_inventory","List declarative management modes and roles without probing machines",map[string]any{}),
@@ -419,6 +421,7 @@ func(s *Server)localTool(ctx context.Context,name string,raw json.RawMessage)(an
   Kind string `json:"kind"`
   WeekOf string `json:"week_of"`
   ResourceKind string `json:"kind"`
+  Reference string `json:"ref"`
   HorizonDays int `json:"horizon_days"`
  }
  if len(raw)>0{if e:=json.Unmarshal(raw,&args);e!=nil{return nil,e}}
@@ -442,6 +445,10 @@ func(s *Server)localTool(ctx context.Context,name string,raw json.RawMessage)(an
   if n<1||n>200{return nil,errors.New("activity limit must be 1 through 200")}
   return s.activity(n,time.Time{}),nil
  case "resource_get":return s.resource(args.ResourceKind,args.ID)
+ case "resource_resolve":
+  kind,id,err:=parseResourceReference(args.Reference)
+  if err!=nil{return nil,err}
+  return s.resource(kind,id)
  case "approval_status":return s.privilegeStatus(args.ID)
  case "security_session_status":
   if s.privilegeClient==nil{return nil,errors.New("independent security service not configured")}
