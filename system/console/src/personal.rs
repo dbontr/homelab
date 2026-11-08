@@ -107,6 +107,11 @@ pub fn Health(csrf: String) -> Element{
     let mut plans=use_resource(||async{api::get::<Value>("/v1/health/plans").await});
     let mut records=use_resource(||async{api::get::<Value>("/v1/health/records").await});
     let mut goals=use_resource(||async{api::get::<Value>("/v1/health/goals").await});
+    let mut obs_domain=use_signal(||"biometric".to_owned());
+    let mut obs_metric=use_signal(||"weight".to_owned());
+    let mut obs_value=use_signal(String::new);
+    let mut obs_unit=use_signal(||"kg".to_owned());
+    let mut obs_method=use_signal(||"measured".to_owned());
     rsx!{
         Heading{
             title:"Health".to_owned(),
@@ -116,6 +121,73 @@ pub fn Health(csrf: String) -> Element{
             },"Refresh"}
         }
         if !health_error().is_empty(){Notice{message:health_error()}}
+        section{class:"card",
+            div{class:"card-header",
+                h2{class:"card-title","Record an observation"}
+                p{class:"card-description","Save only values actually observed or explicitly estimated."}
+            }
+            form{class:"card-body task-editor-fields",
+                onsubmit:move |event|{
+                    event.prevent_default();
+                    if health_busy(){return}
+                    let Ok(value)=obs_value().parse::<f64>() else {
+                        health_error.set("Enter a numeric observation".to_owned());return
+                    };
+                    if !value.is_finite(){health_error.set("The observation must be finite".to_owned());return}
+                    let request=serde_json::json!({
+                        "domain":obs_domain(),"metric":obs_metric(),"value":value,
+                        "unit":obs_unit(),"method":obs_method()
+                    });
+                    let token=csrf();
+                    health_busy.set(true);health_error.set(String::new());
+                    spawn(async move{
+                        match api::write::<Value,_>(reqwest::Method::POST,"/v1/health/records",&token,&request).await{
+                            Ok(_)=>{obs_value.set(String::new);records.restart();},
+                            Err(error)=>health_error.set(error),
+                        }
+                        health_busy.set(false);
+                    });
+                },
+                div{class:"task-field-grid",
+                    label{class:"form-row",
+                        span{class:"label","Domain"}
+                        select{class:"field",value:"{obs_domain()}",
+                            onchange:move |e|obs_domain.set(e.value()),
+                            option{value:"biometric","Biometric"}
+                            option{value:"nutrition","Nutrition"}
+                            option{value:"sleep","Sleep"}
+                            option{value:"workout","Workout"}
+                            option{value:"symptom","Symptom"}
+                        }
+                    }
+                    label{class:"form-row",
+                        span{class:"label","Metric"}
+                        input{class:"field",required:true,value:"{obs_metric()}",
+                            oninput:move |e|obs_metric.set(e.value())}
+                    }
+                    label{class:"form-row",
+                        span{class:"label","Value"}
+                        input{class:"field",r#type:"number",step:"any",required:true,value:"{obs_value()}",
+                            oninput:move |e|obs_value.set(e.value())}
+                    }
+                    label{class:"form-row",
+                        span{class:"label","Unit"}
+                        input{class:"field",required:true,value:"{obs_unit()}",
+                            oninput:move |e|obs_unit.set(e.value())}
+                    }
+                    label{class:"form-row",
+                        span{class:"label","Method"}
+                        select{class:"field",value:"{obs_method()}",
+                            onchange:move |e|obs_method.set(e.value()),
+                            option{value:"measured","Measured"}
+                            option{value:"reported","Reported"}
+                            option{value:"estimated","Estimated"}
+                        }
+                    }
+                }
+                button{class:"btn btn-primary",disabled:health_busy(),"Record"}
+            }
+        }
         Card{
             title:"Food proposals".to_owned(),
             description:"Confirm identification, portions, and nutrient evidence before adding the meal to Health.".to_owned(),

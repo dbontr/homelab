@@ -59,6 +59,7 @@ func(s *Server) Handler()http.Handler{
  mux.HandleFunc("GET /v1/learning/reviews",s.uiLearningReviews)
  mux.HandleFunc("GET /v1/health/plans",s.uiHealthPlans)
  mux.HandleFunc("GET /v1/health/records",s.uiHealthRecords)
+ mux.HandleFunc("POST /v1/health/records",s.uiHealthObservation)
  mux.HandleFunc("GET /v1/health/goals",s.uiHealthGoals)
  mux.HandleFunc("GET /v1/health/food-proposals",s.uiFoodProposals)
  mux.HandleFunc("POST /v1/health/food-proposals/{id}/confirm",s.uiFoodConfirm)
