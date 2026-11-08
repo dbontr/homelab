@@ -50,7 +50,69 @@ type Executor struct {
  services map[string]bool
 }
 
-var unitPattern=regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9@_.-]{0,127}[.]service$`)
+func serviceAction(operation string)(string,bool){
+ switch operation{
+ case "infrastructure__service_start":return "start",true
+ case "infrastructure__service_stop":return "stop",true
+ case "infrastructure__service_reload":return "reload",true
+ case "infrastructure__service_restart":return "restart",true
+ default:return "",false
+ }
+}
+
+var unitPattern=regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9@_.-]{0,127}[.]service// Package privileged owns local administrative operations unavailable to the
+// primary MCP gateway. Every operation is checked by the independent owner
+// authorization service before a credential-owning handler runs.
+package privileged
+
+import (
+ "context"
+ "encoding/json"
+ "errors"
+ "fmt"
+ "io"
+ "log"
+ "net"
+ "net/http"
+ "os"
+ "os/exec"
+ "path/filepath"
+ "regexp"
+ "strings"
+ "time"
+
+ "github.com/dbontr/homelab-new/system/canonicaljson"
+ "github.com/dbontr/homelab-new/system/security"
+)
+
+type Authorizer interface {
+ Authorize(context.Context,string,string,json.RawMessage)(security.Authorization,error)
+}
+
+type Run func(context.Context,string,...string)error
+
+type Actuator interface {
+ Activate(context.Context,string)error
+ Revert(context.Context,string)error
+}
+
+type Config struct{
+ Host string
+ Systemctl string
+ AllowedServices []string
+ AllowRelease bool
+ Kubernetes *KubernetesPolicy
+ Auth Authorizer
+ Run Run
+ Releases Actuator
+}
+
+type Executor struct {
+ cfg Config
+ services map[string]bool
+}
+
+)
 var nodePattern=regexp.MustCompile(`^[a-z][a-z0-9-]{0,62}$`)
 var releasePattern=regexp.MustCompile(`^[a-f0-9]{48}$`)
 
@@ -74,7 +136,7 @@ func New(cfg Config)(*Executor,error){
   if !unitPattern.MatchString(service)||services[service]{
    return nil,errors.New("invalid service allowlist")
   }
-  for _,sensitive:=range []string{"network","firewall","nginx","cloudflared","pihole","tailscale","systemd","docker","k3s","jellyfin","moonfin","sshd"}{
+  for _,sensitive:=range []string{"network","firewall","router","wireguard","vpn","dns","nftables","iptables","nginx","cloudflared","pihole","tailscale","systemd","docker","k3s","kube","jellyfin","moonfin","ssh","security","executor","fleet","prometheus","loki","alertmanager"}{
    if strings.Contains(strings.ToLower(service),sensitive){
     return nil,errors.New("network, security and media services require out-of-band administration")
    }
@@ -90,8 +152,9 @@ func(e *Executor) Execute(ctx context.Context,operation,target string,args json.
  if target!=e.cfg.Host{return security.Authorization{Reason:"target is not this host"},nil}
  canonical,fields,err:=canonicaljson.Object(args)
  if err!=nil{return security.Authorization{Reason:"invalid operation arguments"},nil}
+ verb,_:=serviceAction(operation)
  switch operation{
- case "infrastructure__service_restart":
+ case "infrastructure__service_start","infrastructure__service_stop","infrastructure__service_reload","infrastructure__service_restart":
   if len(fields)!=2{return security.Authorization{Reason:"unexpected arguments"},nil}
   service,ok:=fields["service"].(string)
   if !ok||!e.services[service]{return security.Authorization{Reason:"service not permitted"},nil}
@@ -125,8 +188,8 @@ func(e *Executor) Execute(ctx context.Context,operation,target string,args json.
   return decision,nil
  }
  switch operation{
- case "infrastructure__service_restart":
-  err=e.cfg.Run(ctx,e.cfg.Systemctl,"restart",fields["service"].(string))
+ case "infrastructure__service_start","infrastructure__service_stop","infrastructure__service_reload","infrastructure__service_restart":
+  err=e.cfg.Run(ctx,e.cfg.Systemctl,verb,fields["service"].(string))
  case "infrastructure__release_activate":
   err=e.cfg.Releases.Activate(ctx,fields["release_id"].(string))
  case "infrastructure__release_revert":

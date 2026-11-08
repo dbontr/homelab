@@ -103,7 +103,7 @@ in
     allowedServices = lib.mkOption {
       type = lib.types.listOf lib.types.str;
       default = [];
-      description = "Exact local systemd unit names permitted for owner-approved restarts.";
+      description = "Exact non-critical local systemd units permitted for owner-approved start, stop, reload and restart operations.";
     };
     healthServices = lib.mkOption {
       type = lib.types.listOf lib.types.str;
