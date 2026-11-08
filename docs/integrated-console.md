@@ -15,8 +15,10 @@ treat local personal tasks as Workspace compute tasks.
   and *event definitions* from a configured read-only iCalendar feed. Unsupported
   or unexpanded recurrences are reported as limitations. The system does not
   automatically modify external calendars.
-- **Recipes:** Import a schema.org Recipe from pasted JSON-LD or embedded
-  HTML. Missing ingredient quantities remain unknown and require review.
+- **Recipes:** Import a schema.org Recipe from pasted JSON-LD, HTML or a
+  bounded public HTTPS page. The URL importer validates public DNS answers,
+  pins TLS connections to resolved addresses, rejects redirects and proxies,
+  and returns an unsaved draft. Missing ingredient quantities require review.
   RecipeSage data is not migrated or deleted. Mark groceries as purchased
   through a revision-fenced persistent record.
 - **Food and Health:** Nutrition associated with a first-party recipe may be
@@ -40,7 +42,7 @@ design vocabulary, but is implemented using Rust/Dioxus rather than React.
 This branch is a development implementation, not a feature-parity assertion.
 It does not yet provide autonomous Codex-equivalent agents, full exercise
 authoring and checking in the browser, richer Health coaching, robust recipe
-imports from arbitrary PDFs and URLs, offline synchronization, scheduled
+imports from arbitrary PDFs or pages without structured Recipe markup, offline synchronization, scheduled
 reminders, or calendar write-back. Those operations require their own
 identity, authorization, evidence and data migration contracts.
 
