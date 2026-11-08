@@ -96,6 +96,7 @@ func(s *Server) Handler()http.Handler{
  mux.HandleFunc("POST /v1/tasks/{id}/complete",s.complete)
  mux.HandleFunc("POST /v1/tasks/capture",s.taskCapture)
  mux.HandleFunc("GET /v1/tasks/agenda",s.taskAgenda)
+ mux.HandleFunc("GET /v1/tasks/conflicts",s.taskConflicts)
  mux.HandleFunc("PUT /v1/tasks/{id}",s.taskUpdate)
  mux.HandleFunc("GET /v1/goals",s.goals)
  mux.HandleFunc("POST /v1/goals",s.goals)
