@@ -104,6 +104,7 @@ type Document struct {
     GroceryChecks map[string]bool `json:"grocery_checks,omitempty"`
 	Recipes []Recipe `json:"recipes"`
 	Meals   []Meal   `json:"meals"`
+	History map[string][]Recipe `json:"history,omitempty"`
 }
 
 type snapshot struct {
@@ -112,6 +113,7 @@ type snapshot struct {
 	Version  int               `json:"version"`
 	Recipes  map[string]Recipe `json:"recipes"`
 	Meals    map[string]Meal   `json:"meals"`
+	History  map[string][]Recipe `json:"history,omitempty"`
 }
 
 type Store struct {
@@ -139,7 +141,7 @@ func Open(path string) (*Store, error) {
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}
-	s := &Store{path: path, data: snapshot{Version: 1, Recipes: map[string]Recipe{}, Meals: map[string]Meal{}}}
+	s := &Store{path: path, data: snapshot{Version: 1, Recipes: map[string]Recipe{}, Meals: map[string]Meal{}, History: map[string][]Recipe{}}}
 	body, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return s, nil
@@ -156,9 +158,17 @@ func Open(path string) (*Store, error) {
 	if s.data.Recipes == nil { s.data.Recipes = map[string]Recipe{} }
 	if s.data.Meals == nil { s.data.Meals = map[string]Meal{} }
  if s.data.GroceryChecks == nil { s.data.GroceryChecks = map[string]bool{} }
+	if s.data.History == nil { s.data.History = map[string][]Recipe{} }
 	for id, recipe := range s.data.Recipes {
 		if id != recipe.ID || !validID(id) { return nil, errors.New("recipe identifier mismatch") }
 		if err := validateRecipe(recipe); err != nil { return nil, fmt.Errorf("stored recipe %s: %w", id, err) }
+	}
+	for id, versions := range s.data.History {
+		current, ok := s.data.Recipes[id]
+		if !ok { return nil, errors.New("recipe history references missing recipe") }
+		if err := validateHistory(id, current, versions); err != nil {
+			return nil, fmt.Errorf("stored recipe %s: %w", id, err)
+		}
 	}
 	for id, meal := range s.data.Meals {
 		if id != meal.ID || !validID(id) { return nil, errors.New("meal identifier mismatch") }
@@ -175,6 +185,8 @@ func duplicate(s snapshot) snapshot {
  for key,checked:=range s.GroceryChecks{out.GroceryChecks[key]=checked}
 	for key, value := range s.Recipes { out.Recipes[key] = value }
 	for key, value := range s.Meals { out.Meals[key] = value }
+	out.History = make(map[string][]Recipe, len(s.History))
+	for id, versions := range s.History { out.History[id] = copyHistory(versions) }
 	return out
 }
 
@@ -334,6 +346,7 @@ func (s *Store) Save(recipe Recipe) (Recipe, error) {
 		old, ok := s.data.Recipes[recipe.ID]
 		if !ok { return Recipe{}, ErrNotFound }
 		if recipe.Revision != old.Revision { return Recipe{}, ErrConflict }
+		next.History[recipe.ID] = appendRevision(next.History[recipe.ID], old)
 		recipe.Revision = old.Revision + 1
 		recipe.CreatedAt = old.CreatedAt
 	}
@@ -354,6 +367,7 @@ func (s *Store) Delete(id string, expected int) error {
 	}
 	next := duplicate(s.data)
 	delete(next.Recipes, id)
+	delete(next.History, id)
 	return s.save(next)
 }
 
@@ -474,10 +488,11 @@ func (s *Store) Nutrition(id string, servings float64) (NutritionPreview, error)
 func (s *Store) Export() Document {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	out := Document{Version: 1, GroceryChecks:make(map[string]bool,len(s.data.GroceryChecks)), Recipes: make([]Recipe, 0, len(s.data.Recipes)), Meals: make([]Meal, 0, len(s.data.Meals))}
+	out := Document{Version: 1, GroceryChecks:make(map[string]bool,len(s.data.GroceryChecks)), Recipes: make([]Recipe, 0, len(s.data.Recipes)), Meals: make([]Meal, 0, len(s.data.Meals)), History:make(map[string][]Recipe,len(s.data.History))}
 	for key,checked:=range s.data.GroceryChecks{out.GroceryChecks[key]=checked}
  for _, recipe := range s.data.Recipes { out.Recipes = append(out.Recipes, copyRecipe(recipe)) }
 	for _, meal := range s.data.Meals { out.Meals = append(out.Meals, meal) }
+	for id, versions := range s.data.History { out.History[id] = copyHistory(versions) }
 	sort.Slice(out.Recipes, func(i,j int) bool { return out.Recipes[i].ID < out.Recipes[j].ID })
 	sort.Slice(out.Meals, func(i,j int) bool { return out.Meals[i].ID < out.Meals[j].ID })
 	return out
@@ -490,11 +505,19 @@ func (s *Store) Import(doc Document) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	next := duplicate(s.data)
+	imported := make(map[string]Recipe, len(doc.Recipes))
 	for _, recipe := range doc.Recipes {
 		if !validID(recipe.ID) || recipe.Revision < 1 || recipe.CreatedAt.IsZero() || recipe.UpdatedAt.IsZero() { return 0, errors.New("import requires valid IDs, revisions and timestamps") }
 		if _, exists := next.Recipes[recipe.ID]; exists { return 0, ErrConflict }
 		if err := validateRecipe(recipe); err != nil { return 0, err }
 		next.Recipes[recipe.ID] = copyRecipe(recipe)
+		imported[recipe.ID] = recipe
+	}
+	for id, versions := range doc.History {
+		current, exists := imported[id]
+		if !exists { return 0, errors.New("recipe history requires a matching imported recipe") }
+		if err := validateHistory(id, current, versions); err != nil { return 0, err }
+		next.History[id] = copyHistory(versions)
 	}
 	for _, meal := range doc.Meals {
 		if !validID(meal.ID) || meal.CreatedAt.IsZero() { return 0, errors.New("imported meal ID and creation timestamp are required") }
