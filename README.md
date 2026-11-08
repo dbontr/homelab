@@ -16,7 +16,7 @@ Compute, teaching and health implementations retain independent operating-system
 
 ## Console
 
-The Rust/Dioxus browser client is in [`system/console`](system/console). It uses shadcn/ui neutral design tokens and consumes authenticated native API endpoints for monitoring, workspace inspection, task and recipe workflows, health, teaching, calendar and planning. It does not ship React or embed privileged MCP credentials. See [console architecture](docs/console.md).
+The Rust/Dioxus browser client is in [`system/console`](system/console). It uses shadcn/ui neutral design tokens and consumes authenticated native API endpoints for monitoring, workspace inspection, task and recipe workflows, health, teaching, calendar and planning. It does not ship React or embed privileged MCP credentials. See [console architecture](docs/console.md), [observability](docs/observability.md), [books](docs/books.md) and [self-hosted releases](docs/self-hosted-release.md).
 
 ## Development
 
