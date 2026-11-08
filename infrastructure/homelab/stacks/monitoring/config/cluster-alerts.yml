@@ -1,0 +1,24 @@
+groups:
+  - name: homelab-cluster
+    rules:
+      - alert: ClusterNodeExporterUnavailable
+        expr: up{job="cluster-nodes"} == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Compute-node telemetry unavailable on {{ $labels.node }}"
+      - alert: ClusterRootDiskSpaceLow
+        expr: (node_filesystem_avail_bytes{job="cluster-nodes",mountpoint="/",fstype!="tmpfs"} / node_filesystem_size_bytes{job="cluster-nodes",mountpoint="/",fstype!="tmpfs"}) < 0.10
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Compute-node root filesystem below 10 percent free on {{ $labels.node }}"
+      - alert: ClusterMemoryPressure
+        expr: (node_memory_MemAvailable_bytes{job="cluster-nodes"} / node_memory_MemTotal_bytes{job="cluster-nodes"}) < 0.08
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Compute-node available memory below 8 percent on {{ $labels.node }}"
