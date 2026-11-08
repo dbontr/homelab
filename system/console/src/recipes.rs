@@ -647,6 +647,64 @@ pub fn Recipes(csrf: String) -> Element {
                                     }
                                 }
                                 div { class: "card-body stack",
+                                    if history_open() && history_record() == recipe.id {
+                                        section { class: "recipe-history-panel", aria_label: "Recipe revision history",
+                                            h3 { class: "section-title", "Version history" }
+                                            p { class: "small muted", "Restoring a prior version creates another revision. Recent versions remain available." }
+                                            if history_loading() {
+                                                Loading {}
+                                            } else {
+                                                div { class: "recipe-history-list",
+                                                    for version in history() {
+                                                        RevisionChoice {
+                                                            key: "{version.revision}",
+                                                            version,
+                                                            current_revision: recipe.revision,
+                                                            confirmation: confirm_restore(),
+                                                            on_prepare: move |revision| confirm_restore.set(Some(revision)),
+                                                            on_cancel: move |_| confirm_restore.set(None),
+                                                            on_restore: move |source_revision| {
+                                                                if busy() { return; }
+                                                                let Some(current) = current_record(
+                                                                    &recipes.cloned().and_then(Result::ok).unwrap_or_default(),
+                                                                    selected(), &search().trim().to_lowercase()
+                                                                ) else { return };
+                                                                if history_record() != current.id { return; }
+                                                                let path = format!("/v1/recipes/{}/restore", current.id);
+                                                                let expected_revision = current.revision;
+                                                                let token = csrf();
+                                                                busy.set(true);
+                                                                error.set(String::new());
+                                                                spawn(async move {
+                                                                    match api::write::<Recipe, _>(
+                                                                        Method::POST, &path, &token,
+                                                                        &serde_json::json!({
+                                                                            "source_revision": source_revision,
+                                                                            "expected_revision": expected_revision
+                                                                        })
+                                                                    ).await {
+                                                                        Ok(saved) => {
+                                                                            selected.set(Some(saved.id));
+                                                                            recipes.restart();
+                                                                            history_open.set(false);
+                                                                            history.set(Vec::new());
+                                                                            confirm_restore.set(None);
+                                                                            notice.set("Recipe version restored".to_owned());
+                                                                        }
+                                                                        Err(message) => {
+                                                                            error.set(message);
+                                                                            recipes.restart();
+                                                                        }
+                                                                    }
+                                                                    busy.set(false);
+                                                                });
+                                                            },
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
                                     if !recipe.image_ref.is_empty() {
                                         div { class: "recipe-cover",
                                             img { src: "{recipe.image_ref}", alt: "{recipe.title}", loading: "lazy" }
