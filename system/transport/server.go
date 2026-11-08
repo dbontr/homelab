@@ -24,10 +24,11 @@ import (
  "github.com/dbontr/homelab-new/system/session"
  "github.com/dbontr/homelab-new/system/security"
  "github.com/dbontr/homelab-new/system/privileged"
+ "github.com/dbontr/homelab-new/system/release"
  "github.com/dbontr/homelab-new/system/store"
 )
 type Backend struct { Name string; URL string; Token string }
-type Server struct { db *store.Store; token string; backend []Backend; client *http.Client; calendarURL string; gate *approval.Gate; privilegeClient *security.AdminClient; executorClient *privileged.Client; securityLoginURL string; allowedOrigins map[string]struct{}; media *media.Client; deviceCatalog *devices.Catalog; nodeCatalog *devices.NodeCatalog; profiles *profiles.Registry; recipes *recipes.Store; sessions *session.Manager; observability *observability.Client; bookCatalog *books.Catalog; inflight chan struct{} }
+type Server struct { db *store.Store; token string; backend []Backend; client *http.Client; calendarURL string; gate *approval.Gate; privilegeClient *security.AdminClient; executorClient *privileged.Client; fleetClient *release.FleetClient; securityLoginURL string; allowedOrigins map[string]struct{}; media *media.Client; deviceCatalog *devices.Catalog; nodeCatalog *devices.NodeCatalog; profiles *profiles.Registry; recipes *recipes.Store; sessions *session.Manager; observability *observability.Client; bookCatalog *books.Catalog; inflight chan struct{} }
 
 func New(db *store.Store,token string,backends []Backend)(*Server,error){
  if db==nil||len(token)<32||strings.ContainsAny(token,"\r\n\t"){return nil,errors.New("store and a strong access token are required")}
@@ -49,6 +50,7 @@ func(s *Server) SetBookCatalog(catalog *books.Catalog) { s.bookCatalog = catalog
 func(s *Server) SetSessions(manager *session.Manager) { s.sessions = manager }
 func(s *Server) SetPrivilegeClient(client *security.AdminClient) { s.privilegeClient = client }
 func(s *Server) SetExecutorClient(client *privileged.Client) {s.executorClient=client}
+func(s *Server) SetFleetClient(client *release.FleetClient) {s.fleetClient=client}
 func(s *Server) SetSecurityLoginURL(raw string) error {
  u,err:=url.Parse(raw)
  if err!=nil || u.Scheme!="https" || u.Host=="" || u.User!=nil || u.RawQuery!="" || u.Fragment!="" || (u.Path!=""&&u.Path!="/") {
@@ -318,6 +320,15 @@ func(s *Server)localTools()[]map[string]any{
    tool("infrastructure__release_revert","Restore the previous verified local generation from the active release journal",map[string]any{"host":prop("string"),"release_id":prop("string")},"host","release_id"),
    tool("cluster__deployment_restart","Restart an explicitly allowlisted Kubernetes deployment through the independent executor",map[string]any{"host":prop("string"),"namespace":prop("string"),"deployment":prop("string")},"host","namespace","deployment"),
    tool("cluster__deployment_scale","Scale an explicitly allowlisted Kubernetes deployment with a bounded replica count",map[string]any{"host":prop("string"),"namespace":prop("string"),"deployment":prop("string"),"replicas":prop("integer")},"host","namespace","deployment","replicas"))
+ }
+ if s.fleetClient!=nil {
+  tools=append(tools,
+   tool("infrastructure__fleet_stage","Stage one exact Git commit across the configured fleet without activating any host",map[string]any{"revision":prop("string")},"revision"),
+   tool("infrastructure__fleet_plan","Inspect the private validated fleet stage plan",map[string]any{}),
+   tool("infrastructure__fleet_activate","Activate the immutable prepared fleet plan through independent host authorization",map[string]any{"plan_id":prop("string")},"plan_id"),
+   tool("infrastructure__fleet_status","Inspect durable fleet transaction status",map[string]any{}),
+   tool("infrastructure__fleet_recover","Reconcile unknown release results and recover by exact transaction identity",map[string]any{"transaction_id":prop("string")},"transaction_id"),
+   tool("infrastructure__fleet_clear","Clear a resolved fleet transaction and its prepared plan",map[string]any{"plan_id":prop("string")},"plan_id"))
  }
  if s.privilegeClient!=nil {
   tools=append(tools,tool("security_session_status","Inspect the independent owner administrative session without revealing credentials",map[string]any{}),
