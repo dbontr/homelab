@@ -27,6 +27,7 @@ type credentialLease struct {
  principal string
  handle string
  digest string
+ version string
 }
 
 type ScopedCredentialBroker struct {
@@ -59,16 +60,15 @@ func(b *ScopedCredentialBroker) Prepare(principal,handle,provider,operation,targ
  }
  if !b.sessions.StatusFor(principal).Active{return CredentialUse{},errors.New("verified owner session required")}
  digest,err:=credentialDigest(args);if err!=nil{return CredentialUse{},err}
- exists:=false
- for _,item:=range b.vault.List(){if item.ID==handle&&item.Provider==provider{exists=true;break}}
- if !exists{return CredentialUse{},errors.New("credential handle not found")}
+ version,err:=b.vault.Version(handle,provider)
+ if err!=nil{return CredentialUse{},errors.New("credential handle not found")}
  id,err:=randomURLToken(24);if err!=nil{return CredentialUse{},err}
  b.mu.Lock();defer b.mu.Unlock()
  now:=b.now().UTC()
  for key,lease:=range b.leases{if !now.Before(lease.ExpiresAt){delete(b.leases,key)}}
  if len(b.leases)>=64{return CredentialUse{},errors.New("too many pending credential uses")}
  public:=CredentialUse{ID:id,Provider:provider,Operation:operation,Target:target,ExpiresAt:now.Add(ttl)}
- b.leases[id]=credentialLease{CredentialUse:public,principal:principal,handle:handle,digest:digest}
+ b.leases[id]=credentialLease{CredentialUse:public,principal:principal,handle:handle,digest:digest,version:version}
  return public,nil
 }
 
@@ -93,7 +93,7 @@ func(b *ScopedCredentialBroker) Consume(_ context.Context,principal,id,operation
  }
  delete(b.leases,id)
  b.mu.Unlock()
- if err:=b.vault.WithCredential(lease.handle,lease.Provider,use);err!=nil{
+ if err:=b.vault.WithCredentialVersion(lease.handle,lease.Provider,lease.version,use);err!=nil{
   return Authorization{Reason:"credential use failed"},err
  }
  return Authorization{Allowed:true},nil
