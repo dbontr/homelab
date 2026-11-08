@@ -1,6 +1,8 @@
 package security
 
 import (
+ "encoding/json"
+ "time"
  "net/http"
  "net/http/httptest"
  "net/url"
@@ -67,4 +69,29 @@ func TestBrowserPortalRejectsUnsafeOriginAndExpiry(t *testing.T){
  if out.Code!=303||out.Header().Get("Location")!="/"{t.Fatal("unsafe redirect or failed login")}
  *now=now.Add(12*time.Hour)
  if manager.Status().Active{t.Fatal("absolute lifetime exceeded")}
+}
+
+func TestBrowserPortalDestructiveConfirmation(t *testing.T){
+ manager,key,now:=testSessionManager(t)
+ loginAt(t,manager,key,now)
+ operation:="cluster__configure"
+ args:=json.RawMessage(`{"revision":7,"node":"saturn"}`)
+ pending:=manager.Authorize("platform-gateway",operation,"saturn",args)
+ if pending.Allowed||pending.ConfirmationID==""{t.Fatal("confirmation missing")}
+ *now=now.Add(30*time.Second)
+ portal,err:=NewBrowserPortal(manager,"https://auth.example.test")
+ if err!=nil{t.Fatal(err)}
+ page:=httptest.NewRecorder()
+ portal.ServeHTTP(page,httptest.NewRequest("GET","https://auth.example.test/",nil))
+ if !strings.Contains(page.Body.String(),pending.ConfirmationID){t.Fatal("challenge not presented")}
+ token:=regexp.MustCompile(`name="csrf" value="([a-f0-9]{48})"`).FindStringSubmatch(page.Body.String())[1]
+ form:=url.Values{"csrf":{token},"password":{testOwnerPassword},"totp":{TOTPCode(key,now.Unix()/30)}}
+ request:=httptest.NewRequest("POST","https://auth.example.test/confirm/"+pending.ConfirmationID,strings.NewReader(form.Encode()))
+ request.Header.Set("Origin","https://auth.example.test")
+ request.Header.Set("Content-Type","application/x-www-form-urlencoded")
+ result:=httptest.NewRecorder()
+ portal.ServeHTTP(result,request)
+ if result.Code!=303{t.Fatal("valid confirmation rejected",result.Code)}
+ if next:=manager.Authorize("platform-gateway",operation,"saturn",args);!next.Allowed{t.Fatal("confirmed operation not authorized",next.Reason)}
+ if manager.Authorize("platform-gateway",operation,"saturn",args).Allowed{t.Fatal("destructive grant replayed")}
 }
