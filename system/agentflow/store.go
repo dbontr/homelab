@@ -4,6 +4,8 @@ package agentflow
 
 import (
  "crypto/rand"
+ "crypto/sha256"
+ "crypto/subtle"
  "encoding/hex"
  "encoding/json"
  "errors"
@@ -33,6 +35,7 @@ type Step struct {
  Status Status `json:"status"`
  Attempts int `json:"attempts"`
  Generation uint64 `json:"generation"`
+ LeaseDigest string `json:"lease_digest,omitempty"`
  LeaseUntil time.Time `json:"lease_until,omitempty"`
  LastError string `json:"last_error,omitempty"`
  Result json.RawMessage `json:"result,omitempty"`
@@ -136,6 +139,7 @@ func (s *Store) Create(w Workflow)error{
   w.Steps[i].Status=Pending
   w.Steps[i].Attempts=0
   w.Steps[i].Generation=0
+  w.Steps[i].LeaseDigest=""
   w.Steps[i].LeaseUntil=time.Time{}
   w.Steps[i].Result=nil
   w.Steps[i].LastError=""
@@ -172,14 +176,15 @@ func (s *Store) ClaimReady(id string,ttl time.Duration)(Claim,error){
   token,err:=randomToken();if err!=nil{return claim,err}
   st.Status=Running;st.Attempts++;st.Generation++
   st.LeaseUntil=s.now().Add(ttl);st.LastError=""
+  digest:=sha256.Sum256([]byte(token));st.LeaseDigest=hex.EncodeToString(digest[:])
   w.Revision++
   if err:=s.save(w);err!=nil{return Claim{},err}
   return Claim{WorkflowID:w.ID,StepID:st.ID,Generation:st.Generation,Token:token,Kind:st.Kind,Input:append(json.RawMessage(nil),st.Input...),Deadline:st.LeaseUntil},nil
  }
  return claim,os.ErrNotExist
 }
-// Complete accepts only the active generation. Tokens are deliberately not
-// persisted: a process restart invalidates any in-flight claim until expiry.
+// Complete requires both the active generation and the corresponding secret
+// lease token. Only the token digest is persisted.
 // The executor must enforce its own authorization and idempotency contract.
 func (s *Store) Complete(c Claim,result json.RawMessage,executionError string)error{
  if !validID(c.WorkflowID)||!validID(c.StepID)||c.Generation==0||len(c.Token)!=64{return errors.New("invalid claim")}
@@ -191,8 +196,10 @@ func (s *Store) Complete(c Claim,result json.RawMessage,executionError string)er
   st:=&w.Steps[i]
   if st.ID!=c.StepID{continue}
   if st.Status!=Running||st.Generation!=c.Generation||!s.now().Before(st.LeaseUntil){return errors.New("claim stale or expired")}
-  // Claim tokens are secrets used by the caller to bind its local lease;
-  // persistent generation fencing protects the durable state transition.
+  digest:=sha256.Sum256([]byte(c.Token))
+  expected,err:=hex.DecodeString(st.LeaseDigest)
+  if err!=nil||subtle.ConstantTimeCompare(expected,digest[:])!=1{return errors.New("invalid claim token")}
+  // The lease token and generation jointly fence concurrent workers and restarts.
   if executionError!=""{
    st.LastError=executionError
    if st.Attempts>=st.MaxAttempts{st.Status=Failed}else{st.Status=Pending}
@@ -202,6 +209,7 @@ func (s *Store) Complete(c Claim,result json.RawMessage,executionError string)er
    st.LastError=""
   }
   st.LeaseUntil=time.Time{}
+  st.LeaseDigest=""
   w.Revision++
   return s.save(w)
  }
@@ -213,7 +221,7 @@ func (s *Store) Cancel(id string,expectedRevision uint64)error{
  if w.Revision!=expectedRevision{return errors.New("workflow revision conflict")}
  if w.Cancelled{return nil}
  w.Cancelled=true
- for i:=range w.Steps{if w.Steps[i].Status==Pending||w.Steps[i].Status==Running{w.Steps[i].Status=Cancelled;w.Steps[i].LeaseUntil=time.Time{}}}
+ for i:=range w.Steps{if w.Steps[i].Status==Pending||w.Steps[i].Status==Running{w.Steps[i].Status=Cancelled;w.Steps[i].LeaseUntil=time.Time{};w.Steps[i].LeaseDigest=""}}
  w.Revision++
  return s.save(w)
 }
