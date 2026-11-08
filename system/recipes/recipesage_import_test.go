@@ -194,3 +194,51 @@ func TestRecipeSageRejectsDuplicateAndMalformedInputs(t *testing.T) {
 		t.Fatalf("whitespace changed a source identity: %v %v", errA, errB)
 	}
 }
+
+
+func TestRecipeSageOwnerCorrectionsKeepImportIdentity(t *testing.T) {
+	db, err := Open(filepath.Join(t.TempDir(), "recipes.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := recipeSageFixture(t, sageRecipeRecord("source-incomplete", "Vegetable soup", "onion", "1 tbsp oil"))
+	preview, err := db.PreviewRecipeSage(source)
+	if err != nil || preview.Ready != 0 || preview.Candidates[0].Status != "needs_review" {
+		t.Fatalf("invalid recipe was eligible: %+v %v", preview, err)
+	}
+	key := preview.Candidates[0].Key
+	corrected := preview.Candidates[0].Recipe
+	corrected.Ingredients[0].Amount = 2
+	corrected.Ingredients[0].Unit = "pieces"
+	corrected.Ingredients[0].Notes = "Owner-confirmed quantity"
+	if _, err := db.ImportRecipeSage(source, preview.Digest, []string{key}, nil); err == nil {
+		t.Fatal("incomplete recipe imported without owner correction")
+	}
+	if _, err := db.ImportRecipeSage(source, preview.Digest, []string{key}, map[string]Recipe{
+		"recipesage:" + strings.Repeat("a", 64): corrected,
+	}); err == nil {
+		t.Fatal("unselected source override was accepted")
+	}
+	broken := corrected
+	broken.Servings = 0
+	if _, err := db.ImportRecipeSage(source, preview.Digest, []string{key}, map[string]Recipe{key: broken}); err == nil {
+		t.Fatal("invalid owner correction was accepted")
+	}
+	corrected.ID = strings.Repeat("f", 32)
+	if _, err := db.ImportRecipeSage(source, preview.Digest, []string{key}, map[string]Recipe{key: corrected}); err == nil {
+		t.Fatal("owner correction supplied a fabricated stored ID")
+	}
+	corrected.ID = ""
+	result, err := db.ImportRecipeSage(source, preview.Digest, []string{key}, map[string]Recipe{key: corrected})
+	if err != nil || result.Imported != 1 {
+		t.Fatalf("reviewed recipe import failed: %+v %v", result, err)
+	}
+	saved, err := db.Get(result.IDs[0])
+	if err != nil || saved.ImportRef != key || saved.Ingredients[0].Amount != 2 {
+		t.Fatalf("reviewed data or source identity lost: %+v %v", saved, err)
+	}
+	repeated, err := db.PreviewRecipeSage(source)
+	if err != nil || repeated.Candidates[0].Status != "imported" {
+		t.Fatalf("reviewed record cannot be deduplicated: %+v %v", repeated, err)
+	}
+}
