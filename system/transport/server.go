@@ -26,7 +26,7 @@ import (
  "github.com/dbontr/homelab-new/system/store"
 )
 type Backend struct { Name string; URL string; Token string }
-type Server struct { db *store.Store; token string; backend []Backend; client *http.Client; calendarURL string; gate *approval.Gate; privilegeClient *security.AdminClient; allowedOrigins map[string]struct{}; media *media.Client; deviceCatalog *devices.Catalog; nodeCatalog *devices.NodeCatalog; profiles *profiles.Registry; recipes *recipes.Store; sessions *session.Manager; observability *observability.Client; bookCatalog *books.Catalog; inflight chan struct{} }
+type Server struct { db *store.Store; token string; backend []Backend; client *http.Client; calendarURL string; gate *approval.Gate; privilegeClient *security.AdminClient; securityLoginURL string; allowedOrigins map[string]struct{}; media *media.Client; deviceCatalog *devices.Catalog; nodeCatalog *devices.NodeCatalog; profiles *profiles.Registry; recipes *recipes.Store; sessions *session.Manager; observability *observability.Client; bookCatalog *books.Catalog; inflight chan struct{} }
 
 func New(db *store.Store,token string,backends []Backend)(*Server,error){
  if db==nil||len(token)<32||strings.ContainsAny(token,"\r\n\t"){return nil,errors.New("store and a strong access token are required")}
@@ -47,6 +47,17 @@ func(s *Server) SetProfiles(registry *profiles.Registry) { s.profiles = registry
 func(s *Server) SetBookCatalog(catalog *books.Catalog) { s.bookCatalog = catalog }
 func(s *Server) SetSessions(manager *session.Manager) { s.sessions = manager }
 func(s *Server) SetPrivilegeClient(client *security.AdminClient) { s.privilegeClient = client }
+func(s *Server) SetSecurityLoginURL(raw string) error {
+ u,err:=url.Parse(raw)
+ if err!=nil || u.Scheme!="https" || u.Host=="" || u.User!=nil || u.RawQuery!="" || u.Fragment!="" || (u.Path!=""&&u.Path!="/") {
+  return errors.New("security login must use an exact HTTPS origin")
+ }
+ if u.Hostname()=="localhost" || u.Hostname()=="127.0.0.1" || u.Hostname()=="::1" {
+  return errors.New("security login must use a protected external hostname")
+ }
+ s.securityLoginURL="https://"+u.Host
+ return nil
+}
 func(s *Server) SetCalendarURL(raw string)error{
  if err:=calendar.ValidateURL(raw);err!=nil{return err}
  s.calendarURL=raw
@@ -282,6 +293,9 @@ func(s *Server)localTools()[]map[string]any{
  if s.privilegeClient!=nil {
   tools=append(tools,tool("security_session_status","Inspect the independent owner administrative session without revealing credentials",map[string]any{}),
     tool("security_session_close","Immediately revoke the active owner administrative session",map[string]any{}))
+  if s.securityLoginURL!="" {
+   tools=append(tools,tool("security_session_open","Open the independent HTTPS authentication page to enter password and TOTP directly, outside ChatGPT. No credentials are returned to the model.",map[string]any{}))
+  }
  } else {
   tools=append(tools,tool("approval_status","Check an administrator approval",map[string]any{"id":prop("string")},"id"))
  }
@@ -393,6 +407,15 @@ func(s *Server)localTool(ctx context.Context,name string,raw json.RawMessage)(an
  case "security_session_status":
   if s.privilegeClient==nil{return nil,errors.New("independent security service not configured")}
   return s.privilegeClient.Status(ctx)
+ case "security_session_open":
+  if s.privilegeClient==nil||s.securityLoginURL==""{return nil,errors.New("browser authentication not configured")}
+  status,err:=s.privilegeClient.Status(ctx)
+  if err!=nil{return nil,err}
+  return map[string]any{
+   "sign_in_url":s.securityLoginURL,
+   "session":status,
+   "instructions":"Open the protected HTTPS link in your browser to authenticate. Password and TOTP are entered directly into the independent service, never into a ChatGPT message or MCP tool. After authentication, retry the operation.",
+  },nil
  case "security_session_close":
   if s.privilegeClient==nil{return nil,errors.New("independent security service not configured")}
   if err:=s.privilegeClient.Revoke(ctx);err!=nil{return nil,err}
