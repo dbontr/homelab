@@ -2,6 +2,8 @@ package privileged
 
 import (
  "context"
+ "crypto/tls"
+ "crypto/x509"
  "encoding/json"
  "errors"
  "net/http"
@@ -41,6 +43,13 @@ func TestReleaseStatusRequiresSignedOwnerAndIndependentAuthorization(t *testing.
  request.Header.Set("Cf-Access-Jwt-Assertion","signed-owner")
  response=httptest.NewRecorder()
  e.RemoteHandler().ServeHTTP(response,request)
+ if response.Code!=403||auth.calls!=0{t.Fatal("unverified TLS client reached authorization")}
+ request.TLS=&tls.ConnectionState{
+  VerifiedChains:[][]*x509.Certificate{{&x509.Certificate{}}},
+  PeerCertificates:[]*x509.Certificate{{}},
+ }
+ response=httptest.NewRecorder()
+ e.RemoteHandler().ServeHTTP(response,request)
  if response.Code!=403||auth.calls!=1{t.Fatal("policy denial bypassed")}
  auth.allowed=true
  response=httptest.NewRecorder()
@@ -53,4 +62,15 @@ func TestReleaseStatusRequiresSignedOwnerAndIndependentAuthorization(t *testing.
  response=httptest.NewRecorder()
  e.RemoteHandler().ServeHTTP(response,request)
  if response.Code!=503{t.Fatal("unavailable journal reported healthy")}
+}
+
+func TestRemoteExecutorCannotBindPublicInterfaces(t *testing.T){
+ e:=&Executor{}
+ cert:=tls.Certificate{Certificate:[][]byte{[]byte("unused")},PrivateKey:struct{}{}}
+ roots:=x509.NewCertPool()
+ for _,address:=range []string{"0.0.0.0:9443","[::]:9443","public.example:9443"}{
+  if err:=e.ServeMutualTLS(context.Background(),address,cert,roots,"coordinator.internal");err==nil{
+   t.Fatal("unsafe remote binding permitted",address)
+  }
+ }
 }
