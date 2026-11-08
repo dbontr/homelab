@@ -2,6 +2,9 @@ package main
 
 import (
  "context"
+ "crypto/tls"
+ "crypto/x509"
+ "net"
  "encoding/json"
  "errors"
  "log"
@@ -22,6 +25,25 @@ func required(name string)string{
  value:=os.Getenv(name)
  if value==""{log.Fatal("missing executor configuration: ",name)}
  return value
+}
+
+
+func trustedRemoteListener(address string)error{
+ host,_,err:=net.SplitHostPort(address)
+ if err!=nil{return errors.New("remote executor requires an IP:port listener")}
+ ip:=net.ParseIP(host)
+ if ip==nil||!(ip.IsPrivate()||ip.IsLoopback()){return errors.New("remote executor must bind an explicit private IP address")}
+ return nil
+}
+
+func remoteIdentity()(tls.Certificate,*x509.CertPool,error){
+ cert,err:=tls.LoadX509KeyPair(required("HOMELAB_EXECUTOR_REMOTE_CERT"),required("HOMELAB_EXECUTOR_REMOTE_KEY"))
+ if err!=nil{return tls.Certificate{},nil,errors.New("cannot load remote TLS server identity")}
+ caBytes,err:=os.ReadFile(required("HOMELAB_EXECUTOR_REMOTE_CA"))
+ if err!=nil{return tls.Certificate{},nil,errors.New("cannot read coordinator trust roots")}
+ roots:=x509.NewCertPool()
+ if !roots.AppendCertsFromPEM(caBytes){return tls.Certificate{},nil,errors.New("invalid coordinator trust roots")}
+ return cert,roots,nil
 }
 
 func main(){
@@ -72,6 +94,17 @@ func main(){
  defer stop()
  path:="/run/homelab-executord/execute.sock"
  if strings.ContainsAny(path,"\x00") {log.Fatal(errors.New("invalid socket path"))}
- log.Print("restricted local executor socket starting")
- if err:=e.ServeSocket(ctx,path,gid);err!=nil{log.Fatal(err)}
+ failures:=make(chan error,2)
+ go func(){failures<-e.ServeSocket(ctx,path,gid)}()
+ if address:=os.Getenv("HOMELAB_EXECUTOR_REMOTE_LISTEN");address!=""{
+  if err:=trustedRemoteListener(address);err!=nil{log.Fatal(err)}
+  cert,roots,err:=remoteIdentity()
+  if err!=nil{log.Fatal(err)}
+  coordinator:=required("HOMELAB_EXECUTOR_REMOTE_COORDINATOR")
+  go func(){failures<-e.ServeMutualTLS(ctx,address,cert,roots,coordinator)}()
+ }
+ log.Print("restricted executor endpoints starting")
+ err=<-failures
+ stop()
+ if err!=nil{log.Fatal(err)}
 }
