@@ -39,6 +39,12 @@ The session service enforces finite configured operation/resource policies and f
 
 The platform's gateway-to-security authorization integration is a policy check, not yet a substitute for the cluster executor's own enforcement. Privileged backend tokens, trusted hardware identities, and operation handlers must be isolated from the gateway at their real enforcement boundaries. Deploying the session service alone does not complete the privileged cluster executor or permit a production security sign-off.
 
+## Owner browser sign-in
+
+A configured MCP tool returns only the exact owner-controlled HTTPS authentication URL. ChatGPT opens it as a browser destination; it does not collect password or TOTP through chat, an MCP input, or a model-visible widget result. The optional portal terminates its private traffic on a separate Unix socket held by `homelab-securityd`. It requires a dedicated owner-only Cloudflare Access policy, signed tunnel-origin assertion verification, and an exact Host/Origin plus single-use CSRF check. Successful authentication activates the 120-minute idle, 12-hour maximum session on the independent service. Confirmations remain exact-operation bound and require fresh local credentials.
+
+The portal is not a general cluster administration API, and activating it does not give the primary MCP or the web proxy any executor credentials. Deployment must verify that the public hostname and its Access audience match before admitting traffic.
+
 ## External request boundaries
 
 The API rejects browser requests with an unapproved `Origin` and requires explicit HTTPS origins for remote clients. Non-browser clients without an `Origin` header continue to use bearer authentication. The NixOS option `services.homelabPlatform.allowedOrigins` configures exact permitted origins; wildcard origins are not supported.
