@@ -15,6 +15,7 @@ import (
  "time"
  "github.com/dbontr/homelab-new/system/approval"
  "github.com/dbontr/homelab-new/system/calendar"
+ "github.com/dbontr/homelab-new/system/books"
  "github.com/dbontr/homelab-new/system/devices"
  "github.com/dbontr/homelab-new/system/media"
  "github.com/dbontr/homelab-new/system/observability"
@@ -24,7 +25,7 @@ import (
  "github.com/dbontr/homelab-new/system/store"
 )
 type Backend struct { Name string; URL string; Token string }
-type Server struct { db *store.Store; token string; backend []Backend; client *http.Client; calendarURL string; gate *approval.Gate; allowedOrigins map[string]struct{}; media *media.Client; deviceCatalog *devices.Catalog; nodeCatalog *devices.NodeCatalog; profiles *profiles.Registry; recipes *recipes.Store; sessions *session.Manager; observability *observability.Client; inflight chan struct{} }
+type Server struct { db *store.Store; token string; backend []Backend; client *http.Client; calendarURL string; gate *approval.Gate; allowedOrigins map[string]struct{}; media *media.Client; deviceCatalog *devices.Catalog; nodeCatalog *devices.NodeCatalog; profiles *profiles.Registry; recipes *recipes.Store; sessions *session.Manager; observability *observability.Client; bookCatalog *books.Catalog; inflight chan struct{} }
 
 func New(db *store.Store,token string,backends []Backend)(*Server,error){
  if db==nil||len(token)<32||strings.ContainsAny(token,"\r\n\t"){return nil,errors.New("store and a strong access token are required")}
@@ -42,6 +43,7 @@ func New(db *store.Store,token string,backends []Backend)(*Server,error){
 func(s *Server) SetDeviceCatalog(catalog *devices.Catalog) { s.deviceCatalog = catalog }
 func(s *Server) SetNodeCatalog(catalog *devices.NodeCatalog) { s.nodeCatalog = catalog }
 func(s *Server) SetProfiles(registry *profiles.Registry) { s.profiles = registry }
+func(s *Server) SetBookCatalog(catalog *books.Catalog) { s.bookCatalog = catalog }
 func(s *Server) SetSessions(manager *session.Manager) { s.sessions = manager }
 func(s *Server) SetCalendarURL(raw string)error{
  if err:=calendar.ValidateURL(raw);err!=nil{return err}
@@ -130,6 +132,10 @@ func(s *Server) Handler()http.Handler{
  mux.HandleFunc("GET /v1/compute/profiles/{id}",s.profileRoutes)
  mux.HandleFunc("PUT /v1/compute/profiles/{id}",s.profileRoutes)
  mux.HandleFunc("POST /v1/compute/profiles/{id}/plan",s.profilePlanRoute)
+ mux.HandleFunc("GET /v1/books/search",s.bookRoutes)
+ mux.HandleFunc("GET /v1/books/requests",s.bookRoutes)
+ mux.HandleFunc("POST /v1/books/requests",s.bookRoutes)
+ mux.HandleFunc("PUT /v1/books/requests/{id}",s.bookRoutes)
  mux.HandleFunc("GET /v1/media/search",s.mediaSearch)
  mux.HandleFunc("GET /v1/media/requests",s.mediaRequests)
  mux.HandleFunc("POST /v1/media/requests",s.mediaRequests)
@@ -285,6 +291,12 @@ func(s *Server)localTools()[]map[string]any{
   tool("recipe_meal_remove","Remove a scheduled meal",map[string]any{"id":prop("string")},"id"),
   tool("recipe_groceries","Consolidate meal-plan ingredients by name and unit",map[string]any{"start":prop("string"),"end":prop("string")}),
   tool("recipe_nutrition_preview","Preview reported or estimated recipe nutrients without logging consumption",map[string]any{"id":prop("string"),"servings":prop("number")},"id","servings"))}
+ if s.bookCatalog!=nil {tools=append(tools,
+  tool("book_search","Discover published books through the official Open Library catalog",map[string]any{"query":prop("string")},"query"))}
+ tools=append(tools,
+  tool("book_request_list","List personal book wishes without claiming provider acquisition",map[string]any{"status":prop("string")}),
+  tool("book_request_add","Record an independently identified book wish with format and revision",map[string]any{"request":prop("object")},"request"),
+  tool("book_request_status","Record manual fulfillment or cancellation of a pending book wish",map[string]any{"id":prop("string"),"status":prop("string"),"expected_revision":prop("integer")},"id","status","expected_revision"))
  if s.calendarURL!=""{tools=append(tools,
   tool("calendar_feed","Read read-only calendar event definitions",map[string]any{}),
   tool("calendar_occurrences","Expand supported iCalendar recurrences into a bounded time window with explicit limitations",map[string]any{"start":prop("string"),"end":prop("string")}))}
@@ -323,6 +335,7 @@ func(s *Server)toolList(r *http.Request)[]map[string]any{
 }
 func(s *Server)localTool(ctx context.Context,name string,raw json.RawMessage)(any,error){
  if strings.HasPrefix(name,"monitoring_"){return s.monitoringTool(ctx,name,raw)}
+ if strings.HasPrefix(name,"book_"){return s.bookTool(ctx,name,raw)}
  if name=="calendar_occurrences"||name=="weekly_plan"{return s.calendarTool(ctx,name,raw)}
  if strings.HasPrefix(name,"recipe_"){return s.recipeTool(ctx,name,raw)}
  if s.media!=nil&&(name=="media_search"||name=="media_request"||name=="media_requests"){return s.mediaTool(ctx,name,raw)}
