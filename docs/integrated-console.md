@@ -11,10 +11,10 @@ treat local personal tasks as Workspace compute tasks.
   agenda. Update full task metadata using revision guards. A completion of a
   repeated task records a completed occurrence and creates a new
   due occurrence; it does not pretend an overdue task was completed.
-- **Calendar:** Inspect advisory timebox conflicts across local task records
-  and *event definitions* from a configured read-only iCalendar feed. Unsupported
-  or unexpanded recurrences are reported as limitations. The system does not
-  automatically modify external calendars.
+- **Calendar:** Inspect rolling calendar occurrences and advisory timebox conflicts from local tasks and a read-only iCalendar feed. Common recurring patterns, exclusions and overridden instances are expanded; unsupported recurrence constructs are reported explicitly. Nothing writes back to an external calendar.
+- **Weekly planning:** Propose timeboxes using estimated task durations, priorities, prerequisites, existing reservations and configured daily capacity. Unplanned tasks retain reasons. No automatic task or calendar mutation occurs.
+- **Monitoring:** Inspect fixed Prometheus metrics and history, scrape targets, alerts and bounded Loki journal entries through a Go-owned read-only adapter. Unknown measurements are not represented as zero.
+- **Activity:** Inspect confirmed events and stable task, goal, recipe, meal and book identities through the original owning data stores. The system does not infer unrecorded actions.
 - **Recipes:** Import a schema.org Recipe from pasted JSON-LD, HTML or a
   bounded public HTTPS page. The URL importer validates public DNS answers,
   pins TLS connections to resolved addresses, rejects redirects and proxies,
@@ -38,8 +38,8 @@ treat local personal tasks as Workspace compute tasks.
   view its phase and pending question, and record an ungraded learner response
   with explicit assistance disclosure. Only the education service can evaluate
   the response or award evidence-backed mastery.
-- **Workspace:** Read project jobs and isolated workspace state without
-  extending browser authorization to arbitrary code execution.
+- **Workspace:** Read project jobs and isolated workspace state without extending browser authorization to arbitrary code execution.
+- **Books:** Search Open Library on demand when an operator supplies a protected contact identity, and manage private book requests with revision-guarded fulfillment or cancellation. No purchase or media acquisition is performed.
 
 The console's look-and-feel continues to follow shadcn/ui's neutral/new-york
 design vocabulary, but is implemented using Rust/Dioxus rather than React.
