@@ -21,7 +21,7 @@ type Provider struct {
  Scopes []string
 }
 
-type Authorization struct {
+type OAuthAuthorization struct {
  URL string `json:"url"`
  ExpiresAt time.Time `json:"expires_at"`
 }
@@ -62,14 +62,14 @@ func randomURLToken(size int)(string,error){
  return base64.RawURLEncoding.EncodeToString(b),nil
 }
 
-func(b *OAuthBroker)Begin(provider string)(Authorization,error){
+func(b *OAuthBroker)Begin(provider string)(OAuthAuthorization,error){
  b.mu.Lock();defer b.mu.Unlock()
- p,ok:=b.providers[provider];if !ok{return Authorization{},errors.New("unknown OAuth provider")}
- state,err:=randomURLToken(32);if err!=nil{return Authorization{},err}
- verifier,err:=randomURLToken(32);if err!=nil{return Authorization{},err}
+ p,ok:=b.providers[provider];if !ok{return OAuthAuthorization{},errors.New("unknown OAuth provider")}
+ state,err:=randomURLToken(32);if err!=nil{return OAuthAuthorization{},err}
+ verifier,err:=randomURLToken(32);if err!=nil{return OAuthAuthorization{},err}
  sum:=sha256.Sum256([]byte(verifier))
  challenge:=base64.RawURLEncoding.EncodeToString(sum[:])
- u,err:=url.Parse(p.AuthorizeURL);if err!=nil{return Authorization{},err}
+ u,err:=url.Parse(p.AuthorizeURL);if err!=nil{return OAuthAuthorization{},err}
  q:=u.Query()
  q.Set("response_type","code")
  q.Set("client_id",p.ClientID)
@@ -83,9 +83,9 @@ func(b *OAuthBroker)Begin(provider string)(Authorization,error){
  for key,session:=range b.sessions{
   if !b.now().Before(session.expires){delete(b.sessions,key)}
  }
- if len(b.sessions)>=64{return Authorization{},errors.New("too many pending OAuth sessions")}
+ if len(b.sessions)>=64{return OAuthAuthorization{},errors.New("too many pending OAuth sessions")}
  b.sessions[state]=oauthSession{provider:p,verifier:verifier,expires:expires}
- return Authorization{URL:u.String(),ExpiresAt:expires},nil
+ return OAuthAuthorization{URL:u.String(),ExpiresAt:expires},nil
 }
 
 // Finish is called by the trusted loopback callback. Exchange stores tokens
