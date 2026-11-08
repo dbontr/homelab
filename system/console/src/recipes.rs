@@ -602,6 +602,38 @@ pub fn Recipes(csrf: String) -> Element {
                                                     draft.set(record); editing.set(true); cooking.set(false);
                                                 }
                                             }, "Edit" }
+                                            button { class: "btn btn-outline btn-sm", disabled: busy(),
+                                                onclick: move |_| {
+                                                    if history_open() {
+                                                        history_open.set(false);
+                                                        confirm_restore.set(None);
+                                                        return;
+                                                    }
+                                                    let Some(record) = current_record(
+                                                        &recipes.cloned().and_then(Result::ok).unwrap_or_default(),
+                                                        selected(), &search().trim().to_lowercase()
+                                                    ) else { return };
+                                                    let id = record.id;
+                                                    history_record.set(id.clone());
+                                                    history_open.set(true);
+                                                    history_loading.set(true);
+                                                    history.set(Vec::new());
+                                                    confirm_restore.set(None);
+                                                    error.set(String::new());
+                                                    spawn(async move {
+                                                        let response = api::get::<Vec<Recipe>>(
+                                                            &format!("/v1/recipes/{id}/history")
+                                                        ).await;
+                                                        if history_record() != id || !history_open() { return; }
+                                                        match response {
+                                                            Ok(versions) => history.set(versions),
+                                                            Err(message) => error.set(message),
+                                                        }
+                                                        history_loading.set(false);
+                                                    });
+                                                },
+                                                if history_open() { "Hide versions" } else { "Versions" }
+                                            }
                                             button { class: "btn btn-outline btn-sm", onclick: move |_| {
                                                 cooking.set(!cooking()); step_index.set(0);
                                             }, if cooking() { "Exit cooking" } else { "Cook" } }
