@@ -1,6 +1,6 @@
 # Homelab Console
 
-The console is a Rust/WASM client for the Go personal computing platform. It uses standard HTML and CSS, shadcn/ui neutral design tokens, and native Dioxus components. No React runtime is required.
+The console is a Rust/Dioxus client compiled to WebAssembly for the Go personal computing platform. The browser interface uses standard HTML and CSS with shadcn/ui neutral design tokens. First-party application logic is written in Rust, without TypeScript, JavaScript, JSX, TSX, or React source. The Dioxus build may emit generated JavaScript required to initialize WebAssembly; this is not an application development language.
 
 ## Development
 
@@ -12,7 +12,7 @@ dx serve --platform web
 
 Requires a Rust toolchain with the `wasm32-unknown-unknown` target, Dioxus CLI 0.7, and cached Cargo dependencies. Use a local reverse proxy to serve the compiled console and Go API under one HTTPS origin. Dioxus is a web application; the API must be reachable under the same origin.
 
-Do not expose the gateway's MCP bearer secret to the browser. The browser uses a short-lived cookie authenticated through `POST /ui/session`. Go accepts GET access to selected native resources; first-party recipe mutations require a CSRF token and an exact allowed Origin. The cookie cannot change cluster configuration, invoke MCP tools, or update other domain resources.
+Do not expose the gateway's MCP bearer secret to the browser. The browser uses a short-lived cookie authenticated through `POST /ui/session`. Go accepts reads of selected native resources; permitted owner-data mutations require a CSRF token and an exact allowed Origin. The cookie cannot change cluster configuration, invoke MCP tools, or update other domain resources.
 
 The Go service must have `HOMELAB_CONSOLE_PASSPHRASE_FILE` pointing to an owner-only JSON passphrase verifier, provisioned independently of the administrator approval passphrase. Configure `HOMELAB_ALLOWED_ORIGINS` for the console's exact HTTPS origin. No browser session is available if the verifier is not configured.
 

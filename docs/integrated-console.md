@@ -1,6 +1,6 @@
 # Unified console capabilities
 
-The first-party Rust/Dioxus console is a same-origin client for Go-owned APIs.
+The first-party Rust/Dioxus console compiles to WebAssembly and is a same-origin client for Go-owned APIs. It does not depend on authored TypeScript or JavaScript application logic.
 It does not receive the cluster credential, execute arbitrary MCP tools, or
 treat local personal tasks as Workspace compute tasks.
 
