@@ -158,6 +158,16 @@ func (a *AdminSessions) ClientHandler() http.Handler {
   log.Print("security audit owner_session revoked")
   respondJSON(w,200,SessionStatus{Active:false})
  })
+ mux.HandleFunc("POST /v1/preview",func(w http.ResponseWriter,r *http.Request){
+  principal,ok:=authenticated(w,r);if !ok{return}
+  var input struct{
+   Operation string `json:"operation"`
+   Target string `json:"target"`
+   Arguments json.RawMessage `json:"arguments"`
+  }
+  if err:=readJSON(r,&input);err!=nil{http.Error(w,"invalid request",400);return}
+  respondJSON(w,200,a.PreviewFor(principal,a.client,input.Operation,input.Target,input.Arguments))
+ })
  mux.HandleFunc("POST /v1/authorize",func(w http.ResponseWriter,r *http.Request){
   principal,ok:=authenticated(w,r);if !ok{return}
   var input struct{
@@ -295,6 +305,12 @@ func (c *AdminClient) request(ctx context.Context, method, path string, input, o
 		return fmt.Errorf("security service status %d", resp.StatusCode)
 	}
 	return json.NewDecoder(io.LimitReader(resp.Body, 1<<16)).Decode(output)
+}
+// Preview checks policy without consuming a confirmation or renewing the session.
+func (c *AdminClient) Preview(ctx context.Context,operation,target string,args json.RawMessage)(Authorization,error){
+ var result Authorization
+ err:=c.request(ctx,http.MethodPost,"/v1/preview",map[string]any{"operation":operation,"target":target,"arguments":args},&result)
+ return result,err
 }
 func (c *AdminClient) Authorize(ctx context.Context, operation, target string, args json.RawMessage) (Authorization, error) {
 	var result Authorization
