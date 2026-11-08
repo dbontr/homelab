@@ -69,6 +69,13 @@ in {
       }
     ];
     users.groups.homelab-fleet-client = {};
+    users.groups.homelab-fleet = {};
+    users.users.homelab-fleet = {
+      isSystemUser = true;
+      group = "homelab-fleet";
+      extraGroups = [ "homelab-fleet-client" "homelab-security-client" ];
+      home = "/var/lib/homelab-fleetd";
+    };
 
     systemd.services.homelab-fleetd = {
       description = "Authenticated durable fleet release coordinator";
@@ -88,7 +95,8 @@ in {
       };
       serviceConfig = {
         Type = "simple";
-        DynamicUser = true;
+        User = "homelab-fleet";
+        Group = "homelab-fleet";
         SupplementaryGroups = [ "homelab-fleet-client" "homelab-security-client" ];
         StateDirectory = "homelab-fleetd";
         StateDirectoryMode = "0700";
