@@ -29,7 +29,7 @@ func New(db *store.Store,token string,backends []Backend)(*Server,error){
  if db==nil||len(token)<32||strings.ContainsAny(token,"\r\n\t"){return nil,errors.New("store and a strong access token are required")}
  used:=map[string]bool{}
  for _,b:=range backends{
-  if !validIntegrationName(b.Name)||used[b.Name){return nil,errors.New("invalid backend name")}
+  if !validIntegrationName(b.Name)||used[b.Name]{return nil,errors.New("invalid backend name")}
   used[b.Name]=true
   u,e:=url.Parse(b.URL);if e!=nil{return nil,errors.New("invalid backend URL")}
   if u.Hostname()==""||u.Opaque!=""{return nil,errors.New("backend URL requires a host")}
@@ -77,6 +77,8 @@ func(s *Server) Handler()http.Handler{
  mux.HandleFunc("POST /v1/recipes",s.recipeCollection)
  mux.HandleFunc("GET /v1/recipes/health-goals",s.uiHealthGoals)
  mux.HandleFunc("GET /v1/recipes/export",s.recipeArchive)
+ mux.HandleFunc("GET /v1/recipes/bundle",s.recipeBundle)
+ mux.HandleFunc("POST /v1/recipes/bundle",s.recipeBundle)
  mux.HandleFunc("POST /v1/recipes/parse",s.recipeParse)
  mux.HandleFunc("POST /v1/recipes/import-url",s.recipeImportURL)
  mux.HandleFunc("POST /v1/recipes/recipesage/preview",s.recipeSagePreview)
