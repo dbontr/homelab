@@ -22,7 +22,7 @@ NixOS `services.homelabPlatform.monitoring` supplies loopback origins for Promet
 
 The monitoring Compose stack binds Prometheus port 9090 and Loki port 3100 only to the configured loopback `SERVICE_BIND_IP`. It retains the existing Grafana service during migration. The first-party console is enabled independently with `services.homelabConsole.enable`. Replacing the homepage remains an explicit operator action; source changes do not change public routing.
 
-Metrics available reflect the active exporter configuration. Jupiter GPU data are sampled only when a running GPU-assigned Pod can be inspected. No sample means no measurement. Additional exporter targets for other cluster nodes, NPU devices and Kubernetes controllers should be added only when the corresponding collectors exist and their trust and cardinality limits are understood.
+The Prometheus configuration includes Saturn and the declared Jupiter, Venus, Mercury and Janus Node Exporter targets on the compute network. The four remote targets are identified independently with `node` labels. Node availability, low root filesystem space and memory pressure have separate source-managed cluster alerts, while operator-owned alert configuration is retained. Jupiter GPU data are sampled only when a running GPU-assigned Pod can be inspected. No sample means no measurement. Additional NPU and Kubernetes-specific collectors require their own source and cardinality review.
 
 ## Bounds
 
@@ -33,4 +33,4 @@ Metrics available reflect the active exporter configuration. Jupiter GPU data ar
 - Backend responses: 2 MiB limit and request timeouts. No backend query contains a user-provided metric expression.
 - The browser session is read-only for monitoring. Cluster administration continues through a distinct privileged executor.
 
-Keep Grafana dashboards available until the Rust dashboard has been compiled, viewed and accepted; they serve as a reference and an operational fallback during migration.
+Source-managed Prometheus scrape configuration and cluster alert rules are installed through the monitoring NixOS service while operator-owned alert rules remain untouched. Use the monitoring service reload action to apply an updated Prometheus configuration. Keep Grafana dashboards available until the Rust dashboard has been compiled, viewed and accepted; they serve as a reference and an operational fallback during migration.
