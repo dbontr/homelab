@@ -45,13 +45,13 @@ func(f *fakeCompute)Call(_ context.Context,name string,args map[string]any)(map[
   return map[string]any{"operation_id":id},nil
  case "workspace_operation":
   id:=str(args["operation_id"])
-  if id=="checkout"{return map[string]any{"status":"succeeded","result":map[string]any{"repository":"example/repo"}},nil}
+  if id=="checkout"{return map[string]any{"status":"succeeded","result":map[string]any{"repository":"example/repo","revision":strings.Repeat("a",40)}},nil}
   result,ok:=f.operations[id];if !ok{return nil,errors.New("unknown operation")}
   return map[string]any{"status":"succeeded","result":result},nil
  case "github_publish_artifacts":
   f.drafts++
   if str(args["base_branch"])!="main"||len(obj(args["changes"]))==0{return nil,errors.New("invalid publication")}
-  return map[string]any{"draft":true,"number":12,"url":"https://github.com/example/repo/pull/12"},nil
+  return map[string]any{"draft":true,"number":12,"base_sha":strings.Repeat("a",40),"url":"https://github.com/example/repo/pull/12"},nil
  default:return nil,fmt.Errorf("unexpected compute tool %s",name)
  }
 }
