@@ -7,7 +7,6 @@ import (
  "regexp"
  "strings"
  "testing"
- "time"
 )
 
 func TestBrowserPortalDirectAuthenticationAndRevocation(t *testing.T){
