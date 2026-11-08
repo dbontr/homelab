@@ -426,3 +426,16 @@ main.content { max-width: 94rem; margin: 0 auto; padding: 2rem; }
   .calendar-event { grid-template-columns: 1fr; gap: .375rem; }
   .calendar-date { display: flex; gap: .75rem; }
 }
+
+
+/* Advisory weekly planning */
+.planner-sections { align-items: start; }
+.planner-slots, .planner-unplanned { display: grid; gap: .375rem; }
+.planner-slot { display: grid; grid-template-columns: 9rem minmax(0, 1fr); gap: 1rem; padding: .75rem 0; border-bottom: 1px solid var(--border); }
+.planner-slot-time, .planner-slot-text, .planner-deferred { display: grid; gap: .2rem; min-width: 0; }
+.planner-slot-time strong, .planner-slot-text strong { font-weight: 600; }
+.planner-deferred { padding: .625rem 0; border-bottom: 1px solid var(--border); }
+.planner-slot:last-child, .planner-deferred:last-child { border-bottom: 0; }
+@media (max-width: 600px) {
+  .planner-slot { grid-template-columns: 1fr; gap: .375rem; }
+}
