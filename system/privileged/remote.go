@@ -19,6 +19,7 @@ import (
 // authentication is enforced by ServeMutualTLS.
 func(e *Executor)RemoteHandler()http.Handler{
  mux:=http.NewServeMux()
+ e.registerReleaseStage(mux)
  mux.Handle("POST /v1/execute",e.Handler())
  mux.HandleFunc("GET /v1/release/status",func(w http.ResponseWriter,r *http.Request){
   w.Header().Set("Cache-Control","no-store")
@@ -77,7 +78,7 @@ func(e *Executor)ServeMutualTLS(ctx context.Context,address string,cert tls.Cert
    return state.PeerCertificates[0].VerifyHostname(coordinatorDNS)
   },
  }
- server:=&http.Server{Handler:e.RemoteHandler(),ReadHeaderTimeout:5*time.Second,ReadTimeout:15*time.Second,WriteTimeout:180*time.Second}
+ server:=&http.Server{Handler:e.RemoteHandler(),ReadHeaderTimeout:5*time.Second,ReadTimeout:15*time.Second,WriteTimeout:2*time.Hour}
  stopped:=make(chan struct{})
  go func(){select{case <-ctx.Done():_=server.Close();case <-stopped:}}()
  err=server.Serve(tls.NewListener(listener,configuration));close(stopped)
