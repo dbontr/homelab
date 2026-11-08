@@ -14,6 +14,7 @@ import (
  "path/filepath"
  "sort"
  "sync"
+ "syscall"
  "time"
 )
 
@@ -81,6 +82,16 @@ func randomToken()(string,error){
  return hex.EncodeToString(b[:]),nil
 }
 func (s *Store) filename(id string)string{return filepath.Join(s.dir,id+".json")}
+// lock serializes readers and writers across distinct processes sharing a store.
+func (s *Store) lock()(func(),error){
+ s.mu.Lock()
+ f,err:=os.OpenFile(filepath.Join(s.dir,".lock"),os.O_CREATE|os.O_RDWR,0600)
+ if err!=nil{s.mu.Unlock();return nil,err}
+ info,err:=f.Stat()
+ if err!=nil||!info.Mode().IsRegular()||info.Mode().Perm()&0077!=0{f.Close();s.mu.Unlock();return nil,errors.New("unsafe workflow lock")}
+ if err:=syscall.Flock(int(f.Fd()),syscall.LOCK_EX);err!=nil{f.Close();s.mu.Unlock();return nil,err}
+ return func(){_ = syscall.Flock(int(f.Fd()),syscall.LOCK_UN);_ = f.Close();s.mu.Unlock()},nil
+}
 func (s *Store) read(id string)(Workflow,error){
  var w Workflow
  if !validID(id){return w,errors.New("invalid workflow ID")}
@@ -133,7 +144,7 @@ func Validate(w Workflow)error {
 }
 func (s *Store) Create(w Workflow)error{
  if err:=Validate(w);err!=nil{return err}
- s.mu.Lock();defer s.mu.Unlock()
+ unlock,err:=s.lock();if err!=nil{return err};defer unlock()
  if _,err:=os.Stat(s.filename(w.ID));err==nil{return os.ErrExist}else if !errors.Is(err,os.ErrNotExist){return err}
  for i:=range w.Steps{
   w.Steps[i].Status=Pending
@@ -148,7 +159,7 @@ func (s *Store) Create(w Workflow)error{
  return s.save(w)
 }
 func (s *Store) Get(id string)(Workflow,error){
- s.mu.Lock();defer s.mu.Unlock()
+ unlock,err:=s.lock();if err!=nil{return Workflow{},err};defer unlock()
  return s.read(id)
 }
 // ClaimReady reserves one eligible step. A lease expires without implying
@@ -157,7 +168,7 @@ func (s *Store) Get(id string)(Workflow,error){
 func (s *Store) ClaimReady(id string,ttl time.Duration)(Claim,error){
  var claim Claim
  if ttl<time.Second||ttl>30*time.Minute{return claim,errors.New("invalid lease duration")}
- s.mu.Lock();defer s.mu.Unlock()
+ unlock,err:=s.lock();if err!=nil{return claim,err};defer unlock()
  w,err:=s.read(id);if err!=nil{return claim,err}
  if w.Cancelled{return claim,errors.New("workflow cancelled")}
  statuses:=map[string]Status{}
@@ -189,7 +200,7 @@ func (s *Store) ClaimReady(id string,ttl time.Duration)(Claim,error){
 func (s *Store) Complete(c Claim,result json.RawMessage,executionError string)error{
  if !validID(c.WorkflowID)||!validID(c.StepID)||c.Generation==0||len(c.Token)!=64{return errors.New("invalid claim")}
  if len(result)>64<<10||(len(result)>0&&!json.Valid(result))||len(executionError)>1024{return errors.New("invalid result")}
- s.mu.Lock();defer s.mu.Unlock()
+ unlock,err:=s.lock();if err!=nil{return err};defer unlock()
  w,err:=s.read(c.WorkflowID);if err!=nil{return err}
  if w.Cancelled{return errors.New("workflow cancelled")}
  for i:=range w.Steps{
@@ -216,7 +227,7 @@ func (s *Store) Complete(c Claim,result json.RawMessage,executionError string)er
  return os.ErrNotExist
 }
 func (s *Store) Cancel(id string,expectedRevision uint64)error{
- s.mu.Lock();defer s.mu.Unlock()
+ unlock,err:=s.lock();if err!=nil{return err};defer unlock()
  w,err:=s.read(id);if err!=nil{return err}
  if w.Revision!=expectedRevision{return errors.New("workflow revision conflict")}
  if w.Cancelled{return nil}
@@ -226,7 +237,7 @@ func (s *Store) Cancel(id string,expectedRevision uint64)error{
  return s.save(w)
 }
 func (s *Store) List()( []string,error){
- s.mu.Lock();defer s.mu.Unlock()
+ unlock,err:=s.lock();if err!=nil{return nil,err};defer unlock()
  entries,err:=os.ReadDir(s.dir);if err!=nil{return nil,err}
  var ids []string
  for _,entry:=range entries{
