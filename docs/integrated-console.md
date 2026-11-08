@@ -26,6 +26,7 @@ treat local personal tasks as Workspace compute tasks.
   Review a RecipeSage JSON-LD export as a bounded batch, inspect per-recipe
   conversion warnings, correct incomplete entries in the same recipe editor,
   and select validated records for an atomic first-party import. The original RecipeSage database and export remain unchanged.
+  A portable ZIP can transfer stored recipe records, retained history and referenced photographs without replacing existing IDs.
   Mark groceries as purchased
   through a revision-fenced persistent record.
 - **Food and Health:** Nutrition associated with a first-party recipe may be
