@@ -48,7 +48,7 @@ func NewRemoteReleaseAgent(cfg RemoteAgentConfig)(*RemoteReleaseAgent,error){
   ResponseHeaderTimeout:30*time.Second,
  }
  return &RemoteReleaseAgent{host:cfg.Host,endpoint:strings.TrimSuffix(u.String(),"/"),assertion:cfg.AccessAssertion,
-  client:&http.Client{Transport:transport,Timeout:45*time.Second,CheckRedirect:func(*http.Request,[]*http.Request)error{return errors.New("release agent redirect denied")}}},nil
+  client:&http.Client{Transport:transport,Timeout:2*time.Hour,CheckRedirect:func(*http.Request,[]*http.Request)error{return errors.New("release agent redirect denied")}}},nil
 }
 
 func(a *RemoteReleaseAgent)call(ctx context.Context,method,path string,input,output any)error{
