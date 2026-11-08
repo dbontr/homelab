@@ -12,6 +12,9 @@ The Go platform exposes authenticated loopback HTTP endpoints. Native JSON and M
 - GET /v1/recommendations: filter by available time, energy and location; quick mode favors small tasks
 - GET /v1/reports/weekly: recorded completions against the daily minimum and associated goal progress
 - GET /v1/calendar: read-only event definitions from an optional iCalendar sharing link
+- GET /v1/calendar/occurrences: bounded expanded events and recurrence limitations
+- GET /v1/planning/week: advisory weekly allocation of tasks into unoccupied calendar time; never mutates tasks or the calendar
+- GET /v1/monitoring/summary, /series, /targets, /alerts, /logs: owner-authenticated fixed telemetry and journal views from configured local Prometheus and Loki sources
 - GET /v1/devices: declared device inventory and access policy, not live device status
 - GET /v1/nodes: enrolled and agentless node inventory, not live node status
 - GET /v1/software: read the Workspace-backed approved image, software, and program catalogs
@@ -40,4 +43,4 @@ Reports measure recorded completions. A missing record does not establish inacti
 
 ## Calendar limitations
 
-The iCalendar sharing link is read-only and stored outside Git. The implementation unfolds event definitions, extracts dates, titles, locations, time-zone labels and recurrence rules. It does not expand recurring events, apply recurrence exceptions, or certify that an apparent free period has no commitment. Calendar-aware availability recommendations require full recurrence processing and live acceptance tests.
+The iCalendar sharing link is read-only and stored outside Git. The implementation unfolds event definitions and expands a bounded subset of daily, weekly, monthly and yearly recurrence rules, including exclusions, additional dates and overridden instances. Unsupported recurrence fields, ordinal weekdays and other unavailable interpretations remain limitations rather than assumed free time. Calendar availability is advisory: it does not certify that a time is free of unrecorded commitments. The weekly planner uses task prerequisites, recorded durations and discovered calendar reservations without writing back to either system.
