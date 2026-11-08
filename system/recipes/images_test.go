@@ -84,6 +84,7 @@ func TestRecipeImageInputValidationAndTampering(t *testing.T) {
 	}{
 		{[]byte("<svg><script>bad</script></svg>"), "image/png", ErrInvalidImage},
 		{pngImage, "image/jpeg", ErrInvalidImage},
+		{pngImage[:len(pngImage)-8], "image/png", ErrInvalidImage},
 		{pngImage, "text/html", ErrInvalidImage},
 		{nil, "image/png", ErrInvalidImage},
 		{bytes.Repeat([]byte{1}, MaxImageBytes + 1), "image/png", ErrImageTooLarge},
