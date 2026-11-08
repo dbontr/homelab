@@ -79,6 +79,8 @@ func(s *Server) Handler()http.Handler{
  mux.HandleFunc("GET /v1/recipes/export",s.recipeArchive)
  mux.HandleFunc("POST /v1/recipes/parse",s.recipeParse)
  mux.HandleFunc("POST /v1/recipes/import-url",s.recipeImportURL)
+ mux.HandleFunc("POST /v1/recipes/images",s.recipeImageUpload)
+ mux.HandleFunc("GET /v1/recipes/images/{name}",s.recipeImage)
  mux.HandleFunc("POST /v1/recipes/import",s.recipeArchive)
  mux.HandleFunc("GET /v1/recipes/{id}",s.recipeItem)
  mux.HandleFunc("PUT /v1/recipes/{id}",s.recipeItem)
