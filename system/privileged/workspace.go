@@ -157,9 +157,15 @@ func(p *WorkspacePolicy)Call(ctx context.Context,operation string,fields map[str
   JSONRPC string `json:"jsonrpc"`
   ID int `json:"id"`
   Error json.RawMessage `json:"error"`
-  Result struct{IsError bool `json:"isError"`} `json:"result"`
+  Result json.RawMessage `json:"result"`
  }
  if err:=json.Unmarshal(data,&output);err!=nil||output.JSONRPC!="2.0"||output.ID!=1||
-  len(output.Error)>0||output.Result.IsError{return errors.New("Workspace controller operation was not accepted")}
+  len(output.Error)>0||len(output.Result)==0||bytes.Equal(output.Result,[]byte("null")){
+  return errors.New("Workspace controller operation was not accepted")
+ }
+ var result struct{IsError bool `json:"isError"`}
+ if err:=json.Unmarshal(output.Result,&result);err!=nil||result.IsError{
+  return errors.New("Workspace controller operation was not accepted")
+ }
  return nil
 }
