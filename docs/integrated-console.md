@@ -21,7 +21,9 @@ treat local personal tasks as Workspace compute tasks.
   and returns an unsaved draft. Missing ingredient quantities require review.
   Attach privately stored JPEG or PNG images from the browser editor; images
   are immutable, addressable by content hash and retrieved only with recipe
-  read authorization. RecipeSage data is not migrated or deleted. Mark groceries as purchased
+  read authorization. Review up to 20 earlier recipe versions and restore a
+  retained snapshot only with the current revision, preserving the prior state.
+  RecipeSage data is not migrated or deleted. Mark groceries as purchased
   through a revision-fenced persistent record.
 - **Food and Health:** Nutrition associated with a first-party recipe may be
   submitted as an unconfirmed Health food proposal. An owner must separately
