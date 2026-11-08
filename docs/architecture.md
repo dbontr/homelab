@@ -14,6 +14,10 @@ The system implements personal planning, recurrence-aware calendar availability,
 
 A single capability registry and consistent authorization rules govern tool discovery and execution. Operations use native Go interfaces. An MCP transport is an adapter rather than the business-logic owner. The platform must distinguish a successful operation from one merely queued, accepted or unobserved.
 
+## Engineering execution
+
+Engineering runs are managed by an independent Go daemon within the same product. The public MCP and native API expose owner-authorized run submission, status and cancellation through a restricted Unix socket. Compute and model credentials never enter the gateway. The daemon schedules project-scoped, resource-bounded work and relies on an authenticated compute controller for isolated workspaces, exact-revision source checkout and worker-confirmed operations. Only verified artifacts may be sent to revision-guarded draft pull-request publication; merge and deployment remain separate operator actions. See [Engineering execution](engineering.md).
+
 ## Hardware and privilege
 
 The declared inventory is in `hardware.nix`, validated by the Go `system/devices` package and presented through the native API and MCP. An inventory entry is not proof of physical connectivity. The current Kria KV260 inventory entry permits SSH connection and inspection only and is not compute-eligible. Any physical device can be removed or reconfigured through the inventory without model-specific Go changes. The compute executor must enforce actual device selection and lease authorization independently of the gateway.
