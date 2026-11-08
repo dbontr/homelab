@@ -120,7 +120,7 @@ func(s *Server) Handler()http.Handler{
  mux.HandleFunc("GET /v1/resources/{kind}/{id}",s.uiResource)
  mux.HandleFunc("GET /v1/workspace/nodes",s.uiComputeNodes)
  for _,path:=range []string{"/v1/monitoring/summary","/v1/monitoring/targets",
-   "/v1/monitoring/alerts","/v1/monitoring/series","/v1/monitoring/logs"} {
+   "/v1/monitoring/alerts","/v1/monitoring/security","/v1/monitoring/series","/v1/monitoring/logs"} {
   mux.HandleFunc("GET "+path,s.uiMonitoring)
  }
  mux.HandleFunc("POST /mcp",s.mcp)
