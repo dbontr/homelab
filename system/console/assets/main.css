@@ -343,3 +343,5 @@ main.content { max-width: 94rem; margin: 0 auto; padding: 2rem; }
 .recipe-sage-candidate-label { display: flex; flex-direction: column; min-width: 0; }
 .recipe-sage-candidate-label strong { overflow-wrap: anywhere; font-weight: 600; }
 .recipe-sage-warning { margin: .375rem 0 0 1.75rem; overflow-wrap: anywhere; }
+
+.recipe-sage-review { margin: .625rem 0 0 1.75rem; }
