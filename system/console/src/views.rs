@@ -127,14 +127,14 @@ pub fn Overview() -> Element {
 
 #[component]
 pub fn Projects() -> Element {
-    let mut data = use_resource(|| async { api::get::<Value>("/v1/workspace/projects").await });
+    let mut data = use_resource(|| async { api::get::<Value>("/v1/engineering/projects").await });
     let mut filter = use_signal(String::new);
     let mut selected = use_signal(||None::<String>);
     let mut jobs = use_resource(||{
         let project=selected();
         async move{
             match project{
-                Some(id)=>api::get::<Value>(&format!("/v1/workspace/projects/{id}/jobs")).await,
+                Some(id)=>api::get::<Value>(&format!("/v1/engineering/projects/{id}/jobs")).await,
                 None=>Ok(Value::Null),
             }
         }
@@ -143,7 +143,7 @@ pub fn Projects() -> Element {
         let project=selected();
         async move{
             match project{
-                Some(id)=>api::get::<Value>(&format!("/v1/workspace/projects/{id}/workspaces")).await,
+                Some(id)=>api::get::<Value>(&format!("/v1/engineering/projects/{id}/workspaces")).await,
                 None=>Ok(Value::Null),
             }
         }
@@ -296,7 +296,7 @@ pub fn Compute() -> Element {
     let mut nodes = use_resource(|| async { api::get::<Vec<Node>>("/v1/nodes").await });
     let mut devices = use_resource(|| async { api::get::<Vec<Device>>("/v1/devices").await });
     let mut profiles = use_resource(|| async { api::get::<Vec<Profile>>("/v1/compute/profiles").await });
-    let mut workers = use_resource(|| async { api::get::<Value>("/v1/workspace/nodes").await });
+    let mut workers = use_resource(|| async { api::get::<Value>("/v1/engineering/nodes").await });
     rsx! {
         Heading { title: "Compute".to_owned(),
             description: "Node enrollment, attached hardware, and reusable build environments.".to_owned(),
