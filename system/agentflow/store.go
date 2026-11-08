@@ -87,7 +87,7 @@ func (s *Store) filename(id string)string{return filepath.Join(s.dir,id+".json")
 // lock serializes readers and writers across distinct processes sharing a store.
 func (s *Store) lock()(func(),error){
  s.mu.Lock()
- f,err:=os.OpenFile(filepath.Join(s.dir,".lock"),os.O_CREATE|os.O_RDWR,0600)
+ f,err:=os.OpenFile(filepath.Join(s.dir,".lock"),os.O_CREATE|os.O_RDWR|syscall.O_NOFOLLOW,0600)
  if err!=nil{s.mu.Unlock();return nil,err}
  info,err:=f.Stat()
  if err!=nil||!info.Mode().IsRegular()||info.Mode().Perm()&0077!=0{f.Close();s.mu.Unlock();return nil,errors.New("unsafe workflow lock")}
