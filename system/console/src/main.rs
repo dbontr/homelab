@@ -1,5 +1,6 @@
 mod api;
 mod components;
+mod recipes;
 mod views;
 
 use dioxus::prelude::*;
@@ -16,6 +17,7 @@ enum Page {
     Tasks,
     Learning,
     Health,
+    Recipes,
     Media,
     Administration,
 }
@@ -30,6 +32,7 @@ impl Page {
             Self::Tasks => "Tasks",
             Self::Learning => "Learning",
             Self::Health => "Health",
+            Self::Recipes => "Recipes",
             Self::Media => "Media",
             Self::Administration => "Administration",
         }
@@ -46,6 +49,7 @@ const PERSONAL: &[(Page, &str, &str)] = &[
     (Page::Tasks, "Tasks", "tasks"),
     (Page::Learning, "Learning", "learning"),
     (Page::Health, "Health", "health"),
+    (Page::Recipes, "Recipes", "recipes"),
     (Page::Media, "Media", "media"),
 ];
 
@@ -67,6 +71,7 @@ fn App() -> Element {
         .and_then(Result::ok)
         .and_then(|value| value.csrf_token)
         .unwrap_or_default();
+    let logout_csrf = csrf.clone();
 
     rsx! {
         document::Stylesheet { href: CSS }
@@ -194,7 +199,7 @@ fn App() -> Element {
                             div { class: "user-avatar", "O" }
                             div {
                                 span { class: "user-label", "Owner" }
-                                span { class: "user-meta", "Read-only browser session" }
+                                span { class: "user-meta", "Personal recipes · administration locked" }
                             }
                         }
                     }
@@ -228,7 +233,7 @@ fn App() -> Element {
                                 button {
                                     class: "btn btn-outline btn-sm",
                                     onclick: move |_| {
-                                        let csrf = csrf.clone();
+                                        let csrf = logout_csrf.clone();
                                         spawn(async move {
                                             match api::logout(&csrf).await {
                                                 Ok(()) => session.restart(),
@@ -262,6 +267,7 @@ fn App() -> Element {
                                         prefix: "health__".to_owned()
                                     }
                                 },
+                                Page::Recipes => rsx! { recipes::Recipes { csrf: csrf.clone() } },
                                 Page::Media => rsx! { views::Media {} },
                                 Page::Administration => rsx! { views::Administration {} },
                             }

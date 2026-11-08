@@ -87,27 +87,31 @@ func (s *Server) uiSession(w http.ResponseWriter,r *http.Request) {
 	}
 }
 
-func (s *Server) uiWorkspaceRead(w http.ResponseWriter,r *http.Request,tool string) {
-	if !s.hasBackend("workspace") {writeError(w,http.StatusServiceUnavailable,"workspace not configured");return}
-	value:=s.invoke(r.Context(),"workspace__"+tool,json.RawMessage("{}"),json.RawMessage("1"))
+func (s *Server) uiBackendRead(w http.ResponseWriter,r *http.Request,backend,tool string) {
+	if !s.hasBackend(backend) {writeError(w,http.StatusServiceUnavailable,"service not configured");return}
+	value:=s.invoke(r.Context(),backend+"__"+tool,json.RawMessage("{}"),json.RawMessage("1"))
 	if failed,_:=value["isError"].(bool);failed {
-		writeError(w,http.StatusBadGateway,"workspace unavailable");return
+		writeError(w,http.StatusBadGateway,"integration unavailable");return
 	}
 	parts,ok:=value["content"].([]any)
-	if !ok||len(parts)==0 {writeError(w,http.StatusBadGateway,"workspace returned invalid data");return}
+	if !ok||len(parts)==0 {writeError(w,http.StatusBadGateway,"integration returned invalid data");return}
 	part,ok:=parts[0].(map[string]any)
 	if !ok {writeError(w,http.StatusBadGateway,"workspace returned invalid data");return}
 	raw,ok:=part["text"].(string)
 	if !ok||len(raw)>2<<20 {writeError(w,http.StatusBadGateway,"workspace returned invalid data");return}
 	var payload any
 	if err:=json.Unmarshal([]byte(raw),&payload);err!=nil {
-		writeError(w,http.StatusBadGateway,"workspace returned invalid JSON");return
+		writeError(w,http.StatusBadGateway,"integration returned invalid JSON");return
 	}
 	writeJSON(w,200,payload)
 }
 func (s *Server) uiProjects(w http.ResponseWriter,r *http.Request) {
-	s.uiWorkspaceRead(w,r,"list_projects")
+	s.uiBackendRead(w,r,"workspace","list_projects")
 }
 func (s *Server) uiComputeNodes(w http.ResponseWriter,r *http.Request) {
-	s.uiWorkspaceRead(w,r,"list_compute_nodes")
+	s.uiBackendRead(w,r,"workspace","list_compute_nodes")
+}
+
+func (s *Server) uiHealthGoals(w http.ResponseWriter,r *http.Request) {
+	s.uiBackendRead(w,r,"health","health_goal_list")
 }

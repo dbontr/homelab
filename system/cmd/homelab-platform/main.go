@@ -14,6 +14,7 @@ import (
     "github.com/dbontr/homelab-new/system/devices"
     "github.com/dbontr/homelab-new/system/media"
     "github.com/dbontr/homelab-new/system/profiles"
+    "github.com/dbontr/homelab-new/system/recipes"
     "github.com/dbontr/homelab-new/system/store"
     "github.com/dbontr/homelab-new/system/security"
     "github.com/dbontr/homelab-new/system/session"
@@ -51,6 +52,10 @@ func main(){
     if profileFile=="" {profileFile=filepath.Join(filepath.Dir(state),"profiles.json")}
     registry,e:=profiles.Open(profileFile);if e!=nil{log.Fatal(e)}
     server.SetProfiles(registry)
+    recipeFile:=os.Getenv("HOMELAB_RECIPES_FILE")
+    if recipeFile=="" {recipeFile=filepath.Join(filepath.Dir(state),"recipes.json")}
+    recipeStore,e:=recipes.Open(recipeFile);if e!=nil{log.Fatal(e)}
+    server.SetRecipes(recipeStore)
     if file:=os.Getenv("HOMELAB_CONSOLE_PASSPHRASE_FILE");file!=""{
         b,e:=os.ReadFile(file);if e!=nil{log.Fatal(e)}
         var record security.PassphraseRecord

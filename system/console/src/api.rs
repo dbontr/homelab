@@ -1,5 +1,6 @@
 use serde::de::DeserializeOwned;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use reqwest::Method;
 use serde_json::Value;
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -84,6 +85,8 @@ fn response_error(status: reqwest::StatusCode) -> String {
         401 => "Authentication required".to_owned(),
         403 => "Permission denied".to_owned(),
         404 => "Resource not found".to_owned(),
+        409 => "This record was modified or is still in use".to_owned(),
+        428 => "Current record revision required".to_owned(),
         503 => "Service is not configured".to_owned(),
         code => format!("Service returned HTTP {code}"),
     }
@@ -130,6 +133,35 @@ pub async fn logout(csrf: &str) -> Result<(), String> {
     } else {
         Err(response_error(response.status()))
     }
+}
+
+pub async fn write<T: DeserializeOwned, P: Serialize>(
+    method: Method, path: &str, csrf: &str, payload: &P
+) -> Result<T, String> {
+    let response = reqwest::Client::new()
+        .request(method, url(path)?)
+        .header("X-CSRF-Token", csrf)
+        .json(payload)
+        .send()
+        .await
+        .map_err(|_| "Could not contact the homelab API".to_owned())?;
+    if !response.status().is_success() {
+        return Err(response_error(response.status()));
+    }
+    response.json::<T>().await
+        .map_err(|_| "The service returned invalid data".to_owned())
+}
+
+pub async fn remove(path: &str, csrf: &str, revision: Option<i32>) -> Result<(), String> {
+    let client = reqwest::Client::new();
+    let mut request = client.delete(url(path)?).header("X-CSRF-Token", csrf);
+    if let Some(version) = revision {
+        request = request.header("If-Match", format!("\"{version}\""));
+    }
+    let response = request.send().await
+        .map_err(|_| "Could not contact the homelab API".to_owned())?;
+    if response.status().is_success() { Ok(()) }
+    else { Err(response_error(response.status())) }
 }
 
 pub fn list(value: &Value, keys: &[&str]) -> Vec<Value> {

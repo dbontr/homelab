@@ -7,7 +7,7 @@ The console is a single client for the personal computing platform. It does not 
 - Use Rust and Dioxus for browser-based and desktop clients. The initial target is web/WASM, with desktop packaging as a later build target.
 - Use semantic HTML and CSS as the rendering interface. WebAssembly replaces application-side JavaScript logic, not the browser's document and style systems.
 - The Go platform owns data, integration adapters, authentication, authorization, background work and persistence.
-- The browser client consumes versioned same-origin native HTTP resources through the Go gateway. Its session is authenticated by a separate passphrase verifier and uses a short-lived, HttpOnly, Secure, SameSite=Strict cookie. Browser authorization is read-only and cannot invoke MCP commands. MCP is an automation interface; it is not a substitute for narrow, typed UI resource endpoints.
+- The browser client consumes versioned same-origin native HTTP resources through the Go gateway. Its session is authenticated by a separate passphrase verifier and uses a short-lived, HttpOnly, Secure, SameSite=Strict cookie. General browser authorization is read-only; first-party recipe edits have a narrow CSRF-protected exception. Browser sessions cannot invoke MCP commands or administer infrastructure. MCP is an automation interface; it is not a substitute for narrow, typed UI resources.
 - shadcn/ui is a visual and interaction reference. Reimplement the necessary components and interaction patterns in Rust rather than translating React hooks or importing a React runtime.
 - Start with established accessible controls. Dialogs, comboboxes, focus traps and navigation must be keyboard-operable, with correct native roles and focus behavior before customization.
 - Keep Rust source components owned by this repository. Experimental third-party Rust component registries are references, not hard dependencies.
@@ -35,6 +35,18 @@ Read-only views can use the existing native endpoints for node/device inventory,
 Health information is sensitive and must remain behind the same authorization and session layer. Third-party or user-provided text, markdown, HTML and file previews must be rendered safely without interpreting arbitrary scripts, event handlers, or active document content.
 
 The Go service is the only code that may communicate with the independent privileged executor. The Rust client requests a narrowly scoped operation; the executor verifies the owner approval, operation, target, lease and hardware identity before carrying out the action.
+
+## Recipe application
+
+The first-party recipe domain is stored in the Go platform state directory, independently of RecipeSage. It contains structured ingredients, sequential instructions, yield, preparation and cooking durations, tags, equipment, optional source URLs, nutritional provenance and revision-controlled records. Scheduled meals scale ingredients into a consolidated grocery list. The Rust Recipes view supports library search, editing, cooking mode, meal planning and portable JSON archive transfer. Nutrition previews distinguish estimates, measurements and reports; they do not automatically record food intake. Health's existing food logs, nutrients and grocery tools remain separate until shared identity and confirmed linking are implemented.
+
+Recipes use `GET /v1/recipes`, `GET /v1/recipes/{id}`, `GET /v1/recipes/export`, `GET /v1/meals`, and `GET /v1/groceries`. Mutations use `POST /v1/recipes`, `PUT/DELETE /v1/recipes/{id}`, `POST /v1/recipes/import`, and `POST /v1/meals` or `DELETE /v1/meals/{id}`. The browser owner session requires an exact allowed Origin, an HTTP-only cookie, JSON request content type and `X-CSRF-Token`. The other native API mutations and `/mcp` never accept the browser cookie. The long-lived bearer token remains separate.
+
+Source archives are versioned JSON; imports are additive and conflict when an identifier exists. Importing existing RecipeSage records requires a dedicated migration with data verification; the compatibility adapter and original deployment remain intact.
+
+## Homepage development
+
+`nixosModules/console.nix` declares `services.homelabConsole.enable = false` by default. A built Dioxus web package is required to enable it. Preview uses an Nginx localhost listener on port 8083; `replaceHomepage = true` would move that listener to existing port 8082 and disable the legacy Homepage module. The existing Cloudflare ingress hostname and the native Moonfin/Seerr services are not changed. A later deployment must verify the actual import graph, passphrase provisioning, allowed origin, HTTPS/ingress behavior and previous homepage ownership before activating the replacement.
 
 ## Development sequence
 

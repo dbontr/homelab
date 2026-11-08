@@ -18,11 +18,12 @@ import (
  "github.com/dbontr/homelab-new/system/devices"
  "github.com/dbontr/homelab-new/system/media"
  "github.com/dbontr/homelab-new/system/profiles"
+ "github.com/dbontr/homelab-new/system/recipes"
  "github.com/dbontr/homelab-new/system/session"
  "github.com/dbontr/homelab-new/system/store"
 )
 type Backend struct { Name string; URL string; Token string }
-type Server struct { db *store.Store; token string; backend []Backend; client *http.Client; calendarURL string; gate *approval.Gate; allowedOrigins map[string]struct{}; media *media.Client; deviceCatalog *devices.Catalog; nodeCatalog *devices.NodeCatalog; profiles *profiles.Registry; sessions *session.Manager; inflight chan struct{} }
+type Server struct { db *store.Store; token string; backend []Backend; client *http.Client; calendarURL string; gate *approval.Gate; allowedOrigins map[string]struct{}; media *media.Client; deviceCatalog *devices.Catalog; nodeCatalog *devices.NodeCatalog; profiles *profiles.Registry; recipes *recipes.Store; sessions *session.Manager; inflight chan struct{} }
 
 func New(db *store.Store,token string,backends []Backend)(*Server,error){
  if db==nil||len(token)<32||strings.ContainsAny(token,"\r\n\t"){return nil,errors.New("store and a strong access token are required")}
@@ -53,6 +54,19 @@ func(s *Server) Handler()http.Handler{
  mux.HandleFunc("POST /ui/session",s.uiSession)
  mux.HandleFunc("DELETE /ui/session",s.uiSession)
  mux.HandleFunc("GET /v1/workspace/projects",s.uiProjects)
+ mux.HandleFunc("GET /v1/recipes",s.recipeCollection)
+ mux.HandleFunc("POST /v1/recipes",s.recipeCollection)
+ mux.HandleFunc("GET /v1/recipes/health-goals",s.uiHealthGoals)
+ mux.HandleFunc("GET /v1/recipes/export",s.recipeArchive)
+ mux.HandleFunc("POST /v1/recipes/import",s.recipeArchive)
+ mux.HandleFunc("GET /v1/recipes/{id}",s.recipeItem)
+ mux.HandleFunc("PUT /v1/recipes/{id}",s.recipeItem)
+ mux.HandleFunc("DELETE /v1/recipes/{id}",s.recipeItem)
+ mux.HandleFunc("GET /v1/recipes/{id}/nutrition",s.recipeNutrition)
+ mux.HandleFunc("GET /v1/meals",s.mealCollection)
+ mux.HandleFunc("POST /v1/meals",s.mealCollection)
+ mux.HandleFunc("DELETE /v1/meals/{id}",s.mealItem)
+ mux.HandleFunc("GET /v1/groceries",s.recipeGroceries)
  mux.HandleFunc("GET /v1/workspace/nodes",s.uiComputeNodes)
  mux.HandleFunc("POST /mcp",s.mcp)
  mux.HandleFunc("GET /v1/software",s.softwareLibrary)
@@ -92,7 +106,7 @@ func(s *Server) Handler()http.Handler{
    auth:=r.Header.Get("Authorization")
    bearer:=strings.HasPrefix(auth,"Bearer ") &&
      subtle.ConstantTimeCompare([]byte(strings.TrimPrefix(auth,"Bearer ")),[]byte(s.token))==1
-   if !bearer && !s.sessionReadAllowed(r) {
+   if !bearer && !s.sessionReadAllowed(r) && !s.sessionRecipeWriteAllowed(r) {
     writeError(w,401,"authorization required");return
    }
   }
@@ -216,6 +230,16 @@ func(s *Server)localTools()[]map[string]any{
   tool("compute_profile_get","Read a saved build configuration revision",map[string]any{"id":prop("string"),"version":prop("integer")},"id"),
   tool("compute_profile_save","Save an immutable build profile revision",map[string]any{"spec":prop("object"),"expected_version":prop("integer")},"spec","expected_version"),
   tool("compute_profile_plan","Check available Workspace resources for a saved profile without scheduling",map[string]any{"id":prop("string"),"version":prop("integer"),"project_id":prop("string"),"node_id":prop("string")},"id","project_id"))}
+ if s.recipes!=nil {tools=append(tools,
+  tool("recipe_list","Find saved recipes",map[string]any{"query":prop("string")}),
+  tool("recipe_get","Read a recipe",map[string]any{"id":prop("string")},"id"),
+  tool("recipe_save","Create or revise a recipe with revision control",map[string]any{"recipe":prop("object")},"recipe"),
+  tool("recipe_delete","Delete an unscheduled recipe at its expected revision",map[string]any{"id":prop("string"),"revision":prop("integer")},"id","revision"),
+  tool("recipe_meals","List scheduled meals",map[string]any{}),
+  tool("recipe_meal_schedule","Schedule a recipe for a date",map[string]any{"meal":prop("object")},"meal"),
+  tool("recipe_meal_remove","Remove a scheduled meal",map[string]any{"id":prop("string")},"id"),
+  tool("recipe_groceries","Consolidate meal-plan ingredients by name and unit",map[string]any{"start":prop("string"),"end":prop("string")}),
+  tool("recipe_nutrition_preview","Preview reported or estimated recipe nutrients without logging consumption",map[string]any{"id":prop("string"),"servings":prop("number")},"id","servings"))}
  if s.calendarURL!=""{tools=append(tools,tool("calendar_feed","Read Proton Calendar event definitions; recurrence rules are not expanded",map[string]any{}))}
  if s.media!=nil{tools=append(tools,
   tool("media_search","Search movies and television through Seerr",map[string]any{"query":prop("string")},"query"),
@@ -243,6 +267,7 @@ func(s *Server)toolList(r *http.Request)[]map[string]any{
  return out
 }
 func(s *Server)localTool(ctx context.Context,name string,raw json.RawMessage)(any,error){
+ if strings.HasPrefix(name,"recipe_"){return s.recipeTool(ctx,name,raw)}
  if s.media!=nil&&(name=="media_search"||name=="media_request"||name=="media_requests"){return s.mediaTool(ctx,name,raw)}
  if name=="compute_profile_list"||name=="compute_profile_get"||name=="compute_profile_save"||name=="compute_profile_plan" {return s.profileTool(ctx,name,raw)}
  var args struct{
