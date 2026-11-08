@@ -1,6 +1,7 @@
 use dioxus::prelude::*;
 use reqwest::Method;
 use std::collections::HashMap;
+use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
 use crate::api;
@@ -272,7 +273,7 @@ pub fn Recipes(csrf: String) -> Element {
     let mut import_text = use_signal(String::new);
     let mut schema_text = use_signal(String::new);
     let mut source_url = use_signal(String::new);
-    let mut bundle_file = use_signal(|| Option::<(String, Vec<u8>)>::None);
+    let mut bundle_file = use_signal(|| Option::<(String, Arc<Vec<u8>>)>::None);
     let mut sage_filename = use_signal(String::new);
     let mut sage_source = use_signal(String::new);
     let mut sage_preview = use_signal(|| Option::<RecipeSagePreview>::None);
@@ -1072,7 +1073,7 @@ pub fn Recipes(csrf: String) -> Element {
                                     spawn(async move {
                                         match file.read_bytes().await {
                                             Ok(bytes) if !bytes.is_empty() && bytes.len() <= 96 * 1024 * 1024 =>
-                                                bundle_file.set(Some((name, bytes.to_vec()))),
+                                                bundle_file.set(Some((name, Arc::new(bytes.to_vec())))),
                                             Ok(_) => error.set("Recipe ZIP must be 96 MiB or smaller".to_owned()),
                                             Err(_) => error.set("Could not read the recipe ZIP".to_owned()),
                                         }
@@ -1094,7 +1095,7 @@ pub fn Recipes(csrf: String) -> Element {
                                         busy.set(true);
                                         error.set(String::new());
                                         spawn(async move {
-                                            match api::import_recipe_bundle(&token, content).await {
+                                            match api::import_recipe_bundle(&token, content.as_ref().clone()).await {
                                                 Ok(imported) => {
                                                     bundle_file.set(None);
                                                     recipes.restart();
