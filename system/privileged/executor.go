@@ -28,7 +28,10 @@ type Authorizer interface {
 
 type Run func(context.Context,string,...string)error
 
-type Actuator interface {Activate(context.Context,string)error}
+type Actuator interface {
+ Activate(context.Context,string)error
+ Revert(context.Context,string)error
+}
 
 type Config struct{
  Host string
@@ -99,7 +102,7 @@ func(e *Executor) Execute(ctx context.Context,operation,target string,args json.
   }
   host,ok:=fields["host"].(string)
   if !ok||host!=target{return security.Authorization{Reason:"host mismatch"},nil}
- case "infrastructure__release_activate":
+ case "infrastructure__release_activate","infrastructure__release_revert":
   if !e.cfg.AllowRelease{return security.Authorization{Reason:"release activation not enabled for this host"},nil}
   if len(fields)!=2{return security.Authorization{Reason:"unexpected arguments"},nil}
   host,ok:=fields["host"].(string)
@@ -119,6 +122,8 @@ func(e *Executor) Execute(ctx context.Context,operation,target string,args json.
   err=e.cfg.Run(ctx,e.cfg.Systemctl,"restart",fields["service"].(string))
  case "infrastructure__release_activate":
   err=e.cfg.Releases.Activate(ctx,fields["release_id"].(string))
+ case "infrastructure__release_revert":
+  err=e.cfg.Releases.Revert(ctx,fields["release_id"].(string))
  case "cluster__deployment_restart","cluster__deployment_scale":
   var command string
   var argv []string
