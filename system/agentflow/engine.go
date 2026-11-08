@@ -153,6 +153,9 @@ func (e *Engine) Dispatch(ctx context.Context,key,kind string,input json.RawMess
   reply,e2:=e.Compute.Call(ctx,"github_checkout_repository",map[string]any{"project_id":w.Project,"workspace_id":ws,"repository":args["repository"],"ref":args["ref"]})
   if e2!=nil{return nil,e2}
   out,err=e.awaitOperation(ctx,w.Project,ws,str(reply["operation_id"]))
+  if err==nil&&(str(out["repository"])!=str(args["repository"])||str(out["revision"])!=str(args["ref"])){
+   err=errors.New("checkout result does not match immutable source identity")
+  }
  case "inspect":
   repo:=str(args["repository"])
   list,_:=args["paths"].([]any)
@@ -234,7 +237,9 @@ func (e *Engine) Dispatch(ctx context.Context,key,kind string,input json.RawMess
    "project_id":w.Project,"repository":args["repository"],"base_branch":args["base_branch"],
    "expected_head":args["expected_head"],"changes":artifacts,"title":args["title"],"body":args["body"],
   })
-  if err==nil&&out["draft"]!=true{err=errors.New("publication was not confirmed as draft")}
+  if err==nil&&(out["draft"]!=true||str(out["base_sha"])!=str(args["expected_head"])||str(out["url"])==""){
+   err=errors.New("publication was not confirmed against the expected revision as a draft")
+  }
  default:return nil,errors.New("unsupported engineering step")
  }
  if err!=nil{return nil,err}
