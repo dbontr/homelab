@@ -17,19 +17,20 @@ import (
  "github.com/dbontr/homelab-new/system/calendar"
  "github.com/dbontr/homelab-new/system/devices"
  "github.com/dbontr/homelab-new/system/media"
+ "github.com/dbontr/homelab-new/system/observability"
  "github.com/dbontr/homelab-new/system/profiles"
  "github.com/dbontr/homelab-new/system/recipes"
  "github.com/dbontr/homelab-new/system/session"
  "github.com/dbontr/homelab-new/system/store"
 )
 type Backend struct { Name string; URL string; Token string }
-type Server struct { db *store.Store; token string; backend []Backend; client *http.Client; calendarURL string; gate *approval.Gate; allowedOrigins map[string]struct{}; media *media.Client; deviceCatalog *devices.Catalog; nodeCatalog *devices.NodeCatalog; profiles *profiles.Registry; recipes *recipes.Store; sessions *session.Manager; inflight chan struct{} }
+type Server struct { db *store.Store; token string; backend []Backend; client *http.Client; calendarURL string; gate *approval.Gate; allowedOrigins map[string]struct{}; media *media.Client; deviceCatalog *devices.Catalog; nodeCatalog *devices.NodeCatalog; profiles *profiles.Registry; recipes *recipes.Store; sessions *session.Manager; observability *observability.Client; inflight chan struct{} }
 
 func New(db *store.Store,token string,backends []Backend)(*Server,error){
  if db==nil||len(token)<32||strings.ContainsAny(token,"\r\n\t"){return nil,errors.New("store and a strong access token are required")}
  used:=map[string]bool{}
  for _,b:=range backends{
-  if !validIntegrationName(b.Name)||used[b.Name){return nil,errors.New("invalid backend name")}
+  if !validIntegrationName(b.Name)||used[b.Name]{return nil,errors.New("invalid backend name")}
   used[b.Name]=true
   u,e:=url.Parse(b.URL);if e!=nil{return nil,errors.New("invalid backend URL")}
   if u.Hostname()==""||u.Opaque!=""{return nil,errors.New("backend URL requires a host")}
@@ -97,6 +98,10 @@ func(s *Server) Handler()http.Handler{
  mux.HandleFunc("GET /v1/groceries/board",s.groceryBoard)
  mux.HandleFunc("PUT /v1/groceries/items/{key}",s.groceryUpdate)
  mux.HandleFunc("GET /v1/workspace/nodes",s.uiComputeNodes)
+ for _,path:=range []string{"/v1/monitoring/summary","/v1/monitoring/targets",
+   "/v1/monitoring/alerts","/v1/monitoring/series","/v1/monitoring/logs"} {
+  mux.HandleFunc("GET "+path,s.uiMonitoring)
+ }
  mux.HandleFunc("POST /mcp",s.mcp)
  mux.HandleFunc("GET /v1/software",s.softwareLibrary)
  mux.HandleFunc("GET /v1/tools",func(w http.ResponseWriter,r *http.Request) {
