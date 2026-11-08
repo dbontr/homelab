@@ -9,6 +9,7 @@ import (
  "errors"
  "fmt"
  "io"
+ "log"
  "net"
  "net/http"
  "os"
@@ -28,13 +29,17 @@ type Authorizer interface {
 
 type Run func(context.Context,string,...string)error
 
-type Actuator interface {Activate(context.Context,string)error}
+type Actuator interface {
+ Activate(context.Context,string)error
+ Revert(context.Context,string)error
+}
 
 type Config struct{
  Host string
  Systemctl string
  AllowedServices []string
  AllowRelease bool
+ Kubernetes *KubernetesPolicy
  Auth Authorizer
  Run Run
  Releases Actuator
@@ -63,6 +68,7 @@ func FixedRun(ctx context.Context,command string,args ...string)error{
 func New(cfg Config)(*Executor,error){
  if !nodePattern.MatchString(cfg.Host)||!filepath.IsAbs(cfg.Systemctl)||cfg.Auth==nil||cfg.Run==nil||
  cfg.Releases==nil||len(cfg.AllowedServices)>64{return nil,errors.New("invalid executor configuration")}
+ if err:=cfg.Kubernetes.validate();err!=nil{return nil,err}
  services:=make(map[string]bool,len(cfg.AllowedServices))
  for _,service:=range cfg.AllowedServices{
   if !unitPattern.MatchString(service)||services[service]{
@@ -91,7 +97,13 @@ func(e *Executor) Execute(ctx context.Context,operation,target string,args json.
   if !ok||!e.services[service]{return security.Authorization{Reason:"service not permitted"},nil}
   host,ok:=fields["host"].(string)
   if !ok||host!=target{return security.Authorization{Reason:"host mismatch"},nil}
- case "infrastructure__release_activate":
+ case "cluster__deployment_restart","cluster__deployment_scale":
+  if _,_,err:=e.cfg.Kubernetes.command(operation,fields);err!=nil{
+   return security.Authorization{Reason:"Kubernetes policy denied operation"},nil
+  }
+  host,ok:=fields["host"].(string)
+  if !ok||host!=target{return security.Authorization{Reason:"host mismatch"},nil}
+ case "infrastructure__release_activate","infrastructure__release_revert":
   if !e.cfg.AllowRelease{return security.Authorization{Reason:"release activation not enabled for this host"},nil}
   if len(fields)!=2{return security.Authorization{Reason:"unexpected arguments"},nil}
   host,ok:=fields["host"].(string)
@@ -104,15 +116,33 @@ func(e *Executor) Execute(ctx context.Context,operation,target string,args json.
  // Authentication/confirmation takes place in the separate security process.
  // No gateway-supplied claim of approval is accepted.
  decision,err:=e.cfg.Auth.Authorize(ctx,operation,target,canonical)
- if err!=nil{return security.Authorization{Reason:"independent authorization unavailable"},err}
- if !decision.Allowed{return decision,nil}
+ if err!=nil{
+  log.Print("security audit privileged_operation denied")
+  return security.Authorization{Reason:"independent authorization unavailable"},err
+ }
+ if !decision.Allowed{
+  log.Print("security audit privileged_operation denied")
+  return decision,nil
+ }
  switch operation{
  case "infrastructure__service_restart":
   err=e.cfg.Run(ctx,e.cfg.Systemctl,"restart",fields["service"].(string))
  case "infrastructure__release_activate":
   err=e.cfg.Releases.Activate(ctx,fields["release_id"].(string))
+ case "infrastructure__release_revert":
+  err=e.cfg.Releases.Revert(ctx,fields["release_id"].(string))
+ case "cluster__deployment_restart","cluster__deployment_scale":
+  var command string
+  var argv []string
+  command,argv,err=e.cfg.Kubernetes.command(operation,fields)
+  if err==nil{err=e.cfg.Run(ctx,command,argv...)}
+
  }
- if err!=nil{return security.Authorization{Reason:"execution failed"},err}
+ if err!=nil{
+  log.Print("security audit privileged_operation failed")
+  return security.Authorization{Reason:"execution failed"},err
+ }
+ log.Print("security audit privileged_operation succeeded")
  return security.Authorization{Allowed:true},nil
 }
 

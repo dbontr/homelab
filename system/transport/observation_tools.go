@@ -27,6 +27,8 @@ func(s *Server) monitoringTool(ctx context.Context,name string,raw json.RawMessa
   return s.observability.Targets(ctx)
  case "monitoring_alerts":
   return s.observability.Alerts(ctx)
+ case "monitoring_security":
+  return s.observability.SecurityAudit(ctx)
  case "monitoring_series":
   allowed:=map[string]bool{
    "cpu":true,"memory":true,"disk":true,"gpu":true,

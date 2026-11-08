@@ -15,7 +15,8 @@ func (s *Server) invoke(ctx context.Context,name string,args json.RawMessage,id 
  normalized,_,err:=canonicaljson.Object(args)
  if err!=nil{return toolError(err.Error())}
  args=normalized
- if name=="infrastructure__service_restart" || name=="infrastructure__release_activate" {
+ if name=="infrastructure__service_restart" || name=="infrastructure__release_activate" || name=="infrastructure__release_revert" ||
+  name=="cluster__deployment_restart" || name=="cluster__deployment_scale" {
   if s.executorClient==nil{return toolError("independent privileged executor not configured")}
   decision,err:=s.executorClient.Execute(ctx,name,privilegeTarget(name,args),args)
   if err!=nil{return toolError("independent privileged executor unavailable")}

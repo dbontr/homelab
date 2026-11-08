@@ -19,6 +19,7 @@ func(f *fakeAuth) Authorize(_ context.Context,_,_ string,_ json.RawMessage)(secu
 }
 type fakeRelease struct{calls int;id string}
 func(f *fakeRelease) Activate(_ context.Context,id string)error{f.calls++;f.id=id;return nil}
+func(f *fakeRelease) Revert(_ context.Context,id string)error{f.calls++;f.id=id;return nil}
 
 func TestExecutorDoesNotAcceptArbitraryCommandsOrTargets(t *testing.T){
  auth:=&fakeAuth{decision:security.Authorization{Allowed:true}}

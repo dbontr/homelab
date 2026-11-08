@@ -26,6 +26,24 @@ in
       default = false;
       description = "Explicitly allow an owner-confirmed local NixOS generation switch through the executor.";
     };
+    kubernetes = {
+      enable = lib.mkEnableOption "explicit Kubernetes deployment operations";
+      kubeconfigFile = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Root-owned kubeconfig loaded only into the executor through systemd credentials.";
+      };
+      namespaces = lib.mkOption {
+        type = lib.types.attrsOf (lib.types.listOf lib.types.str);
+        default = {};
+        description = "Exact namespace and deployment names authorized for typed Kubernetes changes.";
+      };
+      maxReplicas = lib.mkOption {
+        type = lib.types.int;
+        default = 16;
+        description = "Maximum allowed replica count for a single deployment scale action.";
+      };
+    };
     allowedServices = lib.mkOption {
       type = lib.types.listOf lib.types.str;
       default = [];
@@ -47,6 +65,12 @@ in
       {
         assertion = cfg.healthServices != [];
         message = "Independent NixOS releases require at least one health service.";
+      }
+      {
+        assertion = !cfg.kubernetes.enable ||
+          (cfg.kubernetes.kubeconfigFile != null && cfg.kubernetes.namespaces != {} &&
+           cfg.kubernetes.maxReplicas >= 1 && cfg.kubernetes.maxReplicas <= 1000);
+        message = "Kubernetes executor requires a kubeconfig, exact resource allowlist and bounded replicas.";
       }
       {
         assertion = lib.hasPrefix "/" cfg.sourceDirectory &&
@@ -91,6 +115,13 @@ in
         HOMELAB_EXECUTOR_SYSTEMCTL = "${pkgs.systemd}/bin/systemctl";
         HOMELAB_EXECUTOR_SERVICES_FILE = pkgs.writeText "homelab-executor-services.json" (builtins.toJSON cfg.allowedServices);
         HOMELAB_EXECUTOR_HEALTH_FILE = pkgs.writeText "homelab-executor-health.json" (builtins.toJSON cfg.healthServices);
+      } // lib.optionalAttrs cfg.kubernetes.enable {
+        HOMELAB_EXECUTOR_KUBECTL = "${pkgs.kubectl}/bin/kubectl";
+        HOMELAB_EXECUTOR_KUBECONFIG = "/run/credentials/homelab-executord.service/kubeconfig";
+        HOMELAB_EXECUTOR_KUBERNETES_POLICY_FILE = pkgs.writeText "homelab-kubernetes-policy.json" (builtins.toJSON {
+          Namespaces = cfg.kubernetes.namespaces;
+          MaxReplicas = cfg.kubernetes.maxReplicas;
+        });
       };
       serviceConfig = {
         Type = "simple";
@@ -102,22 +133,25 @@ in
         RuntimeDirectory = "homelab-executord";
         RuntimeDirectoryMode = "0750";
         ExecStart = "${cfg.package}/bin/homelab-executord";
+        LoadCredential = lib.optionals cfg.kubernetes.enable [
+          "kubeconfig:${cfg.kubernetes.kubeconfigFile}"
+        ];
         Restart = "on-failure";
         RestartSec = "5s";
         UMask = "0077";
-        NoNewPrivileges = true;
-        PrivateNetwork = true;
+        NoNewPrivileges = !cfg.allowReleaseActivation;
+        PrivateNetwork = !(cfg.kubernetes.enable || cfg.allowReleaseActivation);
         PrivateTmp = true;
         ProtectSystem = if cfg.allowReleaseActivation then false else "strict";
         ReadWritePaths = [ "/nix/var/nix/profiles" cfg.stateDirectory ];
         ProtectHome = true;
-        PrivateDevices = true;
-        ProtectKernelTunables = true;
-        ProtectKernelModules = true;
-        ProtectControlGroups = true;
-        CapabilityBoundingSet = "";
-        RestrictAddressFamilies = [ "AF_UNIX" ];
-        RestrictNamespaces = true;
+        PrivateDevices = !cfg.allowReleaseActivation;
+        ProtectKernelTunables = !cfg.allowReleaseActivation;
+        ProtectKernelModules = !cfg.allowReleaseActivation;
+        ProtectControlGroups = !cfg.allowReleaseActivation;
+        CapabilityBoundingSet = lib.mkIf (!cfg.allowReleaseActivation) "";
+        RestrictAddressFamilies = [ "AF_UNIX" ] ++ lib.optionals (cfg.kubernetes.enable || cfg.allowReleaseActivation) [ "AF_INET" "AF_INET6" ];
+        RestrictNamespaces = !cfg.allowReleaseActivation;
         RestrictSUIDSGID = true;
         LockPersonality = true;
       };

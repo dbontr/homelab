@@ -58,6 +58,9 @@ func run(args []string)error{
   if len(args)!=2{return errors.New("activate requires an exact staged release ID")}
   if err:=ctrl.Activate(ctx,args[1]);err!=nil{return err}
   return json.NewEncoder(os.Stdout).Encode(map[string]string{"status":"active","release":args[1]})
+ case "revert":
+  if len(args)!=2{return errors.New("revert requires the active staged release ID")}
+  return ctrl.Revert(ctx,args[1])
  case "recover":
   if len(args)!=1{return errors.New("recover accepts no arguments")}
   return ctrl.Recover(ctx)

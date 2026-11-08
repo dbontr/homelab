@@ -5,6 +5,7 @@ import (
  "errors"
  "regexp"
  "sort"
+ "strings"
  "strconv"
  "time"
 
@@ -29,6 +30,19 @@ type Resource struct{
 func resourceRef(kind,id string) string{
  return "homelab:"+kind+":"+id
 }
+func parseResourceReference(ref string)(string,string,error){
+ if len(ref)>190{return "","",errResourceInvalid}
+ parts:=strings.Split(ref,":")
+ if len(parts)!=3||parts[0]!="homelab"||!resourceIdentifier.MatchString(parts[2]){
+  return "","",errResourceInvalid
+ }
+ switch parts[1]{
+ case "task","goal","recipe","meal","book":
+  return parts[1],parts[2],nil
+ }
+ return "","",errResourceInvalid
+}
+
 func withReference(kind,id,owner string,data any,links []ResourceLink) Resource{
  if links==nil{links=[]ResourceLink{}}
  return Resource{Reference:resourceRef(kind,id),Kind:kind,ID:id,Owner:owner,Data:data,Links:links}
@@ -81,6 +95,18 @@ func(s *Server) resource(kind,id string)(Resource,error){
   return Resource{},errResourceInvalid
  }
  return Resource{},errResourceNotFound
+}
+
+func(s *Server) uiResourceReference(w http.ResponseWriter,r *http.Request){
+ kind,id,err:=parseResourceReference(r.URL.Query().Get("ref"))
+ if err!=nil{writeError(w,400,err.Error());return}
+ item,err:=s.resource(kind,id)
+ switch {
+ case errors.Is(err,errResourceInvalid):writeError(w,400,err.Error())
+ case errors.Is(err,errResourceUnavailable):writeError(w,503,err.Error())
+ case err!=nil:writeError(w,404,err.Error())
+ default:writeJSON(w,200,item)
+ }
 }
 
 func(s *Server) uiResource(w http.ResponseWriter,r *http.Request){

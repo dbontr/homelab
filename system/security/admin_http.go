@@ -97,6 +97,43 @@ func (a *AdminSessions) OwnerHandler() http.Handler {
 		log.Print("security audit owner_confirmation accepted")
 		respondJSON(w, 200, map[string]bool{"confirmed": true})
 	})
+
+ mux.HandleFunc("GET /v1/credentials",func(w http.ResponseWriter,_ *http.Request){
+  if a.vault==nil{http.Error(w,"credential vault unavailable",503);return}
+  respondJSON(w,200,a.vault.List())
+ })
+ mux.HandleFunc("POST /v1/credentials",func(w http.ResponseWriter,r *http.Request){
+  if a.vault==nil{http.Error(w,"credential vault unavailable",503);return}
+  var input struct{
+   Provider string `json:"provider"`
+   Secret string `json:"secret"`
+   Password string `json:"password"`
+   TOTP string `json:"totp"`
+  }
+  if err:=readJSON(r,&input);err!=nil{http.Error(w,"invalid credential request",400);return}
+  if err:=a.VerifyOwnerFactors(input.Password,input.TOTP);err!=nil{
+   log.Print("security audit credential_authentication denied")
+   http.Error(w,"authentication denied",403);return
+  }
+  secret:=[]byte(input.Secret)
+  handle,err:=a.vault.Store(input.Provider,secret)
+  for i:=range secret{secret[i]=0}
+  if err!=nil{http.Error(w,"invalid credential",400);return}
+  log.Print("security audit credential stored")
+  respondJSON(w,200,handle)
+ })
+ mux.HandleFunc("DELETE /v1/credentials/{id}",func(w http.ResponseWriter,r *http.Request){
+  if a.vault==nil{http.Error(w,"credential vault unavailable",503);return}
+  var input struct{Password string `json:"password"`;TOTP string `json:"totp"`}
+  if err:=readJSON(r,&input);err!=nil{http.Error(w,"invalid request",400);return}
+  if err:=a.VerifyOwnerFactors(input.Password,input.TOTP);err!=nil{
+   log.Print("security audit credential_authentication denied")
+   http.Error(w,"authentication denied",403);return
+  }
+  if err:=a.vault.Delete(r.PathValue("id"));err!=nil{http.Error(w,"credential handle unavailable",404);return}
+  log.Print("security audit credential revoked")
+  respondJSON(w,200,map[string]bool{"revoked":true})
+ })
 	return privateHeaders(mux)
 }
 

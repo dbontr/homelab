@@ -45,6 +45,12 @@ A configured MCP tool returns only the exact owner-controlled HTTPS authenticati
 
 The portal is not a general cluster administration API, and activating it does not give the primary MCP or the web proxy any executor credentials. Deployment must verify that the public hostname and its Access audience match before admitting traffic.
 
+## Credential access and security audit
+
+Encrypted vendor credentials reside in the independent security process, not in the MCP gateway or a project workspace. The owner-only Unix socket exposes credential inventory and enrollment/revocation operations. Each enrollment or deletion requires the password and a fresh TOTP. Only opaque handles are returned; a bounded single-use capability authorizes exact operation, resource, and canonical arguments before a trusted executor callback may use plaintext. Do not expose a generic secret-retrieval route or place the encryption key in Git.
+
+Security event records are collected from the existing systemd journal into Loki. The read-only `monitoring_security` tool and `/v1/monitoring/security` native endpoint return bounded event counts for authentication denial, session changes, credential changes and privileged execution. Missing logs or unavailable collectors never count as evidence of no incidents. No raw secret-bearing journal lines are included in the summary.
+
 ## External request boundaries
 
 The API rejects browser requests with an unapproved `Origin` and requires explicit HTTPS origins for remote clients. Non-browser clients without an `Origin` header continue to use bearer authentication. The NixOS option `services.homelabPlatform.allowedOrigins` configures exact permitted origins; wildcard origins are not supported.

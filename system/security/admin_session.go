@@ -104,6 +104,7 @@ type AdminSessions struct {
 	client    string
 	access *AccessVerifier
 	gatewayAudience string
+	vault *Vault
 	verifier  PassphraseRecord
 	totpKey   []byte
 	stateFile string
@@ -179,7 +180,7 @@ func dangerousOperation(name string) bool {
 	tokens := strings.FieldsFunc(strings.ToLower(name), func(r rune) bool { return r == '.' || r == '_' || r == '-' || r == '/' })
 	for _, word := range tokens {
 		switch word {
-		case "delete", "destroy", "purge", "revoke", "rotate", "reset", "remove", "wipe", "drop", "format", "shutdown", "reboot", "restart", "activate", "switch", "prune", "firewall", "router", "network", "credential", "credentials", "trust", "rollback", "reinstall", "merge", "deploy", "apply", "force", "configure", "cleanup", "restore", "grant", "update", "patch":
+		case "delete", "destroy", "purge", "revoke", "rotate", "reset", "remove", "wipe", "drop", "format", "shutdown", "reboot", "restart", "scale", "activate", "revert", "switch", "prune", "firewall", "router", "network", "credential", "credentials", "trust", "rollback", "reinstall", "merge", "deploy", "apply", "force", "configure", "cleanup", "restore", "grant", "update", "patch":
 			return true
 		}
 	}
@@ -297,6 +298,23 @@ func (a *AdminSessions) VerifiedGatewayPrincipal(assertion string)(string,error)
  a.mu.Unlock()
  if verifier==nil{return "",errors.New("Access verifier unavailable")}
  return verifier.Verify(assertion,audience)
+}
+
+// SetVault attaches a protected provider-credential store before serving the
+// owner-only administrative socket. The gateway has no credential APIs.
+func (a *AdminSessions) SetVault(vault *Vault)error{
+ if vault==nil{return errors.New("credential vault required")}
+ a.mu.Lock();defer a.mu.Unlock()
+ if a.vault!=nil{return errors.New("credential vault is already configured")}
+ a.vault=vault
+ return nil
+}
+
+// VerifyOwnerFactors consumes a fresh authenticator counter without extending
+// or replacing the current administrative session.
+func (a *AdminSessions) VerifyOwnerFactors(password,code string)error{
+ a.mu.Lock();defer a.mu.Unlock()
+ return a.authenticateLocked(password,code,a.now().UTC())
 }
 
 func (a *AdminSessions) Authenticate(password, code string) (SessionStatus, error) {

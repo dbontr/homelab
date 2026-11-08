@@ -55,6 +55,14 @@ func main() {
 	if err != nil {
 		log.Fatal("cannot initialize security service: ", err)
 	}
+ if os.Getenv("HOMELAB_SECURITY_VAULT_KEY_FILE")!=""{
+  key,err:=readRequiredFile("HOMELAB_SECURITY_VAULT_KEY_FILE")
+  if err!=nil||len(key)!=32{log.Fatal("invalid credential vault key")}
+  vault,err:=security.OpenVault("/var/lib/homelab-securityd/credentials.json",key)
+  for i:=range key{key[i]=0}
+  if err!=nil{log.Fatal("cannot open protected credential vault: ",err)}
+  if err:=manager.SetVault(vault);err!=nil{log.Fatal(err)}
+ }
  var verifier *security.AccessVerifier
  gatewayAudience:=os.Getenv("HOMELAB_SECURITY_ACCESS_GATEWAY_AUD")
  if gatewayAudience!="" {

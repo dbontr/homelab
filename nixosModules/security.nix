@@ -26,6 +26,11 @@ in
       default = null;
       description = "Private path containing the Base32 TOTP secret.";
     };
+    vaultKeyFile = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "Path to the 32-byte owner-controlled vault key, loaded only into the security daemon.";
+    };
     access = {
       issuer = lib.mkOption {
         type = lib.types.str;
@@ -133,6 +138,8 @@ in
       } // lib.optionalAttrs cfg.browser.enable {
         HOMELAB_SECURITY_BROWSER_ORIGIN = "https://${cfg.browser.hostname}";
         HOMELAB_SECURITY_ACCESS_BROWSER_AUD = cfg.browser.audience;
+      } // lib.optionalAttrs (cfg.vaultKeyFile != null) {
+        HOMELAB_SECURITY_VAULT_KEY_FILE = "/run/credentials/homelab-securityd.service/vault-key";
       } // lib.optionalAttrs (cfg.access.gatewayAudience != "") {
         HOMELAB_SECURITY_ACCESS_ISSUER = cfg.access.issuer;
         HOMELAB_SECURITY_ACCESS_GATEWAY_AUD = cfg.access.gatewayAudience;
@@ -151,6 +158,8 @@ in
         LoadCredential = [
           "password:${cfg.passwordVerifierFile}"
           "totp:${cfg.totpSecretFile}"
+        ] ++ lib.optionals (cfg.vaultKeyFile != null) [
+          "vault-key:${cfg.vaultKeyFile}"
         ] ++ lib.optionals (cfg.access.gatewayAudience != "") [
           "access-jwks:${cfg.access.jwksFile}"
           "access-owner:${cfg.access.ownerEmailFile}"

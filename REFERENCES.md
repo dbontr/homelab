@@ -6,6 +6,8 @@
 - [Go archive/zip Package](https://pkg.go.dev/archive/zip) — Go project. Used for: portable recipe bundle generation and bounded ZIP entry reading.
 - [Model Context Protocol Specification](https://modelcontextprotocol.io/specification/2025-06-18) — MCP project; 2025-06-18. Used for: stateless JSON-RPC transport, tool discovery, and tool calls.
 - [RFC 5545: Internet Calendaring and Scheduling Core Object Specification](https://www.rfc-editor.org/rfc/rfc5545) — IETF. Used for: the read-only iCalendar parser; recurrence support is partial.
+- [kubectl rollout restart](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_rollout/kubectl_rollout_restart/) — Kubernetes project. Used for: validated deployment restart arguments in the privileged executor.
+- [kubectl scale](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_scale/) — Kubernetes project. Used for: bounded replica count adjustments in the privileged executor.
 - [Kubernetes Documentation](https://kubernetes.io/docs/) — Kubernetes project. Used for: scheduled compute workers and workload isolation.
 - [Seerr API: Create New Request](https://docs.seerr.dev/api/create-new-request/) — Seerr project. Used for: media request payloads and supported movie/TV media types.
 - [Seerr OpenAPI](https://github.com/seerr-team/seerr/blob/develop/seerr-api.yml) — Seerr project. Used for: authenticated media search, request listing, and API key headers.
