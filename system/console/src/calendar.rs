@@ -80,7 +80,7 @@ pub fn Calendar() -> Element {
                             }
                         }
                         div { class: "calendar-agenda",
-                            for event in result.occurrences.into_iter().filter(|entry| {
+                            for event in result.occurrences.iter().cloned().filter(|entry| {
                                 needle.is_empty() ||
                                 entry.summary.to_lowercase().contains(&needle) ||
                                 entry.location.to_lowercase().contains(&needle)
