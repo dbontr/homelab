@@ -4,6 +4,7 @@ import (
  "context"
  "errors"
  "fmt"
+ "regexp"
  "sync"
  "time"
 )
@@ -14,6 +15,26 @@ type HostReleaseAgent interface {
  Activate(context.Context,string)error
  Revert(context.Context,string)error
 }
+
+var fleetHostPattern=regexp.MustCompile(`^[a-z][a-z0-9-]{0,62}package release
+
+import (
+ "context"
+ "errors"
+ "fmt"
+ "regexp"
+ "sync"
+ "time"
+)
+
+// HostReleaseAgent is implemented by an independently authenticated host
+// executor. The coordinator never receives host administrator credentials.
+type HostReleaseAgent interface {
+ Activate(context.Context,string)error
+ Revert(context.Context,string)error
+}
+
+)
 
 type FleetTarget struct {
  Host string `json:"host"`
@@ -44,7 +65,7 @@ func validateFleet(targets []FleetTarget,agents map[string]HostReleaseAgent)erro
  seen:=map[string]bool{}
  controlSeen:=false
  for i,target:=range targets{
-  if !nodePattern.MatchString(target.Host)||seen[target.Host]||!idPattern.MatchString(target.ReleaseID)||
+  if !fleetHostPattern.MatchString(target.Host)||seen[target.Host]||!idPattern.MatchString(target.ReleaseID)||
    (target.Role!="compute"&&target.Role!="control"){
    return errors.New("invalid host, role, or release identity")
   }
