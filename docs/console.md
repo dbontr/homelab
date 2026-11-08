@@ -49,6 +49,10 @@ Source archives use versioned JSON and optional ZIP containers with the referenc
 
 The Monitoring tab queries fixed Prometheus measurements and Loki journals through an authenticated Go adapter; raw query languages, deployment credentials and cluster modifications are never exposed to browser sessions. CPU, memory, disk, network, GPU, collectors, alert rules and journal views distinguish missing measurements from zero. The Calendar tab displays recurring event occurrences, exclusions and overrides from the configured read-only iCalendar source; unsupported recurrence fields are disclosed. The Weekly Planner derives timebox proposals from recorded tasks, duration estimates, prerequisites and calendar reservations without writing either source.
 
+## Books and canonical activity
+
+The Books view uses a bounded Open Library search with an operator-provisioned contact identity and a durable local request queue. Requests capture the selected work, authors, preferred format, fulfillment state and optimistic revision. Neither discovery nor queue operations purchase or download copyrighted material. The Activity view combines only confirmed events from owner records and resolves stable resource references through their owning Go data stores. It does not duplicate Health, Learning or Workspace metadata into a fabricated global event log.
+
 ## Homepage development
 
 `nixosModules/console.nix` declares `services.homelabConsole.enable = false` by default. A built Dioxus web package is required to enable it. Preview uses an Nginx localhost listener on port 8083; `replaceHomepage = true` would move that listener to existing port 8082 and disable the legacy Homepage module. The existing Cloudflare ingress hostname and the native Moonfin/Seerr services are not changed. A later deployment must verify the actual import graph, passphrase provisioning, allowed origin, HTTPS/ingress behavior and previous homepage ownership before activating the replacement.
