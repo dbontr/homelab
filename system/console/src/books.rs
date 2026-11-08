@@ -152,8 +152,8 @@ pub fn Books(csrf: String) -> Element {
                                                     error.set(String::new());
                                                     notice.set(String::new());
                                                     let payload = serde_json::json!({
-                                                        "work_id":work_id,"title":title,
-                                                        "authors":authors,"format":format
+                                                        "work_id":work_id.clone(),"title":title.clone(),
+                                                        "authors":authors.clone(),"format":format
                                                     });
                                                     let token = token.clone();
                                                     spawn(async move {
