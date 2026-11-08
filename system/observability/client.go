@@ -100,13 +100,13 @@ type Snapshot struct{
 
 type definition struct{ Label,Unit,Query string }
 var definitions=map[string]definition{
- "cpu":{"CPU usage","%",`100 * (1 - avg by(instance)(rate(node_cpu_seconds_total{mode="idle"}[5m])))`},
+ "cpu":{"CPU usage","%",`100 * (1 - avg by(instance,node)(rate(node_cpu_seconds_total{mode="idle"}[5m])))`},
  "memory":{"Memory usage","%",`100 * (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)`},
  "disk":{"Root filesystem usage","%",`100 * (1 - node_filesystem_avail_bytes{mountpoint="/",fstype!="tmpfs"} / node_filesystem_size_bytes{mountpoint="/",fstype!="tmpfs"})`},
- "network-rx":{"Network received","B/s",`sum by(instance)(rate(node_network_receive_bytes_total{device!~"lo|veth.*|br-.*|docker.*"}[5m]))`},
- "network-tx":{"Network transmitted","B/s",`sum by(instance)(rate(node_network_transmit_bytes_total{device!~"lo|veth.*|br-.*|docker.*"}[5m]))`},
- "disk-read":{"Disk read","B/s",`sum by(instance)(rate(node_disk_read_bytes_total{device=~"nvme.*|sd[a-z]+"}[5m]))`},
- "disk-write":{"Disk write","B/s",`sum by(instance)(rate(node_disk_written_bytes_total{device=~"nvme.*|sd[a-z]+"}[5m]))`},
+ "network-rx":{"Network received","B/s",`sum by(instance,node)(rate(node_network_receive_bytes_total{device!~"lo|veth.*|br-.*|docker.*"}[5m]))`},
+ "network-tx":{"Network transmitted","B/s",`sum by(instance,node)(rate(node_network_transmit_bytes_total{device!~"lo|veth.*|br-.*|docker.*"}[5m]))`},
+ "disk-read":{"Disk read","B/s",`sum by(instance,node)(rate(node_disk_read_bytes_total{device=~"nvme.*|sd[a-z]+"}[5m]))`},
+ "disk-write":{"Disk write","B/s",`sum by(instance,node)(rate(node_disk_written_bytes_total{device=~"nvme.*|sd[a-z]+"}[5m]))`},
  "gpu":{"GPU utilization","%",`homelab_gpu_utilization_percent`},
  "gpu-vram":{"GPU memory usage","%",`100 * homelab_gpu_memory_used_bytes / homelab_gpu_memory_total_bytes`},
  "gpu-temp":{"GPU temperature","°C",`homelab_gpu_temperature_celsius`},
