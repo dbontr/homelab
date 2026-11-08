@@ -113,11 +113,12 @@ func (s *Server) recipeGroceries(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, items)
 }
 
-func (s *Server) recipeTool(_ context.Context, name string, raw json.RawMessage) (any, error) {
+func (s *Server) recipeTool(ctx context.Context, name string, raw json.RawMessage) (any, error) {
 	if s.recipes == nil { return nil, errors.New("recipes are not configured") }
 	var input struct {
 		ID       string         `json:"id"`
 		Query    string         `json:"query"`
+		URL      string         `json:"url"`
 		Servings float64        `json:"servings"`
 		Start    string         `json:"start"`
 		End      string         `json:"end"`
@@ -129,6 +130,7 @@ func (s *Server) recipeTool(_ context.Context, name string, raw json.RawMessage)
 		if err := json.Unmarshal(raw, &input); err != nil { return nil, err }
 	}
 	switch name {
+	case "recipe_import_url_preview": return recipes.FetchSchemaOrgURL(ctx, input.URL)
 	case "recipe_list": return s.recipes.List(input.Query), nil
 	case "recipe_get": return s.recipes.Get(input.ID)
 	case "recipe_save": return s.recipes.Save(input.Recipe)
@@ -167,4 +169,25 @@ func (s *Server) groceryUpdate(w http.ResponseWriter,r *http.Request){
  board,err:=s.recipes.MarkGrocery(r.PathValue("key"),request.Checked,request.ExpectedRevision)
  if err!=nil{recipeFailure(w,err);return}
  writeJSON(w,200,board)
+}
+
+func (s *Server) recipeImportURL(w http.ResponseWriter, r *http.Request) {
+	if s.recipes == nil {
+		writeError(w, http.StatusServiceUnavailable, "recipe storage is not configured")
+		return
+	}
+	var request struct { URL string `json:"url"` }
+	if err := decode(r, &request); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid recipe URL request")
+		return
+	}
+	draft, err := recipes.FetchSchemaOrgURL(r.Context(), request.URL)
+	if err != nil {
+		// Network error text can contain an internal URL, DNS result or transport
+		// detail. Return one stable message without exposing those values.
+		writeError(w, http.StatusUnprocessableEntity,
+			"Recipe import failed. Check the HTTPS address and schema.org Recipe markup.")
+		return
+	}
+	writeJSON(w, http.StatusOK, draft)
 }
