@@ -5,37 +5,111 @@ use crate::api;
 use crate::components::{Card, Empty, Heading, Loading, Notice};
 
 #[component]
-pub fn Learning() -> Element {
+pub fn Learning(csrf: String) -> Element {
+    let csrf = use_signal(|| csrf);
     let mut summary=use_resource(||async{api::get::<Value>("/v1/learning/summary").await});
     let mut sessions=use_resource(||async{api::get::<Value>("/v1/learning/sessions").await});
     let mut reviews=use_resource(||async{api::get::<Value>("/v1/learning/reviews").await});
+    let mut selected=use_signal(||None::<String>);
+    let mut detail=use_resource(||{
+        let id=selected();
+        async move{
+            match id{
+                Some(session_id)=>api::get::<Value>(&format!("/v1/learning/sessions/{session_id}")).await,
+                None=>Ok(Value::Null)
+            }
+        }
+    });
+    let mut pending=use_resource(||{
+        let id=selected();
+        async move{
+            match id{
+                Some(session_id)=>api::get::<Value>(&format!("/v1/learning/sessions/{session_id}/pending")).await,
+                None=>Ok(Value::Null)
+            }
+        }
+    });
+    let mut goal=use_signal(String::new);
+    let mut target=use_signal(String::new);
+    let mut mode=use_signal(||"learn".to_owned());
+    let mut answer=use_signal(String::new);
+    let mut reasoning=use_signal(String::new);
+    let mut assisted=use_signal(||false);
+    let mut busy=use_signal(||false);
+    let mut error=use_signal(String::new);
+    let mut notice=use_signal(String::new);
+    let current_question=pending.cloned().and_then(Result::ok).and_then(|value|
+        if value.get("pending").and_then(Value::as_bool)==Some(true) {
+            value.get("question").cloned()
+        } else {None}
+    );
     rsx!{
         Heading{
             title:"Learning".to_owned(),
-            description:"Independent mastery, active reasoning sessions, and retention.".to_owned(),
+            description:"Build durable understanding through independent reasoning and delayed reassessment.".to_owned(),
             button{class:"btn btn-outline",onclick:move |_|{
-                summary.restart();sessions.restart();reviews.restart();
+                summary.restart();sessions.restart();reviews.restart();detail.restart();pending.restart();
             },"Refresh"}
         }
-        Card{title:"Learning summary".to_owned(),
-             description:"Mastery is determined by independently evaluated evidence.".to_owned(),
-             match summary.cloned(){
-                None=>rsx!{Loading{}},
-                Some(Err(e))=>rsx!{Notice{message:e}},
-                Some(Ok(value))=>rsx!{
-                    div{class:"kv-list",
-                        for (key,entry) in value.as_object().into_iter().flat_map(|data|data.iter()) {
-                            div{class:"kv-entry",key:"{key}",
-                                span{class:"small muted","{key.replace('_',\" \")}"},
-                                strong{"{entry}"}
-                            }
+        if !error().is_empty(){Notice{message:error()}}
+        if !notice().is_empty(){div{class:"alert",role:"status","{notice()}"}}
+        section{class:"card",
+            div{class:"card-header",
+                h2{class:"card-title","Start a learning session"}
+                p{class:"card-description","Select an existing concept ID from Adaptive Teaching; progress is earned by your work, not by creating a session."}
+            }
+            form{class:"card-body task-editor-fields",
+                onsubmit:move |event|{
+                    event.prevent_default();
+                    if busy(){return}
+                    let payload=serde_json::json!({
+                        "goal":goal(),"target_concept_id":target(),"mode":mode()
+                    });
+                    let token=csrf();
+                    busy.set(true);error.set(String::new());
+                    spawn(async move{
+                        match api::write::<Value,_>(reqwest::Method::POST,"/v1/learning/sessions",&token,&payload).await{
+                            Ok(record)=>{
+                                if let Some(id)=record.get("id").and_then(Value::as_str){
+                                    selected.set(Some(id.to_owned()));
+                                }
+                                sessions.restart();detail.restart();pending.restart();
+                                notice.set("Learning session created".to_owned());
+                            },
+                            Err(e)=>error.set(e),
+                        }
+                        busy.set(false);
+                    });
+                },
+                label{class:"form-row",
+                    span{class:"label","Learning goal"}
+                    input{class:"field",required:true,maxlength:"500",value:"{goal()}",
+                        placeholder:"Derive Maxwell's equations from the underlying laws",
+                        oninput:move |e|goal.set(e.value())}
+                }
+                div{class:"task-field-grid",
+                    label{class:"form-row",
+                        span{class:"label","Existing concept ID"}
+                        input{class:"field",required:true,value:"{target()}",
+                            placeholder:"maxwells-equations",
+                            oninput:move |e|target.set(e.value())}
+                    }
+                    label{class:"form-row",
+                        span{class:"label","Mode"}
+                        select{class:"field",value:"{mode()}",
+                            onchange:move |e|mode.set(e.value()),
+                            option{value:"learn","Learn"}
+                            option{value:"practise","Practice"}
+                            option{value:"solve","Solve"}
+                            option{value:"assess","Assess"}
                         }
                     }
                 }
-             }
+                button{class:"btn btn-primary",disabled:busy(),"Start session"}
+            }
         }
-        Card{title:"Active lessons".to_owned(),
-             description:"Stored sessions preserve diagnostics and their reasoning routes.".to_owned(),
+        Card{title:"Learning sessions".to_owned(),
+             description:"Select a session to inspect its phase and pending question.".to_owned(),
              match sessions.cloned(){
                 None=>rsx!{Loading{}},
                 Some(Err(e))=>rsx!{Notice{message:e}},
@@ -43,19 +117,21 @@ pub fn Learning() -> Element {
                     let rows=api::list(&value,&["sessions","items"]);
                     rsx!{
                         if rows.is_empty(){Empty{title:"No sessions".to_owned(),
-                            description:"Create a learning session through the Adaptive Teaching interface.".to_owned()}}
+                            description:"Create a learning session after defining a concept.".to_owned()}}
                         else{
-                            div{class:"table-clip",
-                                table{class:"table",
-                                    thead{tr{th{"Goal"}th{"Phase"}th{"Mode"}th{"ID"}}}
-                                    tbody{
-                                        for record in rows{
-                                            tr{
-                                                td{ {api::property(&record,&["goal","title"])}}
-                                                td{ {api::property(&record,&["phase"])}}
-                                                td{ {api::property(&record,&["mode"])}}
-                                                td{class:"mono muted",{api::property(&record,&["id"])}}
-                                            }
+                            div{class:"task-items",
+                                for record in rows{
+                                    div{class:"task-item",
+                                        div{class:"task-information",
+                                            span{class:"task-title",{api::property(&record,&["goal","title"])}}
+                                            span{class:"small muted",{api::property(&record,&["phase","mode"])}}
+                                        }
+                                        button{class:"btn btn-outline btn-sm",
+                                            onclick:{
+                                                let id=api::property(&record,&["id"]);
+                                                move |_|selected.set(Some(id.clone()))
+                                            },
+                                            "Open"
                                         }
                                     }
                                 }
@@ -65,8 +141,98 @@ pub fn Learning() -> Element {
                 }
              }
         }
+        if let Some(session_id)=selected(){
+            Card{title:"Selected session".to_owned(),
+                 description:format!("Session {session_id}"),
+                 match detail.cloned(){
+                    None=>rsx!{Loading{}},
+                    Some(Err(e))=>rsx!{Notice{message:e}},
+                    Some(Ok(value))=>rsx!{
+                        div{class:"kv-list",
+                            div{class:"kv-entry",span{class:"small muted","Goal"},
+                                strong{ {api::property(&value,&["goal"])} }}
+                            div{class:"kv-entry",span{class:"small muted","Phase"},
+                                strong{ {api::property(&value,&["phase"])} }}
+                            div{class:"kv-entry",span{class:"small muted","Revision"},
+                                strong{ {api::property(&value,&["revision"])} }}
+                        }
+                    }
+                 }
+            }
+            if let Some(question)=current_question{
+                section{class:"card",
+                    div{class:"card-header",
+                        h2{class:"card-title","Pending question"}
+                        p{class:"card-description",
+                            "Your answer will be saved without automatic grading or mastery credit."}
+                    }
+                    div{class:"card-body stack",
+                        p{ {api::property(&question,&["prompt"])} }
+                        if let Some(options)=question.get("options").and_then(Value::as_array){
+                            div{class:"task-items",
+                                for option in options{
+                                    div{class:"task-item",
+                                        span{class:"small muted",{api::property(option,&["id"])}}
+                                        span{ {api::property(option,&["label"])} }
+                                    }
+                                }
+                            }
+                        }
+                        form{class:"task-editor-fields",
+                            onsubmit:move |event|{
+                                event.prevent_default();
+                                if busy(){return}
+                                let Some(value)=pending.cloned().and_then(Result::ok) else{return};
+                                let Some(id)=value.get("question").and_then(|q|q.get("id")).and_then(Value::as_str) else{return};
+                                let path=format!("/v1/learning/questions/{id}/answer");
+                                let payload=serde_json::json!({
+                                    "learner_response":answer(),"learner_reasoning":reasoning(),"assisted":assisted()
+                                });
+                                let token=csrf();
+                                busy.set(true);error.set(String::new());
+                                spawn(async move{
+                                    match api::write::<Value,_>(reqwest::Method::POST,&path,&token,&payload).await{
+                                        Ok(_)=>{
+                                            answer.set(String::new());
+                                            reasoning.set(String::new());
+                                            notice.set("Response saved; it awaits independent assessment".to_owned());
+                                            pending.restart();detail.restart();sessions.restart();
+                                        },
+                                        Err(e)=>error.set(e),
+                                    }
+                                    busy.set(false);
+                                });
+                            },
+                            label{class:"form-row",
+                                span{class:"label","Your answer"}
+                                textarea{class:"field",required:true,rows:"3",
+                                    value:"{answer()}",oninput:move |e|answer.set(e.value())}
+                            }
+                            label{class:"form-row",
+                                span{class:"label","Your reasoning"}
+                                textarea{class:"field",rows:"4",
+                                    value:"{reasoning()}",oninput:move |e|reasoning.set(e.value())}
+                            }
+                            label{class:"inline-row",
+                                input{r#type:"checkbox",checked:assisted(),
+                                    onchange:move |e|assisted.set(e.checked())}
+                                span{"I used assistance"}
+                            }
+                            button{class:"btn btn-primary",disabled:busy(),"Submit response"}
+                        }
+                    }
+                }
+            } else {
+                Card{title:"Pending work".to_owned(),
+                    description:"No unanswered learning question is available.".to_owned(),
+                    div{class:"card-body",
+                        p{class:"small muted","Continue planning and asking questions through the Adaptive Teaching MCP."}
+                    }
+                }
+            }
+        }
         Card{title:"Retention queue".to_owned(),
-             description:"Due reviews are obligations, not evidence of completed learning.".to_owned(),
+             description:"Due reviews do not establish mastery until independently assessed.".to_owned(),
              match reviews.cloned(){
                 None=>rsx!{Loading{}},
                 Some(Err(e))=>rsx!{Notice{message:e}},
@@ -74,7 +240,7 @@ pub fn Learning() -> Element {
                     let rows=api::list(&value,&["queue","reviews","items"]);
                     rsx!{
                         if rows.is_empty(){Empty{title:"No reviews currently due".to_owned(),
-                            description:"Delayed reviews appear here when scheduled by Adaptive Teaching.".to_owned()}}
+                            description:"Delayed reviews appear when scheduled by Adaptive Teaching.".to_owned()}}
                         else{
                             div{class:"table-clip",
                                 table{class:"table",
@@ -89,6 +255,23 @@ pub fn Learning() -> Element {
                                         }
                                     }
                                 }
+                            }
+                        }
+                    }
+                }
+             }
+        }
+        Card{title:"Mastery evidence".to_owned(),
+             description:"A summary of independently demonstrated knowledge.".to_owned(),
+             match summary.cloned(){
+                None=>rsx!{Loading{}},
+                Some(Err(e))=>rsx!{Notice{message:e}},
+                Some(Ok(value))=>rsx!{
+                    div{class:"kv-list",
+                        for (key,entry) in value.as_object().into_iter().flat_map(|data|data.iter()) {
+                            div{class:"kv-entry",key:"{key}",
+                                span{class:"small muted",{key.replace('_'," ")}},
+                                strong{"{entry}"}
                             }
                         }
                     }
