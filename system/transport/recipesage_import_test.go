@@ -1,0 +1,127 @@
+package transport
+
+import (
+	"bytes"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/dbontr/homelab-new/system/recipes"
+	"github.com/dbontr/homelab-new/system/security"
+	"github.com/dbontr/homelab-new/system/session"
+	"github.com/dbontr/homelab-new/system/store"
+)
+
+func TestRecipeSagePreviewAndImportAuthorization(t *testing.T) {
+	base := t.TempDir()
+	tasks, err := store.Open(filepath.Join(base, "tasks.json"), "UTC")
+	if err != nil {
+		t.Fatal(err)
+	}
+	server, err := New(tasks, strings.Repeat("z", 40), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := recipes.Open(filepath.Join(base, "recipes.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	server.SetRecipes(db)
+	verifier, err := security.HashPassphrase([]byte("recipesage-migration-owner-secret"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager, err := session.New(verifier)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server.SetSessions(manager)
+	if err := server.SetAllowedOrigins([]string{"https://console.example"}); err != nil {
+		t.Fatal(err)
+	}
+	handler := server.Handler()
+	call := func(method, path string, body []byte, cookie *http.Cookie, csrf, mediaType string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, path, bytes.NewReader(body))
+		req.Host = "console.example"
+		req.Header.Set("Origin", "https://console.example")
+		if mediaType != "" {
+			req.Header.Set("Content-Type", mediaType)
+		}
+		if csrf != "" {
+			req.Header.Set("X-CSRF-Token", csrf)
+		}
+		if cookie != nil {
+			req.AddCookie(cookie)
+		}
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+		return w
+	}
+	login := call("POST", "/ui/session", []byte(`{"passphrase":"recipesage-migration-owner-secret"}`), nil, "", "application/json")
+	if login.Code != 200 {
+		t.Fatalf("login failed: %d %s", login.Code, login.Body.String())
+	}
+	cookie := login.Result().Cookies()[0]
+	var identity struct {
+		CSRF string `json:"csrf_token"`
+	}
+	s := call("GET", "/ui/session", nil, cookie, "", "")
+	if err := json.Unmarshal(s.Body.Bytes(), &identity); err != nil || identity.CSRF == "" {
+		t.Fatalf("missing session token: %v", err)
+	}
+	source, err := json.Marshal(map[string]any{"recipes": []any{
+		map[string]any{
+			"@type": "Recipe", "identifier": "sage-1", "name": "Olive salad",
+			"recipeYield": "2", "recipeIngredient": []any{"2 cups olives"},
+			"recipeInstructions": []any{map[string]string{"@type": "HowToStep", "text": "Serve cold."}},
+		},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request, err := json.Marshal(map[string]any{"source": string(source)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r := call("POST", "/v1/recipes/recipesage/preview", request, nil, "", "application/json"); r.Code != 401 {
+		t.Fatalf("anonymous migration preview accepted: %d", r.Code)
+	}
+	if r := call("POST", "/v1/recipes/recipesage/preview", request, cookie, "", "application/json"); r.Code != 401 {
+		t.Fatalf("preview without CSRF accepted: %d", r.Code)
+	}
+	if r := call("POST", "/v1/recipes/recipesage/preview", request, cookie, identity.CSRF, "text/plain"); r.Code != 401 {
+		t.Fatalf("unexpected media type accepted: %d", r.Code)
+	}
+	previewResponse := call("POST", "/v1/recipes/recipesage/preview", request, cookie, identity.CSRF, "application/json")
+	var preview recipes.RecipeSagePreview
+	if previewResponse.Code != 200 || json.Unmarshal(previewResponse.Body.Bytes(), &preview) != nil ||
+		preview.Ready != 1 {
+		t.Fatalf("preview failed: %d %s", previewResponse.Code, previewResponse.Body.String())
+	}
+	payload, err := json.Marshal(map[string]any{
+		"source": string(source), "digest": preview.Digest,
+		"keys": []string{preview.Candidates[0].Key},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r := call("POST", "/v1/recipes/recipesage/import", payload, cookie, "", "application/json"); r.Code != 401 {
+		t.Fatalf("import without CSRF accepted: %d", r.Code)
+	}
+	imported := call("POST", "/v1/recipes/recipesage/import", payload, cookie, identity.CSRF, "application/json")
+	if imported.Code != 201 || !strings.Contains(imported.Body.String(), `"imported":1`) {
+		t.Fatalf("import failed: %d %s", imported.Code, imported.Body.String())
+	}
+	if r := call("POST", "/v1/recipes/recipesage/import", payload, cookie, identity.CSRF, "application/json"); r.Code != 409 {
+		t.Fatalf("duplicate migration allowed: %d %s", r.Code, r.Body.String())
+	}
+	if r := call("POST", "/mcp", request, cookie, identity.CSRF, "application/json"); r.Code != 401 {
+		t.Fatalf("browser session obtained MCP credentials: %d", r.Code)
+	}
+	if len(db.List("")) != 1 {
+		t.Fatal("repeated migration changed the library")
+	}
+}
