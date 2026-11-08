@@ -53,3 +53,6 @@
 - [Dioxus 0.7 Deployment](https://dioxuslabs.com/learn/0.7/guides/deploy/) — Dioxus project. Used for: packaging static Rust/WASM console assets for an independent native release.
 - [Open Library Search API](https://openlibrary.org/dev/docs/api/search) — Open Library/Internet Archive. Used for: bounded on-demand work discovery, stable work identifiers, authors and publication metadata.
 - [Open Library API Usage Guidelines](https://openlibrary.org/developers/api) — Open Library/Internet Archive. Used for: identified human-initiated requests, conservative one-request-per-second pacing, and short-lived search caching.
+
+- [RFC 8446: The Transport Layer Security (TLS) Protocol Version 1.3](https://www.rfc-editor.org/rfc/rfc8446) — IETF. Used for: TLS 1.3 transport between trusted release coordinator and host executors.
+- [RFC 5280: Internet X.509 Public Key Infrastructure Certificate Profile](https://www.rfc-editor.org/rfc/rfc5280) — IETF. Used for: verified server and client certificate identities and trust anchors in authenticated release transport.

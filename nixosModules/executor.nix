@@ -26,6 +26,62 @@ in
       default = false;
       description = "Explicitly allow an owner-confirmed local NixOS generation switch through the executor.";
     };
+    authorization.remote = {
+      enable = lib.mkEnableOption "central owner-session authorization over mutual TLS";
+      endpoint = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Fixed HTTPS security service origin, without a user-supplied route.";
+      };
+      serverName = lib.mkOption {
+        type = lib.types.str;
+        default = "";
+        description = "Exact expected DNS identity of the central security service.";
+      };
+      certificateFile = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Protected executor client certificate.";
+      };
+      keyFile = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Protected executor client private key.";
+      };
+      serverCAFile = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Protected trust roots for the central security service.";
+      };
+    };
+    remote = {
+      enable = lib.mkEnableOption "mutually authenticated private release-agent endpoint";
+      listenAddress = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Explicit private IP address and TCP port. Never use a wildcard or public IP.";
+      };
+      certificateFile = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Protected host TLS certificate chain.";
+      };
+      keyFile = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Protected host TLS private key.";
+      };
+      clientCAFile = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Protected CA roots for verifying trusted coordinator certificates.";
+      };
+      coordinatorDNS = lib.mkOption {
+        type = lib.types.str;
+        default = "";
+        description = "Exact DNS subject alternative name required in the coordinator client certificate.";
+      };
+    };
     kubernetes = {
       enable = lib.mkEnableOption "explicit Kubernetes deployment operations";
       kubeconfigFile = lib.mkOption {
@@ -58,9 +114,26 @@ in
   config = lib.mkIf cfg.enable {
     assertions = [
       {
-        assertion = config.services.homelabSecurity.enable &&
-          config.services.homelabSecurity.access.gatewayAudience != "";
-        message = "Independent executor requires signed owner verification in homelab-securityd.";
+        assertion = cfg.authorization.remote.enable ||
+          (config.services.homelabSecurity.enable &&
+           config.services.homelabSecurity.access.gatewayAudience != "");
+        message = "Independent executor requires signed owner verification, local or through central security.";
+      }
+      {
+        assertion = !cfg.authorization.remote.enable ||
+          (cfg.authorization.remote.endpoint != null &&
+           cfg.authorization.remote.serverName != "" &&
+           cfg.authorization.remote.certificateFile != null &&
+           cfg.authorization.remote.keyFile != null &&
+           cfg.authorization.remote.serverCAFile != null);
+        message = "Central authorization requires an HTTPS endpoint, pinned server name, certificate and trust roots.";
+      }
+      {
+        assertion = !cfg.remote.enable ||
+          (cfg.remote.listenAddress != null &&
+           cfg.remote.certificateFile != null && cfg.remote.keyFile != null &&
+           cfg.remote.clientCAFile != null && cfg.remote.coordinatorDNS != "");
+        message = "Remote executor requires an explicit private listener, TLS certificate, key, client CA and coordinator identity.";
       }
       {
         assertion = cfg.healthServices != [];
@@ -78,11 +151,11 @@ in
         message = "Executor source and release state require absolute paths.";
       }
       {
-        assertion = config.services.homelabPlatform.securityClientSocket != null;
+        assertion = cfg.authorization.remote.enable || config.services.homelabPlatform.securityClientSocket != null;
         message = "Platform must use independent authorization before enabling the executor.";
       }
       {
-        assertion = config.services.homelabPlatform.executorSocket == "/run/homelab-executord/execute.sock";
+        assertion = cfg.authorization.remote.enable || config.services.homelabPlatform.executorSocket == "/run/homelab-executord/execute.sock";
         message = "Platform executor socket must match the protected local executor endpoint.";
       }
     ];
@@ -101,8 +174,8 @@ in
     systemd.services.homelab-executord = {
       description = "Restricted local infrastructure executor";
       wantedBy = [ "multi-user.target" ];
-      requires = [ "homelab-securityd.service" ];
-      after = [ "homelab-securityd.service" ];
+      requires = lib.optionals (!cfg.authorization.remote.enable) [ "homelab-securityd.service" ];
+      after = lib.optionals (!cfg.authorization.remote.enable) [ "homelab-securityd.service" ];
       environment = {
         HOMELAB_EXECUTOR_HOST = config.networking.hostName;
         HOMELAB_EXECUTOR_RELEASE_ENABLE = if cfg.allowReleaseActivation then "true" else "false";
@@ -115,6 +188,18 @@ in
         HOMELAB_EXECUTOR_SYSTEMCTL = "${pkgs.systemd}/bin/systemctl";
         HOMELAB_EXECUTOR_SERVICES_FILE = pkgs.writeText "homelab-executor-services.json" (builtins.toJSON cfg.allowedServices);
         HOMELAB_EXECUTOR_HEALTH_FILE = pkgs.writeText "homelab-executor-health.json" (builtins.toJSON cfg.healthServices);
+      } // lib.optionalAttrs cfg.authorization.remote.enable {
+        HOMELAB_EXECUTOR_AUTH_ENDPOINT = cfg.authorization.remote.endpoint;
+        HOMELAB_EXECUTOR_AUTH_SERVER_NAME = cfg.authorization.remote.serverName;
+        HOMELAB_EXECUTOR_AUTH_CERT = "/run/credentials/homelab-executord.service/auth-cert";
+        HOMELAB_EXECUTOR_AUTH_KEY = "/run/credentials/homelab-executord.service/auth-key";
+        HOMELAB_EXECUTOR_AUTH_CA = "/run/credentials/homelab-executord.service/auth-ca";
+      } // lib.optionalAttrs cfg.remote.enable {
+        HOMELAB_EXECUTOR_REMOTE_LISTEN = cfg.remote.listenAddress;
+        HOMELAB_EXECUTOR_REMOTE_CERT = "/run/credentials/homelab-executord.service/remote-cert";
+        HOMELAB_EXECUTOR_REMOTE_KEY = "/run/credentials/homelab-executord.service/remote-key";
+        HOMELAB_EXECUTOR_REMOTE_CA = "/run/credentials/homelab-executord.service/remote-ca";
+        HOMELAB_EXECUTOR_REMOTE_COORDINATOR = cfg.remote.coordinatorDNS;
       } // lib.optionalAttrs cfg.kubernetes.enable {
         HOMELAB_EXECUTOR_KUBECTL = "${pkgs.kubectl}/bin/kubectl";
         HOMELAB_EXECUTOR_KUBECONFIG = "/run/credentials/homelab-executord.service/kubeconfig";
@@ -127,20 +212,28 @@ in
         Type = "simple";
         User = "root";
         Group = "root";
-        SupplementaryGroups = [ "homelab-security-client" ];
+        SupplementaryGroups = lib.optionals (!cfg.authorization.remote.enable) [ "homelab-security-client" ];
         StateDirectory = "homelab-releases";
         StateDirectoryMode = "0700";
         RuntimeDirectory = "homelab-executord";
         RuntimeDirectoryMode = "0750";
         ExecStart = "${cfg.package}/bin/homelab-executord";
-        LoadCredential = lib.optionals cfg.kubernetes.enable [
+        LoadCredential = lib.optionals cfg.authorization.remote.enable [
+          "auth-cert:${cfg.authorization.remote.certificateFile}"
+          "auth-key:${cfg.authorization.remote.keyFile}"
+          "auth-ca:${cfg.authorization.remote.serverCAFile}"
+        ] ++ lib.optionals cfg.kubernetes.enable [
           "kubeconfig:${cfg.kubernetes.kubeconfigFile}"
+        ] ++ lib.optionals cfg.remote.enable [
+          "remote-cert:${cfg.remote.certificateFile}"
+          "remote-key:${cfg.remote.keyFile}"
+          "remote-ca:${cfg.remote.clientCAFile}"
         ];
         Restart = "on-failure";
         RestartSec = "5s";
         UMask = "0077";
         NoNewPrivileges = !cfg.allowReleaseActivation;
-        PrivateNetwork = !(cfg.kubernetes.enable || cfg.allowReleaseActivation);
+        PrivateNetwork = !(cfg.kubernetes.enable || cfg.allowReleaseActivation || cfg.remote.enable || cfg.authorization.remote.enable);
         PrivateTmp = true;
         ProtectSystem = if cfg.allowReleaseActivation then false else "strict";
         ReadWritePaths = [ "/nix/var/nix/profiles" cfg.stateDirectory ];
@@ -150,7 +243,7 @@ in
         ProtectKernelModules = !cfg.allowReleaseActivation;
         ProtectControlGroups = !cfg.allowReleaseActivation;
         CapabilityBoundingSet = lib.mkIf (!cfg.allowReleaseActivation) "";
-        RestrictAddressFamilies = [ "AF_UNIX" ] ++ lib.optionals (cfg.kubernetes.enable || cfg.allowReleaseActivation) [ "AF_INET" "AF_INET6" ];
+        RestrictAddressFamilies = [ "AF_UNIX" ] ++ lib.optionals (cfg.kubernetes.enable || cfg.allowReleaseActivation || cfg.remote.enable || cfg.authorization.remote.enable) [ "AF_INET" "AF_INET6" ];
         RestrictNamespaces = !cfg.allowReleaseActivation;
         RestrictSUIDSGID = true;
         LockPersonality = true;

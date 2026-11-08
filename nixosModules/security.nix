@@ -53,6 +53,34 @@ in
         description = "Pinned issuer signing JWKS file, updated through the trusted release channel.";
       };
     };
+    remote = {
+      enable = lib.mkEnableOption "mutually authenticated authorizer for host executors";
+      listenAddress = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Explicit private IP and TCP port for remote authorization.";
+      };
+      certificateFile = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Protected authorization server certificate.";
+      };
+      keyFile = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Protected authorization server private key.";
+      };
+      clientCAFile = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "CA roots permitted to sign remote executor client certificates.";
+      };
+      allowedClientDNS = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = [];
+        description = "Exact certificate DNS identities permitted to request operation authorization.";
+      };
+    };
     browser = {
       enable = lib.mkEnableOption "owner-only HTTPS browser login reached through an independently protected ingress";
       hostname = lib.mkOption {
@@ -81,6 +109,11 @@ in
 
   config = lib.mkIf cfg.enable {
     assertions = [
+      { assertion = !cfg.remote.enable ||
+          (cfg.remote.listenAddress != null && cfg.remote.certificateFile != null &&
+           cfg.remote.keyFile != null && cfg.remote.clientCAFile != null &&
+           cfg.remote.allowedClientDNS != [] && cfg.access.gatewayAudience != "");
+        message = "Remote authorization needs exact client identities, TLS credentials, a private listener and signed owner verification."; }
       { assertion = cfg.owner != ""; message = "Security daemon requires an owner identity."; }
       { assertion = cfg.passwordVerifierFile != null && cfg.totpSecretFile != null;
         message = "Security daemon requires separate password and TOTP credential files."; }
@@ -135,6 +168,12 @@ in
         HOMELAB_SECURITY_PASSWORD_FILE = "/run/credentials/homelab-securityd.service/password";
         HOMELAB_SECURITY_TOTP_FILE = "/run/credentials/homelab-securityd.service/totp";
         HOMELAB_SECURITY_POLICY_FILE = pkgs.writeText "homelab-security-policy.json" (builtins.toJSON cfg.policies);
+      } // lib.optionalAttrs cfg.remote.enable {
+        HOMELAB_SECURITY_REMOTE_LISTEN = cfg.remote.listenAddress;
+        HOMELAB_SECURITY_REMOTE_CERT = "/run/credentials/homelab-securityd.service/remote-cert";
+        HOMELAB_SECURITY_REMOTE_KEY = "/run/credentials/homelab-securityd.service/remote-key";
+        HOMELAB_SECURITY_REMOTE_CLIENT_CA = "/run/credentials/homelab-securityd.service/remote-client-ca";
+        HOMELAB_SECURITY_REMOTE_CLIENT_IDENTITIES = builtins.toJSON cfg.remote.allowedClientDNS;
       } // lib.optionalAttrs cfg.browser.enable {
         HOMELAB_SECURITY_BROWSER_ORIGIN = "https://${cfg.browser.hostname}";
         HOMELAB_SECURITY_ACCESS_BROWSER_AUD = cfg.browser.audience;
@@ -158,6 +197,10 @@ in
         LoadCredential = [
           "password:${cfg.passwordVerifierFile}"
           "totp:${cfg.totpSecretFile}"
+        ] ++ lib.optionals cfg.remote.enable [
+          "remote-cert:${cfg.remote.certificateFile}"
+          "remote-key:${cfg.remote.keyFile}"
+          "remote-client-ca:${cfg.remote.clientCAFile}"
         ] ++ lib.optionals (cfg.vaultKeyFile != null) [
           "vault-key:${cfg.vaultKeyFile}"
         ] ++ lib.optionals (cfg.access.gatewayAudience != "") [
@@ -171,7 +214,7 @@ in
         NoNewPrivileges = true;
         CapabilityBoundingSet = "";
         PrivateTmp = true;
-        PrivateNetwork = true;
+        PrivateNetwork = !cfg.remote.enable;
         PrivateDevices = true;
         ProtectHome = true;
         ProtectSystem = "strict";
@@ -179,7 +222,7 @@ in
         ProtectKernelModules = true;
         ProtectControlGroups = true;
         ProtectClock = true;
-        RestrictAddressFamilies = [ "AF_UNIX" ];
+        RestrictAddressFamilies = [ "AF_UNIX" ] ++ lib.optionals cfg.remote.enable [ "AF_INET" "AF_INET6" ];
         RestrictNamespaces = true;
         RestrictSUIDSGID = true;
         LockPersonality = true;
