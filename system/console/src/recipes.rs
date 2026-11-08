@@ -1040,6 +1040,59 @@ pub fn Recipes(csrf: String) -> Element {
             Tab::Transfer => rsx! {
                 section { class: "card",
                     div { class: "card-header",
+                        h2 { class: "card-title", "Portable recipe archive with images" }
+                        p { class: "card-description",
+                            "Copy recipes, planned meals, revision history and all referenced photographs in one ZIP. Existing IDs are never replaced during import."
+                        }
+                    }
+                    div { class: "card-body stack",
+                        div { class: "inline-row",
+                            a { class: "btn btn-outline",
+                                href: "/v1/recipes/bundle",
+                                download: "recipes-with-images.zip",
+                                "Download complete archive"
+                            }
+                        }
+                        div { class: "form-row",
+                            label { class: "label", for: "recipe-bundle-file", "Import ZIP archive" }
+                            input { id: "recipe-bundle-file", class: "field recipe-file-input",
+                                type: "file", accept: ".zip,application/zip",
+                                disabled: busy(),
+                                onchange: move |event| {
+                                    let Some(file) = event.files().into_iter().next() else { return; };
+                                    if file.size() > 96 * 1024 * 1024 {
+                                        error.set("Recipe ZIP must be 96 MiB or smaller".to_owned());
+                                        return;
+                                    }
+                                    let token = csrf();
+                                    busy.set(true);
+                                    error.set(String::new());
+                                    spawn(async move {
+                                        let outcome = match file.read_bytes().await {
+                                            Ok(bytes) => api::import_recipe_bundle(&token, bytes.to_vec()).await,
+                                            Err(_) => Err("Could not read the recipe ZIP".to_owned())
+                                        };
+                                        match outcome {
+                                            Ok(imported) => {
+                                                recipes.restart();
+                                                meals.restart();
+                                                groceries.restart();
+                                                notice.set(format!("Imported {} recipes and their referenced images", imported.imported));
+                                            }
+                                            Err(message) => error.set(message),
+                                        }
+                                        busy.set(false);
+                                    });
+                                }
+                            }
+                        }
+                        p { class: "small muted",
+                            "Import starts when an archive is selected. Repeated recipe IDs are rejected without overwriting existing records."
+                        }
+                    }
+                }
+                section { class: "card",
+                    div { class: "card-header",
                         h2 { class: "card-title", "RecipeSage export" }
                         p { class: "card-description",
                             "Import a RecipeSage JSON-LD export after reviewing its contents. RecipeSage and its original data are never modified."
