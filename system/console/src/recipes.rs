@@ -51,6 +51,7 @@ struct Recipe {
     tags: Vec<String>,
     equipment: Vec<String>,
     source_url: String,
+    import_ref: String,
     image_ref: String,
     notes: String,
     last_made: String,
@@ -173,6 +174,30 @@ fn RevisionChoice(
     }
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Deserialize)]
+#[serde(default)]
+struct RecipeSageCandidate {
+    key: String,
+    recipe: Recipe,
+    status: String,
+    warnings: Vec<String>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Deserialize)]
+#[serde(default)]
+struct RecipeSagePreview {
+    digest: String,
+    total: usize,
+    ready: usize,
+    candidates: Vec<RecipeSageCandidate>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Deserialize)]
+#[serde(default)]
+struct RecipeSageImportResult {
+    imported: usize,
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Tab {
     Library,
@@ -247,6 +272,10 @@ pub fn Recipes(csrf: String) -> Element {
     let mut import_text = use_signal(String::new);
     let mut schema_text = use_signal(String::new);
     let mut source_url = use_signal(String::new);
+    let mut sage_filename = use_signal(String::new);
+    let mut sage_source = use_signal(String::new);
+    let mut sage_preview = use_signal(|| Option::<RecipeSagePreview>::None);
+    let mut sage_selected = use_signal(Vec::<String>::new);
     let mut history_open = use_signal(|| false);
     let mut history_loading = use_signal(|| false);
     let mut history_record = use_signal(String::new);
