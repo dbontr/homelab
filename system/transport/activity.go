@@ -2,12 +2,12 @@ package transport
 
 import (
  "net/http"
+ "errors"
  "regexp"
  "sort"
  "strconv"
  "time"
 
- "github.com/dbontr/homelab-new/system/recipes"
  "github.com/dbontr/homelab-new/system/store"
 )
 
@@ -46,44 +46,51 @@ func taskLinks(task store.Task) []ResourceLink{
 
 // Resolving resources uses their actual owner. There is no shadow record
 // that can silently diverge from the canonical task or recipe database.
-func(s *Server) uiResource(w http.ResponseWriter,r *http.Request){
- kind,id:=r.PathValue("kind"),r.PathValue("id")
- if !resourceIdentifier.MatchString(id){writeError(w,400,"invalid resource identifier");return}
- switch kind {
+var errResourceInvalid=errors.New("invalid resource identity or kind")
+var errResourceUnavailable=errors.New("resource owner unavailable")
+var errResourceNotFound=errors.New("resource not found")
+
+func(s *Server) resource(kind,id string)(Resource,error){
+ if !resourceIdentifier.MatchString(id){return Resource{},errResourceInvalid}
+ switch kind{
  case "task":
   for _,item:=range s.db.Tasks(""){
-   if item.ID==id{
-    writeJSON(w,200,withReference(kind,id,"personal",item,taskLinks(item)));return
-   }
+   if item.ID==id{return withReference(kind,id,"personal",item,taskLinks(item)),nil}
   }
  case "goal":
   for _,item:=range s.db.Goals(){
-   if item.ID==id{
-    writeJSON(w,200,withReference(kind,id,"personal",item,nil));return
-   }
+   if item.ID==id{return withReference(kind,id,"personal",item,nil),nil}
   }
  case "recipe":
-  if s.recipes==nil{writeError(w,503,"recipe storage is not configured");return}
+  if s.recipes==nil{return Resource{},errResourceUnavailable}
   item,err:=s.recipes.Get(id)
-  if err==nil{writeJSON(w,200,withReference(kind,id,"recipes",item,nil));return}
+  if err==nil{return withReference(kind,id,"recipes",item,nil),nil}
  case "meal":
-  if s.recipes==nil{writeError(w,503,"recipe storage is not configured");return}
+  if s.recipes==nil{return Resource{},errResourceUnavailable}
   for _,item:=range s.recipes.Meals(){
    if item.ID==id{
-    writeJSON(w,200,withReference(kind,id,"recipes",item,
-     []ResourceLink{{Relation:"recipe",Reference:resourceRef("recipe",item.RecipeID)}}));return
+    links:=[]ResourceLink{{Relation:"recipe",Reference:resourceRef("recipe",item.RecipeID)}}
+    return withReference(kind,id,"recipes",item,links),nil
    }
   }
  case "book":
   for _,item:=range s.db.ListBookRequests(""){
-   if item.ID==id{
-    writeJSON(w,200,withReference(kind,id,"personal",item,nil));return
-   }
+   if item.ID==id{return withReference(kind,id,"personal",item,nil),nil}
   }
  default:
-  writeError(w,400,"unsupported resource kind");return
+  return Resource{},errResourceInvalid
  }
- writeError(w,404,"resource not found")
+ return Resource{},errResourceNotFound
+}
+
+func(s *Server) uiResource(w http.ResponseWriter,r *http.Request){
+ item,err:=s.resource(r.PathValue("kind"),r.PathValue("id"))
+ switch {
+ case errors.Is(err,errResourceInvalid):writeError(w,400,err.Error())
+ case errors.Is(err,errResourceUnavailable):writeError(w,503,err.Error())
+ case err!=nil:writeError(w,404,err.Error())
+ default:writeJSON(w,200,item)
+ }
 }
 
 type ActivityEvent struct{
@@ -162,6 +169,3 @@ func(s *Server) uiActivity(w http.ResponseWriter,r *http.Request){
  writeJSON(w,200,s.activity(limit,after))
 }
 
-// Recipe source ownership is explicitly part of the resource view; imported
-// recipes remain in the first-party Store after owner-reviewed migration.
-var _ = recipes.ErrNotFound
