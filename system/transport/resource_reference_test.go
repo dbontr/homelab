@@ -1,6 +1,8 @@
 package transport
 
 import (
+ "context"
+ "encoding/json"
  "path/filepath"
  "testing"
 
@@ -34,4 +36,9 @@ func TestResourceReferenceResolvesOwningStore(t *testing.T){
  if err!=nil||resource.Owner!="personal"||resource.Reference!=resourceRef("task",task.ID){
   t.Fatalf("resource diverged from source record: %+v %v",resource,err)
  }
+ raw,_:=json.Marshal(map[string]string{"kind":"task","id":task.ID})
+ value,err:=server.localTool(context.Background(),"resource_get",raw)
+ if err!=nil{t.Fatal(err)}
+ resolved,ok:=value.(Resource)
+ if !ok||resolved.Reference!=resource.Reference{t.Fatalf("MCP resource resolution mismatch: %#v",value)}
 }
