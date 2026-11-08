@@ -124,4 +124,38 @@ func TestRecipeSagePreviewAndImportAuthorization(t *testing.T) {
 	if len(db.List("")) != 1 {
 		t.Fatal("repeated migration changed the library")
 	}
+	incompleteSource, err := json.Marshal(map[string]any{"recipes": []any{
+		map[string]any{
+			"@type": "Recipe", "identifier": "sage-2", "name": "Soup",
+			"recipeYield": "2", "recipeIngredient": []any{"onion"},
+			"recipeInstructions": []any{"Heat gently."},
+		},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reviewBody, err := json.Marshal(map[string]any{"source": string(incompleteSource)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reviewResponse := call("POST", "/v1/recipes/recipesage/preview", reviewBody, cookie, identity.CSRF, "application/json")
+	var review recipes.RecipeSagePreview
+	if reviewResponse.Code != 200 || json.Unmarshal(reviewResponse.Body.Bytes(), &review) != nil ||
+		review.Candidates[0].Status != "needs_review" {
+		t.Fatalf("incomplete preview: %d %s", reviewResponse.Code, reviewResponse.Body.String())
+	}
+	corrected := review.Candidates[0].Recipe
+	corrected.Ingredients[0].Amount = 1
+	applyBody, err := json.Marshal(map[string]any{
+		"source": string(incompleteSource), "digest": review.Digest,
+		"keys": []string{review.Candidates[0].Key},
+		"overrides": map[string]recipes.Recipe{review.Candidates[0].Key: corrected},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	applied := call("POST", "/v1/recipes/recipesage/import", applyBody, cookie, identity.CSRF, "application/json")
+	if applied.Code != 201 || len(db.List("")) != 2 {
+		t.Fatalf("reviewed import failed: %d %s", applied.Code, applied.Body.String())
+	}
 }
