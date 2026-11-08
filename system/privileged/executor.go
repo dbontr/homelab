@@ -55,7 +55,7 @@ func serviceAction(operation string)(string,bool){
  case "infrastructure__service_start":return "start",true
  case "infrastructure__service_stop":return "stop",true
  case "infrastructure__service_reload":return "reload",true
- case "infrastructure__service_start","infrastructure__service_stop","infrastructure__service_reload","infrastructure__service_restart":return "restart",true
+ case "infrastructure__service_restart":return "restart",true
  default:return "",false
  }
 }
