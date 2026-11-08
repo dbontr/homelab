@@ -176,7 +176,7 @@ func dangerousOperation(name string) bool {
 	tokens := strings.FieldsFunc(strings.ToLower(name), func(r rune) bool { return r == '.' || r == '_' || r == '-' || r == '/' })
 	for _, word := range tokens {
 		switch word {
-		case "delete", "destroy", "purge", "revoke", "rotate", "reset", "remove", "wipe", "drop", "format", "shutdown", "reboot", "prune", "firewall", "router", "network", "credential", "credentials", "trust", "rollback", "reinstall", "merge", "deploy", "apply", "force":
+		case "delete", "destroy", "purge", "revoke", "rotate", "reset", "remove", "wipe", "drop", "format", "shutdown", "reboot", "prune", "firewall", "router", "network", "credential", "credentials", "trust", "rollback", "reinstall", "merge", "deploy", "apply", "force", "configure", "cleanup", "restore", "grant", "update", "patch":
 			return true
 		}
 	}
@@ -498,6 +498,13 @@ func (a *AdminSessions) loadState() error {
 	dirInfo, err := os.Lstat(dir)
 	if err != nil || !dirInfo.IsDir() || dirInfo.Mode().Perm()&0077 != 0 {
 		return errors.New("security state directory must be private")
+	}
+	pathInfo, err := os.Lstat(a.stateFile)
+	if err == nil && (!pathInfo.Mode().IsRegular() || pathInfo.Mode().Perm()&0077 != 0) {
+		return errors.New("security state file must be private")
+	}
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
 	}
 	f, err := os.Open(a.stateFile)
 	if errors.Is(err, os.ErrNotExist) {
