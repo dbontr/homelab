@@ -44,7 +44,15 @@ let
         };
       }
     ] ++
-      
+      lib.optional config.services.homelabSecurity.browser.enable {
+        hostname = config.services.homelabSecurity.browser.hostname;
+        service = "http://127.0.0.1:8115";
+        originRequest.access = {
+          required = true;
+          teamName = "dbontr";
+          audTag = [ config.services.homelabSecurity.browser.audience ];
+        };
+      } ++
       lib.optional (config.homelab.access.monitorAudTag != null) {
         hostname = "monitor.dbontr.me";
         service = "http://127.0.0.1:3000";
