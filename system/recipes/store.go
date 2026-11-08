@@ -3,6 +3,7 @@ package recipes
 
 import (
 	"crypto/rand"
+    "crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -77,10 +78,17 @@ type Meal struct {
 }
 
 type GroceryItem struct {
+    Key       string   `json:"key"`
+    Checked   bool     `json:"checked"`
 	Name      string   `json:"name"`
 	Amount    float64  `json:"amount"`
 	Unit      string   `json:"unit,omitempty"`
 	RecipeIDs []string `json:"recipe_ids"`
+}
+
+type GroceryBoard struct {
+    Revision int `json:"revision"`
+    Items []GroceryItem `json:"items"`
 }
 
 type NutritionPreview struct {
@@ -93,11 +101,14 @@ type NutritionPreview struct {
 
 type Document struct {
 	Version int      `json:"version"`
+    GroceryChecks map[string]bool `json:"grocery_checks,omitempty"`
 	Recipes []Recipe `json:"recipes"`
 	Meals   []Meal   `json:"meals"`
 }
 
 type snapshot struct {
+    GroceryRevision int `json:"grocery_revision,omitempty"`
+    GroceryChecks map[string]bool `json:"grocery_checks,omitempty"`
 	Version  int               `json:"version"`
 	Recipes  map[string]Recipe `json:"recipes"`
 	Meals    map[string]Meal   `json:"meals"`
@@ -144,6 +155,7 @@ func Open(path string) (*Store, error) {
 	}
 	if s.data.Recipes == nil { s.data.Recipes = map[string]Recipe{} }
 	if s.data.Meals == nil { s.data.Meals = map[string]Meal{} }
+ if s.data.GroceryChecks == nil { s.data.GroceryChecks = map[string]bool{} }
 	for id, recipe := range s.data.Recipes {
 		if id != recipe.ID || !validID(id) { return nil, errors.New("recipe identifier mismatch") }
 		if err := validateRecipe(recipe); err != nil { return nil, fmt.Errorf("stored recipe %s: %w", id, err) }
@@ -159,7 +171,8 @@ func Open(path string) (*Store, error) {
 }
 
 func duplicate(s snapshot) snapshot {
-	out := snapshot{Version: 1, Recipes: make(map[string]Recipe, len(s.Recipes)), Meals: make(map[string]Meal, len(s.Meals))}
+	out := snapshot{Version: 1, Recipes: make(map[string]Recipe, len(s.Recipes)), Meals: make(map[string]Meal, len(s.Meals)), GroceryRevision:s.GroceryRevision, GroceryChecks:make(map[string]bool,len(s.GroceryChecks))}
+ for key,checked:=range s.GroceryChecks{out.GroceryChecks[key]=checked}
 	for key, value := range s.Recipes { out.Recipes[key] = value }
 	for key, value := range s.Meals { out.Meals[key] = value }
 	return out
@@ -380,40 +393,67 @@ func (s *Store) DeleteMeal(id string) error {
 	return s.save(next)
 }
 
-func (s *Store) Groceries(start, end string) ([]GroceryItem, error) {
-	if !validDate(start) || !validDate(end) || (start != "" && end != "" && start > end) {
-		return nil, errors.New("invalid grocery date range")
-	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	items := map[string]*GroceryItem{}
-	for _, meal := range s.data.Meals {
-		if (start != "" && meal.Date < start) || (end != "" && meal.Date > end) { continue }
-		recipe := s.data.Recipes[meal.RecipeID]
-		scale := meal.Servings / recipe.Servings
-		for _, ingredient := range recipe.Ingredients {
-			key := strings.ToLower(strings.TrimSpace(ingredient.Name)) + "\x00" + strings.ToLower(strings.TrimSpace(ingredient.Unit))
-			entry, exists := items[key]
-			if !exists {
-				entry = &GroceryItem{Name: ingredient.Name, Unit: ingredient.Unit, RecipeIDs: []string{}}
-				items[key] = entry
-			}
-			entry.Amount += ingredient.Amount * scale
-			found := false
-			for _, id := range entry.RecipeIDs { if id == recipe.ID { found = true; break } }
-			if !found { entry.RecipeIDs = append(entry.RecipeIDs, recipe.ID) }
-		}
-	}
-	out := make([]GroceryItem, 0, len(items))
-	for _, value := range items {
-		sort.Strings(value.RecipeIDs)
-		out = append(out, *value)
-	}
-	sort.Slice(out, func(i, j int) bool {
-		if strings.EqualFold(out[i].Name, out[j].Name) { return out[i].Unit < out[j].Unit }
-		return strings.ToLower(out[i].Name) < strings.ToLower(out[j].Name)
-	})
-	return out, nil
+// Groceries is a derived view. Ingredients with different units remain distinct;
+// no mass-to-volume conversion is attempted without a measured density.
+func (s *Store) Groceries(start,end string)([]GroceryItem,error){
+ if !validDate(start)||!validDate(end)||(start!=""&&end!=""&&start>end){return nil,errors.New("invalid grocery date range")}
+ s.mu.RLock();defer s.mu.RUnlock()
+ return collectGroceries(s.data,start,end),nil
+}
+
+func groceryKey(name,unit string) string {
+ value:=strings.ToLower(strings.TrimSpace(name))+"\x00"+strings.ToLower(strings.TrimSpace(unit))
+ sum:=sha256.Sum256([]byte(value))
+ return hex.EncodeToString(sum[:])
+}
+
+func collectGroceries(data snapshot,start,end string)[]GroceryItem{
+ items:=map[string]*GroceryItem{}
+ for _,meal:=range data.Meals{
+  if (start!=""&&meal.Date<start)||(end!=""&&meal.Date>end){continue}
+  recipe:=data.Recipes[meal.RecipeID]
+  scale:=meal.Servings/recipe.Servings
+  for _,ingredient:=range recipe.Ingredients{
+   key:=groceryKey(ingredient.Name,ingredient.Unit)
+   item,found:=items[key]
+   if !found{
+    item=&GroceryItem{Key:key,Name:ingredient.Name,Unit:ingredient.Unit,Checked:data.GroceryChecks[key],RecipeIDs:[]string{}}
+    items[key]=item
+   }
+   item.Amount+=ingredient.Amount*scale
+   source:=false
+   for _,id:=range item.RecipeIDs{if id==recipe.ID{source=true;break}}
+   if !source{item.RecipeIDs=append(item.RecipeIDs,recipe.ID)}
+  }
+ }
+ result:=make([]GroceryItem,0,len(items))
+ for _,item:=range items{sort.Strings(item.RecipeIDs);result=append(result,*item)}
+ sort.Slice(result,func(i,j int)bool{
+  if strings.EqualFold(result[i].Name,result[j].Name){return result[i].Unit<result[j].Unit}
+  return strings.ToLower(result[i].Name)<strings.ToLower(result[j].Name)
+ })
+ return result
+}
+
+func (s *Store) Board(start,end string)(GroceryBoard,error){
+ if !validDate(start)||!validDate(end)||(start!=""&&end!=""&&start>end){return GroceryBoard{},errors.New("invalid grocery date range")}
+ s.mu.RLock();defer s.mu.RUnlock()
+ return GroceryBoard{Revision:s.data.GroceryRevision,Items:collectGroceries(s.data,start,end)},nil
+}
+
+func (s *Store) MarkGrocery(key string,checked bool,expected int)(GroceryBoard,error){
+ if len(key)!=64{return GroceryBoard{},errors.New("invalid grocery key")}
+ for _,c:=range key{if !strings.ContainsRune("0123456789abcdef",c){return GroceryBoard{},errors.New("invalid grocery key")}}
+ s.mu.Lock();defer s.mu.Unlock()
+ if expected!=s.data.GroceryRevision{return GroceryBoard{},ErrConflict}
+ found:=false
+ for _,item:=range collectGroceries(s.data,"",""){if item.Key==key{found=true;break}}
+ if !found{return GroceryBoard{},ErrNotFound}
+ next:=duplicate(s.data)
+ if checked{next.GroceryChecks[key]=true}else{delete(next.GroceryChecks,key)}
+ next.GroceryRevision++
+ if err:=s.save(next);err!=nil{return GroceryBoard{},err}
+ return GroceryBoard{Revision:next.GroceryRevision,Items:collectGroceries(next,"","")},nil
 }
 
 func (s *Store) Nutrition(id string, servings float64) (NutritionPreview, error) {
@@ -434,8 +474,9 @@ func (s *Store) Nutrition(id string, servings float64) (NutritionPreview, error)
 func (s *Store) Export() Document {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	out := Document{Version: 1, Recipes: make([]Recipe, 0, len(s.data.Recipes)), Meals: make([]Meal, 0, len(s.data.Meals))}
-	for _, recipe := range s.data.Recipes { out.Recipes = append(out.Recipes, copyRecipe(recipe)) }
+	out := Document{Version: 1, GroceryChecks:make(map[string]bool,len(s.data.GroceryChecks)), Recipes: make([]Recipe, 0, len(s.data.Recipes)), Meals: make([]Meal, 0, len(s.data.Meals))}
+	for key,checked:=range s.data.GroceryChecks{out.GroceryChecks[key]=checked}
+ for _, recipe := range s.data.Recipes { out.Recipes = append(out.Recipes, copyRecipe(recipe)) }
 	for _, meal := range s.data.Meals { out.Meals = append(out.Meals, meal) }
 	sort.Slice(out.Recipes, func(i,j int) bool { return out.Recipes[i].ID < out.Recipes[j].ID })
 	sort.Slice(out.Meals, func(i,j int) bool { return out.Meals[i].ID < out.Meals[j].ID })
@@ -462,6 +503,15 @@ func (s *Store) Import(doc Document) (int, error) {
 		if _, exists := next.Recipes[meal.RecipeID]; !exists { return 0, ErrNotFound }
 		next.Meals[meal.ID] = meal
 	}
-	if err := s.save(next); err != nil { return 0, err }
-	return len(doc.Recipes), nil
+	if len(doc.GroceryChecks)>0 {
+   if len(s.data.Recipes)>0||len(s.data.Meals)>0{return 0,ErrConflict}
+   available:=map[string]bool{}
+   for _,item:=range collectGroceries(next,"",""){available[item.Key]=true}
+   for key,checked:=range doc.GroceryChecks{
+     if !available[key]{return 0,errors.New("grocery archive contains unknown items")}
+     if checked{next.GroceryChecks[key]=true}
+   }
+ }
+ if err := s.save(next); err != nil { return 0, err }
+ return len(doc.Recipes), nil
 }
