@@ -4,7 +4,7 @@ services:
     image: prom/prometheus@sha256:fa3302279710be2f21a8301ec17a8b4f2301fd829bd113839b3b6b02b6f191a2
     restart: unless-stopped
     ports:
-      - "${SERVICE_BIND_IP:-127.0.0.1}:9090:9090"
+      - "127.0.0.1:9090:9090"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     command:
@@ -20,12 +20,12 @@ services:
     image: grafana/grafana@sha256:dbbc38ea21103cefb50396340cd88afec779c7e070b0a7bf5a75b4ce46651d3f
     restart: unless-stopped
     ports:
-      - "${SERVICE_BIND_IP:-127.0.0.1}:3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
       GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/grafana-password
-      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
       GF_AUTH_ANONYMOUS_ORG_ROLE: "Viewer"
-      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_AUTH_DISABLE_LOGIN_FORM: "false"
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/diagnostics.json
     secrets: [grafana-password]
@@ -35,7 +35,7 @@ services:
       - ./config/grafana/dashboards:/var/lib/grafana/dashboards:ro
   loki:
     ports:
-      - "${SERVICE_BIND_IP:-127.0.0.1}:3100:3100"
+      - "127.0.0.1:3100:3100"
     image: grafana/loki@sha256:0db216b630ae1f348a1584c67f3cead8b4c1fc839169a39501db664744158e28
     restart: unless-stopped
     command: ["-config.file=/etc/loki/config.yaml"]
@@ -83,7 +83,7 @@ services:
       - /dev/nvme0:/dev/nvme0:r
       - /dev/nvme0n1:/dev/nvme0n1:r
     ports:
-      - "${SERVICE_BIND_IP:-127.0.0.1}:8086:8080"
+      - "127.0.0.1:8086:8080"
     volumes:
       - scrutiny-config:/opt/scrutiny/config
       - scrutiny-influxdb:/opt/scrutiny/influxdb

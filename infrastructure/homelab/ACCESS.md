@@ -1,6 +1,6 @@
 # Homelab application access
 
-The owner portal and administration are protected by Cloudflare Access.
+The owner portal and administration require Cloudflare Access. The tunnel and origin policies must be verified independently before release.
 Guest services use independent application credentials. Public endpoints are
 not authorization grants and must never expose private monitoring or projects.
 
@@ -9,7 +9,7 @@ not authorization grants and must never expose private monitoring or projects.
 | Hostname | Audience | Transport | Required authorization |
 | --- | --- | --- | --- |
 | `dbontr.me` | Owner | Cloudflare Tunnel | Owner-only Cloudflare Access |
-| `monitor.dbontr.me` | Owner | Cloudflare Tunnel | Owner-only Cloudflare Access and Grafana authentication |
+| `monitor.dbontr.me` | Owner | Cloudflare Tunnel | Owner-only Cloudflare Access and authenticated Grafana session |
 | `mcp.dbontr.me` | MCP gateway | Cloudflare Tunnel | Owner-only Cloudflare Access; independent upstream authorization |
 | `recipes.dbontr.me` | Approved recipe users | Cloudflare Tunnel | Cloudflare Access and RecipeSage account authentication |
 | `media.tail305103.ts.net` | Approved media users | Local split DNS, private tailnet, or Tailscale Funnel | Separate Jellyfin accounts and applicable tailnet ACLs |
@@ -18,9 +18,9 @@ not authorization grants and must never expose private monitoring or projects.
 behind does not make the service available. The supported client server URL is
 `https://media.tail305103.ts.net`.
 
-Cloudflare Access applications are scoped to exact owner-only hostnames. The RecipeSage application uses its own Access policy, and no bypass is
-allowed on owner-only services. The Cloudflare Tunnel validates Access
-audience IDs on protected origins, including RecipeSage. The tunnel's default unmatched route is HTTP 404.
+Cloudflare Access applications must be scoped to their intended hostnames and identities. The RecipeSage hostname requires a dedicated Access application with an appropriate allow policy and a matching audience in the tunnel configuration before it can be treated as available. Do not reuse the media application audience for recipes. The Cloudflare Tunnel must validate Access audience IDs on protected origins. Unmatched tunnel routes return HTTP 404. Verify the remote Access application and local tunnel audience together before activating or publishing an ingress route.
+
+The Cloudflare zone requires TLS 1.2 or newer and redirects HTTP to HTTPS. Verify these edge settings against the live zone before each infrastructure release; NixOS does not manage them. DNSSEC should be enabled only with confirmed registrar delegation and a tested recovery procedure. A working tunnel or DNS record alone is not proof that an application is authenticated.
 
 Cloudflare Access is not a substitute for a service's internal authorization.
 Grafana, Jellyfin, RecipeSage and the project broker must enforce
