@@ -93,6 +93,11 @@ in
       default = null;
       description = "Exact protected HTTPS origin where the owner signs in; the MCP receives no credentials.";
     };
+    fleetSocket = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "Protected Unix socket of the independent fleet release coordinator; no TLS credentials enter the gateway.";
+    };
     executorSocket = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
       default = null;
@@ -139,6 +144,13 @@ in
         message = "Monitoring sources must use loopback HTTP.";
       }
       {
+        assertion = cfg.fleetSocket == null ||
+          (cfg.securityClientSocket != null &&
+           cfg.fleetSocket == "/run/homelab-fleetd/fleet.sock" &&
+           cfg.integrations.workspace.tokenFile == null);
+        message = "Fleet operations require the independent owner security service and exact coordinator socket without a Workspace root credential.";
+      }
+      {
         assertion = cfg.executorSocket == null ||
           (cfg.securityClientSocket != null && cfg.integrations.workspace.tokenFile == null);
         message = "Independent executor requires separate security authorization and no Workspace root bearer credential in the gateway.";
@@ -183,6 +195,8 @@ in
         HOMELAB_SECURITY_LOGIN_URL = cfg.securityLoginURL;
       } // lib.optionalAttrs (cfg.executorSocket != null) {
         HOMELAB_EXECUTOR_SOCKET = cfg.executorSocket;
+      } // lib.optionalAttrs (cfg.fleetSocket != null) {
+        HOMELAB_FLEET_SOCKET = cfg.fleetSocket;
       } // lib.optionalAttrs (cfg.books.contactFile != null) {
         HOMELAB_BOOKS_CONTACT_FILE = "/run/credentials/homelab-platform.service/books_contact";
       } // lib.optionalAttrs (cfg.consolePassphraseFile != null) {
@@ -209,7 +223,8 @@ in
         Type = "simple";
         DynamicUser = true;
         SupplementaryGroups = lib.optional (cfg.securityClientSocket != null) "homelab-security-client"
-          ++ lib.optional (cfg.executorSocket != null) "homelab-executor-client";
+          ++ lib.optional (cfg.executorSocket != null) "homelab-executor-client"
+          ++ lib.optional (cfg.fleetSocket != null) "homelab-fleet-client";
         StateDirectory = "homelab-platform";
         RuntimeDirectory = "homelab-platform";
         RuntimeDirectoryMode = "0700";

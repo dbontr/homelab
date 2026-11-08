@@ -20,6 +20,7 @@ import (
     "github.com/dbontr/homelab-new/system/store"
     "github.com/dbontr/homelab-new/system/security"
     "github.com/dbontr/homelab-new/system/privileged"
+    "github.com/dbontr/homelab-new/system/release"
     "github.com/dbontr/homelab-new/system/session"
     "encoding/json"
     "github.com/dbontr/homelab-new/system/transport"
@@ -114,6 +115,11 @@ func main(){
         if os.Getenv("HOMELAB_SECURITY_SOCKET")==""{log.Fatal("executor requires independent owner authorization")}
         client,err:=privileged.NewClient(socket);if err!=nil{log.Fatal(err)}
         server.SetExecutorClient(client)
+    }
+    if socket:=os.Getenv("HOMELAB_FLEET_SOCKET");socket!=""{
+        if os.Getenv("HOMELAB_SECURITY_SOCKET")==""{log.Fatal("fleet requires independent owner authorization")}
+        client,err:=release.NewFleetClient(socket);if err!=nil{log.Fatal(err)}
+        server.SetFleetClient(client)
     }
     addr:=os.Getenv("HOMELAB_LISTEN_ADDR");if addr==""{addr="127.0.0.1:8300"}
     host,_,e:=net.SplitHostPort(addr);if e!=nil{log.Fatal(e)}

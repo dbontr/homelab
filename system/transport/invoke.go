@@ -15,6 +15,14 @@ func (s *Server) invoke(ctx context.Context,name string,args json.RawMessage,id 
  normalized,_,err:=canonicaljson.Object(args)
  if err!=nil{return toolError(err.Error())}
  args=normalized
+ if strings.HasPrefix(name,"infrastructure__fleet_"){
+  if s.fleetClient==nil{return toolError("independent fleet coordinator not configured")}
+  raw,err:=s.fleetClient.Call(ctx,name,args)
+  if err!=nil{return toolError("independent fleet coordinator unavailable")}
+  var value map[string]any
+  if err:=json.Unmarshal(raw,&value);err!=nil{return toolError("invalid fleet reply")}
+  return result(value)
+ }
  if name=="infrastructure__service_restart" || name=="infrastructure__release_activate" || name=="infrastructure__release_revert" ||
   name=="cluster__deployment_restart" || name=="cluster__deployment_scale" {
   if s.executorClient==nil{return toolError("independent privileged executor not configured")}

@@ -37,6 +37,7 @@
       nixosModules.homelabPlatform = import ./nixosModules/platform.nix;
       nixosModules.homelabSecurity = import ./nixosModules/security.nix;
       nixosModules.homelabExecutor = import ./nixosModules/executor.nix;
+      nixosModules.homelabFleet = import ./nixosModules/fleet.nix;
       packages.${defaultSystem}.homelab-platform = import ./packages/platform.nix {
         pkgs = nixpkgs.legacyPackages.${defaultSystem};
       };
@@ -46,6 +47,10 @@
       };
 
       packages.${defaultSystem}.homelab-executor = import ./packages/executor.nix {
+        pkgs = nixpkgs.legacyPackages.${defaultSystem};
+      };
+
+      packages.${defaultSystem}.homelab-fleet = import ./packages/fleet.nix {
         pkgs = nixpkgs.legacyPackages.${defaultSystem};
       };
 
