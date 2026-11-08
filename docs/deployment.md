@@ -22,7 +22,9 @@ Device policy comes from the device entries in hardware.nix; enrolled node entri
 6. Activate one replaceable component at a time and verify the live result before routing production traffic.
 7. Retire source repositories and rename the successor only after operational acceptance.
 
-The imported upstream service modules retain existing runtime release references. Replacing those with locally built, verified packages is part of runtime integration, not implied by code placement.
+Use `bash scripts/stage-release.sh /absolute/release/directory` on an authorized self-hosted builder to stage the Go platform, Workspace controller and worker, Learning, Health, approval utility and Dioxus frontend together. It writes a SHA-256 manifest and does not start or replace any service. The imported Workspace Kubernetes builder supports an explicitly configured OCI registry, digest-pinned rootless BuildKit image and separately scoped registry credentials; no GitHub Actions minutes are needed for local source builds. The Nix deployment definitions still refer to existing runtime releases until an operator explicitly selects verified local artifacts. Source integration does not imply live cutover.
+
+Monitoring is configured through `services.homelabPlatform.monitoring` with loopback Prometheus/Loki sources and source-managed exporter targets for Saturn, Jupiter, Venus, Mercury and Janus. Existing Grafana and monitoring containers remain available. The optional Open Library catalog requires `services.homelabPlatform.books.contactFile` with the contact email supplied through a protected systemd credential. The Dioxus frontend has a separate opt-in console NixOS module; the original homepage remains active unless an operator enables `replaceHomepage` after acceptance. See [observability](observability.md), [books](books.md) and [self-hosted releases](self-hosted-release.md).
 
 ## Recovery
 

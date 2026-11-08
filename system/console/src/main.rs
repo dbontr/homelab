@@ -4,6 +4,11 @@ mod recipes;
 mod tasks;
 mod personal;
 mod views;
+mod monitoring;
+mod calendar;
+mod planner;
+mod books;
+mod activity;
 
 use dioxus::prelude::*;
 use components::Icon;
@@ -16,10 +21,15 @@ enum Page {
     Projects,
     Compute,
     Software,
+    Monitoring,
+    Calendar,
+    Planner,
     Tasks,
     Learning,
     Health,
     Recipes,
+    Books,
+    Activity,
     Media,
     Administration,
 }
@@ -31,10 +41,15 @@ impl Page {
             Self::Projects => "Projects",
             Self::Compute => "Compute",
             Self::Software => "Software library",
+            Self::Monitoring => "Monitoring",
+            Self::Calendar => "Calendar",
+            Self::Planner => "Weekly planner",
             Self::Tasks => "Tasks",
             Self::Learning => "Learning",
             Self::Health => "Health",
             Self::Recipes => "Recipes",
+            Self::Books => "Books",
+            Self::Activity => "Activity",
             Self::Media => "Media",
             Self::Administration => "Administration",
         }
@@ -49,9 +64,13 @@ const WORKSPACE: &[(Page, &str, &str)] = &[
 ];
 const PERSONAL: &[(Page, &str, &str)] = &[
     (Page::Tasks, "Tasks", "tasks"),
+    (Page::Calendar, "Calendar", "calendar"),
+    (Page::Planner, "Weekly planner", "planner"),
     (Page::Learning, "Learning", "learning"),
     (Page::Health, "Health", "health"),
     (Page::Recipes, "Recipes", "recipes"),
+    (Page::Books, "Books", "books"),
+    (Page::Activity, "Activity", "activity"),
     (Page::Media, "Media", "media"),
 ];
 
@@ -190,6 +209,13 @@ fn App() -> Element {
                                 div { class: "nav-label", "System" }
                                 button {
                                     class: "nav-item",
+                                    aria_current: if page()==Page::Monitoring {"page"} else {"false"},
+                                    onclick: move |_| { page.set(Page::Monitoring); mobile_open.set(false); },
+                                    Icon { name: "monitoring".to_owned() }
+                                    span { "Monitoring" }
+                                }
+                                button {
+                                    class: "nav-item",
                                     aria_current: if page()==Page::Administration {"page"} else {"false"},
                                     onclick: move |_| { page.set(Page::Administration); mobile_open.set(false); },
                                     Icon { name: "admin".to_owned() }
@@ -254,10 +280,15 @@ fn App() -> Element {
                                 Page::Projects => rsx! { views::Projects {} },
                                 Page::Compute => rsx! { views::Compute {} },
                                 Page::Software => rsx! { views::Software {} },
+                                Page::Monitoring => rsx! { monitoring::Monitoring {} },
+                                Page::Calendar => rsx! { calendar::Calendar {} },
+                                Page::Planner => rsx! { planner::Planner {} },
                                 Page::Tasks => rsx! { tasks::Tasks { csrf: csrf.clone() } },
                                 Page::Learning => rsx! { personal::Learning { csrf: csrf.clone() } },
                                 Page::Health => rsx! { personal::Health { csrf: csrf.clone() } },
                                 Page::Recipes => rsx! { recipes::Recipes { csrf: csrf.clone() } },
+                                Page::Books => rsx! { books::Books { csrf: csrf.clone() } },
+                                Page::Activity => rsx! { activity::Activity {} },
                                 Page::Media => rsx! { views::Media {} },
                                 Page::Administration => rsx! { views::Administration {} },
                             }

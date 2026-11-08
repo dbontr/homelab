@@ -1,0 +1,29 @@
+# syntax=docker/dockerfile:1
+FROM golang:1.27.3-bookworm
+ARG TARGETARCH=amd64
+
+ENV CARGO_HOME=/usr/local/cargo \
+    RUSTUP_HOME=/usr/local/rustup \
+    PATH=/usr/local/cargo/bin:/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+COPY --from=rust:1.99.1-bookworm /usr/local/cargo /usr/local/cargo
+COPY --from=rust:1.99.1-bookworm /usr/local/rustup /usr/local/rustup
+
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+       ca-certificates clang curl git pkg-config libssl-dev build-essential \
+    && rm -rf /var/lib/apt/lists/* \
+    && rustup toolchain install 1.99.1 --profile minimal --component rustfmt --component clippy \
+    && rustup default 1.99.1 \
+    && rustup target add wasm32-unknown-unknown \
+    && go version \
+    && rustc --version \
+    && cargo --version \
+    && rustup target list --installed | grep -x wasm32-unknown-unknown
+
+RUN cargo install dioxus-cli --version 0.7.10 --locked \
+    && dx --version \
+    && chmod -R a+rX /usr/local/cargo /usr/local/rustup
+
+ENV CARGO_HOME=/workspace/.cargo
+WORKDIR /workspace

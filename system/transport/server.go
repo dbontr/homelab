@@ -15,15 +15,17 @@ import (
  "time"
  "github.com/dbontr/homelab-new/system/approval"
  "github.com/dbontr/homelab-new/system/calendar"
+ "github.com/dbontr/homelab-new/system/books"
  "github.com/dbontr/homelab-new/system/devices"
  "github.com/dbontr/homelab-new/system/media"
+ "github.com/dbontr/homelab-new/system/observability"
  "github.com/dbontr/homelab-new/system/profiles"
  "github.com/dbontr/homelab-new/system/recipes"
  "github.com/dbontr/homelab-new/system/session"
  "github.com/dbontr/homelab-new/system/store"
 )
 type Backend struct { Name string; URL string; Token string }
-type Server struct { db *store.Store; token string; backend []Backend; client *http.Client; calendarURL string; gate *approval.Gate; allowedOrigins map[string]struct{}; media *media.Client; deviceCatalog *devices.Catalog; nodeCatalog *devices.NodeCatalog; profiles *profiles.Registry; recipes *recipes.Store; sessions *session.Manager; inflight chan struct{} }
+type Server struct { db *store.Store; token string; backend []Backend; client *http.Client; calendarURL string; gate *approval.Gate; allowedOrigins map[string]struct{}; media *media.Client; deviceCatalog *devices.Catalog; nodeCatalog *devices.NodeCatalog; profiles *profiles.Registry; recipes *recipes.Store; sessions *session.Manager; observability *observability.Client; bookCatalog *books.Catalog; inflight chan struct{} }
 
 func New(db *store.Store,token string,backends []Backend)(*Server,error){
  if db==nil||len(token)<32||strings.ContainsAny(token,"\r\n\t"){return nil,errors.New("store and a strong access token are required")}
@@ -41,6 +43,7 @@ func New(db *store.Store,token string,backends []Backend)(*Server,error){
 func(s *Server) SetDeviceCatalog(catalog *devices.Catalog) { s.deviceCatalog = catalog }
 func(s *Server) SetNodeCatalog(catalog *devices.NodeCatalog) { s.nodeCatalog = catalog }
 func(s *Server) SetProfiles(registry *profiles.Registry) { s.profiles = registry }
+func(s *Server) SetBookCatalog(catalog *books.Catalog) { s.bookCatalog = catalog }
 func(s *Server) SetSessions(manager *session.Manager) { s.sessions = manager }
 func(s *Server) SetCalendarURL(raw string)error{
  if err:=calendar.ValidateURL(raw);err!=nil{return err}
@@ -98,7 +101,13 @@ func(s *Server) Handler()http.Handler{
  mux.HandleFunc("GET /v1/groceries",s.recipeGroceries)
  mux.HandleFunc("GET /v1/groceries/board",s.groceryBoard)
  mux.HandleFunc("PUT /v1/groceries/items/{key}",s.groceryUpdate)
+ mux.HandleFunc("GET /v1/activity",s.uiActivity)
+ mux.HandleFunc("GET /v1/resources/{kind}/{id}",s.uiResource)
  mux.HandleFunc("GET /v1/workspace/nodes",s.uiComputeNodes)
+ for _,path:=range []string{"/v1/monitoring/summary","/v1/monitoring/targets",
+   "/v1/monitoring/alerts","/v1/monitoring/series","/v1/monitoring/logs"} {
+  mux.HandleFunc("GET "+path,s.uiMonitoring)
+ }
  mux.HandleFunc("POST /mcp",s.mcp)
  mux.HandleFunc("GET /v1/software",s.softwareLibrary)
  mux.HandleFunc("GET /v1/tools",func(w http.ResponseWriter,r *http.Request) {
@@ -118,13 +127,20 @@ func(s *Server) Handler()http.Handler{
  mux.HandleFunc("PUT /v1/rules/{key}",s.rules)
  mux.HandleFunc("GET /v1/recommendations",s.recommendations)
  mux.HandleFunc("GET /v1/reports/weekly",s.weekly)
+ mux.HandleFunc("GET /v1/planning/week",s.uiWeekPlan)
+ mux.HandleFunc("GET /v1/planning/review",s.uiTaskReview)
  mux.HandleFunc("GET /v1/calendar",s.calendarEvents)
+ mux.HandleFunc("GET /v1/calendar/occurrences",s.calendarOccurrences)
  mux.HandleFunc("GET /v1/devices",func(w http.ResponseWriter,_ *http.Request){writeJSON(w,200,s.deviceCatalog.List())})
  mux.HandleFunc("GET /v1/nodes",func(w http.ResponseWriter,_ *http.Request){writeJSON(w,200,s.nodeCatalog.List())})
  mux.HandleFunc("GET /v1/compute/profiles",s.profileRoutes)
  mux.HandleFunc("GET /v1/compute/profiles/{id}",s.profileRoutes)
  mux.HandleFunc("PUT /v1/compute/profiles/{id}",s.profileRoutes)
  mux.HandleFunc("POST /v1/compute/profiles/{id}/plan",s.profilePlanRoute)
+ mux.HandleFunc("GET /v1/books/search",s.bookRoutes)
+ mux.HandleFunc("GET /v1/books/requests",s.bookRoutes)
+ mux.HandleFunc("POST /v1/books/requests",s.bookRoutes)
+ mux.HandleFunc("PUT /v1/books/requests/{id}",s.bookRoutes)
  mux.HandleFunc("GET /v1/media/search",s.mediaSearch)
  mux.HandleFunc("GET /v1/media/requests",s.mediaRequests)
  mux.HandleFunc("POST /v1/media/requests",s.mediaRequests)
@@ -254,6 +270,9 @@ func(s *Server)localTools()[]map[string]any{
   tool("rule_set","Store a personal constraint or preference; only structured rules are mechanically enforced",map[string]any{"key":prop("string"),"text":prop("string"),"kind":prop("string")},"key","text","kind"),
   tool("rule_list","List personal rules",map[string]any{}),
   tool("weekly_report","Summarize recorded task completions",map[string]any{"week_of":prop("string")}),
+  tool("task_review","Inspect recorded deadlines, prerequisites and missing estimates without interpreting absent logs as neglect",map[string]any{"horizon_days":prop("integer")}),
+  tool("activity_recent","List confirmed personal activity from canonical records, without fabricating unobserved actions",map[string]any{"limit":prop("integer")}),
+  tool("resource_get","Resolve a canonical local resource identity from its owning store",map[string]any{"kind":prop("string"),"id":prop("string")},"kind","id"),
   tool("system_status","List configured integrations",map[string]any{}),
   tool("approval_status","Check an administrator approval",map[string]any{"id":prop("string")},"id"),
   tool("device_inventory","List declared hardware access and constraints; this is not an online device probe",map[string]any{}),
@@ -280,7 +299,23 @@ func(s *Server)localTools()[]map[string]any{
   tool("recipe_meal_remove","Remove a scheduled meal",map[string]any{"id":prop("string")},"id"),
   tool("recipe_groceries","Consolidate meal-plan ingredients by name and unit",map[string]any{"start":prop("string"),"end":prop("string")}),
   tool("recipe_nutrition_preview","Preview reported or estimated recipe nutrients without logging consumption",map[string]any{"id":prop("string"),"servings":prop("number")},"id","servings"))}
- if s.calendarURL!=""{tools=append(tools,tool("calendar_feed","Read Proton Calendar event definitions; recurrence rules are not expanded",map[string]any{}))}
+ if s.bookCatalog!=nil {tools=append(tools,
+  tool("book_search","Discover published books through the official Open Library catalog",map[string]any{"query":prop("string")},"query"))}
+ tools=append(tools,
+  tool("book_request_list","List personal book wishes without claiming provider acquisition",map[string]any{"status":prop("string")}),
+  tool("book_request_add","Record an independently identified book wish with format and revision",map[string]any{"request":prop("object")},"request"),
+  tool("book_request_status","Record manual fulfillment or cancellation of a pending book wish",map[string]any{"id":prop("string"),"status":prop("string"),"expected_revision":prop("integer")},"id","status","expected_revision"))
+ if s.calendarURL!=""{tools=append(tools,
+  tool("calendar_feed","Read read-only calendar event definitions",map[string]any{}),
+  tool("calendar_occurrences","Expand supported iCalendar recurrences into a bounded time window with explicit limitations",map[string]any{"start":prop("string"),"end":prop("string")}))}
+ tools=append(tools,tool("weekly_plan","Propose task timeboxes from recorded durations, prerequisites and calendar reservations without changing any records",map[string]any{"from":prop("string"),"daily_minutes":prop("integer"),"start_hour":prop("integer")}))
+ if s.observability!=nil {tools=append(tools,
+  tool("monitoring_summary","Inspect measured CPU, memory, disk, GPU and collector telemetry without inventing missing readings",map[string]any{}),
+  tool("monitoring_targets","Inspect Prometheus collector availability and last scrape reports",map[string]any{}),
+  tool("monitoring_alerts","List Prometheus firing and pending alert rules",map[string]any{}),
+  tool("monitoring_series","Inspect a selected fixed monitoring metric and bounded time range",map[string]any{"metric":prop("string"),"range":prop("string")},"metric"),
+  tool("monitoring_logs","Read a bounded Loki system journal with literal search text",map[string]any{"range":prop("string"),"search":prop("string"),"limit":prop("integer")}))}
+
  if s.media!=nil{tools=append(tools,
   tool("media_search","Search movies and television through Seerr",map[string]any{"query":prop("string")},"query"),
   tool("media_requests","List Seerr media requests",map[string]any{}),
@@ -307,6 +342,9 @@ func(s *Server)toolList(r *http.Request)[]map[string]any{
  return out
 }
 func(s *Server)localTool(ctx context.Context,name string,raw json.RawMessage)(any,error){
+ if strings.HasPrefix(name,"monitoring_"){return s.monitoringTool(ctx,name,raw)}
+ if strings.HasPrefix(name,"book_"){return s.bookTool(ctx,name,raw)}
+ if name=="calendar_occurrences"||name=="weekly_plan"{return s.calendarTool(ctx,name,raw)}
  if strings.HasPrefix(name,"recipe_"){return s.recipeTool(ctx,name,raw)}
  if s.media!=nil&&(name=="media_search"||name=="media_request"||name=="media_requests"){return s.mediaTool(ctx,name,raw)}
  if name=="compute_profile_list"||name=="compute_profile_get"||name=="compute_profile_save"||name=="compute_profile_plan" {return s.profileTool(ctx,name,raw)}
@@ -320,6 +358,8 @@ func(s *Server)localTool(ctx context.Context,name string,raw json.RawMessage)(an
   Text string `json:"text"`
   Kind string `json:"kind"`
   WeekOf string `json:"week_of"`
+  ResourceKind string `json:"kind"`
+  HorizonDays int `json:"horizon_days"`
  }
  if len(raw)>0{if e:=json.Unmarshal(raw,&args);e!=nil{return nil,e}}
  switch name{
@@ -332,6 +372,16 @@ func(s *Server)localTool(ctx context.Context,name string,raw json.RawMessage)(an
  case "rule_set":return s.db.SetRule(args.Key,args.Text,args.Kind)
  case "rule_list":return s.db.Rules(),nil
  case "weekly_report":return s.db.Report(args.WeekOf)
+ case "task_review":
+  n:=args.HorizonDays
+  if n==0{n=7}
+  return s.db.ReviewTasks(time.Now(),n)
+ case "activity_recent":
+  n:=args.Limit
+  if n==0{n=50}
+  if n<1||n>200{return nil,errors.New("activity limit must be 1 through 200")}
+  return s.activity(n,time.Time{}),nil
+ case "resource_get":return s.resource(args.ResourceKind,args.ID)
  case "approval_status":return s.privilegeStatus(args.ID)
  case "device_inventory":return s.deviceCatalog.List(),nil
  case "node_inventory":return s.nodeCatalog.List(),nil

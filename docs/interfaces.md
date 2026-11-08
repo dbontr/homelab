@@ -12,6 +12,9 @@ The Go platform exposes authenticated loopback HTTP endpoints. Native JSON and M
 - GET /v1/recommendations: filter by available time, energy and location; quick mode favors small tasks
 - GET /v1/reports/weekly: recorded completions against the daily minimum and associated goal progress
 - GET /v1/calendar: read-only event definitions from an optional iCalendar sharing link
+- GET /v1/calendar/occurrences: bounded expanded events and recurrence limitations
+- GET /v1/planning/week: advisory weekly allocation of tasks into unoccupied calendar time; never mutates tasks or the calendar
+- GET /v1/monitoring/summary, /series, /targets, /alerts, /logs: owner-authenticated fixed telemetry and journal views from configured local Prometheus and Loki sources
 - GET /v1/devices: declared device inventory and access policy, not live device status
 - GET /v1/nodes: enrolled and agentless node inventory, not live node status
 - GET /v1/software: read the Workspace-backed approved image, software, and program catalogs
@@ -21,10 +24,14 @@ The Go platform exposes authenticated loopback HTTP endpoints. Native JSON and M
 - GET /v1/compute/profiles/{id}?version={n}: read a saved revision, or the latest if no version is supplied
 - PUT /v1/compute/profiles/{id}: save a profile with an exact `expected_version` revision guard
 - POST /v1/compute/profiles/{id}/plan: request advisory Workspace resource planning without reserving resources
+- GET /v1/books/search?q=...: bounded owner-initiated Open Library catalog lookup when explicitly configured
+- GET/POST /v1/books/requests and PUT /v1/books/requests/{id}: private desired-book list and manual fulfillment/cancellation with revision control
+- GET /v1/activity?limit=...: recorded activity derived from canonical personal and recipe data
+- GET /v1/resources/{kind}/{id}: canonical record with stable resource reference and links, read from its owning store
 - GET /v1/media/search: Seerr movie and television search, when configured
 - GET /v1/media/requests and POST /v1/media/requests: list and submit requests
 
-All endpoints other than /healthz require a bearer token supplied through a protected runtime credential file. The server binds to loopback and requires separately authenticated ingress for remote clients.
+All endpoints other than /healthz require authorization. The platform accepts its protected API bearer token or, for an explicitly limited subset of native routes, an authenticated short-lived browser session with Origin and CSRF checks for permitted mutations. Browser sessions cannot call MCP tools or execute arbitrary compute and cluster operations. The server binds to loopback and requires separately authenticated ingress for remote clients.
 
 ## MCP
 
@@ -40,4 +47,4 @@ Reports measure recorded completions. A missing record does not establish inacti
 
 ## Calendar limitations
 
-The iCalendar sharing link is read-only and stored outside Git. The implementation unfolds event definitions, extracts dates, titles, locations, time-zone labels and recurrence rules. It does not expand recurring events, apply recurrence exceptions, or certify that an apparent free period has no commitment. Calendar-aware availability recommendations require full recurrence processing and live acceptance tests.
+The iCalendar sharing link is read-only and stored outside Git. The implementation unfolds event definitions and expands a bounded subset of daily, weekly, monthly and yearly recurrence rules, including exclusions, additional dates and overridden instances. Unsupported recurrence fields, ordinal weekdays and other unavailable interpretations remain limitations rather than assumed free time. Calendar availability is advisory: it does not certify that a time is free of unrecorded commitments. The weekly planner uses task prerequisites, recorded durations and discovered calendar reservations without writing back to either system.

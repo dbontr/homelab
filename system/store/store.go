@@ -62,7 +62,7 @@ type Report struct {
  Goals []GoalProgress `json:"goals"`
  Note string `json:"note"`
 }
-type snapshot struct { Tasks map[string]Task `json:"tasks"`; Goals map[string]Goal `json:"goals"`; Rules map[string]Rule `json:"rules"` }
+type snapshot struct { Tasks map[string]Task `json:"tasks"`; Goals map[string]Goal `json:"goals"`; Rules map[string]Rule `json:"rules"`; BookRequests map[string]BookRequest `json:"book_requests,omitempty"` }
 type Store struct { mu sync.Mutex; path string; zone *time.Location; data snapshot }
 
 func Open(path, timeZone string) (*Store,error) {
@@ -70,7 +70,7 @@ func Open(path, timeZone string) (*Store,error) {
  if timeZone=="" {timeZone="America/Chicago"}
  zone,err:=time.LoadLocation(timeZone);if err!=nil{return nil,err}
  if err=os.MkdirAll(filepath.Dir(path),0700);err!=nil{return nil,err}
- s:=&Store{path:path,zone:zone,data:snapshot{Tasks:map[string]Task{},Goals:map[string]Goal{},Rules:map[string]Rule{}}}
+ s:=&Store{path:path,zone:zone,data:snapshot{Tasks:map[string]Task{},Goals:map[string]Goal{},Rules:map[string]Rule{},BookRequests:map[string]BookRequest{}}}
  raw,err:=os.ReadFile(path)
  if err!=nil&&!errors.Is(err,os.ErrNotExist){return nil,err}
  if err==nil {
@@ -78,14 +78,16 @@ func Open(path, timeZone string) (*Store,error) {
   if s.data.Tasks==nil{s.data.Tasks=map[string]Task{}}
   if s.data.Goals==nil{s.data.Goals=map[string]Goal{}}
   if s.data.Rules==nil{s.data.Rules=map[string]Rule{}}
+  if s.data.BookRequests==nil{s.data.BookRequests=map[string]BookRequest{}}
  }
  return s,nil
 }
 func clone(in snapshot) snapshot {
- out:=snapshot{Tasks:make(map[string]Task,len(in.Tasks)),Goals:make(map[string]Goal,len(in.Goals)),Rules:make(map[string]Rule,len(in.Rules))}
+ out:=snapshot{Tasks:make(map[string]Task,len(in.Tasks)),Goals:make(map[string]Goal,len(in.Goals)),Rules:make(map[string]Rule,len(in.Rules)),BookRequests:make(map[string]BookRequest,len(in.BookRequests))}
  for k,v:=range in.Tasks{out.Tasks[k]=v}
  for k,v:=range in.Goals{out.Goals[k]=v}
  for k,v:=range in.Rules{out.Rules[k]=v}
+ for k,v:=range in.BookRequests{v.Authors=append([]string(nil),v.Authors...);out.BookRequests[k]=v}
  return out
 }
 func (s *Store) save(next snapshot) error {

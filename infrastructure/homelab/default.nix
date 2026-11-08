@@ -26,6 +26,10 @@
 
   homelab.native.exporters.enable = true;
   homelab.native.applications.monitoring.enable = true;
+  services.homelabPlatform.monitoring = {
+    prometheusURL = "http://127.0.0.1:9090";
+    lokiURL = "http://127.0.0.1:3100";
+  };
 
   homelab.native.downloads.enable = true;
   homelab.native.applications.media.enable = true;

@@ -47,19 +47,31 @@ func (s *Server) sessionReadAllowed(r *http.Request) bool {
 		"/v1/rules":true,
 		"/v1/recommendations":true,
 		"/v1/reports/weekly":true,
+        "/v1/planning/week":true,
+        "/v1/planning/review":true,
 		"/v1/calendar":true,
+        "/v1/calendar/occurrences":true,
 		"/v1/compute/profiles":true,
 		"/v1/software":true,
-		"/v1/media/search":true,
+		"/v1/books/search":true,
+        "/v1/books/requests":true,
+        "/v1/media/search":true,
 		"/v1/media/requests":true,
 		"/v1/tools":true,
 		"/v1/workspace/projects":true,
 		"/v1/workspace/nodes":true,
+        "/v1/activity":true,
+        "/v1/monitoring/summary":true,
+        "/v1/monitoring/targets":true,
+        "/v1/monitoring/alerts":true,
+        "/v1/monitoring/series":true,
+        "/v1/monitoring/logs":true,
 	}
 	if !permitted[p] && !strings.HasPrefix(p,"/v1/compute/profiles/") &&
     !(strings.HasPrefix(p,"/v1/recipes/") && ((len(strings.Split(p,"/"))==5 && strings.HasPrefix(p,"/v1/recipes/images/")) ||
       (len(strings.Split(p,"/"))==4 && p!="/v1/recipes/import" && p!="/v1/recipes/parse")||
       (len(strings.Split(p,"/"))==5 && (strings.HasSuffix(p,"/nutrition") || strings.HasSuffix(p,"/history"))))) &&
+    !(strings.HasPrefix(p,"/v1/resources/") && len(strings.Split(p,"/"))==5) &&
     !(strings.HasPrefix(p,"/v1/workspace/projects/") && len(strings.Split(p,"/"))==6 && (strings.HasSuffix(p,"/jobs")||strings.HasSuffix(p,"/workspaces"))) &&
     !(strings.HasPrefix(p,"/v1/learning/sessions/") && (len(strings.Split(p,"/"))==5 || len(strings.Split(p,"/"))==6 && strings.HasSuffix(p,"/pending"))) {
 		return false

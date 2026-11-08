@@ -10,6 +10,7 @@ controller:
   publicURL: ""
   allowedHosts: "pwm-controller,pwm-controller.pwm-system.svc.cluster.local"
   allowedOrigins: "https://pwm-controller.pwm-system.svc.cluster.local"
+  environmentRegistry: ""
   databaseSize: 50Gi
   storageClass: ""
   nodeSelector: {}
@@ -59,6 +60,10 @@ worker:
   deviceManifestConfigMap: ""
   gpuRuntimeClassName: ""
   workspaceImagePullSecret: ""
+  builder:
+    image: ""
+    registry: ""
+    authSecretName: ""
   resources:
     requests:
       cpu: 250m

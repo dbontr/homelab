@@ -21,6 +21,7 @@ let
       };
       allowedHosts = cfg.allowedHosts;
       allowedOrigins = cfg.allowedOrigins;
+      environmentRegistry = cfg.environmentRegistry;
       publicURL = cfg.publicURL;
       githubPATSecretName = cfg.githubPATSecretName;
       access = {
@@ -56,6 +57,8 @@ let
       deviceManifestConfigMap = worker.deviceManifestConfigMap;
       gpuRuntimeClassName = worker.gpuRuntimeClassName;
       allowedImages = lib.concatStringsSep "," worker.allowedImages;
+      workspaceImagePullSecret = worker.workspaceImagePullSecret;
+      builder = worker.builder;
     };
     quota = worker.quota;
   });
@@ -138,6 +141,22 @@ let
         default = [ "debian:bookworm-slim" ];
         description = "Permitted workload images. The runtime enforces this allowlist.";
       };
+      workspaceImagePullSecret = lib.mkOption {
+        type = lib.types.str;
+        default = "";
+        description = "Registry pull Secret in the worker's project namespace.";
+      };
+      builder = lib.mkOption {
+        type = lib.types.submodule {
+          options = {
+            image = lib.mkOption { type = lib.types.str; default = ""; description = "Digest-pinned rootless OCI builder image."; };
+            registry = lib.mkOption { type = lib.types.str; default = ""; description = "Approved HTTPS registry and repository prefix for built images."; };
+            authSecretName = lib.mkOption { type = lib.types.str; default = ""; description = "Existing dockerconfigjson Secret in the project namespace."; };
+          };
+        };
+        default = {};
+        description = "Optional registry-backed image builder for this worker.";
+      };
     };
   });
 in {
@@ -180,6 +199,11 @@ in {
       type = lib.types.str;
       default = "";
       description = "Preprovisioned controller-only Kubernetes Secret containing a GitHub token key.";
+    };
+    environmentRegistry = lib.mkOption {
+      type = lib.types.str;
+      default = "";
+      description = "Optional approved HTTPS registry and repository prefix for environment images.";
     };
     access = {
       issuer = lib.mkOption {
@@ -255,6 +279,16 @@ in {
       {
         assertion = cfg.workers == {} || imageIsPinned cfg.workerImage;
         message = "Enabled Workspace workers require a digest-pinned worker image.";
+      }
+      {
+        assertion = lib.all (worker:
+          worker.builder.image == "" ||
+            (imageIsPinned worker.builder.image &&
+              worker.builder.registry != "" &&
+              worker.builder.registry == cfg.environmentRegistry &&
+              worker.builder.authSecretName != "")
+        ) (builtins.attrValues cfg.workers);
+        message = "Workspace builders require a digest-pinned image, a credential Secret and the controller's OCI registry prefix.";
       }
       {
         assertion = cfg.backupInterval == "" ||

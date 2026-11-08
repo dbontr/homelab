@@ -11,8 +11,10 @@ import (
     "strings"
     "time"
 
+    "github.com/dbontr/homelab-new/system/books"
     "github.com/dbontr/homelab-new/system/devices"
     "github.com/dbontr/homelab-new/system/media"
+    "github.com/dbontr/homelab-new/system/observability"
     "github.com/dbontr/homelab-new/system/profiles"
     "github.com/dbontr/homelab-new/system/recipes"
     "github.com/dbontr/homelab-new/system/store"
@@ -45,6 +47,17 @@ func main(){
         v,enabled,e:=configuredBackend(b.name,b.upper);if e!=nil{log.Fatal(e)};if enabled{backends=append(backends,v)}
     }
     server,e:=transport.New(db,token,backends);if e!=nil{log.Fatal(e)}
+    prom,loki:=os.Getenv("HOMELAB_PROMETHEUS_URL"),os.Getenv("HOMELAB_LOKI_URL")
+    if prom!=""||loki!=""{
+        monitoring,err:=observability.New(prom,loki)
+        if err!=nil{log.Fatal(err)}
+        server.SetObservability(monitoring)
+    }
+    if path:=os.Getenv("HOMELAB_BOOKS_CONTACT_FILE");path!=""{
+        contact,e:=os.ReadFile(path);if e!=nil{log.Fatal(e)}
+        catalog,e:=books.New(strings.TrimSpace(string(contact)));if e!=nil{log.Fatal(e)}
+        server.SetBookCatalog(catalog)
+    }
     if raw:=os.Getenv("HOMELAB_ALLOWED_ORIGINS");raw!=""{
         if err:=server.SetAllowedOrigins(strings.Split(raw,","));err!=nil{log.Fatal(err)}
     }

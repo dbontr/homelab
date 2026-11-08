@@ -17,6 +17,10 @@ type Event struct {
  Location string `json:"location,omitempty"`
  Recurrence string `json:"recurrence,omitempty"`
  TimeZone string `json:"time_zone,omitempty"`
+ Excluded []string `json:"excluded,omitempty"`
+ Additional []string `json:"additional,omitempty"`
+ RecurrenceID string `json:"recurrence_id,omitempty"`
+ Status string `json:"status,omitempty"`
 }
 type Feed struct {
  Events []Event `json:"events"`
@@ -82,6 +86,10 @@ func Parse(raw string)(Feed,error){
   case "DTEND":current.End=value
   case "LOCATION":current.Location=decodeText(value)
   case "RRULE":current.Recurrence=value;feed.RecurrencesUnexpanded=true
+  case "EXDATE":current.Excluded=append(current.Excluded,strings.Split(value,",")...);feed.RecurrencesUnexpanded=true
+  case "RDATE":current.Additional=append(current.Additional,strings.Split(value,",")...);feed.RecurrencesUnexpanded=true
+  case "RECURRENCE-ID":current.RecurrenceID=value;feed.RecurrencesUnexpanded=true
+  case "STATUS":current.Status=value
   }
  }
  return feed,nil
