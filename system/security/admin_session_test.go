@@ -226,11 +226,14 @@ func TestCorruptStateOrBroadPermissionsFailClosed(t *testing.T) {
 
 func TestOwnerAndClientEndpointsAreSeparated(t *testing.T) {
 	a, key, now := testSessionManager(t)
+ verifier,assertion,principal:=accessFixture(t,"gateway-aud")
+ if err:=a.SetAccessVerifier(verifier,"gateway-aud");err!=nil{t.Fatal(err)}
 	owner := a.OwnerHandler()
 	gateway := a.ClientHandler()
 	login := `{"password":"` + testOwnerPassword + `","totp":"` + TOTPCode(key, now.Unix()/30) + `"}`
 	call := func(h http.Handler, method, path, body string) *httptest.ResponseRecorder {
 		r := httptest.NewRequest(method, path, strings.NewReader(body))
+  r.Header.Set("Cf-Access-Jwt-Assertion",assertion)
 		if body != "" {
 			r.Header.Set("Content-Type", "application/json")
 		}
@@ -244,6 +247,9 @@ func TestOwnerAndClientEndpointsAreSeparated(t *testing.T) {
 	if w := call(owner, "POST", "/v1/session", login); w.Code != 200 || strings.Contains(w.Body.String(), testOwnerPassword) {
 		t.Fatalf("owner login failed or disclosed password: %d", w.Code)
 	}
+ *now=now.Add(30*time.Second)
+ if _,err:=a.AuthenticateFor(principal,testOwnerPassword,TOTPCode(key,now.Unix()/30));err!=nil{t.Fatal(err)}
+
 	request := `{"operation":"workspace__workspace_create","target":"jupiter","arguments":{"cpu":2}}`
 	if w := call(owner, "POST", "/v1/authorize", request); w.Code != http.StatusNotFound {
 		t.Fatalf("owner could authorize without client channel: %d", w.Code)
@@ -284,7 +290,10 @@ func TestConcurrentConfirmationIsSingleUse(t *testing.T) {
 
 func TestUnixGatewaySocket(t *testing.T) {
 	a, key, now := testSessionManager(t)
-	loginAt(t, a, key, now)
+ verifier,assertion,principal:=accessFixture(t,"gateway-aud")
+ if err:=a.SetAccessVerifier(verifier,"gateway-aud");err!=nil{t.Fatal(err)}
+ if _,err:=a.AuthenticateFor(principal,testOwnerPassword,TOTPCode(key,now.Unix()/30));err!=nil{t.Fatal(err)}
+ identityCtx:=WithAccessAssertion(context.Background(),assertion)
 	dir := privateDir(t)
 	ownerPath := filepath.Join(dir, "owner.sock")
 	clientPath := filepath.Join(dir, "client.sock")
@@ -300,7 +309,7 @@ func TestUnixGatewaySocket(t *testing.T) {
 	for i := 0; i < 200; i++ {
 		client, err := NewAdminClient(clientPath)
 		if err == nil {
-			_, err = client.Status(context.Background())
+			_, err = client.Status(identityCtx)
 			if err == nil {
 				c = client
 				break
@@ -325,11 +334,11 @@ func TestUnixGatewaySocket(t *testing.T) {
 	if info.Mode().Perm() != 0660 {
 		t.Fatalf("gateway socket mode %v", info.Mode().Perm())
 	}
-	decision, err := c.Authorize(context.Background(), "workspace__workspace_create", "jupiter", json.RawMessage(`{"cpu":2}`))
+	decision, err := c.Authorize(identityCtx, "workspace__workspace_create", "jupiter", json.RawMessage(`{"cpu":2}`))
 	if err != nil || !decision.Allowed {
 		t.Fatalf("client was denied: %+v %v", decision, err)
 	}
-	if err := c.Revoke(context.Background()); err != nil {
+	if err := c.Revoke(identityCtx); err != nil {
 		t.Fatal(err)
 	}
 	if a.Status().Active {

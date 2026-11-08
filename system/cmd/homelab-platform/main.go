@@ -19,6 +19,7 @@ import (
     "github.com/dbontr/homelab-new/system/recipes"
     "github.com/dbontr/homelab-new/system/store"
     "github.com/dbontr/homelab-new/system/security"
+    "github.com/dbontr/homelab-new/system/privileged"
     "github.com/dbontr/homelab-new/system/session"
     "encoding/json"
     "github.com/dbontr/homelab-new/system/transport"
@@ -108,6 +109,11 @@ func main(){
         }
     }else{
         serveApprovals(server,os.Getenv("HOMELAB_APPROVAL_SOCKET"))
+    }
+    if socket:=os.Getenv("HOMELAB_EXECUTOR_SOCKET");socket!=""{
+        if os.Getenv("HOMELAB_SECURITY_SOCKET")==""{log.Fatal("executor requires independent owner authorization")}
+        client,err:=privileged.NewClient(socket);if err!=nil{log.Fatal(err)}
+        server.SetExecutorClient(client)
     }
     addr:=os.Getenv("HOMELAB_LISTEN_ADDR");if addr==""{addr="127.0.0.1:8300"}
     host,_,e:=net.SplitHostPort(addr);if e!=nil{log.Fatal(e)}

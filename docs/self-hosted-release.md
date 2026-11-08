@@ -8,13 +8,30 @@ Use an operator-controlled host with the Go toolchains required by the four Go m
 
 `bash scripts/stage-release.sh /srv/releases/homelab/<unique-release-id>`
 
-The script builds the eight Go executables from local sources, packages the Dioxus web assets, and writes `SHA256SUMS` and `RELEASE`. It uses an unpublished temporary directory and renames it on completion. It does not alter NixOS generations, start services, publish images, stop the existing homepage, or touch application databases.
+The script builds the ten Go executables from local sources, packages the Dioxus web assets, and writes `SHA256SUMS` and `RELEASE`. It uses an unpublished temporary directory and renames it on completion. It does not alter NixOS generations, start services, publish images, stop the existing homepage, or touch application databases.
 
 Workspace toolchain environments can be built locally with:
 
 `bash system/compute/scripts/build-toolchain-image.sh <approved-image-reference> --load`
 
 Use `--push` only when an operator has configured an approved registry, narrow package-write credential and verified image digest. Rootless BuildKit Kubernetes jobs are separately opt-in in the Workspace module. Publishing an image does not enroll it into a worker or activate a Kubernetes release.
+
+## Guarded NixOS generation controller
+
+The local `homelab-releasectl` wrapper is installed only when `services.homelabExecutor.enable` is configured. It executes as a trusted local administrator and uses the same private release journal as the independent executor:
+
+```sh
+sudo homelab-releasectl stage EXACT_40_CHARACTER_COMMIT
+sudo homelab-releasectl status
+sudo homelab-releasectl activate STAGED_RELEASE_ID
+sudo homelab-releasectl recover
+```
+
+The staging command validates the exact checked-out Git commit and requires a clean working tree. It uses `nix build --offline --no-link --print-out-paths` to obtain the local host's `config.system.build.toplevel` store path. No arbitrary path can be selected by an MCP call. All generation records are kept in a private, process-locked directory with fsynced atomic updates.
+
+Activation records the previous NixOS system before changing the profile. It switches to the staged generation, probes exact allowlisted systemd services, and restores the previous generation when the switch or a health check fails. A crash during activation leaves an interrupted journal that must be handled by `recover` before another activation. The controller is local-host scoped; independent staging and acceptance are required for each compute node.
+
+The executor permits only exact local service restart names and staging IDs. Its remote activation operation is separately disabled unless the operator enables `services.homelabExecutor.allowReleaseActivation`. This option, the signed owner identity, and a destructive-operation confirmation are all required before a ChatGPT-triggered activation is considered. Routing, firewall, media and Kubernetes-critical services are excluded from automated restart allowlists. Network changes and Saturn routing releases require a tested out-of-band recovery plan.
 
 ## Activation
 

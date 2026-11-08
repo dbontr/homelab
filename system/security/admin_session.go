@@ -78,6 +78,7 @@ type PendingConfirmation struct {
 }
 
 type activeSession struct {
+	principal string
 	id           string
 	created      time.Time
 	lastActivity time.Time
@@ -101,6 +102,8 @@ type AdminSessions struct {
 	mu        sync.Mutex
 	owner     string
 	client    string
+	access *AccessVerifier
+	gatewayAudience string
 	verifier  PassphraseRecord
 	totpKey   []byte
 	stateFile string
@@ -176,7 +179,7 @@ func dangerousOperation(name string) bool {
 	tokens := strings.FieldsFunc(strings.ToLower(name), func(r rune) bool { return r == '.' || r == '_' || r == '-' || r == '/' })
 	for _, word := range tokens {
 		switch word {
-		case "delete", "destroy", "purge", "revoke", "rotate", "reset", "remove", "wipe", "drop", "format", "shutdown", "reboot", "prune", "firewall", "router", "network", "credential", "credentials", "trust", "rollback", "reinstall", "merge", "deploy", "apply", "force", "configure", "cleanup", "restore", "grant", "update", "patch":
+		case "delete", "destroy", "purge", "revoke", "rotate", "reset", "remove", "wipe", "drop", "format", "shutdown", "reboot", "restart", "activate", "switch", "prune", "firewall", "router", "network", "credential", "credentials", "trust", "rollback", "reinstall", "merge", "deploy", "apply", "force", "configure", "cleanup", "restore", "grant", "update", "patch":
 			return true
 		}
 	}
@@ -277,7 +280,33 @@ func randomID() (string, error) {
 	return hex.EncodeToString(data), nil
 }
 
+// SetAccessVerifier installs immutable trust configuration before serving clients.
+// A missing verifier always denies gateway-origin authorization.
+func (a *AdminSessions) SetAccessVerifier(v *AccessVerifier,audience string) error {
+ if v==nil||audience==""||len(audience)>256{return errors.New("independent Access verifier and audience required")}
+ a.mu.Lock()
+ defer a.mu.Unlock()
+ a.access=v
+ a.gatewayAudience=audience
+ return nil
+}
+
+func (a *AdminSessions) VerifiedGatewayPrincipal(assertion string)(string,error){
+ a.mu.Lock()
+ verifier,audience:=a.access,a.gatewayAudience
+ a.mu.Unlock()
+ if verifier==nil{return "",errors.New("Access verifier unavailable")}
+ return verifier.Verify(assertion,audience)
+}
+
 func (a *AdminSessions) Authenticate(password, code string) (SessionStatus, error) {
+ return a.AuthenticateFor("local-operator",password,code)
+}
+
+// AuthenticateFor binds a browser login to a separately verified human identity.
+// The principal is derived from a validated signed assertion, never a request field.
+func (a *AdminSessions) AuthenticateFor(principal,password, code string) (SessionStatus, error) {
+ if principal==""||len(principal)>1024{return SessionStatus{},errors.New("verified owner identity required")}
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	now := a.now().UTC()
@@ -288,7 +317,7 @@ func (a *AdminSessions) Authenticate(password, code string) (SessionStatus, erro
 	if err != nil {
 		return SessionStatus{}, err
 	}
-	a.session = &activeSession{id: id, created: now, lastActivity: now}
+	a.session = &activeSession{principal:principal,id: id, created: now, lastActivity: now}
 	a.pending = make(map[string]confirmation)
 	return a.statusLocked(now), nil
 }
@@ -316,9 +345,37 @@ func (a *AdminSessions) statusLocked(now time.Time) SessionStatus {
 }
 
 func (a *AdminSessions) Status() SessionStatus {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	return a.statusLocked(a.now().UTC())
+ a.mu.Lock()
+ defer a.mu.Unlock()
+ return a.statusLocked(a.now().UTC())
+}
+
+func (a *AdminSessions) StatusFor(principal string) SessionStatus {
+ a.mu.Lock()
+ defer a.mu.Unlock()
+ status:=a.statusLocked(a.now().UTC())
+ if !status.Active||principal==""||a.session.principal!=principal{return SessionStatus{Active:false}}
+ return status
+}
+
+func (a *AdminSessions) RevokeFor(principal string) bool {
+ a.mu.Lock()
+ defer a.mu.Unlock()
+ if !a.validSession(a.now().UTC())||principal==""||a.session.principal!=principal{return false}
+ a.session=nil
+ a.pending=make(map[string]confirmation)
+ return true
+}
+
+func (a *AdminSessions) PendingFor(principal string) []PendingConfirmation {
+ a.mu.Lock()
+ defer a.mu.Unlock()
+ now:=a.now().UTC()
+ if !a.validSession(now)||principal==""||a.session.principal!=principal{return nil}
+ a.pruneConfirmations(now)
+ out:=make([]PendingConfirmation,0,len(a.pending))
+ for _,p:=range a.pending{out=append(out,p.PendingConfirmation)}
+ return out
 }
 
 // Revoke immediately invalidates the entire session and every confirmation.
@@ -355,14 +412,19 @@ func (a *AdminSessions) pruneConfirmations(now time.Time) {
 
 // Authorize revalidates the live session for every attempt. Confirmation
 // approvals are consumed atomically by an exactly matching request.
-func (a *AdminSessions) Authorize(client, operation, target string, args json.RawMessage) Authorization {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	now := a.now().UTC()
+func (a *AdminSessions) Authorize(client,operation,target string,args json.RawMessage) Authorization{
+ return a.AuthorizeFor("local-operator",client,operation,target,args)
+}
+
+// AuthorizeFor checks the identity bound to the active session on each call.
+func (a *AdminSessions) AuthorizeFor(principal,client,operation,target string,args json.RawMessage) Authorization {
+ a.mu.Lock()
+ defer a.mu.Unlock()
+ now:=a.now().UTC()
 	if client != a.client {
 		return Authorization{Reason: "unauthorized client"}
 	}
-	if !a.validSession(now) {
+	if !a.validSession(now)||principal==""||a.session.principal!=principal {
 		return Authorization{Reason: "owner authentication required"}
 	}
 	rule, ok := a.rules[operation]
@@ -418,11 +480,16 @@ func (a *AdminSessions) Authorize(client, operation, target string, args json.Ra
 
 // Confirm requires a second owner-only password and a fresh, unreplayed TOTP.
 // The client cannot issue or confirm its own challenges.
-func (a *AdminSessions) Confirm(id, password, code string) error {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	now := a.now().UTC()
-	if !a.validSession(now) {
+func (a *AdminSessions) Confirm(id,password,code string) error{
+ return a.ConfirmFor("local-operator",id,password,code)
+}
+
+// ConfirmFor requires a challenge belonging to the verified browser principal.
+func (a *AdminSessions) ConfirmFor(principal,id,password,code string) error {
+ a.mu.Lock()
+ defer a.mu.Unlock()
+ now:=a.now().UTC()
+	if !a.validSession(now)||principal==""||a.session.principal!=principal {
 		return errors.New("owner authentication required")
 	}
 	a.pruneConfirmations(now)

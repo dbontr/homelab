@@ -102,28 +102,36 @@ func (a *AdminSessions) OwnerHandler() http.Handler {
 
 // ClientHandler grants decisions only for fixed, administrator-configured
 // operation/resource pairs. A session ID is never passed to the gateway.
+// ClientHandler accepts only cryptographically verified owner assertions.
+// A gateway process cannot impersonate an owner by sending identity text.
 func (a *AdminSessions) ClientHandler() http.Handler {
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /v1/session", func(w http.ResponseWriter, _ *http.Request) { respondJSON(w, 200, a.Status()) })
-	mux.HandleFunc("DELETE /v1/session", func(w http.ResponseWriter, _ *http.Request) {
-		a.Revoke()
-		log.Print("security audit owner_session revoked")
-		respondJSON(w, 200, SessionStatus{Active: false})
-	})
-	mux.HandleFunc("POST /v1/authorize", func(w http.ResponseWriter, r *http.Request) {
-		var input struct {
-			Operation string          `json:"operation"`
-			Target    string          `json:"target"`
-			Arguments json.RawMessage `json:"arguments"`
-		}
-		if err := readJSON(r, &input); err != nil {
-			http.Error(w, "invalid request", 400)
-			return
-		}
-		decision := a.Authorize(a.client, input.Operation, input.Target, input.Arguments)
-		respondJSON(w, 200, decision)
-	})
-	return privateHeaders(mux)
+ mux:=http.NewServeMux()
+ authenticated:=func(w http.ResponseWriter,r *http.Request)(string,bool){
+  principal,err:=a.VerifiedGatewayPrincipal(r.Header.Get("Cf-Access-Jwt-Assertion"))
+  if err!=nil{http.Error(w,"independent owner identity required",http.StatusForbidden);return "",false}
+  return principal,true
+ }
+ mux.HandleFunc("GET /v1/session",func(w http.ResponseWriter,r *http.Request){
+  principal,ok:=authenticated(w,r);if !ok{return}
+  respondJSON(w,200,a.StatusFor(principal))
+ })
+ mux.HandleFunc("DELETE /v1/session",func(w http.ResponseWriter,r *http.Request){
+  principal,ok:=authenticated(w,r);if !ok{return}
+  if !a.RevokeFor(principal){http.Error(w,"owner session unavailable",http.StatusForbidden);return}
+  log.Print("security audit owner_session revoked")
+  respondJSON(w,200,SessionStatus{Active:false})
+ })
+ mux.HandleFunc("POST /v1/authorize",func(w http.ResponseWriter,r *http.Request){
+  principal,ok:=authenticated(w,r);if !ok{return}
+  var input struct{
+   Operation string `json:"operation"`
+   Target string `json:"target"`
+   Arguments json.RawMessage `json:"arguments"`
+  }
+  if err:=readJSON(r,&input);err!=nil{http.Error(w,"invalid request",400);return}
+  respondJSON(w,200,a.AuthorizeFor(principal,a.client,input.Operation,input.Target,input.Arguments))
+ })
+ return privateHeaders(mux)
 }
 
 // ServeSockets starts a private owner channel and a separate gateway channel.
@@ -235,6 +243,9 @@ func (c *AdminClient) request(ctx context.Context, method, path string, input, o
 	if err != nil {
 		return err
 	}
+ if assertion,ok:=ctx.Value(accessAssertionContextKey{}).(string);ok&&assertion!=""{
+  req.Header.Set("Cf-Access-Jwt-Assertion",assertion)
+ }
 	if input != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
@@ -261,4 +272,15 @@ func (c *AdminClient) Status(ctx context.Context) (SessionStatus, error) {
 func (c *AdminClient) Revoke(ctx context.Context) error {
 	var status SessionStatus
 	return c.request(ctx, http.MethodDelete, "/v1/session", nil, &status)
+}
+
+// WithAccessAssertion keeps the signed identity out of tool parameters and
+// forwards it only to the independent security service for verification.
+type accessAssertionContextKey struct{}
+func WithAccessAssertion(ctx context.Context,assertion string)context.Context{
+ return context.WithValue(ctx,accessAssertionContextKey{},assertion)
+}
+func AccessAssertion(ctx context.Context)string{
+ assertion,_:=ctx.Value(accessAssertionContextKey{}).(string)
+ return assertion
 }

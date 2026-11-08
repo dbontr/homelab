@@ -1,4 +1,4 @@
-{ ... }:
+{ config, lib, ... }:
 let
   streamProxy = ''
     proxy_http_version 1.1;
@@ -27,15 +27,23 @@ in
       client_max_body_size 64m;
     '';
 
-    locations."= /workspace".extraConfig = workspaceProxy "mcp";
-    locations."= /adaptive-teaching".extraConfig = streamProxy + ''
-      proxy_pass http://127.0.0.1:8200/mcp;
-      proxy_set_header Host 127.0.0.1:8200;
-    '';
-    locations."= /personal-health".extraConfig = streamProxy + ''
-      proxy_pass http://127.0.0.1:8201/mcp;
-      proxy_set_header Host 127.0.0.1:8201;
-    '';
-    locations."/".return = "404";
+    locations = {
+      "= /workspace".extraConfig = workspaceProxy "mcp";
+      "= /adaptive-teaching".extraConfig = streamProxy + ''
+        proxy_pass http://127.0.0.1:8200/mcp;
+        proxy_set_header Host 127.0.0.1:8200;
+      '';
+      "= /personal-health".extraConfig = streamProxy + ''
+        proxy_pass http://127.0.0.1:8201/mcp;
+        proxy_set_header Host 127.0.0.1:8201;
+      '';
+      "/".return = "404";
+    } // lib.optionalAttrs config.services.homelabPlatform.enable {
+      "= /platform".extraConfig = streamProxy + ''
+        proxy_pass http://127.0.0.1:8300/mcp;
+        proxy_set_header Host 127.0.0.1:8300;
+        proxy_set_header Cf-Access-Jwt-Assertion $http_cf_access_jwt_assertion;
+      '';
+    };
   };
 }

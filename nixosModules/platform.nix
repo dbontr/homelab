@@ -93,6 +93,11 @@ in
       default = null;
       description = "Exact protected HTTPS origin where the owner signs in; the MCP receives no credentials.";
     };
+    executorSocket = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "Narrow Unix socket of the independent credential-owning local executor.";
+    };
     securityClientSocket = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
       default = null;
@@ -134,6 +139,11 @@ in
         message = "Monitoring sources must use loopback HTTP.";
       }
       {
+        assertion = cfg.executorSocket == null ||
+          (cfg.securityClientSocket != null && cfg.integrations.workspace.tokenFile == null);
+        message = "Independent executor requires separate security authorization and no Workspace root bearer credential in the gateway.";
+      }
+      {
         assertion = cfg.securityLoginURL == null || (cfg.securityClientSocket != null && lib.hasPrefix "https://" cfg.securityLoginURL);
         message = "Browser authentication requires an HTTPS origin and independent security client socket.";
       }
@@ -171,6 +181,8 @@ in
         HOMELAB_SECURITY_SOCKET = cfg.securityClientSocket;
       } // lib.optionalAttrs (cfg.securityLoginURL != null) {
         HOMELAB_SECURITY_LOGIN_URL = cfg.securityLoginURL;
+      } // lib.optionalAttrs (cfg.executorSocket != null) {
+        HOMELAB_EXECUTOR_SOCKET = cfg.executorSocket;
       } // lib.optionalAttrs (cfg.books.contactFile != null) {
         HOMELAB_BOOKS_CONTACT_FILE = "/run/credentials/homelab-platform.service/books_contact";
       } // lib.optionalAttrs (cfg.consolePassphraseFile != null) {
@@ -196,7 +208,8 @@ in
       serviceConfig = {
         Type = "simple";
         DynamicUser = true;
-        SupplementaryGroups = lib.optional (cfg.securityClientSocket != null) "homelab-security-client";
+        SupplementaryGroups = lib.optional (cfg.securityClientSocket != null) "homelab-security-client"
+          ++ lib.optional (cfg.executorSocket != null) "homelab-executor-client";
         StateDirectory = "homelab-platform";
         RuntimeDirectory = "homelab-platform";
         RuntimeDirectoryMode = "0700";

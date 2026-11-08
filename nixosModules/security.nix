@@ -26,6 +26,28 @@ in
       default = null;
       description = "Private path containing the Base32 TOTP secret.";
     };
+    access = {
+      issuer = lib.mkOption {
+        type = lib.types.str;
+        default = "";
+        description = "Expected Cloudflare Access issuer.";
+      };
+      gatewayAudience = lib.mkOption {
+        type = lib.types.str;
+        default = "";
+        description = "Audience of the authenticated gateway application.";
+      };
+      ownerEmailFile = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Protected owner identity file; never loaded into the MCP.";
+      };
+      jwksFile = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Pinned issuer signing JWKS file, updated through the trusted release channel.";
+      };
+    };
     browser = {
       enable = lib.mkEnableOption "owner-only HTTPS browser login reached through an independently protected ingress";
       hostname = lib.mkOption {
@@ -62,6 +84,15 @@ in
         message = "Security policies must name an operation and at least one target."; }
       { assertion = !cfg.browser.enable || (cfg.browser.audience != null && cfg.browser.audience != "");
         message = "Browser login requires its own configured Cloudflare Access audience."; }
+      { assertion = (cfg.access.gatewayAudience == "" && cfg.access.issuer == "" &&
+          cfg.access.ownerEmailFile == null && cfg.access.jwksFile == null) ||
+          (cfg.access.gatewayAudience != "" && cfg.access.issuer != "" &&
+          cfg.access.ownerEmailFile != null && cfg.access.jwksFile != null);
+        message = "Cloudflare identity verification requires issuer, gateway audience, owner identity and signing keys together."; }
+      { assertion = !cfg.browser.enable || cfg.access.gatewayAudience != "";
+        message = "Browser login requires independently verified Access identity."; }
+      { assertion = !cfg.browser.enable || cfg.browser.audience != cfg.access.gatewayAudience;
+        message = "Browser and gateway Access audiences must be distinct."; }
       { assertion = !cfg.browser.enable || config.services.nginx.enable;
         message = "Browser login requires private nginx ingress."; }
     ];
@@ -83,6 +114,7 @@ in
           proxy_pass http://unix:/run/homelab-security-browser/browser.sock:/;
           proxy_set_header Host $host;
           proxy_set_header X-Forwarded-Proto https;
+          proxy_set_header Cf-Access-Jwt-Assertion $http_cf_access_jwt_assertion;
           proxy_http_version 1.1;
           proxy_read_timeout 15s;
           proxy_send_timeout 15s;
@@ -100,6 +132,12 @@ in
         HOMELAB_SECURITY_POLICY_FILE = pkgs.writeText "homelab-security-policy.json" (builtins.toJSON cfg.policies);
       } // lib.optionalAttrs cfg.browser.enable {
         HOMELAB_SECURITY_BROWSER_ORIGIN = "https://${cfg.browser.hostname}";
+        HOMELAB_SECURITY_ACCESS_BROWSER_AUD = cfg.browser.audience;
+      } // lib.optionalAttrs (cfg.access.gatewayAudience != "") {
+        HOMELAB_SECURITY_ACCESS_ISSUER = cfg.access.issuer;
+        HOMELAB_SECURITY_ACCESS_GATEWAY_AUD = cfg.access.gatewayAudience;
+        HOMELAB_SECURITY_ACCESS_JWKS_FILE = "/run/credentials/homelab-securityd.service/access-jwks";
+        HOMELAB_SECURITY_ACCESS_OWNER_FILE = "/run/credentials/homelab-securityd.service/access-owner";
       };
       serviceConfig = {
         Type = "simple";
@@ -113,6 +151,9 @@ in
         LoadCredential = [
           "password:${cfg.passwordVerifierFile}"
           "totp:${cfg.totpSecretFile}"
+        ] ++ lib.optionals (cfg.access.gatewayAudience != "") [
+          "access-jwks:${cfg.access.jwksFile}"
+          "access-owner:${cfg.access.ownerEmailFile}"
         ];
         ExecStart = "${cfg.package}/bin/homelab-securityd";
         Restart = "on-failure";
