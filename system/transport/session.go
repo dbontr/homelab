@@ -56,7 +56,8 @@ func (s *Server) sessionReadAllowed(r *http.Request) bool {
 		"/v1/workspace/nodes":true,
 	}
 	if !permitted[p] && !strings.HasPrefix(p,"/v1/compute/profiles/") &&
-    !(strings.HasPrefix(p,"/v1/recipes/") && ((len(strings.Split(p,"/"))==4 && p!="/v1/recipes/import" && p!="/v1/recipes/parse")||
+    !(strings.HasPrefix(p,"/v1/recipes/") && ((len(strings.Split(p,"/"))==5 && strings.HasPrefix(p,"/v1/recipes/images/")) ||
+      (len(strings.Split(p,"/"))==4 && p!="/v1/recipes/import" && p!="/v1/recipes/parse")||
       (len(strings.Split(p,"/"))==5 && strings.HasSuffix(p,"/nutrition")))) &&
     !(strings.HasPrefix(p,"/v1/workspace/projects/") && len(strings.Split(p,"/"))==6 && (strings.HasSuffix(p,"/jobs")||strings.HasSuffix(p,"/workspaces"))) &&
     !(strings.HasPrefix(p,"/v1/learning/sessions/") && (len(strings.Split(p,"/"))==5 || len(strings.Split(p,"/"))==6 && strings.HasSuffix(p,"/pending"))) {
