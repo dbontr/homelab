@@ -420,7 +420,6 @@ func(s *Server)localTool(ctx context.Context,name string,raw json.RawMessage)(an
   Text string `json:"text"`
   Kind string `json:"kind"`
   WeekOf string `json:"week_of"`
-  ResourceKind string `json:"kind"`
   Reference string `json:"ref"`
   HorizonDays int `json:"horizon_days"`
  }
@@ -444,7 +443,7 @@ func(s *Server)localTool(ctx context.Context,name string,raw json.RawMessage)(an
   if n==0{n=50}
   if n<1||n>200{return nil,errors.New("activity limit must be 1 through 200")}
   return s.activity(n,time.Time{}),nil
- case "resource_get":return s.resource(args.ResourceKind,args.ID)
+ case "resource_get":return s.resource(args.Kind,args.ID)
  case "resource_resolve":
   kind,id,err:=parseResourceReference(args.Reference)
   if err!=nil{return nil,err}
