@@ -16,6 +16,14 @@ Workspace toolchain environments can be built locally with:
 
 Use `--push` only when an operator has configured an approved registry, narrow package-write credential and verified image digest. Rootless BuildKit Kubernetes jobs are separately opt-in in the Workspace module. Publishing an image does not enroll it into a worker or activate a Kubernetes release.
 
+## Coordinated host releases
+
+The `release.FleetCoordinator` orders declared host operations by explicit release ID. It activates compute hosts serially and permits at most one control-plane host, in the final position. On failure it requests reversal of previously completed host generations in reverse order. A failed host is marked as needing inspection because its state may be unknown. An incomplete rollback is reported rather than concealed. Each host's independent release service must perform actual authorization, health checks and durable journaling.
+
+This coordinator is a source-level component; it requires authenticated per-host transport, persistent fleet journal and staged host artifacts before activation is enabled in production. It does not replace the local NixOS generation controller.
+
+The local CLI also supports `sudo homelab-releasectl revert STAGED_RELEASE_ID` for a previously activated generation. Reversion checks the exact active release journal and deployed Nix store path. Replay and out-of-band generation drift are rejected; interrupted reversion requires recovery.
+
 ## Guarded NixOS generation controller
 
 The local `homelab-releasectl` wrapper is installed only when `services.homelabExecutor.enable` is configured. It executes as a trusted local administrator and uses the same private release journal as the independent executor:
