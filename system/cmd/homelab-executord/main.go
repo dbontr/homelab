@@ -98,9 +98,18 @@ func main(){
   policy.Kubeconfig=required("HOMELAB_EXECUTOR_KUBECONFIG")
   kubernetes=&policy
  }
+ var workspace *privileged.WorkspacePolicy
+ if file:=os.Getenv("HOMELAB_EXECUTOR_WORKSPACE_POLICY_FILE");file!=""{
+  raw,err:=os.ReadFile(file)
+  if err!=nil||len(raw)>64<<10{log.Fatal("invalid Workspace executor policy file")}
+  var policy privileged.WorkspacePolicy
+  if err:=json.Unmarshal(raw,&policy);err!=nil{log.Fatal("invalid Workspace policy")}
+  policy.TokenFile=required("HOMELAB_EXECUTOR_WORKSPACE_TOKEN")
+  workspace=&policy
+ }
  e,err:=privileged.New(privileged.Config{
   Host:host,Systemctl:systemctl,AllowedServices:services,AllowRelease:os.Getenv("HOMELAB_EXECUTOR_RELEASE_ENABLE")=="true",
-  Kubernetes:kubernetes,Auth:client,Run:privileged.FixedRun,Releases:releases,
+  Kubernetes:kubernetes,Workspace:workspace,Auth:client,Run:privileged.FixedRun,Releases:releases,
  })
  if err!=nil{log.Fatal(err)}
  group,err:=user.LookupGroup("homelab-executor-client");if err!=nil{log.Fatal(err)}
