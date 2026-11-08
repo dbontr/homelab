@@ -16,7 +16,17 @@ func (s *Server) learningCall(w http.ResponseWriter,r *http.Request,tool string,
  if failed,_:=result["isError"].(bool);failed{
   writeError(w,502,"learning service did not complete the requested operation");return
  }
- writeJSON(w,status,result)
+ parts,ok:=result["content"].([]any)
+ if !ok||len(parts)==0{writeError(w,502,"learning service returned no data");return}
+ first,ok:=parts[0].(map[string]any)
+ if !ok{writeError(w,502,"invalid learning service response");return}
+ rawText,ok:=first["text"].(string)
+ if !ok||len(rawText)>2<<20{writeError(w,502,"invalid learning service response");return}
+ var value any
+ if err:=json.Unmarshal([]byte(rawText),&value);err!=nil{
+   writeError(w,502,"invalid learning service JSON");return
+ }
+ writeJSON(w,status,value)
 }
 
 func (s *Server) uiLearningStart(w http.ResponseWriter,r *http.Request){
