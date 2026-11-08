@@ -127,6 +127,8 @@ func (s *Server) recipeTool(ctx context.Context, name string, raw json.RawMessag
 		Recipe   recipes.Recipe `json:"recipe"`
 		Meal     recipes.Meal   `json:"meal"`
 		Revision int            `json:"revision"`
+		SourceRevision int       `json:"source_revision"`
+		ExpectedRevision int     `json:"expected_revision"`
 	}
 	if len(raw) > 0 {
 		if err := json.Unmarshal(raw, &input); err != nil { return nil, err }
@@ -135,6 +137,8 @@ func (s *Server) recipeTool(ctx context.Context, name string, raw json.RawMessag
 	case "recipe_import_url_preview": return recipes.FetchSchemaOrgURL(ctx, input.URL)
 	case "recipe_list": return s.recipes.List(input.Query), nil
 	case "recipe_get": return s.recipes.Get(input.ID)
+	case "recipe_history": return s.recipes.History(input.ID)
+	case "recipe_restore": return s.recipes.Restore(input.ID, input.SourceRevision, input.ExpectedRevision)
 	case "recipe_save": return s.recipes.Save(input.Recipe)
 	case "recipe_delete": return map[string]bool{"deleted":true}, s.recipes.Delete(input.ID, input.Revision)
 	case "recipe_meal_schedule": return s.recipes.AddMeal(input.Meal)

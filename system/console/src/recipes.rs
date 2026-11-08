@@ -135,6 +135,44 @@ fn RecipeChoice(record: Recipe, active_id: String, on_select: EventHandler<Strin
     }
 }
 
+#[component]
+fn RevisionChoice(
+    version: Recipe,
+    current_revision: i32,
+    confirmation: Option<i32>,
+    on_prepare: EventHandler<i32>,
+    on_restore: EventHandler<i32>,
+    on_cancel: EventHandler<()>,
+) -> Element {
+    let revision = version.revision;
+    rsx! {
+        div { class: "recipe-version",
+            div { class: "recipe-version-details",
+                strong { "Version {revision}" }
+                span { "{version.title}" }
+                span { class: "small muted", "{version.ingredients.len()} ingredients · {version.steps.len()} steps" }
+            }
+            if revision == current_revision {
+                span { class: "small muted", "Current" }
+            } else {
+                button { class: "btn btn-outline btn-sm", disabled: confirmation.is_some(),
+                    onclick: move |_| on_prepare.call(revision), "Restore" }
+            }
+        }
+        if confirmation == Some(revision) {
+            div { class: "recipe-restore-confirm", role: "group", aria_label: "Confirm recipe restoration",
+                p { "Restore version {revision} as the next revision? The current version remains in history." }
+                div { class: "inline-row",
+                    button { class: "btn btn-primary btn-sm", onclick: move |_| on_restore.call(revision),
+                        "Confirm restore" }
+                    button { class: "btn btn-outline btn-sm", onclick: move |_| on_cancel.call(()),
+                        "Cancel" }
+                }
+            }
+        }
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Tab {
     Library,
@@ -209,6 +247,11 @@ pub fn Recipes(csrf: String) -> Element {
     let mut import_text = use_signal(String::new);
     let mut schema_text = use_signal(String::new);
     let mut source_url = use_signal(String::new);
+    let mut history_open = use_signal(|| false);
+    let mut history_loading = use_signal(|| false);
+    let mut history_record = use_signal(String::new);
+    let mut history = use_signal(Vec::<Recipe>::new);
+    let mut confirm_restore = use_signal(|| Option::<i32>::None);
 
     let records = recipes.cloned().and_then(Result::ok).unwrap_or_default();
     let query = search().trim().to_lowercase();
@@ -238,6 +281,7 @@ pub fn Recipes(csrf: String) -> Element {
                 nutrition_source.set(String::new());
                 error.set(String::new()); notice.set(String::new());
                 editing.set(true); cooking.set(false); confirm_delete.set(false);
+                history_open.set(false); confirm_restore.set(None);
                 tab.set(Tab::Library);
             }, "Add recipe" }
         }
@@ -284,7 +328,7 @@ pub fn Recipes(csrf: String) -> Element {
                                     match api::write::<Recipe, _>(method, &path, &csrf, &value).await {
                                         Ok(saved) => {
                                             selected.set(Some(saved.id));
-                                            editing.set(false); cooking.set(false);
+                                            editing.set(false); cooking.set(false); history_open.set(false);
                                             notice.set("Recipe saved".to_owned());
                                             recipes.restart();
                                         }
@@ -534,6 +578,7 @@ pub fn Recipes(csrf: String) -> Element {
                                                 on_select: move |id: String| {
                                                     selected.set(Some(id));
                                                     cooking.set(false); confirm_delete.set(false); notice.set(String::new());
+                                                    history_open.set(false); confirm_restore.set(None);
                                                 }
                                             }
                                         }
@@ -557,6 +602,38 @@ pub fn Recipes(csrf: String) -> Element {
                                                     draft.set(record); editing.set(true); cooking.set(false);
                                                 }
                                             }, "Edit" }
+                                            button { class: "btn btn-outline btn-sm", disabled: busy(),
+                                                onclick: move |_| {
+                                                    if history_open() {
+                                                        history_open.set(false);
+                                                        confirm_restore.set(None);
+                                                        return;
+                                                    }
+                                                    let Some(record) = current_record(
+                                                        &recipes.cloned().and_then(Result::ok).unwrap_or_default(),
+                                                        selected(), &search().trim().to_lowercase()
+                                                    ) else { return };
+                                                    let id = record.id;
+                                                    history_record.set(id.clone());
+                                                    history_open.set(true);
+                                                    history_loading.set(true);
+                                                    history.set(Vec::new());
+                                                    confirm_restore.set(None);
+                                                    error.set(String::new());
+                                                    spawn(async move {
+                                                        let response = api::get::<Vec<Recipe>>(
+                                                            &format!("/v1/recipes/{id}/history")
+                                                        ).await;
+                                                        if history_record() != id || !history_open() { return; }
+                                                        match response {
+                                                            Ok(versions) => history.set(versions),
+                                                            Err(message) => error.set(message),
+                                                        }
+                                                        history_loading.set(false);
+                                                    });
+                                                },
+                                                if history_open() { "Hide versions" } else { "Versions" }
+                                            }
                                             button { class: "btn btn-outline btn-sm", onclick: move |_| {
                                                 cooking.set(!cooking()); step_index.set(0);
                                             }, if cooking() { "Exit cooking" } else { "Cook" } }
@@ -570,6 +647,64 @@ pub fn Recipes(csrf: String) -> Element {
                                     }
                                 }
                                 div { class: "card-body stack",
+                                    if history_open() && history_record() == recipe.id {
+                                        section { class: "recipe-history-panel", aria_label: "Recipe revision history",
+                                            h3 { class: "section-title", "Version history" }
+                                            p { class: "small muted", "Restoring a prior version creates another revision. Recent versions remain available." }
+                                            if history_loading() {
+                                                Loading {}
+                                            } else {
+                                                div { class: "recipe-history-list",
+                                                    for version in history() {
+                                                        RevisionChoice {
+                                                            key: "{version.revision}",
+                                                            version,
+                                                            current_revision: recipe.revision,
+                                                            confirmation: confirm_restore(),
+                                                            on_prepare: move |revision| confirm_restore.set(Some(revision)),
+                                                            on_cancel: move |_| confirm_restore.set(None),
+                                                            on_restore: move |source_revision| {
+                                                                if busy() { return; }
+                                                                let Some(current) = current_record(
+                                                                    &recipes.cloned().and_then(Result::ok).unwrap_or_default(),
+                                                                    selected(), &search().trim().to_lowercase()
+                                                                ) else { return };
+                                                                if history_record() != current.id { return; }
+                                                                let path = format!("/v1/recipes/{}/restore", current.id);
+                                                                let expected_revision = current.revision;
+                                                                let token = csrf();
+                                                                busy.set(true);
+                                                                error.set(String::new());
+                                                                spawn(async move {
+                                                                    match api::write::<Recipe, _>(
+                                                                        Method::POST, &path, &token,
+                                                                        &serde_json::json!({
+                                                                            "source_revision": source_revision,
+                                                                            "expected_revision": expected_revision
+                                                                        })
+                                                                    ).await {
+                                                                        Ok(saved) => {
+                                                                            selected.set(Some(saved.id));
+                                                                            recipes.restart();
+                                                                            history_open.set(false);
+                                                                            history.set(Vec::new());
+                                                                            confirm_restore.set(None);
+                                                                            notice.set("Recipe version restored".to_owned());
+                                                                        }
+                                                                        Err(message) => {
+                                                                            error.set(message);
+                                                                            recipes.restart();
+                                                                        }
+                                                                    }
+                                                                    busy.set(false);
+                                                                });
+                                                            },
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
                                     if !recipe.image_ref.is_empty() {
                                         div { class: "recipe-cover",
                                             img { src: "{recipe.image_ref}", alt: "{recipe.title}", loading: "lazy" }
