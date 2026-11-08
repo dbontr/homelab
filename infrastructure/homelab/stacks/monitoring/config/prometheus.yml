@@ -3,6 +3,7 @@ global:
   evaluation_interval: 30s
 rule_files:
   - /etc/prometheus/alerts.yml
+  - /etc/prometheus/cluster-alerts.yml
 scrape_configs:
   - job_name: prometheus
     static_configs:
@@ -10,6 +11,17 @@ scrape_configs:
   - job_name: saturn-node
     static_configs:
       - targets: ["node-exporter:9100"]
+  - job_name: cluster-nodes
+    scrape_interval: 30s
+    static_configs:
+      - targets: ["10.77.30.229:9100"]
+        labels: {node: jupiter}
+      - targets: ["10.77.30.230:9100"]
+        labels: {node: venus}
+      - targets: ["10.77.30.231:9100"]
+        labels: {node: mercury}
+      - targets: ["10.77.30.232:9100"]
+        labels: {node: janus}
   - job_name: blackbox
     metrics_path: /probe
     params:
