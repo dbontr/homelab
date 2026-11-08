@@ -15,7 +15,7 @@ The console is a single client for the personal computing platform. It does not 
 
 ## User experience
 
-A persistent shell provides navigation to Overview, Projects, Compute, Research, Learning, Health, Productivity, Media and Administration. These are views into one connected system, not separately styled applications.
+A persistent shell provides navigation to Overview, Projects, Compute, software catalogs, Monitoring, Tasks, Calendar, Weekly Planner, Learning, Health, Recipes, Media and Administration. These are views into one connected system, not separately styled applications.
 
 Components use a small semantic vocabulary: button, field, card, table, navigation, tabs, dialog, alert, status and command palette. Build complex screens by composition instead of page-specific component variants.
 
@@ -39,11 +39,15 @@ The Go service is the only code that may communicate with the independent privil
 
 ## Recipe application
 
-The first-party recipe domain is stored in the Go platform state directory, independently of RecipeSage. It contains structured ingredients, sequential instructions, yield, preparation and cooking durations, tags, equipment, optional source URLs, nutritional provenance and revision-controlled records. Scheduled meals scale ingredients into a consolidated grocery list. The Rust Recipes view supports library search, editing, cooking mode, meal planning and portable JSON archive transfer. Nutrition previews distinguish estimates, measurements and reports; they do not automatically record food intake. Health's existing food logs, nutrients and grocery tools remain separate until shared identity and confirmed linking are implemented.
+The first-party recipe domain is stored in the Go platform state directory, independently of RecipeSage. It contains structured ingredients, sequential instructions, yield, preparation and cooking durations, tags, equipment, optional source URLs, nutritional provenance and revision-controlled records. Scheduled meals scale ingredients into a consolidated grocery list. The Rust Recipes view supports library search, editing, cooking mode, meal planning, revision history and portable JSON or bounded ZIP archives that contain privately stored recipe images. Nutrition previews distinguish estimates, measurements and reports; they do not automatically record food intake. Health's existing food logs, nutrients and grocery tools remain separate until shared identity and confirmed linking are implemented.
 
 Recipes use `GET /v1/recipes`, `GET /v1/recipes/{id}`, `GET /v1/recipes/export`, `GET /v1/meals`, and `GET /v1/groceries`. Mutations use `POST /v1/recipes`, `PUT/DELETE /v1/recipes/{id}`, `POST /v1/recipes/import`, and `POST /v1/meals` or `DELETE /v1/meals/{id}`. The browser owner session requires an exact allowed Origin, an HTTP-only cookie, JSON request content type and `X-CSRF-Token`. The other native API mutations and `/mcp` never accept the browser cookie. The long-lived bearer token remains separate.
 
-Source archives are versioned JSON; imports are additive and conflict when an identifier exists. Importing existing RecipeSage records requires a dedicated migration with data verification; the compatibility adapter and original deployment remain intact.
+Source archives use versioned JSON and optional ZIP containers with the referenced image bytes; imports are additive and conflict when an identifier exists. RecipeSage exports are imported through a separate owner-reviewed staged migration. The compatibility adapter and original deployment remain intact.
+
+## Monitoring, calendar and planning
+
+The Monitoring tab queries fixed Prometheus measurements and Loki journals through an authenticated Go adapter; raw query languages, deployment credentials and cluster modifications are never exposed to browser sessions. CPU, memory, disk, network, GPU, collectors, alert rules and journal views distinguish missing measurements from zero. The Calendar tab displays recurring event occurrences, exclusions and overrides from the configured read-only iCalendar source; unsupported recurrence fields are disclosed. The Weekly Planner derives timebox proposals from recorded tasks, duration estimates, prerequisites and calendar reservations without writing either source.
 
 ## Homepage development
 
