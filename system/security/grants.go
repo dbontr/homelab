@@ -7,6 +7,7 @@ import (
  "encoding/base64"
  "encoding/hex"
  "encoding/json"
+ "io"
 
  "github.com/dbontr/homelab-new/system/canonicaljson"
  "errors"
@@ -46,10 +47,19 @@ func NewAuthority(key []byte, replayFile string) (*Authority,error) {
    return nil,errors.New("executor replay file must be an owner-only regular file")
  }
  if err!=nil&&!errors.Is(err,os.ErrNotExist){return nil,err}
- b,err:=os.ReadFile(replayFile)
+ f,err:=os.Open(replayFile)
  if errors.Is(err,os.ErrNotExist) {return a,nil}
  if err!=nil{return nil,err}
+ defer f.Close()
+ b,err:=io.ReadAll(io.LimitReader(f,(1<<20)+1))
+ if err!=nil{return nil,err}
+ if len(b)>1<<20{return nil,errors.New("executor replay state exceeds size limit")}
  if err:=json.Unmarshal(b,&a.used);err!=nil||a.used==nil{return nil,errors.New("invalid executor replay state")}
+ for id,expiry:=range a.used {
+  if len(id)!=48||expiry<=0{return nil,errors.New("invalid executor replay entry")}
+  decoded,err:=hex.DecodeString(id)
+  if err!=nil||len(decoded)!=24{return nil,errors.New("invalid executor replay entry")}
+ }
  return a,nil
 }
 
@@ -110,6 +120,7 @@ func(a *Authority)Consume(grant,action,target string,args json.RawMessage)error{
 func(a *Authority)saveUsed(next map[string]int64)error{
  if err:=os.MkdirAll(filepath.Dir(a.path),0700);err!=nil{return err}
  b,err:=json.Marshal(next);if err!=nil{return err}
+ if len(b)>1<<20{return errors.New("executor replay state exceeds size limit")}
  f,err:=os.CreateTemp(filepath.Dir(a.path),".grants-*");if err!=nil{return err}
  defer os.Remove(f.Name())
  if err:=f.Chmod(0600);err!=nil{f.Close();return err}
