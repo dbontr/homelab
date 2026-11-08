@@ -36,7 +36,7 @@ type Runner struct {
 }
 
 var workspaceID = regexp.MustCompile(`^[0-9a-f]{32}$`)
-var imageName = regexp.MustCompile(`^pwm-env-[a-z][a-z0-9-]+:v[1-9][0-9]*$`)
+var imageName = regexp.MustCompile(`^(?:[a-z0-9][a-z0-9.-]*(?::[0-9]{2,5})?(?:/[a-z0-9][a-z0-9._-]*){0,3}/)?pwm-env-[a-z][a-z0-9-]+:v[1-9][0-9]*$`)
 
 func NewRunner(devices []Device) *Runner {
 	images := map[string]bool{}
