@@ -9,32 +9,7 @@ import (
  "github.com/dbontr/homelab-new/system/agentflow"
 )
 
-type computeToolCaller struct { server *Server }
-func (s *Server) EngineeringCompute() agentflow.ToolCaller {return computeToolCaller{server:s}}
-
-func (c computeToolCaller) Call(ctx context.Context,name string,args map[string]any)(map[string]any,error){
- allowed:=map[string]bool{
-  "workspace_create":true,"workspace_list":true,"workspace_call":true,
-  "workspace_operation":true,"github_checkout_repository":true,
-  "github_publish_artifacts":true,
- }
- if !allowed[name]{return nil,errors.New("unsupported engineering operation")}
- var backend *Backend
- for i:=range c.server.backend{
-  if c.server.backend[i].Name=="workspace"{backend=&c.server.backend[i];break}
- }
- if backend==nil{return nil,errors.New("compute service unavailable")}
- if !c.server.backendHasTool(ctx,*backend,name){return nil,errors.New("compute operation is not advertised")}
- params,_:=json.Marshal(map[string]any{"name":name,"arguments":args})
- var reply any
- if err:=c.server.forward(ctx,*backend,rpcRequest{JSONRPC:"2.0",ID:json.RawMessage("1"),Method:"tools/call",Params:params},&reply);err!=nil{return nil,err}
- value,ok:=reply.(map[string]any)
- if !ok||value["isError"]==true{return nil,errors.New("compute operation failed or was denied")}
- structured,ok:=value["structuredContent"].(map[string]any)
- if !ok{return nil,errors.New("compute returned no structured result")}
- return structured,nil
-}
-func (s *Server) SetEngineering(engine *agentflow.Engine){s.engineering=engine}
+func (s *Server) SetEngineering(engine agentflow.Manager){s.engineering=engine}
 
 func (s *Server) engineeringCollection(w http.ResponseWriter,r *http.Request){
  if s.engineering==nil{writeError(w,503,"engineering runs unavailable");return}
