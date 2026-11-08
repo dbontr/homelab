@@ -3,6 +3,8 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"log"
@@ -85,7 +87,7 @@ func main() {
 	dir := "/run/homelab-securityd"
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	failures := make(chan error, 2)
+	failures := make(chan error, 3)
 	go func() {
 		failures <- manager.ServeSockets(ctx, filepath.Join(dir, "owner.sock"), filepath.Join(dir, "client.sock"), gid)
 	}()
@@ -111,6 +113,19 @@ func main() {
 			failures <- portal.ServeBrowserSocket(ctx, "/run/homelab-security-browser/browser.sock", webGroupID)
 		}()
 	}
+ if listen:=os.Getenv("HOMELAB_SECURITY_REMOTE_LISTEN");listen!=""{
+  cert,err:=tls.LoadX509KeyPair(os.Getenv("HOMELAB_SECURITY_REMOTE_CERT"),os.Getenv("HOMELAB_SECURITY_REMOTE_KEY"))
+  if err!=nil{log.Fatal("remote security certificate unavailable: ",err)}
+  ca,err:=readRequiredFile("HOMELAB_SECURITY_REMOTE_CLIENT_CA")
+  if err!=nil{log.Fatal("remote security client trust unavailable: ",err)}
+  roots:=x509.NewCertPool()
+  if !roots.AppendCertsFromPEM(ca){log.Fatal("invalid remote security client trust")}
+  var clients []string
+  if err:=json.Unmarshal([]byte(os.Getenv("HOMELAB_SECURITY_REMOTE_CLIENT_IDENTITIES")),&clients);err!=nil||len(clients)==0{
+   log.Fatal("invalid trusted executor identity list")
+  }
+  go func(){failures<-manager.ServeAuthorizationTLS(ctx,listen,cert,roots,clients)}()
+ }
 	log.Print("independent owner authentication sockets starting")
 	err = <-failures
 	stop()
