@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 use reqwest::Method;
-use serde_json::json;
+use serde_json::{json, Value};
 
 use crate::api::{self, Task};
 use crate::components::{Badge, Empty, Heading, Loading, Notice};
@@ -48,6 +48,7 @@ pub fn Tasks(csrf: String) -> Element {
     let mut busy = use_signal(|| false);
     let mut error = use_signal(String::new);
     let mut message = use_signal(String::new);
+    let mut conflict_preview = use_signal(||None::<Value>);
 
     let items = records.cloned().and_then(Result::ok).unwrap_or_default();
     let today = agenda.cloned().and_then(Result::ok).unwrap_or_default();
@@ -283,7 +284,41 @@ pub fn Tasks(csrf: String) -> Element {
                             }
                         }
                     }
+                    if let Some(preview) = conflict_preview() {
+                        div { class: "alert", role: "status",
+                            if let Some(rows)=preview.get("conflicts").and_then(Value::as_array){
+                                p { "{rows.len()} scheduling conflict(s) found." }
+                                for conflict in rows {
+                                    p { class: "small muted",
+                                        {api::property(conflict,&["source"])} ": "
+                                        {api::property(conflict,&["title"])}
+                                    }
+                                }
+                            }
+                            if let Some(notes)=preview.get("limitations").and_then(Value::as_array){
+                                for note in notes { p { class:"small muted", "{note}" } }
+                            }
+                        }
+                    }
                     div { class: "task-actions",
+                        button { class: "btn btn-outline", r#type: "button",
+                            disabled: busy() || editor.scheduled.is_empty() || editor.minutes<1,
+                            onclick: move |_| {
+                                let data=draft();
+                                let id=editing().unwrap_or_default();
+                                let timestamp=data.scheduled.replace("+","%2B");
+                                let path=format!("/v1/tasks/conflicts?start={timestamp}&minutes={}&exclude_id={id}",data.minutes);
+                                busy.set(true);error.set(String::new());
+                                spawn(async move {
+                                    match api::get::<Value>(&path).await{
+                                        Ok(result)=>conflict_preview.set(Some(result)),
+                                        Err(e)=>error.set(e),
+                                    }
+                                    busy.set(false);
+                                });
+                            },
+                            "Check conflicts"
+                        }
                         button { class: "btn btn-primary", disabled: busy(), "Save" }
                         button { class: "btn btn-outline", r#type: "button", onclick: move |_|editing.set(None), "Cancel" }
                     }
