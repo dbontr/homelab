@@ -88,6 +88,11 @@ in
       default = (import ../hardware.nix).devices;
       description = "Declared hardware inventory. Transport does not imply connectivity or permission to modify devices.";
     };
+    securityClientSocket = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "Protected client socket of the independent owner security service. Enabling this disables legacy gateway approval access.";
+    };
     consolePassphraseFile = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
       default = null;
@@ -153,6 +158,8 @@ in
         HOMELAB_API_TOKEN_FILE = "/run/credentials/homelab-platform.service/access_token";
         HOMELAB_PROMETHEUS_URL = cfg.monitoring.prometheusURL;
         HOMELAB_LOKI_URL = cfg.monitoring.lokiURL;
+      } // lib.optionalAttrs (cfg.securityClientSocket != null) {
+        HOMELAB_SECURITY_SOCKET = cfg.securityClientSocket;
       } // lib.optionalAttrs (cfg.books.contactFile != null) {
         HOMELAB_BOOKS_CONTACT_FILE = "/run/credentials/homelab-platform.service/books_contact";
       } // lib.optionalAttrs (cfg.consolePassphraseFile != null) {
@@ -178,6 +185,7 @@ in
       serviceConfig = {
         Type = "simple";
         DynamicUser = true;
+        SupplementaryGroups = lib.optional (cfg.securityClientSocket != null) "homelab-security-client";
         StateDirectory = "homelab-platform";
         RuntimeDirectory = "homelab-platform";
         RuntimeDirectoryMode = "0700";
