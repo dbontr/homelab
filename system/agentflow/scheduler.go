@@ -16,7 +16,7 @@ func (e *Engine) RunAvailable(ctx context.Context)(int,error){
  for _,run:=range runs{
   if err:=ctx.Err();err!=nil{return processed,err}
   if run.Status==Succeeded||run.Status==Failed||run.Status==Cancelled{continue}
-  runner:=Runner{Store:e.Store,Worker:e,Lease:10*time.Minute}
+  runner:=Runner{Store:e.Store,Worker:e,Lease:30*time.Minute}
   advanced,err:=runner.RunOne(ctx,run.ID)
   if err!=nil{return processed,err}
   if advanced{processed++}
