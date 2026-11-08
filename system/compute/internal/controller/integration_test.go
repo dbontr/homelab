@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dbontr/project-workspace-mcp/internal/worker"
+	"github.com/dbontr/homelab-new/system/compute/internal/worker"
 )
 
 func await(t *testing.T, limit time.Duration, check func() (bool, error)) {
