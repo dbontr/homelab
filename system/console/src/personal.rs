@@ -436,9 +436,9 @@ pub fn Health(csrf: String) -> Element{
                 }
                 if let Some(preview)=progression(){
                     div{class:"alert",role:"status",
-                        p{strong{"{api::property(&preview,&["status"])}"}}
+                        p{strong{ {api::property(&preview,&["status"])} }}
                         p{class:"small muted",{api::property(&preview,&["rationale"])}}
-                        p{"Candidate load (kg): {api::property(&preview,&["candidate_load_kg"])}"}
+                        p{"Candidate load (kg): ", {api::property(&preview,&["candidate_load_kg"])}}
                         p{class:"small muted",{api::property(&preview,&["warning"])}}
                         p{class:"small muted","No training plan has been changed."}
                     }
