@@ -28,3 +28,11 @@
 - [RecipeSage JSON-LD Mapping](https://github.com/julianpoy/RecipeSage/blob/master/packages/util/server/src/general/jsonLD.ts) — RecipeSage project. Used for: translating RecipeSage identifiers, ingredients, instructions, tags, author notes, source credits and declared nutrient units.
 - [RecipeSage Export Documentation](https://docs.recipesage.com/docs/tutorials/settings/export/) — RecipeSage project. Used for: owner-initiated portable JSON-LD exports without direct database or credential access.
 - [OWASP Server-Side Request Forgery Prevention Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html) — OWASP. Used for: public-network destination checks, restricted redirects and proxies, DNS pinning and bounded server-side recipe imports.
+
+- [Prometheus HTTP API](https://prometheus.io/docs/prometheus/latest/querying/api/) — Prometheus project. Used for: read-only metric vectors, range histories, target health and active alert reports in the first-party console.
+- [Prometheus Query Language](https://prometheus.io/docs/prometheus/latest/querying/basics/) — Prometheus project. Used for: fixed and bounded telemetry expressions with no user-supplied query language.
+- [Loki HTTP API](https://grafana.com/docs/loki/latest/reference/loki-http-api/) — Grafana Labs. Used for: bounded journal query ranges and log stream parsing.
+- [LogQL](https://grafana.com/docs/loki/latest/query/) — Grafana Labs. Used for: constrained journal selection and literal-safe log search.
+- [BuildKit rootless deployment](https://github.com/moby/buildkit/blob/master/docs/rootless.md) — Moby BuildKit maintainers. Used for: project-scoped OCI image builds without exposing a host Docker socket.
+- [OCI Image Specification](https://github.com/opencontainers/image-spec) — Open Containers Initiative. Used for: digest-qualified image identities in the registry build pipeline.
+- [Dioxus 0.7 Deployment](https://dioxuslabs.com/learn/0.7/guides/deploy/) — Dioxus project. Used for: packaging static Rust/WASM console assets for an independent native release.
