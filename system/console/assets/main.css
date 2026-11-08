@@ -406,3 +406,23 @@ main.content { max-width: 94rem; margin: 0 auto; padding: 2rem; }
   .monitoring-controls .form-row { width: 100%; }
   .monitoring-table-wrap .table { font-size: .78rem; }
 }
+
+
+/* Calendar agenda */
+.calendar-filter { display: grid; gap: .375rem; max-width: 30rem; margin-bottom: 1rem; }
+.calendar-agenda { display: grid; gap: .5rem; }
+.calendar-event {
+  display: grid; grid-template-columns: 9rem minmax(0, 1fr); gap: 1rem;
+  border-bottom: 1px solid var(--border); padding: .8rem .25rem;
+}
+.calendar-date { display: grid; gap: .125rem; align-content: start; font-variant-numeric: tabular-nums; }
+.calendar-date strong { font-weight: 600; }
+.calendar-details { min-width: 0; }
+.calendar-details strong { font-weight: 600; overflow-wrap: anywhere; }
+.calendar-details p { margin: .25rem 0; }
+.calendar-limitations { padding: .75rem; margin: 0 0 1rem; border: 1px solid var(--border); border-radius: var(--radius); }
+.calendar-limitations p { margin: .375rem 0 0; }
+@media (max-width: 600px) {
+  .calendar-event { grid-template-columns: 1fr; gap: .375rem; }
+  .calendar-date { display: flex; gap: .75rem; }
+}
