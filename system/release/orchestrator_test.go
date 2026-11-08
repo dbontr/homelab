@@ -8,7 +8,11 @@ import (
  "testing"
 )
 
-type orchestratorFake struct{stageFake;actions []string}
+type orchestratorFake struct{stageFake;actions []string;needConfirm bool}
+func(f *orchestratorFake)Preview(_ context.Context,id,action string)(ReleasePreparation,error){
+ if f.needConfirm{return ReleasePreparation{Host:f.host,ReleaseID:id,Operation:"infrastructure__release_activate",Reason:"confirmation required",ConfirmationID:"confirmation-1"},nil}
+ return ReleasePreparation{Host:f.host,ReleaseID:id,Operation:"infrastructure__release_activate",Allowed:true},nil
+}
 func(f *orchestratorFake)Activate(_ context.Context,id string)error{f.actions=append(f.actions,"activate:"+id);return nil}
 func(f *orchestratorFake)Revert(_ context.Context,id string)error{f.actions=append(f.actions,"revert:"+id);return nil}
 

@@ -64,12 +64,38 @@ func(s *FleetService)Handler()http.Handler{
   if err!=nil{http.Error(w,"fleet staging failed",503);return}
   success(w,plan)
  })
+ preview:=func(ctx context.Context,planID string)([]ReleasePreparation,bool,error){
+  prepared,err:=s.Controller.Preflight(ctx,planID)
+  if err!=nil{return nil,false,err}
+  ready:=true
+  for _,item:=range prepared{if !item.Allowed{ready=false}}
+  return prepared,ready,nil
+ }
+ mux.HandleFunc("POST /v1/prepare",func(w http.ResponseWriter,r *http.Request){
+  var input struct{PlanID string `json:"plan_id"`}
+  if !read(w,r,&input){return}
+  if !idPattern.MatchString(input.PlanID){http.Error(w,"invalid plan identity",400);return}
+  if !authorize(w,r,"infrastructure__fleet_prepare",input){return}
+  ctx:=security.WithAccessAssertion(r.Context(),r.Header.Get("Cf-Access-Jwt-Assertion"))
+  prepared,ready,err:=preview(ctx,input.PlanID)
+  if err!=nil{http.Error(w,"fleet preflight unavailable",503);return}
+  success(w,map[string]any{"ready":ready,"preparations":prepared})
+ })
  mux.HandleFunc("POST /v1/activate",func(w http.ResponseWriter,r *http.Request){
   var input struct{PlanID string `json:"plan_id"`}
   if !read(w,r,&input){return}
   if !idPattern.MatchString(input.PlanID){http.Error(w,"invalid plan identity",400);return}
-  if !authorize(w,r,"infrastructure__fleet_activate",input){return}
+  if r.Header.Get("Cf-Access-Jwt-Assertion")==""{http.Error(w,"signed owner identity required",403);return}
   ctx:=security.WithAccessAssertion(r.Context(),r.Header.Get("Cf-Access-Jwt-Assertion"))
+  prepared,ready,err:=preview(ctx,input.PlanID)
+  if err!=nil{http.Error(w,"fleet preflight unavailable",503);return}
+  if !ready{
+   w.Header().Set("Content-Type","application/json")
+   _=json.NewEncoder(w).Encode(map[string]any{"allowed":false,"reason":"host confirmation required",
+    "result":map[string]any{"ready":false,"preparations":prepared}})
+   return
+  }
+  if !authorize(w,r,"infrastructure__fleet_activate",input){return}
   tx,err:=s.Controller.Activate(ctx,input.PlanID)
   if err!=nil{http.Error(w,"fleet activation incomplete; inspect transaction journal",503);return}
   success(w,tx)
@@ -154,6 +180,7 @@ func(c *FleetClient)Call(ctx context.Context,operation string,args json.RawMessa
  var method,path string
  switch operation{
  case "infrastructure__fleet_stage":method,path="POST","/v1/stage"
+ case "infrastructure__fleet_prepare":method,path="POST","/v1/prepare"
  case "infrastructure__fleet_activate":method,path="POST","/v1/activate"
  case "infrastructure__fleet_recover":method,path="POST","/v1/recover"
  case "infrastructure__fleet_plan":method,path="GET","/v1/plan"

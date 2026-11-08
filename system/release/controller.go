@@ -188,6 +188,16 @@ func(c *Controller) loadStage(id string)(Manifest,error){
  return m,nil
 }
 
+// VerifyStaged checks an existing protected manifest without activating it.
+// Activation revalidates the staged generation while holding its own lock.
+func(c *Controller)VerifyStaged(id string)error{
+ if !idPattern.MatchString(id){return errors.New("invalid release ID")}
+ return c.locked(func()error{
+  _,err:=c.loadStage(id)
+  return err
+ })
+}
+
 func(c *Controller) health(ctx context.Context)error{
  for _,svc:=range c.Config.HealthServices{
   out,err:=c.Config.Run(ctx,c.Config.Systemctl,"is-active",svc)

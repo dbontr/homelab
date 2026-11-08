@@ -90,6 +90,33 @@ func(o *FleetOrchestrator)Plan()(FleetStagePlan,error){
  return plan,err
 }
 
+type hostReleasePreviewer interface {
+ Preview(context.Context,string,string)(ReleasePreparation,error)
+}
+
+// Preflight identifies all exact host activation confirmations before a fleet
+// transaction begins. It does not consume confirmations or change hosts.
+func(o *FleetOrchestrator)Preflight(ctx context.Context,planID string)([]ReleasePreparation,error){
+ if err:=o.check();err!=nil{return nil,err}
+ plan,err:=o.Plan()
+ if err!=nil{return nil,err}
+ if plan.ID!=planID{return nil,errors.New("fleet plan identity mismatch")}
+ result:=make([]ReleasePreparation,0,len(plan.Targets))
+ for _,target:=range plan.Targets{
+  if err:=ctx.Err();err!=nil{return nil,err}
+  agent,ok:=o.Fleet.Agents[target.Host].(hostReleasePreviewer)
+  if !ok{return nil,errors.New("host preflight is unavailable")}
+  prepared,err:=agent.Preview(ctx,target.ReleaseID,"activate")
+  if err!=nil{return nil,err}
+  if prepared.Host!=target.Host||prepared.ReleaseID!=target.ReleaseID||
+   prepared.Operation!="infrastructure__release_activate"{
+   return nil,errors.New("host preflight scope mismatch")
+  }
+  result=append(result,prepared)
+ }
+ return result,nil
+}
+
 // Activate takes an opaque plan ID, not caller-supplied target release IDs.
 // Local activation remains separately authorized on every host executor.
 func(o *FleetOrchestrator)Activate(ctx context.Context,planID string)(FleetTransaction,error){

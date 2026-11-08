@@ -20,6 +20,7 @@ import (
 func(e *Executor)RemoteHandler()http.Handler{
  mux:=http.NewServeMux()
  e.registerReleaseStage(mux)
+ e.registerReleasePreflight(mux)
  mux.Handle("POST /v1/execute",e.Handler())
  mux.HandleFunc("GET /v1/release/status",func(w http.ResponseWriter,r *http.Request){
   w.Header().Set("Cache-Control","no-store")
