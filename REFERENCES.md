@@ -18,6 +18,7 @@
 - [shadcn/ui](https://github.com/shadcn-ui/ui) — shadcn/ui project. Used for: semantic component composition, design vocabulary, and accessible interaction patterns in the Rust console.
 - [shadcn/ui Theming](https://ui.shadcn.com/docs/theming) — shadcn/ui project. Used for: exact neutral light/dark design tokens, sidebar colors, and radius scale for the Rust/Dioxus console.
 - [Dioxus 0.7 Documentation](https://dioxuslabs.com/learn/0.7/) — Dioxus project. Used for: Rust RSX components, WASM rendering and future desktop packaging.
+- [Dioxus 0.7 Handling User Input](https://dioxuslabs.com/learn/0.7/essentials/basics/event_handlers/) — Dioxus project. Used for: browser file selection, `FileData` metadata and asynchronous image reads in the Rust recipe editor.
 - [OWASP Session Management Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html) — OWASP. Used for: short-lived browser sessions, HttpOnly/Secure/SameSite cookies, credential separation and session invalidation.
 - [Dioxus Styling and Assets](https://dioxuslabs.com/learn/0.7/essentials/ui/styling/) — Dioxus project. Used for: RSX, CSS assets and native SVG controls in the Rust console.
 - [RFC 9110: HTTP Semantics, If-Match](https://www.rfc-editor.org/rfc/rfc9110#section-13.1.1) — IETF. Used for: revision-qualified deletion of first-party recipe records.
