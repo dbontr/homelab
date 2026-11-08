@@ -58,6 +58,8 @@ type Claim struct {
  Deadline time.Time `json:"deadline"`
 }
 
+var errNoReady = os.ErrNotExist
+
 type Store struct {
  mu sync.Mutex
  dir string
@@ -192,7 +194,7 @@ func (s *Store) ClaimReady(id string,ttl time.Duration)(Claim,error){
   if err:=s.save(w);err!=nil{return Claim{},err}
   return Claim{WorkflowID:w.ID,StepID:st.ID,Generation:st.Generation,Token:token,Kind:st.Kind,Input:append(json.RawMessage(nil),st.Input...),Deadline:st.LeaseUntil},nil
  }
- return claim,os.ErrNotExist
+ return claim,errNoReady
 }
 // Complete requires both the active generation and the corresponding secret
 // lease token. Only the token digest is persisted.
