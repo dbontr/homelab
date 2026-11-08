@@ -66,8 +66,31 @@ func main() {
 	dir := "/run/homelab-securityd"
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	log.Print("privileged authentication sockets starting")
-	if err := manager.ServeSockets(ctx, filepath.Join(dir, "owner.sock"), filepath.Join(dir, "client.sock"), gid); err != nil {
+	failures := make(chan error, 2)
+	go func() {
+		failures <- manager.ServeSockets(ctx, filepath.Join(dir, "owner.sock"), filepath.Join(dir, "client.sock"), gid)
+	}()
+	if origin := os.Getenv("HOMELAB_SECURITY_BROWSER_ORIGIN"); origin != "" {
+		portal, err := security.NewBrowserPortal(manager, origin)
+		if err != nil {
+			log.Fatal("invalid protected browser origin: ", err)
+		}
+		group, err := user.LookupGroup("homelab-security-browser")
+		if err != nil {
+			log.Fatal("browser socket group unavailable: ", err)
+		}
+		webGroupID, err := strconv.Atoi(group.Gid)
+		if err != nil || webGroupID <= 0 {
+			log.Fatal("invalid browser socket group")
+		}
+		go func() {
+			failures <- portal.ServeBrowserSocket(ctx, "/run/homelab-security-browser/browser.sock", webGroupID)
+		}()
+	}
+	log.Print("independent owner authentication sockets starting")
+	err = <-failures
+	stop()
+	if err != nil {
 		log.Fatal("security sockets stopped: ", err)
 	}
 }
