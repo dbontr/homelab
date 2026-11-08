@@ -171,6 +171,8 @@ spec:
               value: {{ .Values.controller.allowedHosts | quote }}
             - name: PWM_ALLOWED_ORIGINS
               value: {{ .Values.controller.allowedOrigins | quote }}
+            - name: PWM_ENV_REGISTRY
+              value: {{ .Values.controller.environmentRegistry | quote }}
             - name: PWM_ADMIN_TOKEN
               valueFrom:
                 secretKeyRef:
