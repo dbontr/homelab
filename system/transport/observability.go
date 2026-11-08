@@ -31,6 +31,10 @@ func(s *Server) uiMonitoring(w http.ResponseWriter,r *http.Request){
   value,err:=s.observability.Alerts(ctx)
   if err!=nil{writeError(w,502,"Prometheus alerts are unavailable");return}
   writeJSON(w,200,value)
+ case "/v1/monitoring/security":
+  value,err:=s.observability.SecurityAudit(ctx)
+  if err!=nil{writeError(w,502,"security journal is unavailable");return}
+  writeJSON(w,200,value)
  case "/v1/monitoring/series":
   key:=r.URL.Query().Get("metric")
   window:=r.URL.Query().Get("range")
