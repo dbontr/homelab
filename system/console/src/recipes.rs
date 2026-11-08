@@ -1055,6 +1055,8 @@ pub fn Recipes(csrf: String) -> Element {
                                     let Some(file) = event.files().into_iter().next() else { return; };
                                     sage_preview.set(None);
                                     sage_selected.set(Vec::new());
+                                    sage_overrides.set(HashMap::new());
+                                    sage_edit_key.set(None);
                                     sage_source.set(String::new());
                                     sage_filename.set(file.name().to_owned());
                                     error.set(String::new());
@@ -1089,6 +1091,7 @@ pub fn Recipes(csrf: String) -> Element {
                                     error.set(String::new());
                                     sage_preview.set(None);
                                     sage_selected.set(Vec::new());
+                                    sage_overrides.set(HashMap::new());
                                     spawn(async move {
                                         match api::write::<RecipeSagePreview, _>(
                                             Method::POST, "/v1/recipes/recipesage/preview", &token,
@@ -1105,16 +1108,18 @@ pub fn Recipes(csrf: String) -> Element {
                         if let Some(preview) = sage_preview() {
                             div { class: "recipe-sage-summary",
                                 strong { "{preview.total} recipes in export" }
-                                span { class: "muted", "{preview.ready} eligible for import" }
-                                span { class: "small muted", "Incomplete quantities, duplicate records and existing imports cannot be selected." }
+                                span { class: "muted", "{preview.ready} initially eligible for import" }
+                                span { class: "small muted", "Correct entries with missing quantities in the recipe editor. Duplicate identities and already imported records cannot be selected." }
                             }
                             div { class: "inline-row",
                                 button { class: "btn btn-outline btn-sm",
-                                    disabled: busy() || preview.ready == 0,
+                                    disabled: busy() || (preview.ready == 0 && sage_overrides().is_empty()),
                                     onclick: move |_| {
                                         if let Some(value) = sage_preview() {
                                             sage_selected.set(value.candidates.iter()
-                                                .filter(|candidate| candidate.status == "ready")
+                                                .filter(|candidate| candidate.status == "ready" ||
+                                                    (candidate.status == "needs_review" &&
+                                                     sage_overrides().contains_key(&candidate.key)))
                                                 .map(|candidate| candidate.key.clone()).collect());
                                         }
                                     }, "Select eligible" }
@@ -1128,7 +1133,8 @@ pub fn Recipes(csrf: String) -> Element {
                                         label { class: "recipe-sage-choice",
                                             input { type: "checkbox",
                                                 checked: sage_selected().contains(&candidate.key),
-                                                disabled: busy() || candidate.status != "ready",
+                                                disabled: busy() || !(candidate.status == "ready" ||
+                                                    (candidate.status == "needs_review" && sage_overrides().contains_key(&candidate.key))),
                                                 oninput: {
                                                     let key = candidate.key.clone();
                                                     move |event| {
@@ -1150,11 +1156,44 @@ pub fn Recipes(csrf: String) -> Element {
                                                         "{candidate.recipe.title}"
                                                     }
                                                 }
-                                                span { class: "small muted", "{candidate.status} · {candidate.recipe.ingredients.len()} ingredients" }
+                                                span { class: "small muted",
+                                                    if sage_overrides().contains_key(&candidate.key) { "Reviewed corrections" }
+                                                    else { "{candidate.status} · {candidate.recipe.ingredients.len()} ingredients" }
+                                                }
                                             }
                                         }
                                         for warning in candidate.warnings {
                                             p { class: "small muted recipe-sage-warning", "{warning}" }
+                                        }
+                                        if candidate.status != "duplicate" && candidate.status != "imported" {
+                                            button { class: "btn btn-outline btn-sm recipe-sage-review",
+                                                disabled: busy(),
+                                                onclick: {
+                                                    let key = candidate.key.clone();
+                                                    let original = candidate.recipe.clone();
+                                                    move |_| {
+                                                        let value = sage_overrides().get(&key).cloned().unwrap_or_else(|| original.clone());
+                                                        sage_edit_key.set(Some(key.clone()));
+                                                        tags.set(value.tags.join(", "));
+                                                        equipment.set(value.equipment.join(", "));
+                                                        nutrients.set(nutrient_lines(&value));
+                                                        if let Some(ref nutrition) = value.nutrition {
+                                                            nutrition_method.set(nutrition.method.clone());
+                                                            nutrition_source.set(nutrition.source.clone());
+                                                        } else {
+                                                            nutrition_method.set("estimated".to_owned());
+                                                            nutrition_source.set(String::new());
+                                                        }
+                                                        draft.set(value);
+                                                        editing.set(true);
+                                                        cooking.set(false);
+                                                        error.set(String::new());
+                                                        tab.set(Tab::Library);
+                                                    }
+                                                },
+                                                if sage_overrides().contains_key(&candidate.key) { "Edit corrections" }
+                                                else { "Review in editor" }
+                                            }
                                         }
                                     }
                                 }
@@ -1167,6 +1206,8 @@ pub fn Recipes(csrf: String) -> Element {
                                         let source = sage_source();
                                         let token = csrf();
                                         let keys = sage_selected();
+                                        let edits: HashMap<String, Recipe> = sage_overrides()
+                                            .into_iter().filter(|(key, _)| keys.contains(key)).collect();
                                         busy.set(true);
                                         error.set(String::new());
                                         spawn(async move {
@@ -1175,21 +1216,21 @@ pub fn Recipes(csrf: String) -> Element {
                                                 &serde_json::json!({
                                                     "source": source,
                                                     "digest": preview.digest,
-                                                    "keys": keys
+                                                    "keys": keys,
+                                                    "overrides": edits
                                                 })
                                             ).await {
                                                 Ok(result) => {
                                                     sage_selected.set(Vec::new());
+                                                    sage_overrides.set(HashMap::new());
+                                                    sage_edit_key.set(None);
                                                     sage_preview.set(None);
                                                     sage_source.set(String::new());
                                                     sage_filename.set(String::new());
                                                     recipes.restart();
                                                     notice.set(format!("Imported {} RecipeSage recipes", result.imported));
                                                 }
-                                                Err(message) => {
-                                                    error.set(message);
-                                                    sage_preview.set(None);
-                                                }
+                                                Err(message) => error.set(message),
                                             }
                                             busy.set(false);
                                         });
