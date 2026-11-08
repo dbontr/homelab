@@ -16,7 +16,7 @@ type ToolCaller interface {
  Call(context.Context,string,map[string]any)(map[string]any,error)
 }
 type Author interface {
- Propose(context.Context,string,map[string]string)(map[string]string,error)
+ Propose(context.Context,string,map[string]string,[]string)(map[string]string,error)
 }
 
 type Engine struct {
@@ -173,7 +173,12 @@ func (e *Engine) Dispatch(ctx context.Context,key,kind string,input json.RawMess
    if e.Author==nil{return nil,errors.New("automatic authoring unavailable")}
    inspected,e2:=resultObject(w,"inspect");if e2!=nil{return nil,e2}
    files,e2:=stringMap(inspected["files"]);if e2!=nil{return nil,e2}
-   changes,e2=e.Author.Propose(ctx,str(args["objective"]),files);if e2!=nil{return nil,e2}
+   allowed,_:=args["allowed_paths"].([]any)
+   paths:=make([]string,0,len(allowed));allow:=map[string]bool{}
+   for _,item:=range allowed {p:=str(item);if !validSourcePath(p)||allow[p]{return nil,errors.New("invalid editable path")};allow[p]=true;paths=append(paths,p)}
+   if len(paths)==0{return nil,errors.New("automatic authorship has no authorized file paths")}
+   changes,e2=e.Author.Propose(ctx,str(args["objective"]),files,paths);if e2!=nil{return nil,e2}
+   for name:=range changes{if !allow[name]{return nil,errors.New("author proposed an unauthorized file")}}
   }
   if err=validateChanges(changes);err!=nil{return nil,err}
   out=map[string]any{"changes":changes}
