@@ -47,6 +47,7 @@ func (s *Server) sessionReadAllowed(r *http.Request) bool {
 		"/v1/recommendations":true,
 		"/v1/reports/weekly":true,
 		"/v1/calendar":true,
+        "/v1/calendar/occurrences":true,
 		"/v1/compute/profiles":true,
 		"/v1/software":true,
 		"/v1/media/search":true,
