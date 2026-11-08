@@ -48,7 +48,7 @@ func recipeImageNames(doc Document) (map[string]bool, error) {
 }
 
 func readZipFile(entry *zip.File, limit int) ([]byte, error) {
-	if entry.FileInfo().IsDir() || entry.UncompressedSize64 > uint64(limit) {
+	if !entry.FileInfo().Mode().IsRegular() || entry.UncompressedSize64 > uint64(limit) {
 		return nil, ErrBundleTooLarge
 	}
 	reader, err := entry.Open()
@@ -121,20 +121,28 @@ func (s *Store) ImportBundle(content []byte) (int, error) {
 	var manifest []byte
 	files := map[string][]byte{}
 	seen := map[string]bool{}
+	// The compressed ZIP limit alone does not constrain decompressed memory.
+	// Apply the same aggregate ceiling while reading entries.
+	remaining := MaxPortableBundleBytes
 	for _, file := range reader.File {
 		if seen[file.Name] { return 0, errors.New("duplicate recipe archive entry") }
 		seen[file.Name] = true
 		switch {
 		case file.Name == "recipes.json":
+			if file.UncompressedSize64 > uint64(remaining) { return 0, ErrBundleTooLarge }
 			manifest, err = readZipFile(file, maxPortableManifestBytes)
 			if err != nil { return 0, err }
+			remaining -= len(manifest)
 		case strings.HasPrefix(file.Name, "images/"):
 			name := strings.TrimPrefix(file.Name, "images/")
 			if _, ok := imageMediaType(name); !ok {
 				return 0, errors.New("invalid image name in recipe archive")
 			}
+			if file.UncompressedSize64 > uint64(remaining) { return 0, ErrBundleTooLarge }
 			body, readErr := readZipFile(file, MaxImageBytes)
 			if readErr != nil { return 0, readErr }
+			if len(body) > remaining { return 0, ErrBundleTooLarge }
+			remaining -= len(body)
 			digest := sha256.Sum256(body)
 			if hex.EncodeToString(digest[:]) != name[:64] {
 				return 0, errors.New("recipe archive image digest mismatch")
