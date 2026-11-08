@@ -158,16 +158,58 @@ func ownerRequest(ctx context.Context, method, path string, input any) ([]byte, 
 
 func run(args []string) error {
 	if len(args) == 0 {
-		return errors.New("expected enroll, login, status, pending, confirm or close")
+		return errors.New("expected enroll, vault-init, login, status, pending, confirm, close, credential-add, credential-list or credential-delete")
 	}
 	if args[0] == "enroll" {
 		return enroll(args[1:])
+	}
+	if args[0] == "vault-init" {
+		flags := flag.NewFlagSet("vault-init", flag.ContinueOnError)
+		destination := flags.String("key-file", "", "destination for owner-only credential encryption key")
+		if err := flags.Parse(args[1:]); err != nil {
+			return err
+		}
+		if flags.NArg() != 0 || *destination == "" {
+			return errors.New("vault-init requires --key-file in a private directory")
+		}
+		key := make([]byte, 32)
+		if _, err := rand.Read(key); err != nil {
+			return err
+		}
+		defer func() { for i := range key { key[i] = 0 } }()
+		return createProtectedFile(*destination, key)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	var path, method string
 	var input any
 	switch args[0] {
+	case "credential-list":
+		if len(args) != 1 { return errors.New("credential-list accepts no arguments") }
+		method, path = http.MethodGet, "/v1/credentials"
+	case "credential-add":
+		if len(args) != 2 || args[1] == "" || len(args[1]) > 64 {
+			return errors.New("credential-add requires one provider name")
+		}
+		provider := args[1]
+		secret, err := secretPrompt("Provider credential (hidden):")
+		if err != nil { return err }
+		password, err := secretPrompt("Homelab administrative password:")
+		if err != nil { return err }
+		code, err := secretPrompt("New six-digit authenticator code:")
+		if err != nil { return err }
+		method, path = http.MethodPost, "/v1/credentials"
+		input = map[string]string{"provider": provider, "secret": secret, "password": password, "totp": code}
+	case "credential-delete":
+		if len(args) != 2 || len(args[1]) != 32 || strings.Trim(args[1], "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_") != "" {
+			return errors.New("credential-delete requires an exact opaque credential handle")
+		}
+		password, err := secretPrompt("Homelab administrative password:")
+		if err != nil { return err }
+		code, err := secretPrompt("New six-digit authenticator code:")
+		if err != nil { return err }
+		method, path = http.MethodDelete, "/v1/credentials/" + args[1]
+		input = map[string]string{"password": password, "totp": code}
 	case "status":
 		method, path = http.MethodGet, "/v1/session"
 	case "pending":
