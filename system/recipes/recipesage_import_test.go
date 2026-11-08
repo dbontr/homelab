@@ -83,14 +83,14 @@ func TestRecipeSagePreviewAndSelectiveImport(t *testing.T) {
 	if got := db.List(""); len(got) != 0 {
 		t.Fatal("preview changed the database")
 	}
-	if _, err := db.ImportRecipeSage(body, "invalid-digest", []string{first.Key}); err == nil {
+	if _, err := db.ImportRecipeSage(body, "invalid-digest", []string{first.Key}, nil); err == nil {
 		t.Fatal("import accepted a stale preview digest")
 	}
-	if _, err := db.ImportRecipeSage(body, preview.Digest, []string{first.Key, preview.Candidates[1].Key}); err == nil ||
+	if _, err := db.ImportRecipeSage(body, preview.Digest, []string{first.Key, preview.Candidates[1].Key}, nil); err == nil ||
 		len(db.List("")) != 0 {
 		t.Fatalf("unreviewed import was not atomic: %v", err)
 	}
-	result, err := db.ImportRecipeSage(body, preview.Digest, []string{first.Key})
+	result, err := db.ImportRecipeSage(body, preview.Digest, []string{first.Key}, nil)
 	if err != nil || result.Imported != 1 || len(result.IDs) != 1 {
 		t.Fatalf("selected import failed: %+v %v", result, err)
 	}
@@ -102,7 +102,7 @@ func TestRecipeSagePreviewAndSelectiveImport(t *testing.T) {
 	if err != nil || after.Ready != 0 || after.Candidates[0].Status != "imported" {
 		t.Fatalf("already-imported source not recognized: %+v %v", after, err)
 	}
-	if _, err := db.ImportRecipeSage(body, preview.Digest, []string{first.Key}); !errors.Is(err, ErrConflict) {
+	if _, err := db.ImportRecipeSage(body, preview.Digest, []string{first.Key}, nil); !errors.Is(err, ErrConflict) {
 		t.Fatalf("repeated source imported twice: %v", err)
 	}
 	saved.Notes = "Modified independently"
@@ -150,7 +150,7 @@ func TestRecipeSageTitlesDoNotDetermineSourceIdentity(t *testing.T) {
 	}
 	if result, err := db.ImportRecipeSage(body, preview.Digest, []string{
 		preview.Candidates[0].Key, preview.Candidates[1].Key,
-	}); err != nil || result.Imported != 2 {
+	}, nil); err != nil || result.Imported != 2 {
 		t.Fatalf("independent sources failed: %+v %v", result, err)
 	}
 }
@@ -163,12 +163,13 @@ func TestRecipeSageRejectsDuplicateAndMalformedInputs(t *testing.T) {
 	same := sageRecipeRecord("source-1", "Rice", "2 cups rice")
 	duplicated := recipeSageFixture(t, same, same)
 	preview, err := db.PreviewRecipeSage(duplicated)
-	if err != nil || preview.Ready != 1 || preview.Candidates[1].Status != "duplicate" {
+	if err != nil || preview.Ready != 0 ||
+		preview.Candidates[0].Status != "duplicate" || preview.Candidates[1].Status != "duplicate" {
 		t.Fatalf("source duplicate was not marked: %+v %v", preview, err)
 	}
 	if _, err := db.ImportRecipeSage(duplicated, preview.Digest, []string{
 		preview.Candidates[0].Key, preview.Candidates[0].Key,
-	}); err == nil {
+	}, nil); err == nil {
 		t.Fatal("repeated selection accepted")
 	}
 	for _, invalid := range [][]byte{
