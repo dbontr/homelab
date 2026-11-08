@@ -128,6 +128,7 @@ func(s *Server) Handler()http.Handler{
  mux.HandleFunc("GET /v1/recommendations",s.recommendations)
  mux.HandleFunc("GET /v1/reports/weekly",s.weekly)
  mux.HandleFunc("GET /v1/planning/week",s.uiWeekPlan)
+ mux.HandleFunc("GET /v1/planning/review",s.uiTaskReview)
  mux.HandleFunc("GET /v1/calendar",s.calendarEvents)
  mux.HandleFunc("GET /v1/calendar/occurrences",s.calendarOccurrences)
  mux.HandleFunc("GET /v1/devices",func(w http.ResponseWriter,_ *http.Request){writeJSON(w,200,s.deviceCatalog.List())})
@@ -269,6 +270,7 @@ func(s *Server)localTools()[]map[string]any{
   tool("rule_set","Store a personal constraint or preference; only structured rules are mechanically enforced",map[string]any{"key":prop("string"),"text":prop("string"),"kind":prop("string")},"key","text","kind"),
   tool("rule_list","List personal rules",map[string]any{}),
   tool("weekly_report","Summarize recorded task completions",map[string]any{"week_of":prop("string")}),
+  tool("task_review","Inspect recorded deadlines, prerequisites and missing estimates without interpreting absent logs as neglect",map[string]any{"horizon_days":prop("integer")}),
   tool("activity_recent","List confirmed personal activity from canonical records, without fabricating unobserved actions",map[string]any{"limit":prop("integer")}),
   tool("resource_get","Resolve a canonical local resource identity from its owning store",map[string]any{"kind":prop("string"),"id":prop("string")},"kind","id"),
   tool("system_status","List configured integrations",map[string]any{}),
@@ -357,6 +359,7 @@ func(s *Server)localTool(ctx context.Context,name string,raw json.RawMessage)(an
   Kind string `json:"kind"`
   WeekOf string `json:"week_of"`
   ResourceKind string `json:"kind"`
+  HorizonDays int `json:"horizon_days"`
  }
  if len(raw)>0{if e:=json.Unmarshal(raw,&args);e!=nil{return nil,e}}
  switch name{
@@ -369,6 +372,10 @@ func(s *Server)localTool(ctx context.Context,name string,raw json.RawMessage)(an
  case "rule_set":return s.db.SetRule(args.Key,args.Text,args.Kind)
  case "rule_list":return s.db.Rules(),nil
  case "weekly_report":return s.db.Report(args.WeekOf)
+ case "task_review":
+  n:=args.HorizonDays
+  if n==0{n=7}
+  return s.db.ReviewTasks(time.Now(),n)
  case "activity_recent":
   n:=args.Limit
   if n==0{n=50}
