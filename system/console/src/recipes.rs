@@ -120,9 +120,16 @@ fn RecipeChoice(record: Recipe, active_id: String, on_select: EventHandler<Strin
         button { class: "recipe-list-item",
             aria_pressed: if active_id == record.id { "true" } else { "false" },
             onclick: move |_| on_select.call(id.clone()),
-            span { class: "recipe-list-title", "{record.title}" }
-            span { class: "small muted",
-                "{record.servings} servings · {record.prep_minutes+record.cook_minutes} min"
+            div { class: "recipe-list-entry",
+                if !record.image_ref.is_empty() {
+                    img { class: "recipe-list-thumbnail", src: "{record.image_ref}", alt: "", loading: "lazy" }
+                }
+                div { class: "recipe-list-copy",
+                    span { class: "recipe-list-title", "{record.title}" }
+                    span { class: "small muted",
+                        "{record.servings} servings · {record.prep_minutes+record.cook_minutes} min"
+                    }
+                }
             }
         }
     }
@@ -340,6 +347,57 @@ pub fn Recipes(csrf: String) -> Element {
                                     }
                                 }
                             }
+                            div { class: "recipe-image-upload section",
+                                label { class: "label", for: "recipe-cover", "Recipe image" }
+                                input { id: "recipe-cover", class: "field recipe-file-input",
+                                    type: "file", accept: ".png,.jpg,.jpeg",
+                                    disabled: busy(),
+                                    onchange: move |event| {
+                                        if busy() { return; }
+                                        let Some(file) = event.files().into_iter().next() else { return; };
+                                        if file.size() > 5 * 1024 * 1024 {
+                                            error.set("Recipe image must be 5 MiB or smaller".to_owned());
+                                            return;
+                                        }
+                                        let media_type = file.content_type().unwrap_or_default();
+                                        if media_type != "image/jpeg" && media_type != "image/png" {
+                                            error.set("Choose a JPEG or PNG image".to_owned());
+                                            return;
+                                        }
+                                        let token = csrf();
+                                        busy.set(true);
+                                        error.set(String::new());
+                                        spawn(async move {
+                                            let uploaded = match file.read_bytes().await {
+                                                Ok(bytes) => api::upload_recipe_image(&token, &media_type, bytes.to_vec()).await,
+                                                Err(_) => Err("Could not read the selected image".to_owned()),
+                                            };
+                                            match uploaded {
+                                                Ok(image) => {
+                                                    let mut record = draft();
+                                                    record.image_ref = image.image_ref;
+                                                    draft.set(record);
+                                                    notice.set("Image uploaded. Save the recipe to keep this image attached.".to_owned());
+                                                }
+                                                Err(message) => error.set(message),
+                                            }
+                                            busy.set(false);
+                                        });
+                                    }
+                                }
+                                p { class: "small muted", "Private JPEG or PNG, maximum 5 MiB and 16 megapixels." }
+                                if !draft_value.image_ref.is_empty() {
+                                    div { class: "recipe-image-preview",
+                                        img { src: "{draft_value.image_ref}", alt: "Recipe image preview" }
+                                        button { class: "btn btn-outline btn-sm", type: "button",
+                                            onclick: move |_| {
+                                                let mut record = draft();
+                                                record.image_ref.clear();
+                                                draft.set(record);
+                                            }, "Remove image from recipe" }
+                                    }
+                                }
+                            }
                             div { class: "inline-row space-between",
                                 h3 { class: "section-title", "Ingredients" }
                                 button { class: "btn btn-outline btn-sm", type: "button", onclick: move |_| {
@@ -512,6 +570,11 @@ pub fn Recipes(csrf: String) -> Element {
                                     }
                                 }
                                 div { class: "card-body stack",
+                                    if !recipe.image_ref.is_empty() {
+                                        div { class: "recipe-cover",
+                                            img { src: "{recipe.image_ref}", alt: "{recipe.title}", loading: "lazy" }
+                                        }
+                                    }
                                     div { class: "inline-row recipe-portion",
                                         label { class: "label", for: "recipe-portion", "Portions to make" }
                                         input { id: "recipe-portion", class: "field", type: "number", min: "0.25", step: "0.25",

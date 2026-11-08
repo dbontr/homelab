@@ -19,7 +19,9 @@ treat local personal tasks as Workspace compute tasks.
   bounded public HTTPS page. The URL importer validates public DNS answers,
   pins TLS connections to resolved addresses, rejects redirects and proxies,
   and returns an unsaved draft. Missing ingredient quantities require review.
-  RecipeSage data is not migrated or deleted. Mark groceries as purchased
+  Attach privately stored JPEG or PNG images from the browser editor; images
+  are immutable, addressable by content hash and retrieved only with recipe
+  read authorization. RecipeSage data is not migrated or deleted. Mark groceries as purchased
   through a revision-fenced persistent record.
 - **Food and Health:** Nutrition associated with a first-party recipe may be
   submitted as an unconfirmed Health food proposal. An owner must separately
