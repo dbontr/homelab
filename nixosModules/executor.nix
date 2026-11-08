@@ -82,6 +82,24 @@ in
         description = "Exact DNS subject alternative name required in the coordinator client certificate.";
       };
     };
+    workspace = {
+      enable = lib.mkEnableOption "restricted Workspace controller administrative operations";
+      endpoint = lib.mkOption {
+        type = lib.types.str;
+        default = "";
+        description = "Fixed HTTPS Workspace MCP endpoint, or loopback HTTP for a colocated controller.";
+      };
+      rootTokenFile = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Protected controller root token loaded only into the privileged executor.";
+      };
+      projects = lib.mkOption { type = lib.types.listOf lib.types.str; default = []; };
+      workers = lib.mkOption { type = lib.types.listOf lib.types.str; default = []; };
+      images = lib.mkOption { type = lib.types.listOf lib.types.str; default = []; };
+      software = lib.mkOption { type = lib.types.listOf lib.types.str; default = []; };
+      packages = lib.mkOption { type = lib.types.listOf lib.types.str; default = []; };
+    };
     kubernetes = {
       enable = lib.mkEnableOption "explicit Kubernetes deployment operations";
       kubeconfigFile = lib.mkOption {
@@ -138,6 +156,14 @@ in
       {
         assertion = cfg.healthServices != [];
         message = "Independent NixOS releases require at least one health service.";
+      }
+      {
+        assertion = !cfg.workspace.enable ||
+          (cfg.workspace.endpoint != "" && cfg.workspace.rootTokenFile != null &&
+           (cfg.workspace.projects != [] || cfg.workspace.workers != [] ||
+            cfg.workspace.images != [] || cfg.workspace.software != [] ||
+            cfg.workspace.packages != []));
+        message = "Workspace executor requires a fixed endpoint, protected controller credential and explicit resource allowlist.";
       }
       {
         assertion = !cfg.kubernetes.enable ||
@@ -200,6 +226,16 @@ in
         HOMELAB_EXECUTOR_REMOTE_KEY = "/run/credentials/homelab-executord.service/remote-key";
         HOMELAB_EXECUTOR_REMOTE_CA = "/run/credentials/homelab-executord.service/remote-ca";
         HOMELAB_EXECUTOR_REMOTE_COORDINATOR = cfg.remote.coordinatorDNS;
+      } // lib.optionalAttrs cfg.workspace.enable {
+        HOMELAB_EXECUTOR_WORKSPACE_TOKEN = "/run/credentials/homelab-executord.service/workspace-token";
+        HOMELAB_EXECUTOR_WORKSPACE_POLICY_FILE = pkgs.writeText "homelab-workspace-policy.json" (builtins.toJSON {
+          Endpoint = cfg.workspace.endpoint;
+          Projects = cfg.workspace.projects;
+          Workers = cfg.workspace.workers;
+          Images = cfg.workspace.images;
+          Software = cfg.workspace.software;
+          Packages = cfg.workspace.packages;
+        });
       } // lib.optionalAttrs cfg.kubernetes.enable {
         HOMELAB_EXECUTOR_KUBECTL = "${pkgs.kubectl}/bin/kubectl";
         HOMELAB_EXECUTOR_KUBECONFIG = "/run/credentials/homelab-executord.service/kubeconfig";
@@ -224,6 +260,8 @@ in
           "auth-ca:${cfg.authorization.remote.serverCAFile}"
         ] ++ lib.optionals cfg.kubernetes.enable [
           "kubeconfig:${cfg.kubernetes.kubeconfigFile}"
+        ] ++ lib.optionals cfg.workspace.enable [
+          "workspace-token:${cfg.workspace.rootTokenFile}"
         ] ++ lib.optionals cfg.remote.enable [
           "remote-cert:${cfg.remote.certificateFile}"
           "remote-key:${cfg.remote.keyFile}"
@@ -233,7 +271,7 @@ in
         RestartSec = "5s";
         UMask = "0077";
         NoNewPrivileges = !cfg.allowReleaseActivation;
-        PrivateNetwork = !(cfg.kubernetes.enable || cfg.allowReleaseActivation || cfg.remote.enable || cfg.authorization.remote.enable);
+        PrivateNetwork = !(cfg.kubernetes.enable || cfg.allowReleaseActivation || cfg.remote.enable || cfg.authorization.remote.enable || cfg.workspace.enable);
         PrivateTmp = true;
         ProtectSystem = if cfg.allowReleaseActivation then false else "strict";
         ReadWritePaths = [ "/nix/var/nix/profiles" cfg.stateDirectory ];
@@ -243,7 +281,7 @@ in
         ProtectKernelModules = !cfg.allowReleaseActivation;
         ProtectControlGroups = !cfg.allowReleaseActivation;
         CapabilityBoundingSet = lib.mkIf (!cfg.allowReleaseActivation) "";
-        RestrictAddressFamilies = [ "AF_UNIX" ] ++ lib.optionals (cfg.kubernetes.enable || cfg.allowReleaseActivation || cfg.remote.enable || cfg.authorization.remote.enable) [ "AF_INET" "AF_INET6" ];
+        RestrictAddressFamilies = [ "AF_UNIX" ] ++ lib.optionals (cfg.kubernetes.enable || cfg.allowReleaseActivation || cfg.remote.enable || cfg.authorization.remote.enable || cfg.workspace.enable) [ "AF_INET" "AF_INET6" ];
         RestrictNamespaces = !cfg.allowReleaseActivation;
         RestrictSUIDSGID = true;
         LockPersonality = true;
