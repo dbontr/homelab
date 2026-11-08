@@ -4,6 +4,7 @@ mod recipes;
 mod tasks;
 mod personal;
 mod views;
+mod monitoring;
 
 use dioxus::prelude::*;
 use components::Icon;
@@ -16,6 +17,7 @@ enum Page {
     Projects,
     Compute,
     Software,
+    Monitoring,
     Tasks,
     Learning,
     Health,
@@ -31,6 +33,7 @@ impl Page {
             Self::Projects => "Projects",
             Self::Compute => "Compute",
             Self::Software => "Software library",
+            Self::Monitoring => "Monitoring",
             Self::Tasks => "Tasks",
             Self::Learning => "Learning",
             Self::Health => "Health",
@@ -190,6 +193,13 @@ fn App() -> Element {
                                 div { class: "nav-label", "System" }
                                 button {
                                     class: "nav-item",
+                                    aria_current: if page()==Page::Monitoring {"page"} else {"false"},
+                                    onclick: move |_| { page.set(Page::Monitoring); mobile_open.set(false); },
+                                    Icon { name: "monitoring".to_owned() }
+                                    span { "Monitoring" }
+                                }
+                                button {
+                                    class: "nav-item",
                                     aria_current: if page()==Page::Administration {"page"} else {"false"},
                                     onclick: move |_| { page.set(Page::Administration); mobile_open.set(false); },
                                     Icon { name: "admin".to_owned() }
@@ -254,6 +264,7 @@ fn App() -> Element {
                                 Page::Projects => rsx! { views::Projects {} },
                                 Page::Compute => rsx! { views::Compute {} },
                                 Page::Software => rsx! { views::Software {} },
+                                Page::Monitoring => rsx! { monitoring::Monitoring {} },
                                 Page::Tasks => rsx! { tasks::Tasks { csrf: csrf.clone() } },
                                 Page::Learning => rsx! { personal::Learning { csrf: csrf.clone() } },
                                 Page::Health => rsx! { personal::Health { csrf: csrf.clone() } },
