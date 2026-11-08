@@ -13,6 +13,10 @@
 - [RFC 6749: The OAuth 2.0 Authorization Framework](https://www.rfc-editor.org/rfc/rfc6749) — IETF. Used for: provider authorization-code flow boundaries.
 - [RFC 2104: HMAC: Keyed-Hashing for Message Authentication](https://www.rfc-editor.org/rfc/rfc2104) — IETF. Used for: operation-bound approval grants.
 - [NIST SP 800-38D: Recommendation for Block Cipher Modes of Operation — Galois/Counter Mode (GCM)](https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication800-38d.pdf) — NIST. Used for: authenticated encryption of locally stored provider credentials.
+- [RFC 6238: TOTP — Time-Based One-Time Password Algorithm](https://www.rfc-editor.org/rfc/rfc6238) — IETF. Used for: thirty-second HMAC-SHA1 one-time codes and authenticator verification in the owner security service.
+- [RFC 4226: HOTP — An HMAC-Based One-Time Password Algorithm](https://www.rfc-editor.org/rfc/rfc4226) — IETF. Used for: dynamic truncation and six-digit authenticator codes.
+- [systemd.exec manual](https://www.freedesktop.org/software/systemd/man/latest/systemd.exec.html) — systemd project. Used for: independent service users, credentials loading, protected state and runtime directories, and service sandboxing.
+- [systemd-ask-password manual](https://www.freedesktop.org/software/systemd/man/latest/systemd-ask-password.html) — systemd project. Used for: local interactive owner-secret entry without command-line arguments.
 - [RFC 8018: PKCS #5 Password-Based Cryptography Specification, Version 2.1](https://www.rfc-editor.org/rfc/rfc8018) — IETF. Used for: PBKDF2-HMAC-SHA256 owner passphrase verification.
 - [MCP Streamable HTTP Transport — Security and Endpoint](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports) — Model Context Protocol. Used for: incoming Origin validation and authenticated Streamable HTTP requests.
 - [OWASP API Security Top 10](https://owasp.org/API-Security/editions/2023/en/0x11-t10/) — OWASP. Used for: function-level authorization, bounded downstream responses and unsafe external API consumption.
