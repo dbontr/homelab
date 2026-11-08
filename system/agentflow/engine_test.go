@@ -123,3 +123,20 @@ func TestEngineDoesNotReturnClaimSecrets(t *testing.T){
  raw,err:=json.Marshal(run);if err!=nil{t.Fatal(err)}
  if strings.Contains(string(raw),"lease_digest")||strings.Contains(string(raw),"token"){t.Fatal("leaked execution claim details")}
 }
+
+func TestCancelSignalsActiveEngineOperation(t *testing.T){
+ e,_:=testEngine(t)
+ run,err:=e.Submit(sampleProgram());if err!=nil{t.Fatal(err)}
+ ctx,cancel:=context.WithCancel(context.Background())
+ defer cancel()
+ e.activeMu.Lock()
+ e.active=map[string]context.CancelFunc{run.ID:cancel}
+ e.activeMu.Unlock()
+ if err:=e.Cancel(run.ID,run.Revision);err!=nil{t.Fatal(err)}
+ select{
+ case <-ctx.Done():
+ default:t.Fatal("active execution was not interrupted")
+ }
+ current,err:=e.Get(run.ID);if err!=nil{t.Fatal(err)}
+ if !current.Cancelled||current.Status!=Cancelled{t.Fatalf("unexpected cancellation status: %+v",current)}
+}
