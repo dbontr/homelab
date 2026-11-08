@@ -24,10 +24,14 @@ The Go platform exposes authenticated loopback HTTP endpoints. Native JSON and M
 - GET /v1/compute/profiles/{id}?version={n}: read a saved revision, or the latest if no version is supplied
 - PUT /v1/compute/profiles/{id}: save a profile with an exact `expected_version` revision guard
 - POST /v1/compute/profiles/{id}/plan: request advisory Workspace resource planning without reserving resources
+- GET /v1/books/search?q=...: bounded owner-initiated Open Library catalog lookup when explicitly configured
+- GET/POST /v1/books/requests and PUT /v1/books/requests/{id}: private desired-book list and manual fulfillment/cancellation with revision control
+- GET /v1/activity?limit=...: recorded activity derived from canonical personal and recipe data
+- GET /v1/resources/{kind}/{id}: canonical record with stable resource reference and links, read from its owning store
 - GET /v1/media/search: Seerr movie and television search, when configured
 - GET /v1/media/requests and POST /v1/media/requests: list and submit requests
 
-All endpoints other than /healthz require a bearer token supplied through a protected runtime credential file. The server binds to loopback and requires separately authenticated ingress for remote clients.
+All endpoints other than /healthz require authorization. The platform accepts its protected API bearer token or, for an explicitly limited subset of native routes, an authenticated short-lived browser session with Origin and CSRF checks for permitted mutations. Browser sessions cannot call MCP tools or execute arbitrary compute and cluster operations. The server binds to loopback and requires separately authenticated ingress for remote clients.
 
 ## MCP
 
