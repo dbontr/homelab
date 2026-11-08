@@ -9,6 +9,7 @@ import (
  "errors"
  "fmt"
  "io"
+ "log"
  "net"
  "net/http"
  "os"
@@ -115,8 +116,14 @@ func(e *Executor) Execute(ctx context.Context,operation,target string,args json.
  // Authentication/confirmation takes place in the separate security process.
  // No gateway-supplied claim of approval is accepted.
  decision,err:=e.cfg.Auth.Authorize(ctx,operation,target,canonical)
- if err!=nil{return security.Authorization{Reason:"independent authorization unavailable"},err}
- if !decision.Allowed{return decision,nil}
+ if err!=nil{
+  log.Print("security audit privileged_operation denied")
+  return security.Authorization{Reason:"independent authorization unavailable"},err
+ }
+ if !decision.Allowed{
+  log.Print("security audit privileged_operation denied")
+  return decision,nil
+ }
  switch operation{
  case "infrastructure__service_restart":
   err=e.cfg.Run(ctx,e.cfg.Systemctl,"restart",fields["service"].(string))
@@ -131,7 +138,11 @@ func(e *Executor) Execute(ctx context.Context,operation,target string,args json.
   if err==nil{err=e.cfg.Run(ctx,command,argv...)}
 
  }
- if err!=nil{return security.Authorization{Reason:"execution failed"},err}
+ if err!=nil{
+  log.Print("security audit privileged_operation failed")
+  return security.Authorization{Reason:"execution failed"},err
+ }
+ log.Print("security audit privileged_operation succeeded")
  return security.Authorization{Allowed:true},nil
 }
 
