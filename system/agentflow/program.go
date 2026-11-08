@@ -109,7 +109,9 @@ func Summarize(w Workflow)RunSummary {
  out:=RunSummary{ID:w.ID,Project:w.Project,Revision:w.Revision,Cancelled:w.Cancelled,Status:Pending}
  allComplete:=true
  for _,step:=range w.Steps{
-  out.Steps=append(out.Steps,StepSummary{ID:step.ID,Kind:step.Kind,Status:step.Status,Attempts:step.Attempts,Error:step.LastError,Result:append(json.RawMessage(nil),step.Result...)})
+  var visible json.RawMessage
+  if step.Kind=="provision"||step.Kind=="checkout"||step.Kind=="verify"||step.Kind=="export"||step.Kind=="publish"{visible=append(json.RawMessage(nil),step.Result...)}
+  out.Steps=append(out.Steps,StepSummary{ID:step.ID,Kind:step.Kind,Status:step.Status,Attempts:step.Attempts,Error:step.LastError,Result:visible})
   if step.Status==Running{out.Status=Running}
   if step.Status==Failed{out.Status=Failed}
   if step.Status!=Succeeded{allComplete=false}
