@@ -58,6 +58,7 @@ type Recipe struct {
 	Tags        []string    `json:"tags,omitempty"`
 	Equipment   []string    `json:"equipment,omitempty"`
 	SourceURL   string      `json:"source_url,omitempty"`
+	ImportRef   string      `json:"import_ref,omitempty"`
 	ImageRef    string      `json:"image_ref,omitempty"`
 	Notes       string      `json:"notes,omitempty"`
 	LastMade    string      `json:"last_made,omitempty"`
@@ -170,6 +171,14 @@ func Open(path string) (*Store, error) {
 			return nil, fmt.Errorf("stored recipe %s: %w", id, err)
 		}
 	}
+	seenImports := make(map[string]string)
+	for id, recipe := range s.data.Recipes {
+		if recipe.ImportRef == "" { continue }
+		if old, exists := seenImports[recipe.ImportRef]; exists {
+			return nil, fmt.Errorf("duplicate recipe import reference for %s and %s", old, id)
+		}
+		seenImports[recipe.ImportRef] = id
+	}
 	for id, meal := range s.data.Meals {
 		if id != meal.ID || !validID(id) { return nil, errors.New("meal identifier mismatch") }
 		if err := validateMeal(meal); err != nil { return nil, err }
@@ -261,6 +270,7 @@ func validateRecipe(r Recipe) error {
 		if strings.TrimSpace(text) == "" || len(text) > 100 { return errors.New("invalid tag or equipment") }
 	}
 	if len(r.SourceURL) > 2000 || len(r.ImageRef) > 2000 || !validDate(r.LastMade) { return errors.New("invalid source, image or last-made date") }
+	if r.ImportRef != "" && !validRecipeSageRef(r.ImportRef) { return errors.New("invalid recipe import reference") }
 	if r.ID != "" && !validID(r.ID) { return errors.New("invalid recipe ID") }
 	if r.SourceURL != "" {
 		u, err := url.Parse(r.SourceURL)
@@ -338,6 +348,7 @@ func (s *Store) Save(recipe Recipe) (Recipe, error) {
 	now := time.Now().UTC()
 	next := duplicate(s.data)
 	if recipe.ID == "" {
+		if recipe.ImportRef != "" { return Recipe{}, errors.New("source provenance is assigned by the import operation") }
 		if recipe.Revision != 0 { return Recipe{}, ErrConflict }
 		id, err := randomID()
 		if err != nil { return Recipe{}, err }
@@ -346,6 +357,7 @@ func (s *Store) Save(recipe Recipe) (Recipe, error) {
 		old, ok := s.data.Recipes[recipe.ID]
 		if !ok { return Recipe{}, ErrNotFound }
 		if recipe.Revision != old.Revision { return Recipe{}, ErrConflict }
+		if recipe.ImportRef != old.ImportRef { return Recipe{}, ErrConflict }
 		next.History[recipe.ID] = appendRevision(next.History[recipe.ID], old)
 		recipe.Revision = old.Revision + 1
 		recipe.CreatedAt = old.CreatedAt
@@ -506,10 +518,18 @@ func (s *Store) Import(doc Document) (int, error) {
 	defer s.mu.Unlock()
 	next := duplicate(s.data)
 	imported := make(map[string]Recipe, len(doc.Recipes))
+	importRefs := make(map[string]bool, len(s.data.Recipes))
+	for _, existing := range s.data.Recipes {
+		if existing.ImportRef != "" { importRefs[existing.ImportRef] = true }
+	}
 	for _, recipe := range doc.Recipes {
 		if !validID(recipe.ID) || recipe.Revision < 1 || recipe.CreatedAt.IsZero() || recipe.UpdatedAt.IsZero() { return 0, errors.New("import requires valid IDs, revisions and timestamps") }
 		if _, exists := next.Recipes[recipe.ID]; exists { return 0, ErrConflict }
 		if err := validateRecipe(recipe); err != nil { return 0, err }
+		if recipe.ImportRef != "" {
+			if importRefs[recipe.ImportRef] { return 0, ErrConflict }
+			importRefs[recipe.ImportRef] = true
+		}
 		next.Recipes[recipe.ID] = copyRecipe(recipe)
 		imported[recipe.ID] = recipe
 	}
