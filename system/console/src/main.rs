@@ -1,6 +1,8 @@
 mod api;
 mod components;
 mod recipes;
+mod tasks;
+mod personal;
 mod views;
 
 use dioxus::prelude::*;
@@ -252,21 +254,9 @@ fn App() -> Element {
                                 Page::Projects => rsx! { views::Projects {} },
                                 Page::Compute => rsx! { views::Compute {} },
                                 Page::Software => rsx! { views::Software {} },
-                                Page::Tasks => rsx! { views::Tasks {} },
-                                Page::Learning => rsx! {
-                                    views::Capabilities {
-                                        title: "Learning".to_owned(),
-                                        description: "Adaptive teaching capabilities.".to_owned(),
-                                        prefix: "learning__".to_owned()
-                                    }
-                                },
-                                Page::Health => rsx! {
-                                    views::Capabilities {
-                                        title: "Health".to_owned(),
-                                        description: "Health and wellness capabilities.".to_owned(),
-                                        prefix: "health__".to_owned()
-                                    }
-                                },
+                                Page::Tasks => rsx! { tasks::Tasks { csrf: csrf.clone() } },
+                                Page::Learning => rsx! { personal::Learning { csrf: csrf.clone() } },
+                                Page::Health => rsx! { personal::Health { csrf: csrf.clone() } },
                                 Page::Recipes => rsx! { recipes::Recipes { csrf: csrf.clone() } },
                                 Page::Media => rsx! { views::Media {} },
                                 Page::Administration => rsx! { views::Administration {} },

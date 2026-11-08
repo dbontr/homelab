@@ -13,7 +13,7 @@ import (
 	"github.com/dbontr/homelab-new/system/store"
 )
 
-func TestConsoleBrowserSessionIsReadOnly(t *testing.T) {
+func TestConsoleBrowserSessionScopesMutations(t *testing.T) {
 	db,err:=store.Open(filepath.Join(t.TempDir(),"state.json"),"UTC")
 	if err!=nil{t.Fatal(err)}
 	s,err:=New(db,strings.Repeat("g",40),nil)
@@ -30,6 +30,7 @@ func TestConsoleBrowserSessionIsReadOnly(t *testing.T) {
 		req.Host="console.example"
 		req.Header.Set("Origin","https://console.example")
 		if cookie!=nil{req.AddCookie(cookie)}
+        if body!=""{req.Header.Set("Content-Type","application/json")}
 		if csrf!=""{req.Header.Set("X-CSRF-Token",csrf)}
 		w:=httptest.NewRecorder()
 		h.ServeHTTP(w,req)
@@ -60,7 +61,9 @@ func TestConsoleBrowserSessionIsReadOnly(t *testing.T) {
 	}
 	if err:=json.Unmarshal(status.Body.Bytes(),&result);err!=nil{t.Fatal(err)}
 	if !result.Authenticated||result.CSRF==""{t.Fatal("session status missing CSRF token")}
-	if w:=call("DELETE","/ui/session","",cookie,"wrong");w.Code!=403{
+	if w:=call("POST","/v1/tasks",`{"title":"Authorized task"}`,cookie,result.CSRF);w.Code!=201{t.Fatalf("owner task rejected: %d %s",w.Code,w.Body.String())}
+ if w:=call("POST","/mcp",`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`,cookie,result.CSRF);w.Code!=401{t.Fatalf("session reached MCP: %d",w.Code)}
+ if w:=call("DELETE","/ui/session","",cookie,"wrong");w.Code!=403{
 		t.Fatalf("CSRF bypassed: %d",w.Code)
 	}
 	if w:=call("DELETE","/ui/session","",cookie,result.CSRF);w.Code!=204{

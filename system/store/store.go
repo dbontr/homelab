@@ -24,6 +24,9 @@ type Task struct {
  ParentID string `json:"parent_id,omitempty"`
  DependsOn []string `json:"depends_on,omitempty"`
  Due string `json:"due,omitempty"`
+ Scheduled string `json:"scheduled,omitempty"`
+ Recurrence string `json:"recurrence,omitempty"`
+ Revision int `json:"revision"`
  Minutes int `json:"minutes,omitempty"`
  Energy string `json:"energy,omitempty"`
  Location string `json:"location,omitempty"`
@@ -40,6 +43,8 @@ type TaskInput struct {
  ParentID string `json:"parent_id,omitempty"`
  DependsOn []string `json:"depends_on,omitempty"`
  Due string `json:"due,omitempty"`
+ Scheduled string `json:"scheduled,omitempty"`
+ Recurrence string `json:"recurrence,omitempty"`
  Minutes int `json:"minutes,omitempty"`
  Energy string `json:"energy,omitempty"`
  Location string `json:"location,omitempty"`
@@ -108,6 +113,9 @@ func (s *Store) AddTask(in TaskInput)(Task,error){
  if in.Minutes<0||in.Minutes>1440{return Task{},errors.New("minutes must be 0-1440")}
  if in.Priority<0||in.Priority>5{return Task{},errors.New("priority must be 0-5")}
  if !validDue(in.Due){return Task{},errors.New("due must be YYYY-MM-DD or RFC3339")}
+ if in.Scheduled!=""{if _,e:=time.Parse(time.RFC3339,in.Scheduled);e!=nil{return Task{},errors.New("scheduled must be RFC3339")}}
+ if !validRecurrence(in.Recurrence)||in.Recurrence!=""&&in.Due==""{return Task{},errors.New("recurring tasks require a due date and a supported recurrence")}
+ if in.Scheduled!="" && in.Minutes<1 {return Task{},errors.New("scheduled tasks require a positive duration")}
  if in.Energy!=""&&in.Energy!="low"&&in.Energy!="medium"&&in.Energy!="high"{return Task{},errors.New("invalid energy")}
  s.mu.Lock();defer s.mu.Unlock()
  if in.GoalID!=""{if _,ok:=s.data.Goals[in.GoalID];!ok{return Task{},errors.New("goal does not exist")}}
@@ -120,7 +128,7 @@ func (s *Store) AddTask(in TaskInput)(Task,error){
   seen[dep]=true
  }
  key,e:=id();if e!=nil{return Task{},e}
- t:=Task{ID:key,Title:in.Title,Notes:in.Notes,GoalID:in.GoalID,Links:append([]string(nil),in.Links...),ParentID:in.ParentID,DependsOn:append([]string(nil),in.DependsOn...),Due:in.Due,Minutes:in.Minutes,Energy:in.Energy,Location:in.Location,Priority:in.Priority,Status:"open",CreatedAt:time.Now().UTC()}
+ t:=Task{ID:key,Title:in.Title,Notes:in.Notes,GoalID:in.GoalID,Links:append([]string(nil),in.Links...),ParentID:in.ParentID,DependsOn:append([]string(nil),in.DependsOn...),Due:in.Due,Scheduled:in.Scheduled,Recurrence:in.Recurrence,Revision:1,Minutes:in.Minutes,Energy:in.Energy,Location:in.Location,Priority:in.Priority,Status:"open",CreatedAt:time.Now().UTC()}
  next:=clone(s.data);next.Tasks[key]=t
  return t,s.save(next)
 }
@@ -128,8 +136,23 @@ func (s *Store) CompleteTask(key string)(Task,error){
  s.mu.Lock();defer s.mu.Unlock()
  t,ok:=s.data.Tasks[key];if !ok{return Task{},os.ErrNotExist}
  if t.Status=="completed"{return t,nil}
- now:=time.Now().UTC();t.Status="completed";t.CompletedAt=&now
- next:=clone(s.data);next.Tasks[key]=t
+ now:=time.Now().UTC()
+ next:=clone(s.data)
+ t.Status="completed";t.CompletedAt=&now;t.Revision++
+ next.Tasks[key]=t
+ if t.Recurrence!="" {
+  due,err:=nextRecurringTime(t.Due,t.Recurrence,now,s.zone)
+  if err!=nil{return Task{},err}
+  following:=t
+  following.ID,err=id();if err!=nil{return Task{},err}
+  following.Status="open";following.CompletedAt=nil;following.CreatedAt=now
+  following.Revision=1;following.Due=due
+  if t.Scheduled!="" {
+   following.Scheduled,err=nextRecurringTime(t.Scheduled,t.Recurrence,now,s.zone)
+   if err!=nil{return Task{},err}
+  }
+  next.Tasks[following.ID]=following
+ }
  return t,s.save(next)
 }
 func (s *Store) Tasks(status string)[]Task{

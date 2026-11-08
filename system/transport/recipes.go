@@ -141,3 +141,30 @@ func (s *Server) recipeTool(_ context.Context, name string, raw json.RawMessage)
 	default: return nil, errors.New("unknown recipe tool")
 	}
 }
+
+func (s *Server) recipeParse(w http.ResponseWriter,r *http.Request){
+ var request struct{Source string `json:"source"`}
+ if err:=decode(r,&request);err!=nil{writeError(w,400,err.Error());return}
+ draft,err:=recipes.ParseSchemaOrg(request.Source)
+ if err!=nil{writeError(w,400,err.Error());return}
+ writeJSON(w,200,draft)
+}
+
+func (s *Server) groceryBoard(w http.ResponseWriter,r *http.Request){
+ if s.recipes==nil{writeError(w,503,"recipe storage is not configured");return}
+ board,err:=s.recipes.Board(r.URL.Query().Get("start"),r.URL.Query().Get("end"))
+ if err!=nil{recipeFailure(w,err);return}
+ writeJSON(w,200,board)
+}
+
+func (s *Server) groceryUpdate(w http.ResponseWriter,r *http.Request){
+ if s.recipes==nil{writeError(w,503,"recipe storage is not configured");return}
+ var request struct{
+  Checked bool `json:"checked"`
+  ExpectedRevision int `json:"expected_revision"`
+ }
+ if err:=decode(r,&request);err!=nil{writeError(w,400,err.Error());return}
+ board,err:=s.recipes.MarkGrocery(r.PathValue("key"),request.Checked,request.ExpectedRevision)
+ if err!=nil{recipeFailure(w,err);return}
+ writeJSON(w,200,board)
+}

@@ -90,3 +90,17 @@ func TestRecipeValidation(t *testing.T) {
 		if _,err:=s.Save(item);err==nil { t.Fatalf("invalid recipe accepted: %+v",item) }
 	}
 }
+
+func TestGroceryChecklistRevisionAndRestart(t *testing.T) {
+ path:=filepath.Join(t.TempDir(),"recipes.json")
+ s,err:=Open(path);if err!=nil{t.Fatal(err)}
+ recipe,err:=s.Save(sample("Broth"));if err!=nil{t.Fatal(err)}
+ if _,err=s.AddMeal(Meal{RecipeID:recipe.ID,Date:"2026-11-14",Servings:2});err!=nil{t.Fatal(err)}
+ board,err:=s.Board("","");if err!=nil||len(board.Items)!=2{t.Fatalf("board: %+v %v",board,err)}
+ key:=board.Items[0].Key
+ updated,err:=s.MarkGrocery(key,true,board.Revision);if err!=nil||updated.Revision!=1{t.Fatalf("check: %+v %v",updated,err)}
+ if _,err:=s.MarkGrocery(key,false,board.Revision);!errors.Is(err,ErrConflict){t.Fatal("lost update accepted")}
+ reopened,err:=Open(path);if err!=nil{t.Fatal(err)}
+ persisted,err:=reopened.Board("","");if err!=nil||!persisted.Items[0].Checked{t.Fatalf("not persisted: %+v %v",persisted,err)}
+ if _,err:=reopened.MarkGrocery("not-a-key",true,1);err==nil{t.Fatal("invalid grocery key accepted")}
+}

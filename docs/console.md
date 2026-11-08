@@ -4,13 +4,14 @@ The console is a single client for the personal computing platform. It does not 
 
 ## Implementation
 
-- Use Rust and Dioxus for browser-based and desktop clients. The initial target is web/WASM, with desktop packaging as a later build target.
-- Use semantic HTML and CSS as the rendering interface. WebAssembly replaces application-side JavaScript logic, not the browser's document and style systems.
+- Write interactive frontend application code in Rust, using Dioxus components and Rust state management. The web target compiles to WebAssembly (`wasm32-unknown-unknown`). Desktop builds may reuse the same Rust components.
+- Do not author TypeScript, JavaScript, JSX, TSX, or React implementations of first-party interfaces. Use semantic HTML and CSS for browser structure and styling. Framework-generated WebAssembly bootstrap glue is allowed because the browser requires integration code to instantiate and connect the module; it must not contain independently maintained product logic.
 - The Go platform owns data, integration adapters, authentication, authorization, background work and persistence.
-- The browser client consumes versioned same-origin native HTTP resources through the Go gateway. Its session is authenticated by a separate passphrase verifier and uses a short-lived, HttpOnly, Secure, SameSite=Strict cookie. General browser authorization is read-only; first-party recipe edits have a narrow CSRF-protected exception. Browser sessions cannot invoke MCP commands or administer infrastructure. MCP is an automation interface; it is not a substitute for narrow, typed UI resources.
+- The browser client consumes versioned same-origin native HTTP resources through the Go gateway. Its session is authenticated by a separate passphrase verifier and uses a short-lived, HttpOnly, Secure, SameSite=Strict cookie. Only explicit personal-data routes permit CSRF-protected writes. Browser sessions cannot invoke MCP commands or administer infrastructure. MCP is an automation interface; it is not a substitute for narrow, typed UI resources.
 - shadcn/ui is a visual and interaction reference. Reimplement the necessary components and interaction patterns in Rust rather than translating React hooks or importing a React runtime.
 - Start with established accessible controls. Dialogs, comboboxes, focus traps and navigation must be keyboard-operable, with correct native roles and focus behavior before customization.
 - Keep Rust source components owned by this repository. Experimental third-party Rust component registries are references, not hard dependencies.
+- Apply the same frontend rule to standalone Workspace, Health, and Adaptive Teaching MCP App interfaces. Their existing HTML resources contain embedded JavaScript and are not part of the Dioxus console build. Preserve functional endpoints while moving interactive views into Rust/WASM. Serve the compiled entrypoints and assets through their Go-owned resources; retire inline-script implementations only after their interactions, tool bridge, keyboard access, and security boundaries are preserved.
 
 ## User experience
 

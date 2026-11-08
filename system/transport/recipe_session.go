@@ -7,14 +7,33 @@ import (
 	"strings"
 )
 
-// Recipe writes are owner-session operations, not cluster or MCP privileges.
-func (s *Server) sessionRecipeWriteAllowed(r *http.Request) bool {
+// Owner-session mutations are limited to personal records; cluster privileges
+// and direct MCP tools always require independent authorization.
+func (s *Server) sessionOwnerWriteAllowed(r *http.Request) bool {
 	if s.sessions == nil || r.Header.Get("Origin") == "" { return false }
 	path := r.URL.Path
 	allowed := false
 	switch {
-	case r.Method == http.MethodPost && (path == "/v1/recipes" || path == "/v1/recipes/import" || path == "/v1/meals"):
-		allowed = true
+	case r.Method == http.MethodPost && (path == "/v1/recipes" || path == "/v1/recipes/import" || path == "/v1/recipes/parse" || path == "/v1/meals" || path == "/v1/tasks" || path == "/v1/tasks/capture" || path == "/v1/goals"):
+        allowed = true
+    case r.Method == http.MethodPost && path == "/v1/learning/sessions":
+        allowed = true
+    case r.Method == http.MethodPost && strings.HasPrefix(path, "/v1/learning/questions/"):
+        allowed = len(strings.Split(path, "/"))==6 && strings.HasSuffix(path, "/answer")
+    case r.Method == http.MethodPost && path == "/v1/health/training-sets":
+        allowed = true
+    case r.Method == http.MethodPost && path == "/v1/health/records":
+        allowed = true
+    case r.Method == http.MethodPost && strings.HasPrefix(path, "/v1/health/food-proposals/"):
+        allowed = len(strings.Split(path, "/")) == 6 && strings.HasSuffix(path, "/confirm")
+    case r.Method == http.MethodPost && strings.HasPrefix(path, "/v1/recipes/"):
+        allowed = len(strings.Split(path, "/")) == 5 && strings.HasSuffix(path, "/nutrition-proposal")
+    case r.Method == http.MethodPost && strings.HasPrefix(path, "/v1/tasks/"):
+        allowed = len(strings.Split(path, "/")) == 5 && strings.HasSuffix(path, "/complete")
+    case r.Method == http.MethodPut && strings.HasPrefix(path, "/v1/groceries/items/"):
+        allowed = len(strings.Split(path, "/")) == 5
+    case r.Method == http.MethodPut && strings.HasPrefix(path, "/v1/tasks/"):
+        allowed = len(strings.Split(path, "/")) == 4
 	case (r.Method == http.MethodPut || r.Method == http.MethodDelete) && strings.HasPrefix(path, "/v1/recipes/"):
 		allowed = len(strings.Split(path, "/")) == 4 && path != "/v1/recipes/export"
 	case r.Method == http.MethodDelete && strings.HasPrefix(path, "/v1/meals/"):

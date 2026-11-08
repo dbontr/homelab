@@ -56,9 +56,9 @@ func TestRecipeRoutesAndScopedBrowserWrites(t *testing.T) {
 	var recipe recipes.Recipe
 	if err:=json.Unmarshal(created.Body.Bytes(),&recipe);err!=nil { t.Fatal(err) }
 	if recipe.ID=="" || recipe.Revision!=1 { t.Fatal("missing stored identity or revision") }
-	if r:=call("POST","/v1/tasks",`{"title":"Forbidden"}`,cookie,sessionInfo.CSRF);r.Code!=401 {
-		t.Fatal("recipe-scoped session mutated tasks")
-	}
+	if r:=call("POST","/v1/tasks",`{"title":"Owner task"}`,cookie,sessionInfo.CSRF);r.Code!=201 {
+        t.Fatalf("owner task creation rejected: %d %s",r.Code,r.Body.String())
+    }
 	if r:=call("POST","/mcp",`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`,cookie,sessionInfo.CSRF);r.Code!=401 {
 		t.Fatal("recipe-scoped session reached MCP")
 	}

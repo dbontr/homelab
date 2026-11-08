@@ -83,10 +83,19 @@ struct Meal {
 #[derive(Clone, Debug, Default, PartialEq, Deserialize)]
 #[serde(default)]
 struct GroceryItem {
+    key: String,
+    checked: bool,
     name: String,
     amount: f64,
     unit: String,
     recipe_ids: Vec<String>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Deserialize)]
+#[serde(default)]
+struct GroceryBoard {
+    revision: i32,
+    items: Vec<GroceryItem>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Deserialize)]
@@ -168,7 +177,7 @@ pub fn Recipes(csrf: String) -> Element {
     let csrf = use_signal(|| csrf);
     let mut recipes = use_resource(|| async { api::get::<Vec<Recipe>>("/v1/recipes").await });
     let mut meals = use_resource(|| async { api::get::<Vec<Meal>>("/v1/meals").await });
-    let mut groceries = use_resource(|| async { api::get::<Vec<GroceryItem>>("/v1/groceries").await });
+    let mut groceries = use_resource(|| async { api::get::<GroceryBoard>("/v1/groceries/board").await });
     let mut health_goals = use_resource(|| async { api::get::<HashMap<String, HealthGoal>>("/v1/recipes/health-goals").await });
 
     let mut tab = use_signal(|| Tab::Library);
@@ -191,6 +200,7 @@ pub fn Recipes(csrf: String) -> Element {
     let mut plan_type = use_signal(|| "dinner".to_owned());
     let mut confirm_delete = use_signal(|| false);
     let mut import_text = use_signal(String::new);
+    let mut schema_text = use_signal(String::new);
 
     let records = recipes.cloned().and_then(Result::ok).unwrap_or_default();
     let query = search().trim().to_lowercase();
@@ -202,7 +212,9 @@ pub fn Recipes(csrf: String) -> Element {
     let active = current_record(&records, selected(), &query);
     let draft_value = draft();
     let planned = meals.cloned().and_then(Result::ok).unwrap_or_default();
-    let shopping = groceries.cloned().and_then(Result::ok).unwrap_or_default();
+    let grocery_board = groceries.cloned().and_then(Result::ok).unwrap_or_default();
+    let grocery_revision = grocery_board.revision;
+    let shopping = grocery_board.items;
 
     rsx! {
         Heading {
@@ -571,6 +583,33 @@ pub fn Recipes(csrf: String) -> Element {
                                                     }
                                                 }
                                             }
+                                            button {
+                                                class: "btn btn-outline",
+                                                disabled: busy(),
+                                                onclick: move |_| {
+                                                    let Some(record) = current_record(
+                                                        &recipes.cloned().and_then(Result::ok).unwrap_or_default(),
+                                                        selected(), &search().trim().to_lowercase()
+                                                    ) else { return };
+                                                    let token=csrf();
+                                                    let value=portion();
+                                                    let path=format!("/v1/recipes/{}/nutrition-proposal",record.id);
+                                                    busy.set(true);error.set(String::new());
+                                                    spawn(async move {
+                                                        match api::write::<serde_json::Value,_>(
+                                                            Method::POST,&path,&token,
+                                                            &serde_json::json!({"servings":value})
+                                                        ).await {
+                                                            Ok(_) => notice.set(
+                                                                "Food proposal sent to Health; confirm it before nutrient logging".to_owned()
+                                                            ),
+                                                            Err(e) => error.set(e),
+                                                        }
+                                                        busy.set(false);
+                                                    });
+                                                },
+                                                "Propose as a meal consumed now"
+                                            }
                                         }
                                     }
                                     div { class: "divider" }
@@ -702,19 +741,89 @@ pub fn Recipes(csrf: String) -> Element {
                         } else {
                             ul { class: "recipe-shopping",
                                 for item in shopping {
-                                    li {
-                                        input { type: "checkbox", aria_label: "Mark ingredient on paper" }
-                                        span { "{item.name}" }
+                                    li { key: "{item.key}",
+                                        button {
+                                            class: "recipe-grocery-check",
+                                            aria_label: format!("Toggle purchased status for {}", item.name),
+                                            aria_pressed: if item.checked { "true" } else { "false" },
+                                            disabled: busy(),
+                                            onclick: {
+                                                let key = item.key.clone();
+                                                let checked = !item.checked;
+                                                move |_| {
+                                                    let token=csrf();
+                                                    let path=format!("/v1/groceries/items/{key}");
+                                                    busy.set(true);error.set(String::new());
+                                                    spawn(async move {
+                                                        match api::write::<GroceryBoard,_>(Method::PUT,&path,&token,
+                                                            &serde_json::json!({"checked":checked,"expected_revision":grocery_revision})).await {
+                                                            Ok(_) => groceries.restart(),
+                                                            Err(message) => {error.set(message);groceries.restart();},
+                                                        }
+                                                        busy.set(false);
+                                                    });
+                                                }
+                                            },
+                                            if item.checked { "✓" } else { "○" }
+                                        }
+                                        span { class: if item.checked {"recipe-purchased"} else {""}, "{item.name}" }
                                         strong { "{quantity(item.amount)} {item.unit}" }
                                     }
                                 }
                             }
-                            p { class: "small muted", "Checkmarks are local to this page; no purchase records are created." }
+                            p { class: "small muted", "Purchase status is saved privately and synchronized through the recipe store." }
                         }
                     }
                 }
             },
             Tab::Transfer => rsx! {
+                section { class: "card",
+                    div { class: "card-header",
+                        h2 { class: "card-title", "Import from recipe markup" }
+                        p { class: "card-description",
+                            "Paste a page's HTML or schema.org JSON-LD. Review ingredient quantities before saving."
+                        }
+                    }
+                    div { class: "card-body stack",
+                        label { class: "form-row",
+                            span { class: "label", "Recipe HTML or JSON-LD" }
+                            textarea { class: "field textarea", rows: "5",
+                                value: "{schema_text}", oninput: move |event| schema_text.set(event.value()) }
+                        }
+                        button { class: "btn btn-outline", disabled: busy() || schema_text().trim().is_empty(),
+                            onclick: move |_| {
+                                let source = schema_text();
+                                let token = csrf();
+                                busy.set(true);error.set(String::new());
+                                spawn(async move {
+                                    match api::write::<Recipe,_>(Method::POST,"/v1/recipes/parse",&token,
+                                        &serde_json::json!({"source":source})).await {
+                                        Ok(parsed) => {
+                                            tags.set(parsed.tags.join(", "));equipment.set(parsed.equipment.join(", "));
+                                            nutrients.set(nutrient_lines(&parsed));
+                                            if let Some(ref n)=parsed.nutrition {
+                                                nutrition_method.set(n.method.clone());
+                                                nutrition_source.set(n.source.clone());
+                                            } else {
+                                                nutrition_method.set("estimated".to_owned());
+                                                nutrition_source.set(String::new());
+                                            }
+                                            draft.set(parsed);
+                                            editing.set(true);
+                                            cooking.set(false);
+                                            tab.set(Tab::Library);
+                                            notice.set("Review all quantities before saving this recipe".to_owned());
+                                            schema_text.set(String::new());
+                                        }
+                                        Err(message) => error.set(message),
+                                    }
+                                    busy.set(false);
+                                });
+                            },
+                            "Preview imported recipe"
+                        }
+                    }
+                }
                 section { class: "card",
                     div { class: "card-header",
                         h2 { class: "card-title", "Portable recipe archive" }

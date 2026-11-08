@@ -16,7 +16,8 @@ func (s *Server) sessionCookie(r *http.Request) string {
 	return cookie.Value
 }
 
-// The browser session is read-only; write operations require separately scoped authorization.
+// Browser reads are restricted to allowlisted routes. Owner writes require
+// independent path authorization, a valid session, Origin and CSRF token.
 func (s *Server) sessionReadAllowed(r *http.Request) bool {
 	if r.Method != http.MethodGet || s.sessions == nil { return false }
 	p := r.URL.Path
@@ -24,6 +25,23 @@ func (s *Server) sessionReadAllowed(r *http.Request) bool {
 		"/v1/nodes":true,
 		"/v1/devices":true,
 		"/v1/tasks":true,
+        "/v1/tasks/agenda":true,
+        "/v1/tasks/conflicts":true,
+        "/v1/groceries/board":true,
+        "/v1/groceries":true,
+        "/v1/recipes":true,
+        "/v1/recipes/health-goals":true,
+        "/v1/recipes/export":true,
+        "/v1/meals":true,
+        "/v1/learning/summary":true,
+        "/v1/learning/sessions":true,
+        "/v1/learning/reviews":true,
+        "/v1/health/plans":true,
+        "/v1/health/records":true,
+        "/v1/health/training-sets":true,
+        "/v1/health/training-progress":true,
+        "/v1/health/goals":true,
+        "/v1/health/food-proposals":true,
 		"/v1/goals":true,
 		"/v1/rules":true,
 		"/v1/recommendations":true,
@@ -37,7 +55,11 @@ func (s *Server) sessionReadAllowed(r *http.Request) bool {
 		"/v1/workspace/projects":true,
 		"/v1/workspace/nodes":true,
 	}
-	if !permitted[p] && !strings.HasPrefix(p,"/v1/compute/profiles/") {
+	if !permitted[p] && !strings.HasPrefix(p,"/v1/compute/profiles/") &&
+    !(strings.HasPrefix(p,"/v1/recipes/") && ((len(strings.Split(p,"/"))==4 && p!="/v1/recipes/import" && p!="/v1/recipes/parse")||
+      (len(strings.Split(p,"/"))==5 && strings.HasSuffix(p,"/nutrition")))) &&
+    !(strings.HasPrefix(p,"/v1/workspace/projects/") && len(strings.Split(p,"/"))==6 && (strings.HasSuffix(p,"/jobs")||strings.HasSuffix(p,"/workspaces"))) &&
+    !(strings.HasPrefix(p,"/v1/learning/sessions/") && (len(strings.Split(p,"/"))==5 || len(strings.Split(p,"/"))==6 && strings.HasSuffix(p,"/pending"))) {
 		return false
 	}
 	_,_,ok := s.sessions.Check(s.sessionCookie(r))
