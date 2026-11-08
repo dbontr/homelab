@@ -16,25 +16,7 @@ type HostReleaseAgent interface {
  Revert(context.Context,string)error
 }
 
-var fleetHostPattern=regexp.MustCompile(`^[a-z][a-z0-9-]{0,62}package release
-
-import (
- "context"
- "errors"
- "fmt"
- "regexp"
- "sync"
- "time"
-)
-
-// HostReleaseAgent is implemented by an independently authenticated host
-// executor. The coordinator never receives host administrator credentials.
-type HostReleaseAgent interface {
- Activate(context.Context,string)error
- Revert(context.Context,string)error
-}
-
-)
+var fleetHostPattern = regexp.MustCompile("^[a-z][a-z0-9-]{0,62}$")
 
 type FleetTarget struct {
  Host string `json:"host"`
