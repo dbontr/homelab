@@ -22,10 +22,11 @@ import (
  "github.com/dbontr/homelab-new/system/profiles"
  "github.com/dbontr/homelab-new/system/recipes"
  "github.com/dbontr/homelab-new/system/session"
+ "github.com/dbontr/homelab-new/system/security"
  "github.com/dbontr/homelab-new/system/store"
 )
 type Backend struct { Name string; URL string; Token string }
-type Server struct { db *store.Store; token string; backend []Backend; client *http.Client; calendarURL string; gate *approval.Gate; allowedOrigins map[string]struct{}; media *media.Client; deviceCatalog *devices.Catalog; nodeCatalog *devices.NodeCatalog; profiles *profiles.Registry; recipes *recipes.Store; sessions *session.Manager; observability *observability.Client; bookCatalog *books.Catalog; inflight chan struct{} }
+type Server struct { db *store.Store; token string; backend []Backend; client *http.Client; calendarURL string; gate *approval.Gate; privilegeClient *security.AdminClient; securityLoginURL string; allowedOrigins map[string]struct{}; media *media.Client; deviceCatalog *devices.Catalog; nodeCatalog *devices.NodeCatalog; profiles *profiles.Registry; recipes *recipes.Store; sessions *session.Manager; observability *observability.Client; bookCatalog *books.Catalog; inflight chan struct{} }
 
 func New(db *store.Store,token string,backends []Backend)(*Server,error){
  if db==nil||len(token)<32||strings.ContainsAny(token,"\r\n\t"){return nil,errors.New("store and a strong access token are required")}
@@ -45,6 +46,18 @@ func(s *Server) SetNodeCatalog(catalog *devices.NodeCatalog) { s.nodeCatalog = c
 func(s *Server) SetProfiles(registry *profiles.Registry) { s.profiles = registry }
 func(s *Server) SetBookCatalog(catalog *books.Catalog) { s.bookCatalog = catalog }
 func(s *Server) SetSessions(manager *session.Manager) { s.sessions = manager }
+func(s *Server) SetPrivilegeClient(client *security.AdminClient) { s.privilegeClient = client }
+func(s *Server) SetSecurityLoginURL(raw string) error {
+ u,err:=url.Parse(raw)
+ if err!=nil || u.Scheme!="https" || u.Host=="" || u.User!=nil || u.RawQuery!="" || u.Fragment!="" || (u.Path!=""&&u.Path!="/") {
+  return errors.New("security login must use an exact HTTPS origin")
+ }
+ if u.Hostname()=="localhost" || u.Hostname()=="127.0.0.1" || u.Hostname()=="::1" {
+  return errors.New("security login must use a protected external hostname")
+ }
+ s.securityLoginURL="https://"+u.Host
+ return nil
+}
 func(s *Server) SetCalendarURL(raw string)error{
  if err:=calendar.ValidateURL(raw);err!=nil{return err}
  s.calendarURL=raw
@@ -244,9 +257,26 @@ func(s *Server)mcp(w http.ResponseWriter,r *http.Request){
  }
  switch req.Method{
  case "initialize":
-  s.rpc(w,req.ID,map[string]any{"protocolVersion":"2025-06-18","capabilities":map[string]any{"tools":map[string]any{"listChanged":false}},"serverInfo":map[string]string{"name":"homelab","version":"0.1.0"}},nil)
+  caps:=map[string]any{"tools":map[string]any{"listChanged":false}}
+  if s.privilegeClient!=nil&&s.securityLoginURL!="" {caps["resources"]=map[string]any{"listChanged":false}}
+  s.rpc(w,req.ID,map[string]any{"protocolVersion":"2025-06-18","capabilities":caps,"serverInfo":map[string]string{"name":"homelab","version":"0.1.0"}},nil)
  case "ping":s.rpc(w,req.ID,map[string]any{},nil)
  case "tools/list":s.rpc(w,req.ID,map[string]any{"tools":s.toolList(r)},nil)
+ case "resources/list":
+  if s.privilegeClient==nil||s.securityLoginURL==""{s.rpc(w,req.ID,map[string]any{"resources":[]any{}},nil);return}
+  s.rpc(w,req.ID,map[string]any{"resources":[]any{map[string]any{"uri":"ui://homelab/security-login.html","name":"Homelab owner authentication","mimeType":"text/html;profile=mcp-app"}}},nil)
+ case "resources/read":
+  var p struct{URI string `json:"uri"`}
+  if err:=json.Unmarshal(req.Params,&p);err!=nil||s.privilegeClient==nil||s.securityLoginURL==""||p.URI!="ui://homelab/security-login.html"{
+   s.rpc(w,req.ID,nil,failure(-32602,"unknown UI resource"));return
+  }
+  s.rpc(w,req.ID,map[string]any{"contents":[]any{map[string]any{
+   "uri":p.URI,"mimeType":"text/html;profile=mcp-app","text":s.securityLoginWidget(),
+   "_meta":map[string]any{
+    "ui":map[string]any{"csp":map[string]any{"connectDomains":[]string{},"resourceDomains":[]string{}}},
+    "openai/widgetCSP":map[string]any{"redirect_domains":[]string{s.securityLoginURL}},
+   },
+  }}},nil)
  case "tools/call":
   var p struct {Name string `json:"name"`; Arguments json.RawMessage `json:"arguments"`}
   if e:=json.Unmarshal(req.Params,&p);e!=nil||p.Name==""{s.rpc(w,req.ID,nil,failure(-32602,"tool name required"));return}
@@ -274,9 +304,17 @@ func(s *Server)localTools()[]map[string]any{
   tool("activity_recent","List confirmed personal activity from canonical records, without fabricating unobserved actions",map[string]any{"limit":prop("integer")}),
   tool("resource_get","Resolve a canonical local resource identity from its owning store",map[string]any{"kind":prop("string"),"id":prop("string")},"kind","id"),
   tool("system_status","List configured integrations",map[string]any{}),
-  tool("approval_status","Check an administrator approval",map[string]any{"id":prop("string")},"id"),
   tool("device_inventory","List declared hardware access and constraints; this is not an online device probe",map[string]any{}),
   tool("node_inventory","List declarative management modes and roles without probing machines",map[string]any{}),
+ }
+ if s.privilegeClient!=nil {
+  tools=append(tools,tool("security_session_status","Inspect the independent owner administrative session without revealing credentials",map[string]any{}),
+    tool("security_session_close","Immediately revoke the active owner administrative session",map[string]any{}))
+  if s.securityLoginURL!="" {
+   tools=append(tools,tool("security_session_open","Open the independent HTTPS authentication page to enter password and TOTP directly, outside ChatGPT. No credentials are returned to the model.",map[string]any{}))
+  }
+ } else {
+  tools=append(tools,tool("approval_status","Check an administrator approval",map[string]any{"id":prop("string")},"id"))
  }
  if s.hasBackend("workspace") {tools=append(tools,tool("software_catalog","List approved images, software collections, and program requests",map[string]any{}))}
  if s.profiles!=nil {tools=append(tools,
@@ -324,6 +362,16 @@ func(s *Server)localTools()[]map[string]any{
 }
 func(s *Server)toolList(r *http.Request)[]map[string]any{
  out:=s.localTools()
+ if s.privilegeClient!=nil&&s.securityLoginURL!="" {
+  for _,item:=range out {
+   if item["name"]=="security_session_open" {
+    item["_meta"]=map[string]any{
+     "ui":map[string]any{"resourceUri":"ui://homelab/security-login.html"},
+     "openai/outputTemplate":"ui://homelab/security-login.html",
+    }
+   }
+  }
+ }
  for _,b:=range s.backend{
   var remote any
   ctx,cancel:=context.WithTimeout(r.Context(),4*time.Second)
@@ -383,6 +431,22 @@ func(s *Server)localTool(ctx context.Context,name string,raw json.RawMessage)(an
   return s.activity(n,time.Time{}),nil
  case "resource_get":return s.resource(args.ResourceKind,args.ID)
  case "approval_status":return s.privilegeStatus(args.ID)
+ case "security_session_status":
+  if s.privilegeClient==nil{return nil,errors.New("independent security service not configured")}
+  return s.privilegeClient.Status(ctx)
+ case "security_session_open":
+  if s.privilegeClient==nil||s.securityLoginURL==""{return nil,errors.New("browser authentication not configured")}
+  status,err:=s.privilegeClient.Status(ctx)
+  if err!=nil{return nil,err}
+  return map[string]any{
+   "sign_in_url":s.securityLoginURL,
+   "session":status,
+   "instructions":"Open the protected HTTPS link in your browser to authenticate. Password and TOTP are entered directly into the independent service, never into a ChatGPT message or MCP tool. After authentication, retry the operation.",
+  },nil
+ case "security_session_close":
+  if s.privilegeClient==nil{return nil,errors.New("independent security service not configured")}
+  if err:=s.privilegeClient.Revoke(ctx);err!=nil{return nil,err}
+  return map[string]bool{"active":false},nil
  case "device_inventory":return s.deviceCatalog.List(),nil
  case "node_inventory":return s.nodeCatalog.List(),nil
  case "calendar_feed":

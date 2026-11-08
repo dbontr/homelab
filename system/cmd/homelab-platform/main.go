@@ -99,7 +99,16 @@ func main(){
         raw,e:=os.ReadFile(file);if e!=nil{log.Fatal(e)}
         if e:=server.SetCalendarURL(strings.TrimSpace(string(raw)));e!=nil{log.Fatal(e)}
     }
-    serveApprovals(server,os.Getenv("HOMELAB_APPROVAL_SOCKET"))
+    if socket:=os.Getenv("HOMELAB_SECURITY_SOCKET");socket!=""{
+        client,err:=security.NewAdminClient(socket)
+        if err!=nil{log.Fatal(err)}
+        server.SetPrivilegeClient(client)
+        if raw:=os.Getenv("HOMELAB_SECURITY_LOGIN_URL");raw!=""{
+            if err:=server.SetSecurityLoginURL(raw);err!=nil{log.Fatal(err)}
+        }
+    }else{
+        serveApprovals(server,os.Getenv("HOMELAB_APPROVAL_SOCKET"))
+    }
     addr:=os.Getenv("HOMELAB_LISTEN_ADDR");if addr==""{addr="127.0.0.1:8300"}
     host,_,e:=net.SplitHostPort(addr);if e!=nil{log.Fatal(e)}
     if host!="127.0.0.1"&&host!="::1"&&host!="localhost"{log.Fatal("homelab-platform must listen on loopback behind an authenticated ingress")}

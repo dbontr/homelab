@@ -8,7 +8,7 @@ Use an operator-controlled host with the Go toolchains required by the four Go m
 
 `bash scripts/stage-release.sh /srv/releases/homelab/<unique-release-id>`
 
-The script builds the six Go executables from local sources, packages the Dioxus web assets, and writes `SHA256SUMS` and `RELEASE`. It uses an unpublished temporary directory and renames it on completion. It does not alter NixOS generations, start services, publish images, stop the existing homepage, or touch application databases.
+The script builds the eight Go executables from local sources, packages the Dioxus web assets, and writes `SHA256SUMS` and `RELEASE`. It uses an unpublished temporary directory and renames it on completion. It does not alter NixOS generations, start services, publish images, stop the existing homepage, or touch application databases.
 
 Workspace toolchain environments can be built locally with:
 

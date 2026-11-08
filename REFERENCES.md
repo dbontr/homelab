@@ -13,6 +13,10 @@
 - [RFC 6749: The OAuth 2.0 Authorization Framework](https://www.rfc-editor.org/rfc/rfc6749) — IETF. Used for: provider authorization-code flow boundaries.
 - [RFC 2104: HMAC: Keyed-Hashing for Message Authentication](https://www.rfc-editor.org/rfc/rfc2104) — IETF. Used for: operation-bound approval grants.
 - [NIST SP 800-38D: Recommendation for Block Cipher Modes of Operation — Galois/Counter Mode (GCM)](https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication800-38d.pdf) — NIST. Used for: authenticated encryption of locally stored provider credentials.
+- [RFC 6238: TOTP — Time-Based One-Time Password Algorithm](https://www.rfc-editor.org/rfc/rfc6238) — IETF. Used for: thirty-second HMAC-SHA1 one-time codes and authenticator verification in the owner security service.
+- [RFC 4226: HOTP — An HMAC-Based One-Time Password Algorithm](https://www.rfc-editor.org/rfc/rfc4226) — IETF. Used for: dynamic truncation and six-digit authenticator codes.
+- [systemd.exec manual](https://www.freedesktop.org/software/systemd/man/latest/systemd.exec.html) — systemd project. Used for: independent service users, credentials loading, protected state and runtime directories, and service sandboxing.
+- [systemd-ask-password manual](https://www.freedesktop.org/software/systemd/man/latest/systemd-ask-password.html) — systemd project. Used for: local interactive owner-secret entry without command-line arguments.
 - [RFC 8018: PKCS #5 Password-Based Cryptography Specification, Version 2.1](https://www.rfc-editor.org/rfc/rfc8018) — IETF. Used for: PBKDF2-HMAC-SHA256 owner passphrase verification.
 - [MCP Streamable HTTP Transport — Security and Endpoint](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports) — Model Context Protocol. Used for: incoming Origin validation and authenticated Streamable HTTP requests.
 - [OWASP API Security Top 10](https://owasp.org/API-Security/editions/2023/en/0x11-t10/) — OWASP. Used for: function-level authorization, bounded downstream responses and unsafe external API consumption.
@@ -20,6 +24,9 @@
 - [shadcn/ui Theming](https://ui.shadcn.com/docs/theming) — shadcn/ui project. Used for: exact neutral light/dark design tokens, sidebar colors, and radius scale for the Rust/Dioxus console.
 - [Dioxus 0.7 Documentation](https://dioxuslabs.com/learn/0.7/) — Dioxus project. Used for: Rust RSX components, WASM rendering and future desktop packaging.
 - [Dioxus 0.7 Handling User Input](https://dioxuslabs.com/learn/0.7/essentials/basics/event_handlers/) — Dioxus project. Used for: browser file selection, `FileData` metadata and asynchronous image reads in the Rust recipe editor.
+- [OpenAI Plugins UI Reference](https://developers.openai.com/plugins/reference) — OpenAI. Used for: opening a vetted owner authentication URL from a ChatGPT component without exposing credentials through tool inputs.
+- [MCP Elicitation — URL Mode](https://modelcontextprotocol.io/specification/2025-11-25/client/elicitation) — MCP project. Used for: treating password and second-factor entry as a trusted out-of-band browser interaction rather than client-side form elicitation.
+- [Cloudflare Tunnel Origin Access Settings](https://developers.cloudflare.com/tunnel/reference/origin-parameters/) — Cloudflare. Used for: validating the dedicated Cloudflare Access JWT audience before proxying owner authentication traffic.
 - [OWASP Session Management Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html) — OWASP. Used for: short-lived browser sessions, HttpOnly/Secure/SameSite cookies, credential separation and session invalidation.
 - [Dioxus Styling and Assets](https://dioxuslabs.com/learn/0.7/essentials/ui/styling/) — Dioxus project. Used for: RSX, CSS assets and native SVG controls in the Rust console.
 - [RFC 9110: HTTP Semantics, If-Match](https://www.rfc-editor.org/rfc/rfc9110#section-13.1.1) — IETF. Used for: revision-qualified deletion of first-party recipe records.
