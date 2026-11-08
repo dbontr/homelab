@@ -86,6 +86,8 @@ func(s *Server) Handler()http.Handler{
  mux.HandleFunc("PUT /v1/recipes/{id}",s.recipeItem)
  mux.HandleFunc("DELETE /v1/recipes/{id}",s.recipeItem)
  mux.HandleFunc("GET /v1/recipes/{id}/nutrition",s.recipeNutrition)
+ mux.HandleFunc("GET /v1/recipes/{id}/history",s.recipeHistory)
+ mux.HandleFunc("POST /v1/recipes/{id}/restore",s.recipeRestore)
  mux.HandleFunc("GET /v1/meals",s.mealCollection)
  mux.HandleFunc("POST /v1/meals",s.mealCollection)
  mux.HandleFunc("DELETE /v1/meals/{id}",s.mealItem)
@@ -263,6 +265,8 @@ func(s *Server)localTools()[]map[string]any{
   tool("recipe_import_url_preview","Fetch a public HTTPS recipe page and return an unsaved schema.org recipe draft",map[string]any{"url":prop("string")},"url"),
   tool("recipe_list","Find saved recipes",map[string]any{"query":prop("string")}),
   tool("recipe_get","Read a recipe",map[string]any{"id":prop("string")},"id"),
+  tool("recipe_history","List current and previous recipe revisions",map[string]any{"id":prop("string")},"id"),
+  tool("recipe_restore","Restore a prior recipe version as a new revision",map[string]any{"id":prop("string"),"source_revision":prop("integer"),"expected_revision":prop("integer")},"id","source_revision","expected_revision"),
   tool("recipe_save","Create or revise a recipe with revision control",map[string]any{"recipe":prop("object")},"recipe"),
   tool("recipe_delete","Delete an unscheduled recipe at its expected revision",map[string]any{"id":prop("string"),"revision":prop("integer")},"id","revision"),
   tool("recipe_meals","List scheduled meals",map[string]any{}),
