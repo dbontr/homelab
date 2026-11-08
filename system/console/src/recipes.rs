@@ -1,6 +1,7 @@
 use dioxus::prelude::*;
 use reqwest::Method;
 use std::collections::HashMap;
+use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
 use crate::api;
@@ -272,6 +273,7 @@ pub fn Recipes(csrf: String) -> Element {
     let mut import_text = use_signal(String::new);
     let mut schema_text = use_signal(String::new);
     let mut source_url = use_signal(String::new);
+    let mut bundle_file = use_signal(|| Option::<(String, Arc<Vec<u8>>)>::None);
     let mut sage_filename = use_signal(String::new);
     let mut sage_source = use_signal(String::new);
     let mut sage_preview = use_signal(|| Option::<RecipeSagePreview>::None);
@@ -1038,6 +1040,86 @@ pub fn Recipes(csrf: String) -> Element {
                 }
             },
             Tab::Transfer => rsx! {
+                section { class: "card",
+                    div { class: "card-header",
+                        h2 { class: "card-title", "Portable recipe archive with images" }
+                        p { class: "card-description",
+                            "Copy recipes, planned meals, revision history and all referenced photographs in one ZIP. Existing IDs are never replaced during import."
+                        }
+                    }
+                    div { class: "card-body stack",
+                        div { class: "inline-row",
+                            a { class: "btn btn-outline",
+                                href: "/v1/recipes/bundle",
+                                download: "recipes-with-images.zip",
+                                "Download complete archive"
+                            }
+                        }
+                        div { class: "form-row",
+                            label { class: "label", for: "recipe-bundle-file", "Select ZIP archive" }
+                            input { id: "recipe-bundle-file", class: "field recipe-file-input",
+                                type: "file", accept: ".zip,application/zip",
+                                disabled: busy(),
+                                onchange: move |event| {
+                                    bundle_file.set(None);
+                                    let Some(file) = event.files().into_iter().next() else { return; };
+                                    if file.size() > 96 * 1024 * 1024 {
+                                        error.set("Recipe ZIP must be 96 MiB or smaller".to_owned());
+                                        return;
+                                    }
+                                    let name = file.name().to_owned();
+                                    busy.set(true);
+                                    error.set(String::new());
+                                    spawn(async move {
+                                        match file.read_bytes().await {
+                                            Ok(bytes) if !bytes.is_empty() && bytes.len() <= 96 * 1024 * 1024 =>
+                                                bundle_file.set(Some((name, Arc::new(bytes.to_vec())))),
+                                            Ok(_) => error.set("Recipe ZIP must be 96 MiB or smaller".to_owned()),
+                                            Err(_) => error.set("Could not read the recipe ZIP".to_owned()),
+                                        }
+                                        busy.set(false);
+                                    });
+                                }
+                            }
+                        }
+                        if let Some((name, data)) = bundle_file() {
+                            p { class: "small muted",
+                                "Selected: {name} ({data.len()} bytes). Import does not replace existing recipe IDs."
+                            }
+                            div { class: "inline-row",
+                                button { class: "btn btn-primary",
+                                    disabled: busy(),
+                                    onclick: move |_| {
+                                        let Some((_, content)) = bundle_file() else { return; };
+                                        let token = csrf();
+                                        busy.set(true);
+                                        error.set(String::new());
+                                        spawn(async move {
+                                            match api::import_recipe_bundle(&token, content.as_ref().clone()).await {
+                                                Ok(imported) => {
+                                                    bundle_file.set(None);
+                                                    recipes.restart();
+                                                    meals.restart();
+                                                    groceries.restart();
+                                                    notice.set(format!("Imported {} recipes and their referenced images", imported.imported));
+                                                }
+                                                Err(message) => error.set(message),
+                                            }
+                                            busy.set(false);
+                                        });
+                                    },
+                                    "Confirm archive import"
+                                }
+                                button { class: "btn btn-outline", disabled: busy(),
+                                    onclick: move |_| bundle_file.set(None), "Cancel" }
+                            }
+                        } else {
+                            p { class: "small muted",
+                                "The archive is not imported until you confirm. Existing recipe IDs are never replaced."
+                            }
+                        }
+                    }
+                }
                 section { class: "card",
                     div { class: "card-header",
                         h2 { class: "card-title", "RecipeSage export" }

@@ -205,6 +205,30 @@ pub async fn upload_recipe_image(
         .map_err(|_| "The service returned invalid image data".to_owned())
 }
 
+#[derive(Clone, Debug, Deserialize)]
+pub struct BundleImport {
+    pub imported: usize,
+}
+
+pub async fn import_recipe_bundle(csrf: &str, content: Vec<u8>) -> Result<BundleImport, String> {
+    if content.is_empty() || content.len() > 96 * 1024 * 1024 {
+        return Err("Recipe ZIP must be 96 MiB or smaller".to_owned());
+    }
+    let response = reqwest::Client::new()
+        .post(url("/v1/recipes/bundle")?)
+        .header("X-CSRF-Token", csrf)
+        .header("Content-Type", "application/zip")
+        .body(content)
+        .send()
+        .await
+        .map_err(|_| "Could not upload the recipe ZIP".to_owned())?;
+    if !response.status().is_success() {
+        return Err(response_error(response.status()));
+    }
+    response.json::<BundleImport>().await
+        .map_err(|_| "The service returned invalid recipe bundle data".to_owned())
+}
+
 pub async fn remove(path: &str, csrf: &str, revision: Option<i32>) -> Result<(), String> {
     let client = reqwest::Client::new();
     let mut request = client.delete(url(path)?).header("X-CSRF-Token", csrf);
