@@ -325,6 +325,7 @@ func(s *Server)localTools()[]map[string]any{
   tools=append(tools,
    tool("infrastructure__fleet_stage","Stage one exact Git commit across the configured fleet without activating any host",map[string]any{"revision":prop("string")},"revision"),
    tool("infrastructure__fleet_plan","Inspect the private validated fleet stage plan",map[string]any{}),
+   tool("infrastructure__fleet_prepare","Inspect the exact host confirmations required by a staged fleet plan",map[string]any{"plan_id":prop("string")},"plan_id"),
    tool("infrastructure__fleet_activate","Activate the immutable prepared fleet plan through independent host authorization",map[string]any{"plan_id":prop("string")},"plan_id"),
    tool("infrastructure__fleet_status","Inspect durable fleet transaction status",map[string]any{}),
    tool("infrastructure__fleet_recover","Reconcile unknown release results and recover by exact transaction identity",map[string]any{"transaction_id":prop("string")},"transaction_id"),
