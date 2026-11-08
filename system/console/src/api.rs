@@ -160,7 +160,17 @@ pub async fn write<T: DeserializeOwned, P: Serialize>(
         .await
         .map_err(|_| "Could not contact the homelab API".to_owned())?;
     if !response.status().is_success() {
-        return Err(response_error(response.status()));
+        let status = response.status();
+        if matches!(status.as_u16(), 400 | 409 | 413 | 422) {
+            if let Ok(body) = response.json::<serde_json::Value>().await {
+                if let Some(message) = body.get("error").and_then(serde_json::Value::as_str) {
+                    if !message.is_empty() && message.len() <= 250 {
+                        return Err(message.to_owned());
+                    }
+                }
+            }
+        }
+        return Err(response_error(status));
     }
     response.json::<T>().await
         .map_err(|_| "The service returned invalid data".to_owned())

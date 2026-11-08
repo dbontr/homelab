@@ -328,3 +328,20 @@ main.content { max-width: 94rem; margin: 0 auto; padding: 2rem; }
   background: var(--muted);
 }
 .recipe-restore-confirm p { margin: 0; }
+
+
+.recipe-sage-summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: .5rem 1.25rem; }
+.recipe-sage-candidates {
+  max-height: 30rem; overflow-y: auto; border: 1px solid var(--border);
+  border-radius: var(--radius); background: var(--card);
+}
+.recipe-sage-candidate { padding: .75rem 1rem; border-bottom: 1px solid var(--border); }
+.recipe-sage-candidate:last-child { border-bottom: 0; }
+.recipe-sage-choice { display: flex; align-items: center; gap: .75rem; cursor: pointer; }
+.recipe-sage-choice input { accent-color: var(--primary); flex: 0 0 auto; width: 1rem; height: 1rem; }
+.recipe-sage-choice:has(input:disabled) { cursor: default; }
+.recipe-sage-candidate-label { display: flex; flex-direction: column; min-width: 0; }
+.recipe-sage-candidate-label strong { overflow-wrap: anywhere; font-weight: 600; }
+.recipe-sage-warning { margin: .375rem 0 0 1.75rem; overflow-wrap: anywhere; }
+
+.recipe-sage-review { margin: .625rem 0 0 1.75rem; }

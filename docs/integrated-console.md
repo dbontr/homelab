@@ -23,7 +23,10 @@ treat local personal tasks as Workspace compute tasks.
   are immutable, addressable by content hash and retrieved only with recipe
   read authorization. Review up to 20 earlier recipe versions and restore a
   retained snapshot only with the current revision, preserving the prior state.
-  RecipeSage data is not migrated or deleted. Mark groceries as purchased
+  Review a RecipeSage JSON-LD export as a bounded batch, inspect per-recipe
+  conversion warnings, correct incomplete entries in the same recipe editor,
+  and select validated records for an atomic first-party import. The original RecipeSage database and export remain unchanged.
+  Mark groceries as purchased
   through a revision-fenced persistent record.
 - **Food and Health:** Nutrition associated with a first-party recipe may be
   submitted as an unconfirmed Health food proposal. An owner must separately
