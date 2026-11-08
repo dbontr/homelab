@@ -56,6 +56,16 @@ Configure `services.homelabSecurity.access` with the issuer, gateway application
 
 Generation activation from the executor also requires `services.homelabExecutor.allowReleaseActivation = true` and a one-use destructive confirmation. The default is false. The release controller stages only clean exact Git commits, uses offline Nix builds, records the active and previous store paths, checks specified systemd services, and attempts rollback on activation failure. Interrupted transactions block further activation until local recovery. It does not automatically deploy to another host or alter the public firewall.
 
+## Credential vault and scoped secret use
+
+The security service may load an owner-controlled 32-byte AES-GCM vault key through `services.homelabSecurity.vaultKeyFile` and systemd `LoadCredential`. The key is never stored in Git or read by the gateway. On a trusted local terminal, `homelab-admin vault-init --key-file PATH` creates the encryption key in a private directory. The same CLI supports `credential-add PROVIDER`, `credential-list` and `credential-delete HANDLE`. Enrollment and deletion require a fresh password and TOTP. The protected owner socket returns opaque credential handles, not secret values.
+
+The `ScopedCredentialBroker` stores short-lived capabilities that bind the verified principal, provider credential, operation, target, canonical argument digest, and expiration. A trusted executor callback receives plaintext only after an independent authorization decision; the capability is consumed before the callback and cannot be replayed. It does not allow arbitrary MCP clients to retrieve vault contents. Supported vendor OAuth exchanges use the existing PKCE broker. Software-specific login adapters must still enforce their provider's scopes and token lifecycle before they are made available to production workers.
+
+## Kubernetes deployment operations
+
+The optional `services.homelabExecutor.kubernetes` policy permits only exact namespace/deployment pairs listed by the operator. The separate executor receives a root-controlled kubeconfig through systemd credentials and exposes `cluster__deployment_restart` and `cluster__deployment_scale`. Commands are constructed from fixed `kubectl` arguments without shell interpretation. Scaling is bounded by `maxReplicas`, and both operations require an active owner identity and a separate destructive-operation confirmation. The executor does not expose a Kubernetes administrator shell or arbitrary apply/delete endpoint.
+
 ## Enforcement boundary
 
 The gateway can query authorization and request revocation but cannot authenticate the owner, approve a destructive operation, issue a session credential, change the configured policy, or extend the absolute lifetime. Socket access relies on operating-system user and group isolation. The daemon validates the configured operation and target for every request, canonicalizes arguments with duplicate-key rejection, and fails closed if the service is unreachable.
