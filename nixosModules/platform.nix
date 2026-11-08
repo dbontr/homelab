@@ -88,6 +88,11 @@ in
       default = (import ../hardware.nix).devices;
       description = "Declared hardware inventory. Transport does not imply connectivity or permission to modify devices.";
     };
+    securityLoginURL = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "Exact protected HTTPS origin where the owner signs in; the MCP receives no credentials.";
+    };
     securityClientSocket = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
       default = null;
@@ -129,6 +134,10 @@ in
         message = "Monitoring sources must use loopback HTTP.";
       }
       {
+        assertion = cfg.securityLoginURL == null || (cfg.securityClientSocket != null && lib.hasPrefix "https://" cfg.securityLoginURL);
+        message = "Browser authentication requires an HTTPS origin and independent security client socket.";
+      }
+      {
         assertion = cfg.tokenFile != null;
         message = "The platform requires a protected API token file.";
       }
@@ -160,6 +169,8 @@ in
         HOMELAB_LOKI_URL = cfg.monitoring.lokiURL;
       } // lib.optionalAttrs (cfg.securityClientSocket != null) {
         HOMELAB_SECURITY_SOCKET = cfg.securityClientSocket;
+      } // lib.optionalAttrs (cfg.securityLoginURL != null) {
+        HOMELAB_SECURITY_LOGIN_URL = cfg.securityLoginURL;
       } // lib.optionalAttrs (cfg.books.contactFile != null) {
         HOMELAB_BOOKS_CONTACT_FILE = "/run/credentials/homelab-platform.service/books_contact";
       } // lib.optionalAttrs (cfg.consolePassphraseFile != null) {
