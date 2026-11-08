@@ -12,6 +12,8 @@ The NixOS modules leave both TCP endpoints **disabled by default**. The separate
 
 `release.RemoteReleaseAgent` implements the existing `HostReleaseAgent` interface and observes the local release journal. `release.DurableFleet` journals a random transaction identity, ordered host targets, and each intent **before** sending a remote command. It writes owner-only records atomically and synchronizes the containing directory. Rollouts proceed compute-first and control-last, and successful hosts are rolled back in reverse order after failure.
 
+The trusted `FleetOrchestrator` writes a private, immutable plan record after all host manifests have been validated. Activation accepts only the opaque plan identity and acquires the same fleet journal lock before loading the plan and writing activation intent. An owner or gateway cannot substitute arbitrary per-host release IDs at activation time. A fully resolved transaction and its plan can be cleared together; ambiguous outcomes cannot be cleared. 
+
 A lost reply is **not proof of either success or failure**. Unknown host outcomes require signed, authorized journal observations with an exact matching release ID; the coordinator never blindly retries an ambiguous switch. Unresolved transactions remain in an attention-required state, and only completed or fully reverted transactions can be cleared.
 
 ## Deliberate remaining limitations
