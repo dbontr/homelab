@@ -1,4 +1,16 @@
 {{- if .Values.worker.enabled }}
+{{- $builder := .Values.worker.builder }}
+{{- if or $builder.image $builder.registry $builder.authSecretName }}
+{{- if not (and $builder.image $builder.registry $builder.authSecretName) }}
+{{- fail "worker.builder requires image, registry, and authSecretName together" }}
+{{- end }}
+{{- if not (regexMatch "@sha256:[a-f0-9]{64}$" $builder.image) }}
+{{- fail "worker.builder.image must reference an immutable OCI digest" }}
+{{- end }}
+{{- if not (regexMatch "^[a-z0-9][a-z0-9.-]*(?::[0-9]{2,5})?(?:/[a-z0-9][a-z0-9._-]*){0,3}$" $builder.registry) }}
+{{- fail "worker.builder.registry must be a valid HTTPS registry prefix" }}
+{{- end }}
+{{- end }}
 {{- $namespace := .Values.worker.workloadNamespace }}
 {{- if not (regexMatch "^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$" $namespace) }}
 {{- fail "worker.workloadNamespace must be a valid Kubernetes DNS label" }}
@@ -102,6 +114,37 @@ spec:
   policyTypes: ["Ingress", "Egress"]
   ingress: []
   egress: []
+{{- if and $builder.image $builder.registry $builder.authSecretName }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pwm-image-builder-egress
+  namespace: {{ .Values.worker.workloadNamespace }}
+spec:
+  podSelector:
+    matchLabels:
+      pwm.dev/kind: image-builder
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 80
+{{- end }}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -171,6 +214,14 @@ spec:
                   key: worker_token
             - name: PWM_ALLOWED_IMAGES
               value: {{ .Values.worker.allowedImages | quote }}
+            {{- if and $builder.image $builder.registry $builder.authSecretName }}
+            - name: PWM_KUBE_BUILDER_IMAGE
+              value: {{ $builder.image | quote }}
+            - name: PWM_KUBE_BUILDER_REGISTRY
+              value: {{ $builder.registry | quote }}
+            - name: PWM_KUBE_BUILDER_AUTH_SECRET
+              value: {{ $builder.authSecretName | quote }}
+            {{- end }}
             {{- if .Values.worker.deviceManifestConfigMap }}
             - name: PWM_KUBE_DEVICE_MANIFEST
               value: /etc/pwm-devices/devices.json
