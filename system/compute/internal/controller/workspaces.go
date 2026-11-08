@@ -4,6 +4,8 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"os"
+	"regexp"
 	"strings"
 )
 
@@ -629,6 +631,24 @@ func (db *Database) RestoreSnapshot(project, ws, snapshot string) (map[string]an
 	})
 	return map[string]any{"operation_id": id, "status": "queued"}, err
 }
+var registryEnvironmentPrefix = regexp.MustCompile(`^[a-z0-9][a-z0-9.-]*(?::[0-9]{2,5})?(?:/[a-z0-9][a-z0-9._-]*){0,3}$`)
+
+func environmentImageName(project, name string, version int, registry string) (string, error) {
+	local := fmt.Sprintf("pwm-env-%s-%s:v%d", project, name, version)
+	if registry == "" {
+		return local, nil
+	}
+	if len(registry) > 128 || !registryEnvironmentPrefix.MatchString(registry) ||
+		strings.Contains(registry, "..") || !strings.ContainsAny(strings.Split(registry, "/")[0], ".:") {
+		return "", errors.New("invalid environment OCI registry prefix")
+	}
+	image := registry + "/" + local
+	if !validImage.MatchString(image) {
+		return "", errors.New("environment OCI image reference exceeds allowed format")
+	}
+	return image, nil
+}
+
 func (db *Database) EnvironmentDefine(project, name, base, file, context, arch string, expected int) (map[string]any, error) {
 	if !validID.MatchString(name) || !validImage.MatchString(base) || len(file) > 16384 || context != "" && !validID.MatchString(context) || arch != "" && arch != "amd64" && arch != "arm64" {
 		return nil, errors.New("invalid environment definition")
@@ -668,7 +688,8 @@ func (db *Database) EnvironmentDefine(project, name, base, file, context, arch s
 			return errors.New("environment version conflict")
 		}
 		now := stamp()
-		image := fmt.Sprintf("pwm-env-%s-%s:v%d", project, name, ver+1)
+		image, e := environmentImageName(project, name, ver+1, strings.TrimSuffix(os.Getenv("PWM_ENV_REGISTRY"), "/"))
+		if e != nil { return e }
 		e = db.execLocked("INSERT INTO environments(project,name,version,base_image,dockerfile,image,context_name,architecture,node,status,image_id,created,updated) VALUES(?,?,?,?,?,?,?,?,NULL,'defined',NULL,?,?) ON CONFLICT(project,name) DO UPDATE SET version=excluded.version,base_image=excluded.base_image,dockerfile=excluded.dockerfile,image=excluded.image,context_name=excluded.context_name,architecture=excluded.architecture,node=NULL,status='defined',image_id=NULL,updated=excluded.updated", project, name, ver+1, base, file, image, context, arch, now, now)
 		if e != nil {
 			return e
