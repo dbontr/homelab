@@ -5,7 +5,7 @@ import (
  "encoding/json"
  "errors"
 
- "github.com/dbontr/personal-health-mcp/internal/googlehealth"
+ "github.com/dbontr/homelab-new/system/health/internal/googlehealth"
 )
 func (s *Server) EnableGoogle(client *googlehealth.Client) {
  if client==nil{return}

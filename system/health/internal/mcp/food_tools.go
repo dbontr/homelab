@@ -5,7 +5,7 @@ import (
  "encoding/json"
  "errors"
 
- "github.com/dbontr/personal-health-mcp/internal/fooddata"
+ "github.com/dbontr/homelab-new/system/health/internal/fooddata"
 )
 func(s *Server)EnableFoodData(client *fooddata.Client){
  if client==nil{return}
