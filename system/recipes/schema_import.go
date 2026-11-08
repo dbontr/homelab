@@ -136,8 +136,7 @@ func parseIngredient(text string)Ingredient{
 
 func schemaSteps(value any)[]Step{
  if text,ok:=value.(string);ok{
-  lines:=strings.Split(text,"
-")
+  lines:=strings.Split(text,string(rune(10)))
   out:=[]Step{}
   for _,line:=range lines{
    if clean:=strings.TrimSpace(line);clean!=""{out=append(out,Step{Text:clean})}
