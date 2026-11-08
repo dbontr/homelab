@@ -38,7 +38,15 @@ func(e *Executor)RemoteHandler()http.Handler{
   w.Header().Set("Content-Type","application/json")
   _=json.NewEncoder(w).Encode(release.ReleaseObservation{ID:journal.ID,Phase:journal.Phase})
  })
- return mux
+ // Defense in depth: this handler is never valid on an ordinary HTTP
+ // listener or a TLS listener that did not verify the coordinator client.
+ return http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){
+  if r.TLS==nil||len(r.TLS.VerifiedChains)==0||len(r.TLS.PeerCertificates)==0{
+   http.Error(w,"verified executor client certificate required",http.StatusForbidden)
+   return
+  }
+  mux.ServeHTTP(w,r)
+ })
 }
 
 func releaseJournalID(id string)bool{
@@ -55,7 +63,10 @@ func(e *Executor)ServeMutualTLS(ctx context.Context,address string,cert tls.Cert
  if e==nil||clientCA==nil||coordinatorDNS==""||len(cert.Certificate)==0||cert.PrivateKey==nil{
   return errors.New("remote executor requires TLS identity and client CA")
  }
- if _,_,err:=net.SplitHostPort(address);err!=nil{return errors.New("invalid remote executor listener")}
+ host,_,err:=net.SplitHostPort(address)
+ if err!=nil{return errors.New("invalid remote executor listener")}
+ ip:=net.ParseIP(host)
+ if ip==nil||!(ip.IsPrivate()||ip.IsLoopback()){return errors.New("remote executor must bind an explicit private IP")}
  listener,err:=net.Listen("tcp",address);if err!=nil{return err}
  defer listener.Close()
  configuration:=&tls.Config{
