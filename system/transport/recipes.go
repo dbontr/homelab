@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"io"
+	"mime"
 	"strconv"
 	"strings"
 
@@ -169,6 +171,60 @@ func (s *Server) groceryUpdate(w http.ResponseWriter,r *http.Request){
  board,err:=s.recipes.MarkGrocery(r.PathValue("key"),request.Checked,request.ExpectedRevision)
  if err!=nil{recipeFailure(w,err);return}
  writeJSON(w,200,board)
+}
+
+func (s *Server) recipeImageUpload(w http.ResponseWriter, r *http.Request) {
+	if s.recipes == nil {
+		writeError(w, http.StatusServiceUnavailable, "recipe storage is not configured")
+		return
+	}
+	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if err != nil || (mediaType != "image/png" && mediaType != "image/jpeg") {
+		writeError(w, http.StatusUnsupportedMediaType, "JPEG or PNG image required")
+		return
+	}
+	content, err := io.ReadAll(http.MaxBytesReader(w, r.Body, recipes.MaxImageBytes))
+	if err != nil {
+		var limit *http.MaxBytesError
+		if errors.As(err, &limit) {
+			writeError(w, http.StatusRequestEntityTooLarge, "recipe image exceeds 5 MiB")
+		} else {
+			writeError(w, http.StatusBadRequest, "could not read recipe image")
+		}
+		return
+	}
+	ref, err := s.recipes.PutImage(content, mediaType)
+	switch {
+	case errors.Is(err, recipes.ErrImageTooLarge):
+		writeError(w, http.StatusRequestEntityTooLarge, "recipe image exceeds 5 MiB")
+	case errors.Is(err, recipes.ErrInvalidImage):
+		writeError(w, http.StatusUnprocessableEntity, "image must be a valid JPEG or PNG under 16 megapixels")
+	case err != nil:
+		writeError(w, http.StatusInternalServerError, "recipe image storage failed")
+	default:
+		writeJSON(w, http.StatusCreated, map[string]string{"image_ref": ref})
+	}
+}
+
+func (s *Server) recipeImage(w http.ResponseWriter, r *http.Request) {
+	if s.recipes == nil {
+		writeError(w, http.StatusServiceUnavailable, "recipe storage is not configured")
+		return
+	}
+	content, mediaType, err := s.recipes.GetImage(r.PathValue("name"))
+	if errors.Is(err, recipes.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "recipe image not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "recipe image unavailable")
+		return
+	}
+	w.Header().Set("Content-Type", mediaType)
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; sandbox")
+	w.Header().Set("Content-Disposition", "inline")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(content)
 }
 
 func (s *Server) recipeImportURL(w http.ResponseWriter, r *http.Request) {
