@@ -410,7 +410,39 @@ pub fn Health(csrf: String) -> Element{
                             value:"{rpe()}",oninput:move |e|rpe.set(e.value())}
                     }
                 }
-                button{class:"btn btn-primary",disabled:health_busy(),"Save set or interval"}
+                div{class:"task-actions",
+                    button{class:"btn btn-primary",disabled:health_busy(),"Save set or interval"}
+                    button{class:"btn btn-outline",r#type:"button",disabled:health_busy() || exercise().trim().is_empty(),
+                        onclick:move |_|{
+                            let Some(reps)=repetitions().parse::<i64>().ok().filter(|n|*n>=1&&*n<=30)
+                            else{health_error.set("Progression review requires a repetition target from 1 to 30".to_owned());return};
+                            let encoded=exercise().bytes().map(|b|{
+                                if b.is_ascii_alphanumeric() || b"-_.~".contains(&b){
+                                    (b as char).to_string()
+                                }else{format!("%{b:02X}")}
+                            }).collect::<String>();
+                            let path=format!("/v1/health/training-progress?exercise={encoded}&repetitions={reps}");
+                            health_busy.set(true);health_error.set(String::new());
+                            spawn(async move{
+                                match api::get::<Value>(&path).await{
+                                    Ok(value)=>progression.set(Some(value)),
+                                    Err(e)=>health_error.set(e),
+                                }
+                                health_busy.set(false);
+                            });
+                        },
+                        "Review progression"
+                    }
+                }
+                if let Some(preview)=progression(){
+                    div{class:"alert",role:"status",
+                        p{strong{"{api::property(&preview,&["status"])}"}}
+                        p{class:"small muted",{api::property(&preview,&["rationale"])}}
+                        p{"Candidate load (kg): {api::property(&preview,&["candidate_load_kg"])}"}
+                        p{class:"small muted",{api::property(&preview,&["warning"])}}
+                        p{class:"small muted","No training plan has been changed."}
+                    }
+                }
             }
         }
         Card{title:"Recent training".to_owned(),
