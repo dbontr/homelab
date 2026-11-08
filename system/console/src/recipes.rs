@@ -276,6 +276,8 @@ pub fn Recipes(csrf: String) -> Element {
     let mut sage_source = use_signal(String::new);
     let mut sage_preview = use_signal(|| Option::<RecipeSagePreview>::None);
     let mut sage_selected = use_signal(Vec::<String>::new);
+    let mut sage_overrides = use_signal(HashMap::<String, Recipe>::new);
+    let mut sage_edit_key = use_signal(|| Option::<String>::None);
     let mut history_open = use_signal(|| false);
     let mut history_loading = use_signal(|| false);
     let mut history_record = use_signal(String::new);
@@ -310,6 +312,7 @@ pub fn Recipes(csrf: String) -> Element {
                 nutrition_source.set(String::new());
                 error.set(String::new()); notice.set(String::new());
                 editing.set(true); cooking.set(false); confirm_delete.set(false);
+                sage_edit_key.set(None);
                 history_open.set(false); confirm_restore.set(None);
                 tab.set(Tab::Library);
             }, "Add recipe" }
@@ -332,7 +335,9 @@ pub fn Recipes(csrf: String) -> Element {
                     section { class: "card recipe-editor",
                         div { class: "card-header",
                             h2 { class: "card-title",
-                                if draft_value.id.is_empty() { "Create recipe" } else { "Edit recipe" }
+                                if sage_edit_key().is_some() { "Review RecipeSage entry" }
+                                else if draft_value.id.is_empty() { "Create recipe" }
+                                else { "Edit recipe" }
                             }
                             p { class: "card-description", "Keep amounts, method steps and nutrition evidence structured." }
                         }
@@ -347,6 +352,25 @@ pub fn Recipes(csrf: String) -> Element {
                                 match nutrients_from_lines(&nutrients(), &nutrition_method(), &nutrition_source()) {
                                     Err(message) => { error.set(message); return; }
                                     Ok(n) => value.nutrition = n,
+                                }
+                                if let Some(source_key) = sage_edit_key() {
+                                    if value.title.trim().is_empty() || value.servings <= 0.0 ||
+                                        value.ingredients.is_empty() ||
+                                        value.ingredients.iter().any(|item| item.name.trim().is_empty() || item.amount <= 0.0) ||
+                                        value.steps.is_empty() ||
+                                        value.steps.iter().any(|step| step.text.trim().is_empty()) {
+                                        error.set("Add a title, servings, ingredient quantities and method steps before continuing.".to_owned());
+                                        return;
+                                    }
+                                    let mut edits = sage_overrides();
+                                    edits.insert(source_key, value);
+                                    sage_overrides.set(edits);
+                                    sage_edit_key.set(None);
+                                    editing.set(false);
+                                    tab.set(Tab::Transfer);
+                                    notice.set("Recipe corrections retained for import review".to_owned());
+                                    error.set(String::new());
+                                    return;
                                 }
                                 let csrf = csrf();
                                 let path = if value.id.is_empty() { "/v1/recipes".to_owned() }
@@ -574,8 +598,16 @@ pub fn Recipes(csrf: String) -> Element {
                                 }
                             }
                             div { class: "inline-row recipe-actions",
-                                button { class: "btn btn-primary", type: "submit", disabled: busy(), "Save recipe" }
-                                button { class: "btn btn-outline", type: "button", onclick: move |_| {editing.set(false); error.set(String::new());}, "Cancel" }
+                                button { class: "btn btn-primary", type: "submit", disabled: busy(),
+                                    if sage_edit_key().is_some() { "Keep import corrections" } else { "Save recipe" }
+                                }
+                                button { class: "btn btn-outline", type: "button", onclick: move |_| {
+                                    let reviewing_import = sage_edit_key().is_some();
+                                    sage_edit_key.set(None);
+                                    editing.set(false);
+                                    error.set(String::new());
+                                    if reviewing_import { tab.set(Tab::Transfer); }
+                                }, "Cancel" }
                             }
                         }
                     }
@@ -628,6 +660,7 @@ pub fn Recipes(csrf: String) -> Element {
                                                     nutrients.set(nutrient_lines(&record));
                                                     nutrition_method.set(record.nutrition.as_ref().map(|n| n.method.clone()).unwrap_or_else(|| "estimated".to_owned()));
                                                     nutrition_source.set(record.nutrition.as_ref().map(|n| n.source.clone()).unwrap_or_default());
+                                                    sage_edit_key.set(None);
                                                     draft.set(record); editing.set(true); cooking.set(false);
                                                 }
                                             }, "Edit" }
