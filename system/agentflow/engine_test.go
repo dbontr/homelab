@@ -4,6 +4,7 @@ import (
  "context"
  "encoding/json"
  "errors"
+ "errors"
  "fmt"
  "strings"
  "testing"
@@ -139,4 +140,49 @@ func TestCancelSignalsActiveEngineOperation(t *testing.T){
  }
  current,err:=e.Get(run.ID);if err!=nil{t.Fatal(err)}
  if !current.Cancelled||current.Status!=Cancelled{t.Fatalf("unexpected cancellation status: %+v",current)}
+}
+
+type repairAuthor struct{
+ compute *fakeCompute
+ calls int
+}
+func (a *repairAuthor)Propose(_ context.Context,_ string,_ map[string]string,allowed []string)(map[string]string,error){
+ a.calls++
+ if len(allowed)!=1||allowed[0]!="README.md"{return nil,errors.New("unexpected editable scope")}
+ a.compute.failCheck=false
+ return map[string]string{"README.md":"Corrected after verification"},nil
+}
+func TestAuthorizedRepairRerunsVerificationBeforePublication(t *testing.T){
+ e,compute:=testEngine(t)
+ compute.failCheck=true
+ author:=&repairAuthor{compute:compute}
+ e.Author=author
+ p:=sampleProgram()
+ p.AllowedPaths=[]string{"README.md"}
+ run,err:=e.Submit(p);if err!=nil{t.Fatal(err)}
+ for i:=0;i<8;i++{
+  progressed,err:=(&Runner{Store:e.Store,Worker:e,Lease:time.Minute}).RunOne(context.Background(),run.ID)
+  if err!=nil||!progressed{t.Fatalf("step %d: %v",i,err)}
+ }
+ final,err:=e.Get(run.ID);if err!=nil{t.Fatal(err)}
+ if final.Status!=Succeeded||compute.drafts!=1||author.calls!=1{
+  t.Fatalf("failed to verify bounded repair: status=%s drafts=%d calls=%d",final.Status,compute.drafts,author.calls)
+ }
+}
+func TestUnauthorizedRepairCannotReachDraftPublication(t *testing.T){
+ e,compute:=testEngine(t)
+ compute.failCheck=true
+ e.Author=untrustedAuthor{}
+ p:=sampleProgram()
+ p.AllowedPaths=[]string{"README.md"}
+ run,err:=e.Submit(p);if err!=nil{t.Fatal(err)}
+ for i:=0;i<8;i++{
+  progressed,err:=(&Runner{Store:e.Store,Worker:e,Lease:time.Minute}).RunOne(context.Background(),run.ID)
+  if err!=nil{t.Fatal(err)}
+  if !progressed{break}
+ }
+ final,err:=e.Get(run.ID);if err!=nil{t.Fatal(err)}
+ if final.Status!=Failed||compute.drafts!=0{
+  t.Fatalf("unauthorized repair reached publication: status=%s drafts=%d",final.Status,compute.drafts)
+ }
 }
