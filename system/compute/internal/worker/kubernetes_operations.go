@@ -87,8 +87,10 @@ func (k *Kubernetes) Handle(ctx context.Context, r *Runner, op Operation, c *Cli
 		return r.importArchive(ctx, op, c)
 	case "capture_display":
 		return k.captureDisplay(ctx, r, op, c)
-	case "build_image", "export_image", "load_image":
-		return nil, errors.New("image build and transfer require an approved Kubernetes registry builder")
+	case "build_image":
+		return k.BuildImage(ctx, r, op, payload)
+	case "export_image", "load_image":
+		return k.RegistryImageUnavailable(op.Action)
 	default:
 		return nil, fmt.Errorf("unsupported Kubernetes operation %q", op.Action)
 	}
