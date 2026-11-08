@@ -166,6 +166,35 @@ pub async fn write<T: DeserializeOwned, P: Serialize>(
         .map_err(|_| "The service returned invalid data".to_owned())
 }
 
+#[derive(Clone, Debug, Deserialize)]
+pub struct ImageUpload {
+    pub image_ref: String,
+}
+
+pub async fn upload_recipe_image(
+    csrf: &str, media_type: &str, contents: Vec<u8>
+) -> Result<ImageUpload, String> {
+    if contents.is_empty() || contents.len() > 5 * 1024 * 1024 {
+        return Err("Recipe image must be 5 MiB or smaller".to_owned());
+    }
+    if media_type != "image/jpeg" && media_type != "image/png" {
+        return Err("Choose a JPEG or PNG image".to_owned());
+    }
+    let response = reqwest::Client::new()
+        .post(url("/v1/recipes/images")?)
+        .header("X-CSRF-Token", csrf)
+        .header("Content-Type", media_type)
+        .body(contents)
+        .send()
+        .await
+        .map_err(|_| "Could not upload the recipe image".to_owned())?;
+    if !response.status().is_success() {
+        return Err(response_error(response.status()));
+    }
+    response.json::<ImageUpload>().await
+        .map_err(|_| "The service returned invalid image data".to_owned())
+}
+
 pub async fn remove(path: &str, csrf: &str, revision: Option<i32>) -> Result<(), String> {
     let client = reqwest::Client::new();
     let mut request = client.delete(url(path)?).header("X-CSRF-Token", csrf);
