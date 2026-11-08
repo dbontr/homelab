@@ -18,10 +18,11 @@ import (
  "github.com/dbontr/homelab-new/system/devices"
  "github.com/dbontr/homelab-new/system/media"
  "github.com/dbontr/homelab-new/system/profiles"
+ "github.com/dbontr/homelab-new/system/session"
  "github.com/dbontr/homelab-new/system/store"
 )
 type Backend struct { Name string; URL string; Token string }
-type Server struct { db *store.Store; token string; backend []Backend; client *http.Client; calendarURL string; gate *approval.Gate; allowedOrigins map[string]struct{}; media *media.Client; deviceCatalog *devices.Catalog; nodeCatalog *devices.NodeCatalog; profiles *profiles.Registry; inflight chan struct{} }
+type Server struct { db *store.Store; token string; backend []Backend; client *http.Client; calendarURL string; gate *approval.Gate; allowedOrigins map[string]struct{}; media *media.Client; deviceCatalog *devices.Catalog; nodeCatalog *devices.NodeCatalog; profiles *profiles.Registry; sessions *session.Manager; inflight chan struct{} }
 
 func New(db *store.Store,token string,backends []Backend)(*Server,error){
  if db==nil||len(token)<32||strings.ContainsAny(token,"\r\n\t"){return nil,errors.New("store and a strong access token are required")}
@@ -39,6 +40,7 @@ func New(db *store.Store,token string,backends []Backend)(*Server,error){
 func(s *Server) SetDeviceCatalog(catalog *devices.Catalog) { s.deviceCatalog = catalog }
 func(s *Server) SetNodeCatalog(catalog *devices.NodeCatalog) { s.nodeCatalog = catalog }
 func(s *Server) SetProfiles(registry *profiles.Registry) { s.profiles = registry }
+func(s *Server) SetSessions(manager *session.Manager) { s.sessions = manager }
 func(s *Server) SetCalendarURL(raw string)error{
  if err:=calendar.ValidateURL(raw);err!=nil{return err}
  s.calendarURL=raw
@@ -47,6 +49,11 @@ func(s *Server) SetCalendarURL(raw string)error{
 func(s *Server) Handler()http.Handler{
  mux:=http.NewServeMux()
  mux.HandleFunc("GET /healthz",func(w http.ResponseWriter,_ *http.Request){writeJSON(w,200,map[string]string{"status":"ok"})})
+ mux.HandleFunc("GET /ui/session",s.uiSession)
+ mux.HandleFunc("POST /ui/session",s.uiSession)
+ mux.HandleFunc("DELETE /ui/session",s.uiSession)
+ mux.HandleFunc("GET /v1/workspace/projects",s.uiProjects)
+ mux.HandleFunc("GET /v1/workspace/nodes",s.uiComputeNodes)
  mux.HandleFunc("POST /mcp",s.mcp)
  mux.HandleFunc("GET /v1/software",s.softwareLibrary)
  mux.HandleFunc("GET /v1/tools",func(w http.ResponseWriter,r *http.Request) {
@@ -81,8 +88,11 @@ func(s *Server) Handler()http.Handler{
   }
   if r.URL.Path!="/healthz" {
    if !s.originAllowed(r) {writeError(w,http.StatusForbidden,"origin not permitted");return}
+   if r.URL.Path=="/ui/session" {mux.ServeHTTP(w,r);return}
    auth:=r.Header.Get("Authorization")
-   if !strings.HasPrefix(auth,"Bearer ")||subtle.ConstantTimeCompare([]byte(strings.TrimPrefix(auth,"Bearer ")),[]byte(s.token))!=1{
+   bearer:=strings.HasPrefix(auth,"Bearer ") &&
+     subtle.ConstantTimeCompare([]byte(strings.TrimPrefix(auth,"Bearer ")),[]byte(s.token))==1
+   if !bearer && !s.sessionReadAllowed(r) {
     writeError(w,401,"authorization required");return
    }
   }

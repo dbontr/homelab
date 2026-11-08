@@ -14,6 +14,10 @@ The unified interface supports tasks, goals, configurable personal rules, quick-
 
 Compute, teaching and health implementations retain independent operating-system and database boundaries where necessary for reliability. Their separation must not require the user to choose between assistants, endpoints or inconsistent project identifiers.
 
+## Console
+
+The Rust/Dioxus browser client is in [`system/console`](system/console). It uses shadcn/ui neutral design tokens and consumes read-only, owner-authenticated native API endpoints. It does not ship React or embed privileged MCP credentials. See [console architecture](docs/console.md).
+
 ## Development
 
 Compute profiles are stored with immutable revisions, resource requirements and operator-approved software identifiers; profile resource planning is advisory and never schedules a job. SSH-mode equipment uses ordinary-user inspection probes without remote agents. The native tool-call API and MCP dispatch share the same application authorization layer. Credential encryption and independent executor grants exist as library contracts but have no live account or cluster-authority configuration.
