@@ -56,6 +56,9 @@ type Kubernetes struct {
 	Storage         string
 	StorageClass    string
 	ImagePullSecret string
+	BuilderImage string
+	BuilderRegistry string
+	BuilderAuthSecret string
 	GPURuntimeClass string
 	WorkloadNode    string
 	Devices         []KubernetesDevice
@@ -90,6 +93,14 @@ func NewKubernetes(namespace, project string, cpu float64, memory, jobs int) (*K
 	if pullSecret != "" && !kubernetesName.MatchString(pullSecret) {
 		return nil, errors.New("invalid Kubernetes workload registry pull secret")
 	}
+	builderImage := os.Getenv("PWM_KUBE_BUILDER_IMAGE")
+	builderRegistry := strings.TrimSuffix(os.Getenv("PWM_KUBE_BUILDER_REGISTRY"), "/")
+	builderAuth := os.Getenv("PWM_KUBE_BUILDER_AUTH_SECRET")
+	if (builderImage != "" || builderRegistry != "" || builderAuth != "") &&
+		(!validBuilderImage(builderImage) || !validBuilderRegistry(builderRegistry) ||
+			!kubernetesName.MatchString(builderAuth)) {
+		return nil, errors.New("Kubernetes builder requires an approved image, HTTPS registry and credential Secret")
+	}
 	workloadNode := os.Getenv("PWM_KUBE_WORKLOAD_NODE")
 	if workloadNode != "" && !kubernetesName.MatchString(workloadNode) {
 		return nil, errors.New("invalid Kubernetes workload node")
@@ -100,6 +111,8 @@ func NewKubernetes(namespace, project string, cpu float64, memory, jobs int) (*K
 	}
 	k := &Kubernetes{Namespace: namespace, Project: project, Binary: binary,
 		Storage: storage, StorageClass: class, ImagePullSecret: pullSecret,
+		BuilderImage: builderImage, BuilderRegistry: builderRegistry,
+		BuilderAuthSecret: builderAuth,
 		WorkloadNode: workloadNode, CPU: cpu, MemoryMB: memory, MaxJobs: jobs}
 	k.GPURuntimeClass = runtimeClass
 	if err := k.configureServiceAccount(); err != nil {
@@ -423,7 +436,7 @@ func (k *Kubernetes) Start(ctx context.Context, r *Runner, id string, p map[stri
 		return nil, errors.New("invalid Kubernetes worker or workspace ID")
 	}
 	image := getString(p, "image")
-	if !r.Images[image] {
+	if !k.approvedRuntimeImage(r, image) {
 		return nil, errors.New("Kubernetes Pod image is not in the approved OCI registry pool")
 	}
 	cpu, memory := getFloat(p, "cpu"), getFloat(p, "memory_mb")
@@ -677,7 +690,7 @@ func (k *Kubernetes) jobManifestWithDevices(job Job, worker string) (map[string]
 }
 
 func (k *Kubernetes) ExecuteJob(ctx context.Context, r *Runner, job Job) (string, string) {
-	if !workspaceID.MatchString(job.ID) || !r.Images[job.Image] || job.CPU < 0.1 ||
+	if !workspaceID.MatchString(job.ID) || !k.approvedRuntimeImage(r, job.Image) || job.CPU < 0.1 ||
 		job.CPU > 32 || job.CPU > k.CPU || math.IsNaN(job.CPU) || math.IsInf(job.CPU, 0) ||
 		job.MemoryMB < 64 || job.MemoryMB > 131072 || job.MemoryMB > k.MemoryMB {
 		return "failed", "invalid or unapproved Kubernetes job"
