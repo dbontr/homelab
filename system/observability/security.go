@@ -33,6 +33,9 @@ var securityEventNames=[]string{
  "web_session revoked",
  "owner_confirmation accepted",
  "web_confirmation accepted",
+ "privileged_operation denied",
+ "privileged_operation failed",
+ "privileged_operation succeeded",
 }
 
 // SecurityAudit counts known security events from the system journal in Loki.
