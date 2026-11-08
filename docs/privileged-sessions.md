@@ -34,6 +34,14 @@ sudo homelab-admin close
 
 `pending` returns redacted argument previews and full SHA-256 digests. The owner must inspect the action and target before confirmation. The initial TOTP counter cannot be reused for a destructive step-up; wait for the authenticator's next 30-second code. All owner requests use the owner-only Unix socket. No browser or public ingress route is configured by the security daemon.
 
+## Privileged Workspace delegation
+
+The optional `services.homelabExecutor.workspace` configuration uses a fixed HTTPS Workspace MCP endpoint (or loopback HTTP for a colocated controller) and a protected controller credential loaded only into the privileged executor through systemd. The platform gateway does not receive the controller root token.
+
+The executor accepts four typed operations: stop an allowlisted project workspace, queue an environment build in an allowlisted project, register a software package collection with exact approved image/software/package identifiers, and revoke an allowlisted compute worker. Each call independently verifies the signed owner principal, current session, operation, resource and canonical arguments before the executor reads the credential. All four operations require one-time owner confirmation. The executor forwards only the fixed Workspace MCP tool name and validated downstream fields; it does not expose the controller's unrestricted `tools/call` interface or a shell.
+
+The existing Workspace controller remains the sole owner of device leases, software inventories, worker identities and workspace lifecycle. The privileged bridge does not create shadow hardware or software stores. Environment builds may be asynchronous and should be checked through the owning Workspace operation-status API; an accepted request does not prove that software has finished installing. This delegation is disabled by default and requires trusted controller configuration and deployment validation.
+
 ## Credential custody and rotation
 
 The owner-only socket can list opaque credential handles, store provider credentials, revoke entries, and atomically rotate an existing entry. Each add, delete, or rotate operation requires a fresh administrative password and an unreplayed TOTP submitted directly to the trusted owner channel. The gateway does not expose any credential-inventory or plaintext-credential operation.
