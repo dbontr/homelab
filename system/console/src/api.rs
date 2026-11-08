@@ -56,6 +56,20 @@ pub struct Task {
     pub minutes: i32,
     #[serde(default)]
     pub due: String,
+    #[serde(default)]
+    pub notes: String,
+    #[serde(default)]
+    pub scheduled: String,
+    #[serde(default)]
+    pub recurrence: String,
+    #[serde(default)]
+    pub energy: String,
+    #[serde(default)]
+    pub location: String,
+    #[serde(default)]
+    pub priority: i32,
+    #[serde(default)]
+    pub revision: i32,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]

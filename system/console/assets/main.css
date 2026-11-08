@@ -259,3 +259,19 @@ main.content { max-width: 94rem; margin: 0 auto; padding: 2rem; }
   .recipe-plan-form .field { width: 100%; }
   .tabs { display: flex; flex-wrap: wrap; }
 }
+
+/* Task list */
+.task-capture { display: flex; gap: .625rem; align-items: center; }
+.task-capture .field { flex: 1; }
+.task-items { display: grid; }
+.task-item { display: flex; align-items: center; gap: .75rem; padding: .75rem 1rem; border-top: 1px solid var(--border); }
+.task-item:first-child { border-top: 0; }
+.task-information { flex: 1; display: grid; gap: .25rem; min-width: 0; }
+.task-title { font-weight: 550; overflow-wrap: anywhere; }
+.task-meta { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; font-size: .75rem; color: var(--muted-foreground); }
+.task-check { flex: 0 0 1.75rem; width: 1.75rem; height: 1.75rem; border: 1px solid var(--border); border-radius: 50%; background: transparent; color: var(--foreground); font-size: 1.25rem; }
+.task-done { flex: 0 0 1.75rem; text-align: center; color: var(--muted-foreground); }
+.task-editor-fields { display: grid; gap: .875rem; }
+.task-field-grid { display: grid; gap: .75rem; grid-template-columns: repeat(2,minmax(0,1fr)); }
+.task-actions { display: flex; gap: .5rem; }
+@media (max-width: 650px) { .task-capture { flex-direction: column; align-items: stretch; } .task-field-grid { grid-template-columns: 1fr; } }

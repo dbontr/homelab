@@ -1,6 +1,7 @@
 mod api;
 mod components;
 mod recipes;
+mod tasks;
 mod views;
 
 use dioxus::prelude::*;
@@ -252,7 +253,7 @@ fn App() -> Element {
                                 Page::Projects => rsx! { views::Projects {} },
                                 Page::Compute => rsx! { views::Compute {} },
                                 Page::Software => rsx! { views::Software {} },
-                                Page::Tasks => rsx! { views::Tasks {} },
+                                Page::Tasks => rsx! { tasks::Tasks { csrf: csrf.clone() } },
                                 Page::Learning => rsx! {
                                     views::Capabilities {
                                         title: "Learning".to_owned(),

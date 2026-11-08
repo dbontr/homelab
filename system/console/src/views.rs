@@ -412,44 +412,6 @@ fn SoftwareCollection(title: String, description: String, records: Vec<Value>) -
 }
 
 #[component]
-pub fn Tasks() -> Element {
-    let mut data=use_resource(|| async{api::get::<Vec<Task>>("/v1/tasks").await});
-    rsx! {
-        Heading {title:"Tasks".to_owned(),description:"Your recorded work and task dependencies.".to_owned(),
-            button {class:"btn btn-outline",onclick:move |_|data.restart(),
-                Icon{name:"refresh".to_owned()} "Refresh"
-            }
-        }
-        Card {title:"Task list".to_owned(),description:"Managed by the personal productivity service.".to_owned(),
-            match data.cloned() {
-                None=>rsx!{Loading{}},
-                Some(Err(error))=>rsx!{Notice{message:error}},
-                Some(Ok(items)) if items.is_empty()=>rsx!{Empty{title:"No tasks recorded".to_owned(),description:"Tasks created through the native API or MCP appear here.".to_owned()}},
-                Some(Ok(items))=>rsx!{
-                    div {class:"table-clip",
-                        table {class:"table",
-                            thead {tr {th {"Task"} th {"Status"} th {"Duration"} th {"Due"} }}
-                            tbody {
-                                for item in items {
-                                    tr {key:"{item.id}",
-                                        td {"{item.title}"}
-                                        td {Badge{text:item.status}}
-                                        td {class:"muted",
-                                            if item.minutes>0 {"{item.minutes} min"} else {"—"}
-                                        }
-                                        td {class:"muted","{item.due}"}
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-#[component]
 pub fn Capabilities(title: String, description: String, prefix: String) -> Element {
     let mut data=use_resource(|| async{api::get::<ToolList>("/v1/tools").await});
     let tools: Vec<api::Tool> = data.cloned().and_then(Result::ok)
