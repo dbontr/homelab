@@ -26,7 +26,6 @@ func (r Runner) RunOne(ctx context.Context, workflowID string)(bool,error){
  if r.Store==nil||r.Worker==nil{return false,errors.New("runner requires store and dispatcher")}
  if err:=ctx.Err();err!=nil{return false,err}
  claim,err:=r.Store.ClaimReady(workflowID,r.Lease)
- if errors.Is(err,context.Canceled){return false,err}
  if errors.Is(err,errNoReady){return false,nil}
  if err!=nil{return false,err}
  duration:=time.Until(claim.Deadline)
@@ -37,7 +36,9 @@ func (r Runner) RunOne(ctx context.Context, workflowID string)(bool,error){
  result,runErr:=r.Worker.Dispatch(active,idempotencyKey,claim.Kind,claim.Input)
  if active.Err()!=nil{return true,active.Err()}
  if runErr!=nil{
-  if err:=r.Store.Complete(claim,nil,runErr.Error());err!=nil{return true,err}
+  detail:=runErr.Error()
+  if len(detail)>1024{detail=detail[:1024]}
+  if err:=r.Store.Complete(claim,nil,detail);err!=nil{return true,err}
   return true,nil
  }
  if err:=r.Store.Complete(claim,result,"");err!=nil{return true,err}
