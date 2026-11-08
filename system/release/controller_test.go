@@ -133,3 +133,27 @@ func TestInterruptedGenerationRequiresRecovery(t *testing.T){
  journal,err:=ctrl.Status()
  if err!=nil||journal.Phase!="rolled-back"{t.Fatal("interrupted release not recovered")}
 }
+
+func TestExplicitReleaseRevertAndReplayDenial(t *testing.T) {
+ runner:=&fakeReleaseRunner{}
+ ctrl:=releaseTestController(t,runner)
+ staged,err:=ctrl.Stage(context.Background(),testRevision)
+ if err!=nil{t.Fatal(err)}
+ if err:=ctrl.Activate(context.Background(),staged.ID);err!=nil{t.Fatal(err)}
+ if err:=ctrl.Revert(context.Background(),strings.Repeat("f",48));err==nil{t.Fatal("wrong staged release accepted")}
+ if err:=ctrl.Revert(context.Background(),staged.ID);err!=nil{t.Fatal(err)}
+ if runner.current!=priorSystem{t.Fatal("prior generation not restored")}
+ journal,err:=ctrl.Status()
+ if err!=nil||journal.Phase!="rolled-back"{t.Fatalf("invalid rollback journal: %+v %v",journal,err)}
+ if err:=ctrl.Revert(context.Background(),staged.ID);err==nil{t.Fatal("replayed rollback accepted")}
+}
+
+func TestExplicitRevertRequiresExactActiveGeneration(t *testing.T) {
+ runner:=&fakeReleaseRunner{}
+ ctrl:=releaseTestController(t,runner)
+ staged,err:=ctrl.Stage(context.Background(),testRevision)
+ if err!=nil{t.Fatal(err)}
+ if err:=ctrl.Activate(context.Background(),staged.ID);err!=nil{t.Fatal(err)}
+ runner.current="/nix/store/cccccccccccccccccccccccccccccccc-out-of-band"
+ if err:=ctrl.Revert(context.Background(),staged.ID);err==nil{t.Fatal("out-of-band generation overwritten")}
+}
