@@ -7,13 +7,19 @@ import (
 	"strings"
 )
 
-// Recipe writes are owner-session operations, not cluster or MCP privileges.
-func (s *Server) sessionRecipeWriteAllowed(r *http.Request) bool {
+// Owner-session mutations are limited to personal records; cluster privileges
+// and direct MCP tools always require independent authorization.
+func (s *Server) sessionOwnerWriteAllowed(r *http.Request) bool {
 	if s.sessions == nil || r.Header.Get("Origin") == "" { return false }
 	path := r.URL.Path
 	allowed := false
 	switch {
-	case r.Method == http.MethodPost && (path == "/v1/recipes" || path == "/v1/recipes/import" || path == "/v1/meals"):
+	case r.Method == http.MethodPost && (path == "/v1/recipes" || path == "/v1/recipes/import" || path == "/v1/meals" || path == "/v1/tasks" || path == "/v1/tasks/capture" || path == "/v1/goals"):
+        allowed = true
+    case r.Method == http.MethodPost && strings.HasPrefix(path, "/v1/tasks/"):
+        allowed = len(strings.Split(path, "/")) == 5 && strings.HasSuffix(path, "/complete")
+    case r.Method == http.MethodPut && strings.HasPrefix(path, "/v1/tasks/"):
+        allowed = len(strings.Split(path, "/")) == 4
 		allowed = true
 	case (r.Method == http.MethodPut || r.Method == http.MethodDelete) && strings.HasPrefix(path, "/v1/recipes/"):
 		allowed = len(strings.Split(path, "/")) == 4 && path != "/v1/recipes/export"

@@ -77,6 +77,9 @@ func(s *Server) Handler()http.Handler{
  mux.HandleFunc("GET /v1/tasks",s.tasks)
  mux.HandleFunc("POST /v1/tasks",s.tasks)
  mux.HandleFunc("POST /v1/tasks/{id}/complete",s.complete)
+ mux.HandleFunc("POST /v1/tasks/capture",s.taskCapture)
+ mux.HandleFunc("GET /v1/tasks/agenda",s.taskAgenda)
+ mux.HandleFunc("PUT /v1/tasks/{id}",s.taskUpdate)
  mux.HandleFunc("GET /v1/goals",s.goals)
  mux.HandleFunc("POST /v1/goals",s.goals)
  mux.HandleFunc("GET /v1/rules",s.rules)
@@ -106,7 +109,7 @@ func(s *Server) Handler()http.Handler{
    auth:=r.Header.Get("Authorization")
    bearer:=strings.HasPrefix(auth,"Bearer ") &&
      subtle.ConstantTimeCompare([]byte(strings.TrimPrefix(auth,"Bearer ")),[]byte(s.token))==1
-   if !bearer && !s.sessionReadAllowed(r) && !s.sessionRecipeWriteAllowed(r) {
+   if !bearer && !s.sessionReadAllowed(r) && !s.sessionOwnerWriteAllowed(r) {
     writeError(w,401,"authorization required");return
    }
   }

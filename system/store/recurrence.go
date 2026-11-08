@@ -2,7 +2,6 @@ package store
 
 import (
  "errors"
- "os"
  "sort"
  "strings"
  "time"
