@@ -5,6 +5,10 @@ use serde_json::Value;
 use crate::api;
 use crate::components::{Empty, Heading, Icon, Loading, Notice};
 
+fn date_label(value: &str) -> String {
+    value.get(..19).unwrap_or(value).replace('T', " ")
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 pub struct ActivityEvent {
     pub id: String,
@@ -107,7 +111,7 @@ pub fn Activity() -> Element {
                                                 span { class: "badge muted", "{event.kind}" }
                                                 span { class: "small muted", "{event.action}" }
                                                 time { class: "small muted tabular",
-                                                    "{event.at.get(..19).unwrap_or(&event.at).replace('T',\" \")}"
+                                                    {date_label(&event.at)}
                                                 }
                                             }
                                             strong { "{event.summary}" }
