@@ -2,7 +2,6 @@ package main
 
 import (
     "errors"
-    "context"
     "fmt"
     "log"
     "net"
@@ -51,31 +50,10 @@ func main(){
         v,enabled,e:=configuredBackend(b.name,b.upper);if e!=nil{log.Fatal(e)};if enabled{backends=append(backends,v)}
     }
     server,e:=transport.New(db,token,backends);if e!=nil{log.Fatal(e)}
-    if stateDir:=os.Getenv("HOMELAB_ENGINEERING_DIR");stateDir!=""{
-        projects:=map[string]bool{}
-        for _,item:=range strings.Split(os.Getenv("HOMELAB_ENGINEERING_PROJECTS"),","){
-            project:=strings.TrimSpace(item);if project!=""{projects[project]=true}
-        }
-        if len(projects)==0{log.Fatal("engineering requires authorized project scope")}
-        enabled:=false
-        for _,b:=range backends{if b.Name=="workspace"{enabled=true}}
-        if !enabled{log.Fatal("engineering requires a configured compute backend")}
-        runs,err:=agentflow.Open(stateDir);if err!=nil{log.Fatal(err)}
-        var author agentflow.Author
-        if endpoint:=os.Getenv("HOMELAB_ENGINEERING_MODEL_URL");endpoint!=""{
-            key:=""
-            if file:=os.Getenv("HOMELAB_ENGINEERING_MODEL_TOKEN_FILE");file!=""{
-                raw,err:=os.ReadFile(file);if err!=nil{log.Fatal(err)}
-                key=strings.TrimSpace(string(raw))
-                if key==""||strings.ContainsAny(key,"\r\n"){log.Fatal("invalid engineering model credential")}
-            }
-            model,err:=agentflow.NewModelAuthor(endpoint,os.Getenv("HOMELAB_ENGINEERING_MODEL_NAME"),key)
-            if err!=nil{log.Fatal(err)}
-            author=model
-        }
-        engine:=&agentflow.Engine{Store:runs,Compute:server.EngineeringCompute(),Author:author,AllowedProjects:projects}
-        server.SetEngineering(engine)
-        go engine.Serve(context.Background())
+    if socket:=os.Getenv("HOMELAB_ENGINEERING_SOCKET");socket!=""{
+        client,err:=agentflow.NewClient(socket)
+        if err!=nil{log.Fatal(err)}
+        server.SetEngineering(client)
     }
     prom,loki:=os.Getenv("HOMELAB_PROMETHEUS_URL"),os.Getenv("HOMELAB_LOKI_URL")
     if prom!=""||loki!=""{
