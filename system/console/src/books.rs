@@ -40,7 +40,7 @@ pub struct BookRequest {
 
 fn encode(value: &str) -> String {
     value.as_bytes().iter().map(|byte| {
-        if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.' | b'_' | b'~') {
+        if byte.is_ascii_alphanumeric() || matches!(*byte, b'-' | b'.' | b'_' | b'~') {
             (*byte as char).to_string()
         } else {
             format!("%{byte:02X}")
