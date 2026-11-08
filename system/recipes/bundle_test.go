@@ -3,8 +3,11 @@ package recipes
 import (
 	"archive/zip"
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"os"
 	"strings"
 	"path/filepath"
 	"testing"
@@ -108,5 +111,53 @@ func TestRecipeBundleRejectsMissingAndUnexpectedAssets(t *testing.T) {
 	}
 	if _, err := dest.ImportBundle(make([]byte, MaxPortableBundleBytes+1)); !errors.Is(err, ErrBundleTooLarge) {
 		t.Fatalf("oversized archive accepted: %v", err)
+	}
+}
+
+
+func TestRecipeBundleRejectsAggregateDecompression(t *testing.T) {
+	var compressed bytes.Buffer
+	writer := zip.NewWriter(&compressed)
+	manifest, err := writer.Create("recipes.json")
+	if err != nil { t.Fatal(err) }
+	if _, err := manifest.Write([]byte(`{"version":1,"recipes":[],"meals":[]}`)); err != nil {
+		t.Fatal(err)
+	}
+	// Each entry is under the 5 MiB image limit, but their aggregate
+	// decompressed size exceeds the 96 MiB archive budget.
+	for i := 0; i < 20; i++ {
+		payload := bytes.Repeat([]byte{byte(i)}, MaxImageBytes)
+		digest := sha256.Sum256(payload)
+		entry, err := writer.Create("images/" + hex.EncodeToString(digest[:]) + ".png")
+		if err != nil { t.Fatal(err) }
+		if _, err := entry.Write(payload); err != nil { t.Fatal(err) }
+	}
+	if err := writer.Close(); err != nil { t.Fatal(err) }
+	if compressed.Len() >= MaxPortableBundleBytes {
+		t.Fatal("test fixture is not compressed")
+	}
+	target, err := Open(filepath.Join(t.TempDir(), "recipes.json"))
+	if err != nil { t.Fatal(err) }
+	if _, err := target.ImportBundle(compressed.Bytes()); !errors.Is(err, ErrBundleTooLarge) {
+		t.Fatalf("aggregate decompression limit not enforced: %v", err)
+	}
+	if len(target.List("")) != 0 {
+		t.Fatal("oversized bundle changed recipe records")
+	}
+}
+
+func TestRecipeBundleRejectsNonRegularEntries(t *testing.T) {
+	var compressed bytes.Buffer
+	writer := zip.NewWriter(&compressed)
+	header := &zip.FileHeader{Name: "recipes.json", Method: zip.Deflate}
+	header.SetMode(os.ModeSymlink | 0600)
+	entry, err := writer.CreateHeader(header)
+	if err != nil { t.Fatal(err) }
+	if _, err := entry.Write([]byte("other.json")); err != nil { t.Fatal(err) }
+	if err := writer.Close(); err != nil { t.Fatal(err) }
+	target, err := Open(filepath.Join(t.TempDir(), "recipes.json"))
+	if err != nil { t.Fatal(err) }
+	if _, err := target.ImportBundle(compressed.Bytes()); !errors.Is(err, ErrBundleTooLarge) {
+		t.Fatalf("non-regular archive entry accepted: %v", err)
 	}
 }
