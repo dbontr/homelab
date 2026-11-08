@@ -19,6 +19,11 @@ in
       type = lib.types.str;
       default = "America/Chicago";
     };
+    allowedOrigins = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [];
+      description = "Exact browser or MCP Origin values permitted by the gateway; no wildcards.";
+    };
     seerr = {
       url = lib.mkOption {
         type = lib.types.str;
@@ -107,6 +112,7 @@ in
       wants = [ "network-online.target" ];
       environment = {
         HOMELAB_LISTEN_ADDR = cfg.listenAddress;
+        HOMELAB_ALLOWED_ORIGINS = lib.concatStringsSep "," cfg.allowedOrigins;
         HOMELAB_TIME_ZONE = cfg.timeZone;
         HOMELAB_DEVICES_FILE = pkgs.writeText "homelab-hardware.json" (builtins.toJSON cfg.devices);
         HOMELAB_NODES_FILE = pkgs.writeText "homelab-nodes.json" (builtins.toJSON (import ../hardware.nix).nodes);

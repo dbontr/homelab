@@ -24,7 +24,7 @@ type Feed struct {
  Note string `json:"note"`
 }
 func ValidateURL(raw string)error{
- u,e:=url.Parse(raw);if e!=nil{return e}
+ u,e:=url.Parse(raw);if e!=nil{return errors.New("invalid calendar URL")}
  if u.Scheme!="https"||u.Host==""||u.User!=nil||u.Fragment!=""{
   return errors.New("calendar URL must be HTTPS and must not embed credentials")
  }
@@ -32,9 +32,9 @@ func ValidateURL(raw string)error{
 }
 func Fetch(ctx context.Context,client *http.Client,rawURL string)(Feed,error){
  if e:=ValidateURL(rawURL);e!=nil{return Feed{},e}
- req,e:=http.NewRequestWithContext(ctx,http.MethodGet,rawURL,nil);if e!=nil{return Feed{},e}
+ req,e:=http.NewRequestWithContext(ctx,http.MethodGet,rawURL,nil);if e!=nil{return Feed{},errors.New("invalid calendar request")}
  req.Header.Set("Accept","text/calendar")
- response,e:=client.Do(req);if e!=nil{return Feed{},e}
+ response,e:=client.Do(req);if e!=nil{return Feed{},errors.New("calendar feed request failed")}
  defer response.Body.Close()
  if response.StatusCode!=200{return Feed{},fmt.Errorf("calendar feed returned HTTP %d",response.StatusCode)}
  content,e:=io.ReadAll(io.LimitReader(response.Body,(8<<20)+1));if e!=nil{return Feed{},e}

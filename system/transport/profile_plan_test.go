@@ -20,7 +20,7 @@ func TestProfilePlanningCannotBypassDeviceInventory(t *testing.T){
    var rpc rpcRequest
    if err:=json.NewDecoder(r.Body).Decode(&rpc);err!=nil{t.Error(err);return}
    if rpc.Method=="tools/list"{
-     _,_=w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"tools":[]}}`));return
+     _,_=w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"resource_plan","description":"Plan resources","inputSchema":{"type":"object"}}]}}`));return
    }
    forwarded.Add(1)
    _,_=w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"{\"eligible_count\":1,\"recommended_node\":\"worker-jupiter\"}"}],"isError":false}}`))

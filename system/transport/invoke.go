@@ -5,20 +5,27 @@ import (
  "encoding/json"
  "net/http"
  "strings"
+
+ "github.com/dbontr/homelab-new/system/canonicaljson"
 )
 
 func (s *Server) invoke(ctx context.Context,name string,args json.RawMessage,id json.RawMessage) map[string]any {
+ normalized,_,err:=canonicaljson.Object(args)
+ if err!=nil{return toolError(err.Error())}
+ args=normalized
  if name=="workspace__resource_plan" {
    if err:=s.deviceCatalog.ValidatePlan(args);err!=nil{return toolError(err.Error())}
  }
  if name=="workspace__workspace_create" || name=="workspace__task_compute_submit" {
    if err:=s.deviceCatalog.ValidateAllocation(args);err!=nil{return toolError(err.Error())}
  }
- if output,allowed:=s.checkPrivilege(name,args);!allowed{return output}
  for _,b:=range s.backend {
    prefix:=b.Name+"__"
    if strings.HasPrefix(name,prefix) {
-     params:=map[string]any{"name":strings.TrimPrefix(name,prefix),"arguments":json.RawMessage(args)}
+     toolName:=strings.TrimPrefix(name,prefix)
+     if !s.backendHasTool(ctx,b,toolName){return toolError("backend tool unavailable or not advertised")}
+     if output,allowed:=s.checkPrivilege(name,args);!allowed{return output}
+     params:=map[string]any{"name":toolName,"arguments":json.RawMessage(args)}
      raw,_:=json.Marshal(params)
      var remote any
      err:=s.forward(ctx,b,rpcRequest{JSONRPC:"2.0",ID:id,Method:"tools/call",Params:raw},&remote)
@@ -28,6 +35,7 @@ func (s *Server) invoke(ctx context.Context,name string,args json.RawMessage,id 
      return output
    }
  }
+ if output,allowed:=s.checkPrivilege(name,args);!allowed{return output}
  v,err:=s.localTool(ctx,name,args)
  if err!=nil{return toolError(err.Error())}
  return result(v)
