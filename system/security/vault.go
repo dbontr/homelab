@@ -4,6 +4,8 @@ import (
  "crypto/aes"
  "crypto/cipher"
  "crypto/rand"
+ "crypto/sha256"
+ "encoding/hex"
  "encoding/base64"
  "encoding/json"
  "errors"
@@ -90,12 +92,51 @@ func(v *Vault)Store(provider string,secret []byte)(CredentialHandle,error){
  return rec.CredentialHandle,nil
 }
 
+// CredentialRevision is an internal fingerprint of one encrypted record.
+// Rotation changes the revision without exposing the protected material.
+func credentialRevision(rec storedCredential)string{
+ sum:=sha256.Sum256([]byte(rec.Provider+":"+rec.ID+":"+rec.Nonce+":"+rec.Data))
+ return hex.EncodeToString(sum[:])
+}
+
+func(v *Vault)Version(handle,provider string)(string,error){
+ v.mu.Lock();defer v.mu.Unlock()
+ rec,ok:=v.records[handle]
+ if !ok||rec.Provider!=provider{return "",os.ErrNotExist}
+ return credentialRevision(rec),nil
+}
+
+// Rotate replaces a secret atomically under the same opaque handle. Previously
+// prepared scoped capabilities are invalidated by their stored revision.
+func(v *Vault)Rotate(handle,provider string,secret []byte)(CredentialHandle,error){
+ if len(secret)==0||len(secret)>32768{return CredentialHandle{},errors.New("invalid credential length")}
+ v.mu.Lock();defer v.mu.Unlock()
+ original,ok:=v.records[handle]
+ if !ok||original.Provider!=provider{return CredentialHandle{},os.ErrNotExist}
+ record,err:=v.seal(provider,handle,secret)
+ if err!=nil{return CredentialHandle{},err}
+ record.CreatedAt=original.CreatedAt
+ next:=make(map[string]storedCredential,len(v.records))
+ for id,item:=range v.records{next[id]=item}
+ next[handle]=record
+ if err:=v.persist(next);err!=nil{return CredentialHandle{},err}
+ v.records=next
+ return record.CredentialHandle,nil
+}
+
 func(v *Vault)WithCredential(handle,provider string,use func([]byte)error)error{
+ return v.WithCredentialVersion(handle,provider,"",use)
+}
+
+// WithCredentialVersion refuses a capability issued against a previous
+// encrypted record, including one that was rotated under the same handle.
+func(v *Vault)WithCredentialVersion(handle,provider,version string,use func([]byte)error)error{
  if use==nil{return errors.New("credential operation is required")}
  v.mu.Lock()
  rec,ok:=v.records[handle]
  v.mu.Unlock()
  if !ok||rec.Provider!=provider{return os.ErrNotExist}
+ if version!=""&&credentialRevision(rec)!=version{return errors.New("credential capability invalidated by rotation")}
  block,err:=aes.NewCipher(v.key[:]);if err!=nil{return err}
  gcm,err:=cipher.NewGCM(block);if err!=nil{return err}
  nonce,err:=base64.RawStdEncoding.DecodeString(rec.Nonce)
