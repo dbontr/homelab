@@ -189,16 +189,34 @@ func applyPatch(content string, hunks []PatchHunk) (string, error) {
 	if len(hunks) == 0 || len(hunks) > 8 {
 		return "", errors.New("invalid patch hunk count")
 	}
+	type replacement struct {
+		start, end int
+		text       string
+	}
+	edits := make([]replacement, 0, len(hunks))
 	for _, h := range hunks {
 		if h.Find == "" || strings.Count(content, h.Find) != 1 {
 			return "", errors.New("patch context is missing or ambiguous")
 		}
-		content = strings.Replace(content, h.Find, h.Replace, 1)
-		if len(content) == 0 || len(content) > 24000 {
-			return "", errors.New("patched source exceeds size limits")
-		}
+		start := strings.Index(content, h.Find)
+		edits = append(edits, replacement{start: start, end: start + len(h.Find), text: h.Replace})
 	}
-	return content, nil
+	sort.Slice(edits, func(i, j int) bool { return edits[i].start < edits[j].start })
+	var out strings.Builder
+	last := 0
+	for _, edit := range edits {
+		if edit.start < last {
+			return "", errors.New("overlapping patch hunks are not permitted")
+		}
+		out.WriteString(content[last:edit.start])
+		out.WriteString(edit.text)
+		last = edit.end
+	}
+	out.WriteString(content[last:])
+	if out.Len() == 0 || out.Len() > 24000 {
+		return "", errors.New("patched source exceeds size limits")
+	}
+	return out.String(), nil
 }
 
 // Secret-bearing configuration files are not eligible for model inspection.
