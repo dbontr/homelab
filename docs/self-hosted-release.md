@@ -8,7 +8,9 @@ Use an operator-controlled host with the Go toolchains required by the four Go m
 
 `bash scripts/stage-release.sh /srv/releases/homelab/<unique-release-id>`
 
-The script builds the eleven Go executables from local sources, packages the Dioxus web assets, and writes `SHA256SUMS` and `RELEASE`. It uses an unpublished temporary directory and renames it on completion. It does not alter NixOS generations, start services, publish images, stop the existing homepage, or touch application databases.
+The staging script requires a clean, exact 40-character Git source revision. Before building, it runs `scripts/verify-offline.sh --all`, including module tests, Rust checks, Helm rendering, fleet NixOS evaluations and local package builds. It builds eleven Go executables from cached source dependencies, packages the Dioxus web assets, and writes `SHA256SUMS` and `RELEASE`. The independent `scripts/verify-release.sh` then checks the release envelope, declared binary set, exact source revision, and digest of every asset before the temporary directory is atomically published. It does not alter NixOS generations, start services, publish images, stop the existing homepage, or touch application databases.
+
+A release consumer can inspect an artifact without deploying it using `bash scripts/verify-release.sh /srv/releases/homelab/<release-id>`. The checksum manifest detects corruption and undeclared files; it does not authenticate a malicious replacement of the entire manifest and payload. Trust the release only when its staging directory, original source commit, and custody are controlled by the independent operator. The verifier never grants activation authority or changes a running generation.
 
 Compute toolchain environments can be built locally with:
 
