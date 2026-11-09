@@ -104,7 +104,20 @@ func main(){
   if err!=nil||len(raw)>64<<10{log.Fatal("invalid Workspace executor policy file")}
   var policy privileged.WorkspacePolicy
   if err:=json.Unmarshal(raw,&policy);err!=nil{log.Fatal("invalid Workspace policy")}
-  policy.TokenFile=required("HOMELAB_EXECUTOR_WORKSPACE_TOKEN")
+  tokenFile:=os.Getenv("HOMELAB_EXECUTOR_WORKSPACE_TOKEN")
+  vaultAlias:=os.Getenv("HOMELAB_EXECUTOR_WORKSPACE_VAULT_ALIAS")
+  if (tokenFile=="")==(vaultAlias==""){
+   log.Fatal("Workspace requires exactly one credential authority")
+  }
+  if vaultAlias!=""{
+   remote,ok:=client.(*security.RemoteAuthorizationClient)
+   if !ok{log.Fatal("vault-backed Workspace requires independent remote authorization")}
+   source,sourceErr:=remote.TokenSource(vaultAlias)
+   if sourceErr!=nil{log.Fatal("invalid Workspace vault alias: ",sourceErr)}
+   policy.TokenSource=source
+  }else{
+   policy.TokenFile=tokenFile
+  }
   workspace=&policy
  }
  audit,err:=privileged.OpenAuditJournal(required("HOMELAB_EXECUTOR_AUDIT_FILE"))
