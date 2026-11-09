@@ -101,6 +101,7 @@ func(a *AdminSessions)ServeAuthorizationTLS(ctx context.Context,address string,s
  mux:=http.NewServeMux()
  mux.Handle("POST /v1/authorize",a.ClientHandler())
  mux.Handle("POST /v1/preview",a.ClientHandler())
+ mux.Handle("GET /v1/service-credentials/{alias}",a.ServiceCredentialHandler())
  server:=&http.Server{Handler:mux,ReadHeaderTimeout:5*time.Second,ReadTimeout:10*time.Second,WriteTimeout:10*time.Second}
  stopped:=make(chan struct{})
  go func(){select{case <-ctx.Done():_=server.Close();case <-stopped:}}()
