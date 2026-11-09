@@ -32,7 +32,7 @@ cargo --version
 rustup target list --installed
 dx --version
 cd system && go test ./... && go vet ./...
-cd ../system/console && cargo check --target wasm32-unknown-unknown
+cd ../ui/console && cargo check --target wasm32-unknown-unknown
 ```
 
 For the complete monorepo, use the `go.work` toolchain version (currently Go 1.27.3) and run the other Go modules' tests separately where needed.
