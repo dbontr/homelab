@@ -54,10 +54,10 @@ func (db *Database) ProjectEmbeddingPolicy(project,library string)(map[string]an
  if !validID.MatchString(project)||!validID.MatchString(library){
   return nil,errors.New("invalid embedding policy scope")
  }
- rows,err:=db.query(\`SELECT p.library,p.model,p.enabled,p.revision,p.updated
+ rows,err:=db.query(`SELECT p.library,p.model,p.enabled,p.revision,p.updated
    FROM research_embedding_policies p
    JOIN project_libraries l ON l.library=p.library
-   WHERE l.project=? AND p.library=?\`,project,library)
+   WHERE l.project=? AND p.library=?`,project,library)
  if err!=nil{return nil,err}
  if len(rows)==0{return nil,errors.New("embedding permission unavailable for this project")}
  return rows[0],nil
@@ -67,21 +67,21 @@ func (db *Database) enabledEmbeddingLibraries(project,model string)(int,error){
  if !validID.MatchString(project)||!embeddingModelID.MatchString(model){
   return 0,errors.New("invalid embedding search scope")
  }
- rows,err:=db.query(\`SELECT p.library FROM research_embedding_policies p
+ rows,err:=db.query(`SELECT p.library FROM research_embedding_policies p
    JOIN project_libraries l ON l.library=p.library
-   WHERE l.project=? AND p.model=? AND p.enabled=1 LIMIT 1\`,project,model)
+   WHERE l.project=? AND p.model=? AND p.enabled=1 LIMIT 1`,project,model)
  if err!=nil{return 0,err}
  return len(rows),nil
 }
 
 func (db *Database) pendingResearchEmbeddings(model string,limit int)([]pendingEmbedding,error){
  if !embeddingModelID.MatchString(model)||limit<1||limit>16{return nil,errors.New("invalid embedding batch")}
- rows,err:=db.query(\`SELECT s.library,p.id,p.body,p.body_sha256
+ rows,err:=db.query(`SELECT s.library,p.id,p.body,p.body_sha256
   FROM research_passages p
   JOIN research_sources s ON s.id=p.source AND p.epoch=s.epoch
   JOIN research_embedding_policies policy ON policy.library=s.library AND policy.enabled=1 AND policy.model=?
   LEFT JOIN research_embeddings e ON e.passage=p.id AND e.model=policy.model
-  WHERE e.passage IS NULL ORDER BY p.created,p.id LIMIT ?\`,model,limit)
+  WHERE e.passage IS NULL ORDER BY p.created,p.id LIMIT ?`,model,limit)
  if err!=nil{return nil,err}
  result:=make([]pendingEmbedding,0,len(rows))
  for _,row:=range rows{

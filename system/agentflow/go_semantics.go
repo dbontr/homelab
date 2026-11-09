@@ -146,7 +146,9 @@ func (e *Engine) repositoryGoSemantics(ctx context.Context,w Workflow,brief Agen
     target,err:=get(filename)
     if err!=nil{return "",err}
     sources:=map[string]string{filename:target}
-    raw,err:=e.repositoryMap(ctx,w,brief,path.Dir(filename))
+    scope:=path.Dir(filename)
+    if scope=="."{scope=""}
+    raw,err:=e.repositoryMap(ctx,w,brief,scope)
     if err!=nil{return "",err}
     var mapped CodeMap
     if err:=json.Unmarshal([]byte(raw),&mapped);err!=nil{return "",err}

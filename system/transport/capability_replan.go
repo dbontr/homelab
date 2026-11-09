@@ -6,7 +6,6 @@ import (
     "encoding/json"
     "errors"
     "io"
-    "strings"
     "time"
 
     "github.com/dbontr/homelab-new/system/agentflow"
@@ -96,6 +95,3 @@ func (s *Server) advanceCapabilityReplan(ctx context.Context,id string) error {
     return s.workflows.ExtendCapabilityPlan(workflow.ID,workflow.Revision,additions,false,"")
 }
 
-func validReplanProposal(raw []byte) bool {
-    return len(bytes.TrimSpace(raw))>0 && len(raw)<16<<10 && !strings.Contains(string(raw),"\x00")
-}
