@@ -1,5 +1,11 @@
 # Research evidence and compute planning
 
+## Automatic local source ingestion
+
+An owner may enable `research_text_policy_set` for a specific shared library with an exact policy revision. The controller then indexes immutable UTF-8 `.txt`, `.md` and `.json` objects up to 96 KiB into bounded source-linked passages. The index worker verifies each object's SHA-256 and rechecks permission inside the passage transaction. Invalid documents retain visible failure records and do not block subsequent sources. A separate embedding policy controls whether passages may be transmitted to a model; text ingestion never enables embeddings by implication.
+
+MCP tools: `research_text_policy_get`, `research_text_policy_set`, `research_text_index_pending`, and `research_text_failures`. Native policy routes: `GET /api/projects/{project}/research/text-policy/{library}` and owner-only `PUT /api/libraries/{library}/research/text-policy`. PDF, scanned, multimodal and repository extraction require source-specific extractors; they are not mistaken for plain text.
+
 ## Hybrid evidence retrieval
 
 `research_hybrid_query` and `GET /api/projects/{project}/research/hybrid?q=...` combine project-linked FTS5 search with semantic retrieval when the project has active embedding consent and a configured provider. A bounded reciprocal-rank-fusion score (rank constant 60) merges duplicate source passages without inventing source claims. If semantic retrieval is unavailable, the response explicitly reports `lexical_only` rather than falsely claiming semantic results. Both pathways rely on existing project-library authorization and immutable citation locators.

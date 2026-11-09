@@ -204,6 +204,7 @@ func command(args []string) error {
 		server := &http.Server{Addr: *addr, Handler: service, ReadHeaderTimeout: 5 * time.Second, MaxHeaderBytes: 1 << 16, IdleTimeout: 120 * time.Second}
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
+        service.StartResearchTextWorker(ctx)
         service.StartResearchEmbeddingWorker(ctx)
 		var offsite sync.WaitGroup
 		if intervalText := os.Getenv("PWM_RESTIC_BACKUP_INTERVAL"); args[0] == "controller" && intervalText != "" {
