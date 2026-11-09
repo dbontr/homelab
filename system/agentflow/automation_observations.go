@@ -54,9 +54,9 @@ func observedDigest(w Workflow) (string, bool, error) {
 }
 
 // ReconcileAutomationObservations durably processes completed scheduled reads.
-// The first successful run establishes a baseline. Subsequent successful
-// changes create one notification each. Failed or cancelled runs are recorded
-// as observed, but cannot establish a false change.
+// Change-monitoring schedules establish a baseline and alert when successful
+// results differ. Weekly-summary schedules alert for each successful run.
+// Failed or cancelled runs cannot generate a success notification.
 func (s *Store) ReconcileAutomationObservations(limit int) (int, error) {
 	if limit < 1 || limit > 100 {
 		return 0, errors.New("invalid automation observation limit")
@@ -75,7 +75,7 @@ func (s *Store) ReconcileAutomationObservations(limit int) (int, error) {
 		if processed >= limit {
 			break
 		}
-		if !a.NotifyOnChange || a.LastWorkflowID == "" ||
+		if (!a.NotifyOnChange && !a.NotifyOnEveryRun) || a.LastWorkflowID == "" ||
 			a.LastWorkflowID == a.LastObservedWorkflowID {
 			continue
 		}
@@ -99,7 +99,7 @@ func (s *Store) ReconcileAutomationObservations(limit int) (int, error) {
 			return processed, err
 		}
 		if successful {
-			if a.ObservationDigest != "" && a.ObservationDigest != digest {
+			if a.NotifyOnEveryRun || (a.ObservationDigest != "" && a.ObservationDigest != digest) {
 				a.Alerts = append(a.Alerts, AutomationAlert{
 					WorkflowID: w.ID,
 					ObservedAt: s.now().UTC(),
