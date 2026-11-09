@@ -59,7 +59,7 @@ func readComputeCredential(filename string)(string,error){
  if err!=nil{return "",errors.New("compute credential unavailable")}
  defer f.Close()
  info,err:=f.Stat()
- if err!=nil||!info.Mode().IsRegular()||info.Size()>16384||info.Mode().Perm()&0022!=0{
+ if err!=nil||!info.Mode().IsRegular()||info.Size()>16384||info.Mode().Perm()&0077!=0{
   return "",errors.New("unsafe compute credential file")
  }
  data,err:=io.ReadAll(io.LimitReader(f,16385))
