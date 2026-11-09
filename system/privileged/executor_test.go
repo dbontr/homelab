@@ -25,7 +25,7 @@ func TestExecutorDoesNotAcceptArbitraryCommandsOrTargets(t *testing.T){
  auth:=&fakeAuth{decision:security.Authorization{Allowed:true}}
  rel:=&fakeRelease{}
  calls:=0
- executor,err:=New(Config{
+ executor,err:=New(Config{Audit:testExecutorAudit(t),
   Host:"jupiter",Systemctl:"/run/current-system/sw/bin/systemctl",
   AllowedServices:[]string{"homelab-platform.service"},Auth:auth,Releases:rel,
   Run:func(_ context.Context,_ string,args ...string)error{
@@ -54,7 +54,7 @@ func TestExecutorDoesNotAcceptArbitraryCommandsOrTargets(t *testing.T){
 func TestExecutorRequiresIndependentApprovalBeforeRelease(t *testing.T){
  auth:=&fakeAuth{decision:security.Authorization{Reason:"confirmation required",ConfirmationID:"pending"}}
  rel:=&fakeRelease{}
- executor,err:=New(Config{
+ executor,err:=New(Config{Audit:testExecutorAudit(t),
   Host:"jupiter",Systemctl:"/usr/bin/systemctl",AllowRelease:true,Auth:auth,Releases:rel,
   Run:func(context.Context,string,...string)error{t.Fatal("unexpected system command");return nil},
  })
@@ -73,7 +73,7 @@ func TestExecutorRequiresIndependentApprovalBeforeRelease(t *testing.T){
 
 func TestExecutorSocketRequiresOwnerAssertion(t *testing.T){
  auth:=&fakeAuth{decision:security.Authorization{Allowed:true}}
- executor,err:=New(Config{
+ executor,err:=New(Config{Audit:testExecutorAudit(t),
   Host:"jupiter",Systemctl:"/usr/bin/systemctl",Auth:auth,Releases:&fakeRelease{},
   Run:func(context.Context,string,...string)error{return nil},
  })
