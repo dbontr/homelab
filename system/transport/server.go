@@ -94,6 +94,7 @@ func(s *Server) Handler()http.Handler{
  mux.HandleFunc("GET /v1/engineering/runs/{id}/knowledge/{proposal}",s.engineeringRunKnowledge)
  mux.HandleFunc("POST /v1/engineering/runs/{id}/knowledge/{proposal}/approve",s.engineeringRunKnowledge)
  mux.HandleFunc("GET /v1/engineering/runs/{id}/diffs",s.engineeringRunDiffs)
+ mux.HandleFunc("GET /v1/projects/{project}/overview",s.uiProjectOverview)
  mux.HandleFunc("GET /v1/workspace/projects",s.uiProjects)
  mux.HandleFunc("GET /v1/workspace/projects/{project}/jobs",s.uiWorkspaceProjectView)
  mux.HandleFunc("GET /v1/workspace/projects/{project}/workspaces",s.uiWorkspaceProjectView)
@@ -328,6 +329,7 @@ func(s *Server)localTools()[]map[string]any{
   tool("weekly_report","Summarize recorded task completions",map[string]any{"week_of":prop("string")}),
   tool("task_review","Inspect recorded deadlines, prerequisites and missing estimates without interpreting absent logs as neglect",map[string]any{"horizon_days":prop("integer")}),
   tool("activity_recent","List confirmed personal activity from canonical records, without fabricating unobserved actions",map[string]any{"limit":prop("integer")}),
+  tool("project_overview","Read a project with linked sources, libraries, personal tasks, goals and engineering runs",map[string]any{"project_id":prop("string")},"project_id"),
   tool("resource_get","Resolve a canonical local resource identity from its owning store",map[string]any{"kind":prop("string"),"id":prop("string")},"kind","id"),
   tool("resource_resolve","Resolve a homelab:kind:id reference without copying the owning service's data",map[string]any{"ref":prop("string")},"ref"),
   tool("system_status","List configured integrations",map[string]any{}),
@@ -510,11 +512,15 @@ func(s *Server)localTool(ctx context.Context,name string,raw json.RawMessage)(an
   if n==0{n=50}
   if n<1||n>200{return nil,errors.New("activity limit must be 1 through 200")}
   return s.activity(n,time.Time{}),nil
- case "resource_get":return s.resource(args.Kind,args.ID)
+ case "project_overview":
+  var request struct{ProjectID string `json:"project_id"`}
+  if err:=json.Unmarshal(raw,&request);err!=nil{return nil,err}
+  return s.projectOverview(ctx,request.ProjectID)
+ case "resource_get":return s.resource(ctx,args.Kind,args.ID)
  case "resource_resolve":
   kind,id,err:=parseResourceReference(args.Reference)
   if err!=nil{return nil,err}
-  return s.resource(kind,id)
+  return s.resource(ctx,kind,id)
  case "approval_status":return s.privilegeStatus(args.ID)
  case "security_session_status":
   if s.privilegeClient==nil{return nil,errors.New("independent security service not configured")}

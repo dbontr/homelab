@@ -1,6 +1,7 @@
 package transport
 
 import (
+ "context"
  "net/http"
  "errors"
  "regexp"
@@ -37,7 +38,7 @@ func parseResourceReference(ref string)(string,string,error){
   return "","",errResourceInvalid
  }
  switch parts[1]{
- case "task","goal","recipe","meal","book":
+ case "task","goal","recipe","meal","book","project":
   return parts[1],parts[2],nil
  }
  return "","",errResourceInvalid
@@ -55,6 +56,15 @@ func taskLinks(task store.Task) []ResourceLink{
  for _,id:=range task.DependsOn{
   links=append(links,ResourceLink{Relation:"prerequisite",Reference:resourceRef("task",id)})
  }
+ seen:=map[string]bool{}
+ for _,link:=range links{seen[link.Reference]=true}
+ for _,ref:=range task.Links{
+  kind,id,err:=parseResourceReference(ref)
+  if err==nil && !(kind=="task"&&id==task.ID) && !seen[ref]{
+   links=append(links,ResourceLink{Relation:"related",Reference:ref})
+   seen[ref]=true
+  }
+ }
  return links
 }
 
@@ -64,9 +74,13 @@ var errResourceInvalid=errors.New("invalid resource identity or kind")
 var errResourceUnavailable=errors.New("resource owner unavailable")
 var errResourceNotFound=errors.New("resource not found")
 
-func(s *Server) resource(kind,id string)(Resource,error){
+func(s *Server) resource(ctx context.Context,kind,id string)(Resource,error){
  if !resourceIdentifier.MatchString(id){return Resource{},errResourceInvalid}
  switch kind{
+ case "project":
+  overview,err:=s.projectOverview(ctx,id)
+  if err!=nil{return Resource{},err}
+  return withReference(kind,id,"compute",overview,overview.Links),nil
  case "task":
   for _,item:=range s.db.Tasks(""){
    if item.ID==id{return withReference(kind,id,"personal",item,taskLinks(item)),nil}
@@ -100,7 +114,7 @@ func(s *Server) resource(kind,id string)(Resource,error){
 func(s *Server) uiResourceReference(w http.ResponseWriter,r *http.Request){
  kind,id,err:=parseResourceReference(r.URL.Query().Get("ref"))
  if err!=nil{writeError(w,400,err.Error());return}
- item,err:=s.resource(kind,id)
+ item,err:=s.resource(r.Context(),kind,id)
  switch {
  case errors.Is(err,errResourceInvalid):writeError(w,400,err.Error())
  case errors.Is(err,errResourceUnavailable):writeError(w,503,err.Error())
@@ -110,7 +124,7 @@ func(s *Server) uiResourceReference(w http.ResponseWriter,r *http.Request){
 }
 
 func(s *Server) uiResource(w http.ResponseWriter,r *http.Request){
- item,err:=s.resource(r.PathValue("kind"),r.PathValue("id"))
+ item,err:=s.resource(r.Context(),r.PathValue("kind"),r.PathValue("id"))
  switch {
  case errors.Is(err,errResourceInvalid):writeError(w,400,err.Error())
  case errors.Is(err,errResourceUnavailable):writeError(w,503,err.Error())
