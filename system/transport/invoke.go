@@ -42,6 +42,10 @@ func (s *Server) invoke(ctx context.Context,name string,args json.RawMessage,id 
   }
   return result(map[string]bool{"executed":true})
  }
+ if name=="workspace__resource_plan" ||
+  name=="workspace__workspace_create" || name=="workspace__task_compute_submit" {
+  if s.deviceCatalog==nil{return toolError("device policy catalog is not configured")}
+ }
  if name=="workspace__resource_plan" {
    if err:=s.deviceCatalog.ValidatePlan(args);err!=nil{return toolError(err.Error())}
  }

@@ -195,8 +195,14 @@ func(s *Server) Handler()http.Handler{
  mux.HandleFunc("GET /v1/planning/review",s.uiTaskReview)
  mux.HandleFunc("GET /v1/calendar",s.calendarEvents)
  mux.HandleFunc("GET /v1/calendar/occurrences",s.calendarOccurrences)
- mux.HandleFunc("GET /v1/devices",func(w http.ResponseWriter,_ *http.Request){writeJSON(w,200,s.deviceCatalog.List())})
- mux.HandleFunc("GET /v1/nodes",func(w http.ResponseWriter,_ *http.Request){writeJSON(w,200,s.nodeCatalog.List())})
+ mux.HandleFunc("GET /v1/devices",func(w http.ResponseWriter,_ *http.Request){
+  if s.deviceCatalog==nil{writeError(w,http.StatusServiceUnavailable,"device catalog is not configured");return}
+  writeJSON(w,http.StatusOK,s.deviceCatalog.List())
+ })
+ mux.HandleFunc("GET /v1/nodes",func(w http.ResponseWriter,_ *http.Request){
+  if s.nodeCatalog==nil{writeError(w,http.StatusServiceUnavailable,"node catalog is not configured");return}
+  writeJSON(w,http.StatusOK,s.nodeCatalog.List())
+ })
  mux.HandleFunc("GET /v1/compute/profiles",s.profileRoutes)
  mux.HandleFunc("GET /v1/compute/profiles/{id}",s.profileRoutes)
  mux.HandleFunc("PUT /v1/compute/profiles/{id}",s.profileRoutes)
@@ -456,8 +462,12 @@ func(s *Server)localTools()[]map[string]any{
   tool("resource_get","Resolve a canonical local resource identity from its owning store",map[string]any{"kind":prop("string"),"id":prop("string")},"kind","id"),
   tool("resource_resolve","Resolve a homelab:kind:id reference without copying the owning service's data",map[string]any{"ref":prop("string")},"ref"),
   tool("system_status","List configured integrations",map[string]any{}),
-  tool("device_inventory","List declared hardware access and constraints; this is not an online device probe",map[string]any{}),
-  tool("node_inventory","List declarative management modes and roles without probing machines",map[string]any{}),
+ }
+ if s.deviceCatalog!=nil{
+  tools=append(tools,tool("device_inventory","List declared hardware access and constraints; this is not an online device probe",map[string]any{}))
+ }
+ if s.nodeCatalog!=nil{
+  tools=append(tools,tool("node_inventory","List declarative management modes and roles without probing machines",map[string]any{}))
  }
  if s.engineering!=nil{
   tools=append(tools,
@@ -741,8 +751,12 @@ func(s *Server)localTool(ctx context.Context,name string,raw json.RawMessage)(an
   if s.privilegeClient==nil{return nil,errors.New("independent security service not configured")}
   if err:=s.privilegeClient.Revoke(ctx);err!=nil{return nil,err}
   return map[string]bool{"active":false},nil
- case "device_inventory":return s.deviceCatalog.List(),nil
- case "node_inventory":return s.nodeCatalog.List(),nil
+ case "device_inventory":
+  if s.deviceCatalog==nil{return nil,errors.New("device catalog is not configured")}
+  return s.deviceCatalog.List(),nil
+ case "node_inventory":
+  if s.nodeCatalog==nil{return nil,errors.New("node catalog is not configured")}
+  return s.nodeCatalog.List(),nil
  case "calendar_feed":
   if s.calendarURL==""{return nil,errors.New("calendar is not configured")}
   return calendar.Fetch(ctx,s.client,s.calendarURL)
