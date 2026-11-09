@@ -70,3 +70,28 @@ func(c *ComputeClient)Call(ctx context.Context,tool string,arguments map[string]
  if result.Result.IsError||result.Result.Structured==nil{return nil,errors.New("compute operation failed or was denied")}
  return result.Result.Structured,nil
 }
+
+// VerifyProjectCredential denies administrator credentials before autonomous
+// execution. Controller-side project grants remain authoritative on every call.
+func (c *ComputeClient) VerifyProjectCredential(ctx context.Context) error {
+ if c==nil||c.http==nil{return errors.New("compute service is not configured")}
+ target:=strings.TrimSuffix(c.Endpoint,"/mcp")+"/api/whoami"
+ req,err:=http.NewRequestWithContext(ctx,http.MethodGet,target,nil)
+ if err!=nil{return err}
+ req.Header.Set("Authorization","Bearer "+c.token)
+ response,err:=c.http.Do(req)
+ if err!=nil{return errors.New("unable to verify compute service identity")}
+ defer response.Body.Close()
+ if response.StatusCode!=http.StatusOK{return fmt.Errorf("compute identity verification failed (HTTP %d)",response.StatusCode)}
+ reader:=io.LimitReader(response.Body,4097)
+ data,err:=io.ReadAll(reader)
+ if err!=nil||len(data)>4096{return errors.New("invalid compute identity response")}
+ var profile struct {
+  Principal string `json:"principal"`
+  Administrator bool `json:"administrator"`
+ }
+ if err:=json.Unmarshal(data,&profile);err!=nil||profile.Principal==""||profile.Administrator{
+  return errors.New("engineering requires a non-administrator project credential")
+ }
+ return nil
+}
