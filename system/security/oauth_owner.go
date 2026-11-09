@@ -5,6 +5,7 @@ import (
  "encoding/json"
  "errors"
  "log"
+ "net"
  "net/http"
  "net/url"
  "sort"
@@ -122,4 +123,34 @@ func(a *AdminSessions)OAuthCallbackHandler()http.Handler{
    "message":"Provider authorization completed in the independent credential service.",
   })
  }))
+}
+
+// ServeOAuthCallback binds only to the fixed IPv4 loopback address declared
+// by the allowlisted OAuth providers. It never exposes the callback through
+// the gateway, browser ingress or a wildcard network listener.
+func(a *AdminSessions)ServeOAuthCallback(ctx context.Context)error{
+ if a.oauth==nil||a.vault==nil{return errors.New("OAuth callback is not configured")}
+ address,err:=a.oauth.CallbackListenAddress()
+ if err!=nil{return err}
+ listener,err:=net.Listen("tcp4",address)
+ if err!=nil{return errors.New("OAuth loopback callback unavailable")}
+ defer listener.Close()
+ server:=&http.Server{
+  Handler:a.OAuthCallbackHandler(),
+  ReadHeaderTimeout:5*time.Second,
+  ReadTimeout:10*time.Second,
+  WriteTimeout:35*time.Second,
+  IdleTimeout:10*time.Second,
+ }
+ finished:=make(chan struct{})
+ go func(){
+  select{
+  case <-ctx.Done(): _=server.Close()
+  case <-finished:
+  }
+ }()
+ defer close(finished)
+ err=server.Serve(listener)
+ if errors.Is(err,http.ErrServerClosed){return nil}
+ return err
 }
