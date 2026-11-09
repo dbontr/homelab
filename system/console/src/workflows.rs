@@ -6,6 +6,22 @@ use crate::api;
 use crate::components::{Badge, Empty, Heading, Loading, Notice};
 
 #[derive(Clone, PartialEq)]
+struct PlanPreview {
+    project: String,
+    objective: String,
+    personal_read: bool,
+    program: Value,
+}
+
+impl PlanPreview {
+    fn matches(&self, draft: &WorkflowDraft) -> bool {
+        self.project == draft.project.trim() &&
+            self.objective == draft.objective.trim() &&
+            self.personal_read == draft.personal_read
+    }
+}
+
+#[derive(Clone, PartialEq)]
 struct WorkflowDraft {
     project: String,
     objective: String,
@@ -29,16 +45,33 @@ impl Default for WorkflowDraft {
 }
 
 impl WorkflowDraft {
-    fn program(&self) -> Result<Value, String> {
+    fn planning_request(&self) -> Result<Value, String> {
+        self.validate_scope()?;
+        Ok(json!({
+            "project": self.project.trim(),
+            "objective": self.objective.trim(),
+            "personal_read": self.personal_read,
+        }))
+    }
+
+    fn validate_scope(&self) -> Result<(), String> {
         let project = self.project.trim();
         let objective = self.objective.trim();
         if project.is_empty() || project.len() > 80 ||
-            !project.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-') {
+            !project.starts_with(|c: char| c.is_ascii_lowercase()) ||
+            !project.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == \'-\') {
             return Err("Enter an existing project ID using lowercase letters, digits or hyphens.".to_owned());
         }
         if objective.is_empty() || objective.len() > 2000 {
             return Err("The objective must contain 1–2,000 characters.".to_owned());
         }
+        Ok(())
+    }
+
+    fn program(&self) -> Result<Value, String> {
+        self.validate_scope()?;
+        let project = self.project.trim();
+        let objective = self.objective.trim();
         let needs_query = matches!(self.action.as_str(),
             "research_search" | "research_semantic_query" | "recipe_search");
         let personal = matches!(self.action.as_str(),
@@ -91,6 +124,10 @@ fn items(value: Option<Result<Value, String>>, key: &str) -> Vec<Value> {
         .unwrap_or_default()
 }
 
+fn result_excerpt(value: &Value) -> String {
+    value.to_string().chars().take(4000).collect()
+}
+
 fn property(value: &Value, key: &str) -> String {
     match value.get(key) {
         Some(Value::String(text)) => text.clone(),
@@ -109,7 +146,8 @@ pub fn Workflows(csrf: String) -> Element {
     let mut error = use_signal(String::new);
     let mut notice = use_signal(String::new);
     let mut selected_run = use_signal(String::new);
-    let detail = use_resource(move || {
+    let mut preview = use_signal(|| Option::<PlanPreview>::None);
+    let mut detail = use_resource(move || {
         let run_id = selected_run();
         async move {
             if run_id.is_empty() {
@@ -287,6 +325,97 @@ pub fn Workflows(csrf: String) -> Element {
                         },
                         "Run once"
                     }
+                    button {
+                        class: "btn btn-outline", type: "button", disabled: busy(),
+                        onclick: move |_| {
+                            if busy() { return; }
+                            let current = draft();
+                            let input = match current.planning_request() {
+                                Ok(request) => request,
+                                Err(message) => { error.set(message); return; }
+                            };
+                            let token = csrf();
+                            busy.set(true);
+                            error.set(String::new());
+                            preview.set(None);
+                            spawn(async move {
+                                match api::write::<Value, _>(
+                                    Method::POST, "/v1/workflows/plan", &token, &input
+                                ).await {
+                                    Ok(response) => {
+                                        match response.get("program").cloned() {
+                                            Some(program) if program.get("steps").and_then(Value::as_array).is_some() => {
+                                                preview.set(Some(PlanPreview {
+                                                    project: current.project.trim().to_owned(),
+                                                    objective: current.objective.trim().to_owned(),
+                                                    personal_read: current.personal_read,
+                                                    program,
+                                                }));
+                                                notice.set("Review the proposed stages before submitting.".to_owned());
+                                            }
+                                            _ => error.set("The planner did not return a valid program.".to_owned()),
+                                        }
+                                    }
+                                    Err(message) => error.set(message),
+                                }
+                                busy.set(false);
+                            });
+                        },
+                        "Propose a plan"
+                    }
+                }
+            }
+        }
+        if let Some(plan) = preview() {
+            section { class: "card",
+                div { class: "card-header",
+                    h2 { class: "card-title", "Review proposed stages" }
+                    p { class: "card-description",
+                        "The model proposes read-only operations. No plan executes without your approval."
+                    }
+                }
+                div { class: "card-body",
+                    if !plan.matches(&draft()) {
+                        Notice { message: "The project, objective or consent changed. Request a fresh plan.".to_owned() }
+                    } else {
+                        if let Some(steps) = plan.program.get("steps").and_then(Value::as_array) {
+                            ol {
+                                for step in steps {
+                                    li { "{property(step, \"action\")}: {property(step, \"query\")}" }
+                                }
+                            }
+                        }
+                        button {
+                            class: "btn btn-primary", disabled: busy(),
+                            onclick: move |_| {
+                                if busy() { return; }
+                                let Some(selected) = preview() else { return; };
+                                if !selected.matches(&draft()) {
+                                    error.set("Request a fresh plan after changing its scope.".to_owned());
+                                    return;
+                                }
+                                let input = selected.program;
+                                let token = csrf();
+                                busy.set(true);
+                                error.set(String::new());
+                                spawn(async move {
+                                    match api::write::<Value, _>(
+                                        Method::POST, "/v1/workflows", &token, &input
+                                    ).await {
+                                        Ok(response) => {
+                                            notice.set("Approved workflow submitted.".to_owned());
+                                            selected_run.set(property(&response, "id"));
+                                            preview.set(None);
+                                            runs.restart();
+                                        }
+                                        Err(message) => error.set(message),
+                                    }
+                                    busy.set(false);
+                                });
+                            },
+                            "Approve and run"
+                        }
+                    }
                 }
             }
         }
@@ -411,6 +540,35 @@ pub fn Workflows(csrf: String) -> Element {
                 div { class: "card-body",
                     if let Some(Ok(record)) = detail.cloned() {
                         Badge { text: property(&record,"status") }
+                        if !matches!(property(&record,"status").as_str(), "succeeded" | "failed" | "cancelled") {
+                            button {
+                                class: "btn btn-outline", disabled: busy(),
+                                onclick: move |_| {
+                                    if busy() { return; }
+                                    let Some(current) = detail.cloned().and_then(Result::ok) else { return; };
+                                    let revision = current.get("revision").and_then(Value::as_u64).unwrap_or(0);
+                                    let id = selected_run();
+                                    if id.is_empty() || revision == 0 { return; }
+                                    let token = csrf();
+                                    busy.set(true);
+                                    error.set(String::new());
+                                    spawn(async move {
+                                        let route = format!("/v1/workflows/{id}/cancel");
+                                        match api::write::<Value, _>(Method::POST, &route, &token,
+                                            &json!({"revision":revision})).await {
+                                            Ok(_) => {
+                                                notice.set("Workflow cancelled.".to_owned());
+                                                detail.restart();
+                                                runs.restart();
+                                            }
+                                            Err(message) => error.set(message),
+                                        }
+                                        busy.set(false);
+                                    });
+                                },
+                                "Cancel workflow"
+                            }
+                        }
                         if let Some(steps) = record.get("steps").and_then(Value::as_array) {
                             div { class: "item-list",
                                 for step in steps.iter() {
@@ -420,6 +578,12 @@ pub fn Workflows(csrf: String) -> Element {
                                         Badge { text: property(step,"status") }
                                         if !property(step,"error").is_empty() {
                                             p { class: "muted", "{property(step, \"error\")}" }
+                                        }
+                                        if let Some(result) = step.get("result") {
+                                            details {
+                                                summary { "View recorded result" }
+                                                pre { "{result_excerpt(result)}" }
+                                            }
                                         }
                                     }
                                 }
@@ -438,7 +602,8 @@ pub fn Workflows(csrf: String) -> Element {
 
 #[cfg(test)]
 mod tests {
-    use super::WorkflowDraft;
+    use super::{WorkflowDraft, PlanPreview};
+    use serde_json::json;
 
     #[test]
     fn schedule_preserves_explicit_personal_consent() {
@@ -452,6 +617,27 @@ mod tests {
         assert_eq!(value["program"]["personal_read"], true);
         assert_eq!(value["every_minutes"], 1440);
         assert_eq!(value["program"]["steps"][0]["action"], "learning_summary");
+    }
+
+    #[test]
+    fn proposed_plan_requires_matching_owner_scope() {
+        let mut form = WorkflowDraft::default();
+        form.project = "research".to_owned();
+        form.objective = "Investigate the source".to_owned();
+        let request = form.planning_request().expect("valid planning scope");
+        assert_eq!(request["project"], "research");
+        let preview = PlanPreview {
+            project: "research".to_owned(),
+            objective: "Investigate the source".to_owned(),
+            personal_read: false,
+            program: json!({"project":"research","steps":[{"id":"one","action":"project_context"}]}),
+        };
+        assert!(preview.matches(&form));
+        form.personal_read = true;
+        assert!(!preview.matches(&form));
+        form.personal_read = false;
+        form.objective = "Different scope".to_owned();
+        assert!(!preview.matches(&form));
     }
 
     #[test]
