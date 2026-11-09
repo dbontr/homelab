@@ -15,6 +15,7 @@ mod engineering_orchestration;
 mod engineering_knowledge;
 mod engineering_diff;
 mod knowledge;
+mod workflows;
 
 use dioxus::prelude::*;
 use components::Icon;
@@ -26,6 +27,7 @@ enum Page {
     Overview,
     Projects,
     EngineeringRuns,
+    Workflows,
     Knowledge,
     Compute,
     Software,
@@ -48,6 +50,7 @@ impl Page {
             Self::Overview => "Overview",
             Self::Projects => "Projects",
             Self::EngineeringRuns => "Engineering runs",
+            Self::Workflows => "Workflows",
             Self::Knowledge => "Knowledge",
             Self::Compute => "Compute",
             Self::Software => "Software library",
@@ -70,6 +73,7 @@ const ENGINEERING: &[(Page, &str, &str)] = &[
     (Page::Overview, "Overview", "overview"),
     (Page::Projects, "Projects", "projects"),
     (Page::EngineeringRuns, "Engineering runs", "tasks"),
+    (Page::Workflows, "Workflows", "activity"),
     (Page::Knowledge, "Knowledge", "books"),
     (Page::Compute, "Compute", "compute"),
     (Page::Software, "Software library", "software"),
@@ -291,6 +295,7 @@ fn App() -> Element {
                                 Page::Overview => rsx! { views::Overview {} },
                                 Page::Projects => rsx! { views::Projects {} },
                                 Page::EngineeringRuns => rsx! { engineering::EngineeringRuns { csrf: csrf.clone() } },
+                                Page::Workflows => rsx! { workflows::Workflows { csrf: csrf.clone() } },
                                 Page::Knowledge => rsx! { knowledge::ProjectKnowledge {} },
                                 Page::Compute => rsx! { views::Compute {} },
                                 Page::Software => rsx! { views::Software {} },
