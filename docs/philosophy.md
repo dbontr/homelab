@@ -1,8 +1,8 @@
-# Eminence: governing philosophy
+# Homelab: governing philosophy
 
 ## Purpose
 
-Eminence is a personal capability system: an adaptable collection of software, tools, intelligence and compute resources whose purpose is to increase the owner's intellectual independence, practical accomplishment and well-being. The platform must evolve to serve changing goals rather than demand that the owner conform to its internal organization.
+Homelab is a personal capability system: an adaptable collection of software, tools, intelligence and compute resources whose purpose is to increase the owner's intellectual independence, practical accomplishment and well-being. The platform must evolve to serve changing goals rather than demand that the owner conform to its internal organization.
 
 Two outcomes govern every major product decision:
 
@@ -26,7 +26,7 @@ Efficiency is not the objective by itself. Time saved is valuable insofar as it 
 
 ### Research and engineering
 
-Make ordinary ChatGPT capable of repository exploration, professional code editing, project planning, issue and PR management, bounded compute execution and repeatable development workflows through Eminence. Projects may link multiple repositories and reusable research libraries. The **Development** skill is the canonical method for maintainable work, while the independent security and release boundaries preserve explicit authority.
+Make ordinary ChatGPT capable of repository exploration, professional code editing, project planning, issue and PR management, bounded compute execution and repeatable development workflows through Homelab. Projects may link multiple repositories and reusable research libraries. The **Development** skill is the canonical method for maintainable work, while the independent security and release boundaries preserve explicit authority.
 
 Knowledge should connect claims, evidence, experiments, assumptions, hypotheses, mistakes and open questions. Every conclusion should remain traceable to its source and confidence; research memory must support revision rather than calcify mistakes.
 
