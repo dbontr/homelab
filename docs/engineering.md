@@ -66,6 +66,8 @@ The native endpoints are:
 
 The MCP tools `engineering_run_submit`, `engineering_run_get`, `engineering_run_list` and `engineering_run_cancel` call the same implementation. The Rust console displays run progress and links to any confirmed draft pull request.
 
+The project-scoped acceptance command and credential prerequisites are documented in [Isolated engineering acceptance](engineering-acceptance.md). It runs outside the production service and is restricted to draft publication.
+
 ## Verification and operational constraints
 
 Source presence is not evidence of a tested runtime. Before enabling the daemon, build the Go service, run the behavioral and negative-authorization tests, exercise a linked test repository through the actual compute worker, verify artifacts and Git publication, and confirm project/credential isolation.
