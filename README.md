@@ -1,6 +1,6 @@
-# Eminence
+# Homelab
 
-Eminence is a self-hosted, adaptive personal capability system. It increases the owner's intellectual independence and useful work output while removing low-value administrative burden. Its architecture and priorities evolve with the owner's goals. See [philosophy](docs/philosophy.md) and [skills](skills/README.md).
+Homelab is a self-hosted, adaptive personal capability system. It increases the owner's intellectual independence and useful work output while removing low-value administrative burden. Its architecture and priorities evolve with the owner's goals. See [philosophy](docs/philosophy.md) and [skills](skills/README.md).
 
 The system is managed through one source repository. Go implements its operations, MCP and native HTTP interfaces. Nix declares the operating environment. Every capability is available through the same assistant interface; an MCP client is optional.
 
