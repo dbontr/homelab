@@ -63,9 +63,13 @@ func (s *Server) ProjectKnowledgeContext(project string) (map[string]any, error)
 			return nil, errors.New("local Git storage is not configured")
 		}
 		revision, err = s.LocalGit.Resolve(localName, branch)
-	} else {
-		revision, err = s.GitHub.Commit(repository, branch)
-	}
+	} else if _,gitlab:=gitLabRepoName(repository);gitlab{
+  if s.GitLab==nil{return nil,errors.New("GitLab is not configured")}
+  revision,err=s.GitLab.Commit(repository,branch)
+ } else {
+  if strings.HasPrefix(repository,"gitlab:"){return nil,errors.New("invalid GitLab locator")}
+  revision, err = s.GitHub.Commit(repository, branch)
+ }
 	if err != nil {
 		return nil, err
 	}
@@ -80,13 +84,13 @@ func (s *Server) ProjectKnowledgeContext(project string) (map[string]any, error)
 		var file map[string]any
 		if local {
 			file, err = s.LocalGit.ReadAtCommit(localName, revision, path)
-		} else {
-			var raw any
-			raw, err = s.GitHub.File(repository, path, revision)
-			if err == nil {
-				file = gitObj(raw)
-			}
-		}
+		} else if _,gitlab:=gitLabRepoName(repository);gitlab{
+    file,err=s.GitLab.File(repository,path,revision)
+   } else {
+    var raw any
+    raw,err=s.GitHub.File(repository,path,revision)
+    if err==nil{file=gitObj(raw)}
+   }
 		if err != nil {
 			// A knowledge repository may be initialized before its canonical
 			// documents exist. Remote failures other than missing files fail closed.
