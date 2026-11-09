@@ -29,10 +29,18 @@ in
       default = null;
       description = "Protected contact email file used to identify on-demand Open Library search requests.";
     };
+    vault = {
+      endpoint = lib.mkOption { type = lib.types.nullOr lib.types.str; default = null; description = "Private mTLS credential service HTTPS origin."; };
+      serverName = lib.mkOption { type = lib.types.str; default = ""; description = "Pinned vault TLS server identity."; };
+      caFile = lib.mkOption { type = lib.types.nullOr lib.types.str; default = null; description = "Protected vault trust roots."; };
+      certificateFile = lib.mkOption { type = lib.types.nullOr lib.types.str; default = null; description = "Protected platform client identity certificate."; };
+      keyFile = lib.mkOption { type = lib.types.nullOr lib.types.str; default = null; description = "Protected platform client identity private key."; };
+    };
     capabilityModel = {
       url = lib.mkOption { type = lib.types.str; default = ""; description = "Approved HTTPS or loopback model endpoint for read-only workflow planning."; };
       name = lib.mkOption { type = lib.types.str; default = ""; description = "Exact model name."; };
       tokenFile = lib.mkOption { type = lib.types.nullOr lib.types.str; default = null; description = "Owner-private provider token file."; };
+      vaultAlias = lib.mkOption { type = lib.types.str; default = ""; description = "Vault alias for an allowlisted planning model credential."; };
       routes = lib.mkOption {
         type = lib.types.listOf (lib.types.submodule {
           options = {
@@ -42,6 +50,7 @@ in
             model = lib.mkOption { type = lib.types.str; description = "Exact selected model."; };
             localOnly = lib.mkOption { type = lib.types.bool; default = false; description = "Reject non-loopback endpoints for this purpose."; };
             tokenFile = lib.mkOption { type = lib.types.nullOr lib.types.str; default = null; description = "Owner-private bearer token file, loaded into this service only."; };
+            vaultAlias = lib.mkOption { type = lib.types.str; default = ""; description = "Owner vault alias for this model purpose."; };
           };
         });
         default = [];
@@ -71,6 +80,7 @@ in
         default = null;
         description = "Protected path containing the Seerr API key.";
       };
+      vaultAlias = lib.mkOption { type = lib.types.str; default = ""; description = "Vault alias for Seerr's scoped API key."; };
     };
     devices = lib.mkOption {
       type = lib.types.listOf (lib.types.submodule {
@@ -150,6 +160,7 @@ in
     integrations = lib.genAttrs [ "workspace" "learning" "health" ] (_: {
       url = lib.mkOption { type = lib.types.str; default = ""; };
       tokenFile = lib.mkOption { type = lib.types.nullOr lib.types.str; default = null; };
+      vaultAlias = lib.mkOption { type = lib.types.str; default = ""; };
     });
   };
 
@@ -157,12 +168,12 @@ in
     assertions = [
       {
         assertion = (cfg.capabilityModel.url == "") == (cfg.capabilityModel.name == "")
-          && (cfg.capabilityModel.url != "" || cfg.capabilityModel.tokenFile == null);
+          && (cfg.capabilityModel.url != "" || (cfg.capabilityModel.tokenFile == null && cfg.capabilityModel.vaultAlias == ""));
         message = "Capability planning requires a model endpoint and name; credentials cannot be configured alone.";
       }
       {
         assertion = cfg.capabilityModel.routes == [] ||
-          (cfg.capabilityModel.url == "" && cfg.capabilityModel.name == "" && cfg.capabilityModel.tokenFile == null);
+          (cfg.capabilityModel.url == "" && cfg.capabilityModel.name == "" && cfg.capabilityModel.tokenFile == null && cfg.capabilityModel.vaultAlias == "");
         message = "Purpose-specific model routes cannot be combined with legacy single-model settings.";
       }
       {
@@ -177,8 +188,31 @@ in
         message = "Model routing requires nonempty, unique purpose and identity records, with at most three routes.";
       }
       {
-        assertion = (cfg.seerr.url == "") == (cfg.seerr.apiKeyFile == null);
-        message = "Seerr requires both its origin URL and protected API key file.";
+        assertion = (cfg.seerr.url == "") == (cfg.seerr.apiKeyFile == null && cfg.seerr.vaultAlias == "")
+          && (cfg.seerr.apiKeyFile == null || cfg.seerr.vaultAlias == "");
+        message = "Seerr requires one protected credential source and an endpoint.";
+      }
+      {
+        assertion = (cfg.capabilityModel.tokenFile == null || cfg.capabilityModel.vaultAlias == "")
+          && lib.all (route: route.tokenFile == null || route.vaultAlias == "") cfg.capabilityModel.routes
+          && lib.all (name: cfg.integrations.${name}.tokenFile == null || cfg.integrations.${name}.vaultAlias == "")
+            [ "workspace" "learning" "health" ];
+        message = "Each external service must use only one credential authority.";
+      }
+      {
+        assertion = cfg.vault.endpoint == null || (cfg.vault.serverName != "" &&
+          cfg.vault.caFile != null && cfg.vault.certificateFile != null && cfg.vault.keyFile != null);
+        message = "Platform vault endpoint requires complete pinned TLS trust and service identity.";
+      }
+      {
+        assertion = let
+          aliases = [ cfg.capabilityModel.vaultAlias cfg.seerr.vaultAlias ]
+            ++ map (route: route.vaultAlias) cfg.capabilityModel.routes
+            ++ map (name: cfg.integrations.${name}.vaultAlias) [ "workspace" "learning" "health" ];
+          used = lib.any (alias: alias != "") aliases;
+        in !used || (cfg.vault.endpoint != null && cfg.vault.serverName != "" &&
+          cfg.vault.caFile != null && cfg.vault.certificateFile != null && cfg.vault.keyFile != null);
+        message = "Vault credential aliases require pinned private TLS and client trust files.";
       }
       {
         assertion = lib.all (source: source == "" ||
@@ -248,6 +282,7 @@ in
             local_only = route.localOnly;
             token_file = if route.tokenFile == null then "" else
               "/run/credentials/homelab-platform.service/model-route-token-${toString index}";
+            vault_alias = route.vaultAlias;
           }) cfg.capabilityModel.routes;
         });
       } // lib.optionalAttrs (cfg.capabilityModel.url != "") {
@@ -255,6 +290,14 @@ in
         HOMELAB_CAPABILITY_MODEL_NAME = cfg.capabilityModel.name;
       } // lib.optionalAttrs (cfg.capabilityModel.tokenFile != null) {
         HOMELAB_CAPABILITY_MODEL_TOKEN_FILE = "/run/credentials/homelab-platform.service/capability-model-token";
+      } // lib.optionalAttrs (cfg.capabilityModel.vaultAlias != "") {
+        HOMELAB_CAPABILITY_MODEL_VAULT_ALIAS = cfg.capabilityModel.vaultAlias;
+      } // lib.optionalAttrs (cfg.vault.endpoint != null) {
+        HOMELAB_VAULT_URL = cfg.vault.endpoint;
+        HOMELAB_VAULT_SERVER_NAME = cfg.vault.serverName;
+        HOMELAB_VAULT_CA_FILE = "/run/credentials/homelab-platform.service/vault-ca";
+        HOMELAB_VAULT_CLIENT_CERT_FILE = "/run/credentials/homelab-platform.service/vault-cert";
+        HOMELAB_VAULT_CLIENT_KEY_FILE = "/run/credentials/homelab-platform.service/vault-key";
       } // lib.optionalAttrs (cfg.securityClientSocket != null) {
         HOMELAB_SECURITY_SOCKET = cfg.securityClientSocket;
       } // lib.optionalAttrs (cfg.securityLoginURL != null) {
@@ -271,7 +314,10 @@ in
         HOMELAB_CONSOLE_PASSPHRASE_FILE = "/run/credentials/homelab-platform.service/console_passphrase";
       } // lib.optionalAttrs (cfg.seerr.url != "") {
         HOMELAB_SEERR_URL = cfg.seerr.url;
+      } // lib.optionalAttrs (cfg.seerr.apiKeyFile != null) {
         HOMELAB_SEERR_API_KEY_FILE = "/run/credentials/homelab-platform.service/seerr_api_key";
+      } // lib.optionalAttrs (cfg.seerr.vaultAlias != "") {
+        HOMELAB_SEERR_VAULT_ALIAS = cfg.seerr.vaultAlias;
       } // lib.optionalAttrs (cfg.calendarURLFile != null) {
         HOMELAB_CALENDAR_URL_FILE = "/run/credentials/homelab-platform.service/calendar_url";
       } // (lib.foldl' (acc: name:
@@ -285,6 +331,9 @@ in
           // lib.optionalAttrs (integration.tokenFile != null) {
             "HOMELAB_${upper}_MCP_TOKEN_FILE" =
               "/run/credentials/homelab-platform.service/${name}_token";
+          }
+          // lib.optionalAttrs (integration.vaultAlias != "") {
+            "HOMELAB_${upper}_MCP_VAULT_ALIAS" = integration.vaultAlias;
           }
       ) {} [ "workspace" "learning" "health" ]);
       serviceConfig = {
@@ -304,6 +353,11 @@ in
           ++ lib.optional (cfg.consolePassphraseFile != null) "console_passphrase:${cfg.consolePassphraseFile}"
           ++ lib.optional (cfg.books.contactFile != null) "books_contact:${cfg.books.contactFile}"
           ++ lib.optional (cfg.seerr.apiKeyFile != null) "seerr_api_key:${cfg.seerr.apiKeyFile}"
+          ++ lib.optionals (cfg.vault.endpoint != null) [
+            "vault-ca:${cfg.vault.caFile}"
+            "vault-cert:${cfg.vault.certificateFile}"
+            "vault-key:${cfg.vault.keyFile}"
+          ]
           ++ lib.optional (cfg.capabilityModel.tokenFile != null) "capability-model-token:${cfg.capabilityModel.tokenFile}"
           ++ lib.concatLists (lib.imap0 (index: route:
             lib.optional (route.tokenFile != null)

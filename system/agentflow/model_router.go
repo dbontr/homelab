@@ -31,6 +31,7 @@ type ModelRoute struct {
  Model string `json:"model"`
  LocalOnly bool `json:"local_only"`
  Token string `json:"-"`
+ TokenSource func()(string,error) `json:"-"`
 }
 
 type ModelRouter struct {
@@ -58,8 +59,10 @@ func NewModelRouter(specs []ModelRoute)(*ModelRouter,error){
     return nil,errors.New("local-only route cannot use a remote provider")
    }
   }
+  if spec.Token!=""&&spec.TokenSource!=nil{return nil,errors.New("model route has conflicting credential sources")}
   author,err:=NewModelAuthor(spec.Endpoint,spec.Model,spec.Token)
   if err!=nil{return nil,err}
+  author.TokenSource=spec.TokenSource
   router.routes[spec.Purpose]=author
  }
  return router,nil

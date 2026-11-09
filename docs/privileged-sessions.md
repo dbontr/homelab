@@ -94,6 +94,18 @@ The Helm Compute controller supports `controller.vault.enabled` with an approved
 
 Central authorization and central **storage** do not mean that every secret can have one physical copy. The vault's own encryption key, password verifier, TOTP seed, mTLS private keys, worker bootstrap credentials, backup recovery keys and other independent trust roots necessarily remain separately protected. Existing non-PAT software credentials still need dedicated authority mappings or migration; no automatic inventory reconciliation or Kubernetes Secret cleanup is implied by enabling the PAT clients. Credential delivery is a trusted-service operation, not a generic model-controlled secret read API.
 
+## Credential consumers and authority
+
+Provider tokens remain encrypted at the independent owner vault. Each consuming service has its own verified TLS client certificate and an exact `clientDNS`, `alias`, `provider`, and `handle` binding in the security daemon's `remote.serviceCredentialGrants`. Those grants control which service may read which record; they do not create broad permission to enumerate vault entries. The secrets are obtained at the instant a provider request is made. A revoked vault handle or unavailable vault fails closed.
+
+The platform uses `services.homelabPlatform.vault` and the specific `vaultAlias` for Seerr, the purpose-specific model route, or an explicitly configured Workspace, Learning, or Health MCP backend. The model route configuration contains only the alias and endpoint. The platform cannot use a vault alias and protected token file for the same provider. The main platform never receives the Compute administrator token, the owner password, or the privileged executor credentials.
+
+Engineering uses `services.homelabEngineering.vault`, `computeVaultAlias`, and `model.vaultAlias`. Its compute credential still must be a non-administrator, project-scoped editor identity; the compute client verifies the controller's current principal and project grants. Owner vault custody cannot widen those roles. The Engineering daemon remains separate from the platform gateway.
+
+Compute uses `services.workspaceMcp.vault` for GitHub, GitLab, or consented embeddings, with `githubAlias`, `gitlabAlias`, and `embeddingsAlias` independently granted. Its NixOS release renders only alias and certificate Secret names into the controller chart. The embedding client requests a credential only on an explicitly permitted text-embedding request. A credential failure never reroutes the text to a different provider.
+
+Every service still needs independently protected bootstrap material: the vault unlock key, mTLS client private key, TLS CA, service identity, local console verifier, and scoped worker credentials. Those should not be transferred through model input, application logs, or repository content. The root vault is not an unrestricted secret accessor, and no process may obtain another service's alias merely by changing a tool argument.
+
 ## Kubernetes deployment operations
 
 The optional `services.homelabExecutor.kubernetes` policy permits only exact namespace/deployment pairs listed by the operator. The separate executor receives a root-controlled kubeconfig through systemd credentials and exposes `cluster__deployment_restart` and `cluster__deployment_scale`. Commands are constructed from fixed `kubectl` arguments without shell interpretation. Scaling is bounded by `maxReplicas`, and both operations require an active owner identity and a separate destructive-operation confirmation. The executor does not expose a Kubernetes administrator shell or arbitrary apply/delete endpoint.

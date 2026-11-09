@@ -21,6 +21,7 @@ type EmbeddingProvider struct {
  Endpoint string
  Model string
  Token string
+ TokenSource func()(string,error)
  Client *http.Client
 }
 
@@ -51,7 +52,15 @@ func (p *EmbeddingProvider) Embed(ctx context.Context,text string)([]float64,err
  request,err:=http.NewRequestWithContext(ctx,http.MethodPost,p.Endpoint,bytes.NewReader(body))
  if err!=nil{return nil,err}
  request.Header.Set("Content-Type","application/json")
- if p.Token!=""{request.Header.Set("Authorization","Bearer "+p.Token)}
+ token:=p.Token
+ if p.TokenSource!=nil{
+  if token!=""{return nil,errors.New("conflicting embedding credential authorities")}
+  token,err=p.TokenSource()
+  if err!=nil||len(token)<20||strings.ContainsAny(token,"\x00\r\n\t "){
+   return nil,errors.New("embedding credential unavailable")
+  }
+ }
+ if token!=""{request.Header.Set("Authorization","Bearer "+token)}
  response,err:=p.Client.Do(request)
  if err!=nil{return nil,errors.New("embedding provider unavailable")}
  defer response.Body.Close()

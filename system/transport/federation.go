@@ -22,7 +22,15 @@ func (s *Server) forward(ctx context.Context, backend Backend, rpc rpcRequest, o
     req.Header.Set("Content-Type", "application/json")
     req.Header.Set("Accept", "application/json, text/event-stream")
     req.Header.Set("MCP-Protocol-Version", "2025-06-18")
-    if backend.Token != "" { req.Header.Set("Authorization", "Bearer "+backend.Token) }
+    token:=backend.Token
+    if backend.TokenSource!=nil{
+     if token!=""{return errors.New("conflicting backend credential authorities")}
+     token,err=backend.TokenSource()
+     if err!=nil||len(token)<20||strings.ContainsAny(token,"\x00\r\n\t "){
+      return fmt.Errorf("backend %s credential unavailable",backend.Name)
+     }
+    }
+    if token!=""{req.Header.Set("Authorization","Bearer "+token)}
     resp, err := s.client.Do(req)
     if err != nil { return fmt.Errorf("service %s unavailable", backend.Name) }
     defer resp.Body.Close()

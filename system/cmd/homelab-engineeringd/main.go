@@ -11,6 +11,7 @@ import (
  "time"
 
  "github.com/dbontr/homelab-new/system/agentflow"
+ "github.com/dbontr/homelab-new/system/security"
 )
 
 func required(name string) string {
@@ -34,7 +35,21 @@ func main(){
   if project!=""{projects[project]=true}
  }
  if len(projects)==0||len(projects)>32{log.Fatal("invalid engineering project scope")}
- compute,err:=agentflow.NewComputeClientFromFile(required("HOMELAB_COMPUTE_URL"),required("HOMELAB_COMPUTE_TOKEN_FILE"));if err!=nil{log.Fatal(err)}
+ vault,err:=security.NewVaultClientFromEnv("HOMELAB_ENGINEERING")
+ if err!=nil{log.Fatal("engineering vault trust: ",err)}
+ computeAlias:=os.Getenv("HOMELAB_ENGINEERING_COMPUTE_VAULT_ALIAS")
+ computeFile:=os.Getenv("HOMELAB_COMPUTE_TOKEN_FILE")
+ if (computeAlias=="")==(computeFile==""){log.Fatal("engineering compute requires exactly one credential authority")}
+ var compute *agentflow.ComputeClient
+ if computeAlias!=""{
+  if vault==nil{log.Fatal("engineering compute vault is unavailable")}
+  source,sourceErr:=vault.TokenSource(computeAlias)
+  if sourceErr!=nil{log.Fatal(sourceErr)}
+  compute,err=agentflow.NewComputeClientFromSource(required("HOMELAB_COMPUTE_URL"),source)
+ }else{
+  compute,err=agentflow.NewComputeClientFromFile(required("HOMELAB_COMPUTE_URL"),computeFile)
+ }
+ if err!=nil{log.Fatal(err)}
  probeCtx,stopProbe:=context.WithTimeout(context.Background(),10*time.Second)
  err=compute.VerifyProjectCredential(probeCtx)
  stopProbe()
@@ -49,11 +64,25 @@ func main(){
  var author agentflow.Author
  if endpoint:=os.Getenv("HOMELAB_ENGINEERING_MODEL_URL");endpoint!=""{
   key:=""
-  if file:=os.Getenv("HOMELAB_ENGINEERING_MODEL_TOKEN_FILE");file!=""{
-   key,err=credential(file);if err!=nil{log.Fatal(err)}
+  modelAlias:=os.Getenv("HOMELAB_ENGINEERING_MODEL_VAULT_ALIAS")
+  modelFile:=os.Getenv("HOMELAB_ENGINEERING_MODEL_TOKEN_FILE")
+  if modelAlias!=""&&modelFile!=""{log.Fatal("conflicting engineering model credential authorities")}
+  var source func()(string,error)
+  if modelAlias!=""{
+   if vault==nil{log.Fatal("engineering model vault unavailable")}
+   source,err=vault.TokenSource(modelAlias)
+   if err!=nil{log.Fatal(err)}
+  }else if modelFile!=""{
+   key,err=credential(modelFile)
+   if err!=nil{log.Fatal(err)}
   }
-  author,err=agentflow.NewModelAuthor(endpoint,required("HOMELAB_ENGINEERING_MODEL_NAME"),key)
-  if err!=nil{log.Fatal(err)}
+  model,modelErr:=agentflow.NewModelAuthor(endpoint,required("HOMELAB_ENGINEERING_MODEL_NAME"),key)
+  if modelErr!=nil{log.Fatal(modelErr)}
+  model.TokenSource=source
+  author=model
+ }else if os.Getenv("HOMELAB_ENGINEERING_MODEL_VAULT_ALIAS")!=""||
+  os.Getenv("HOMELAB_ENGINEERING_MODEL_TOKEN_FILE")!=""{
+  log.Fatal("engineering model credential requires model endpoint")
  }
  engine:=&agentflow.Engine{Store:store,Compute:compute,Author:author,AllowedProjects:projects}
  ctx,stop:=signal.NotifyContext(context.Background(),syscall.SIGINT,syscall.SIGTERM)

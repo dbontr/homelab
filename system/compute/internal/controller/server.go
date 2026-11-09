@@ -21,6 +21,7 @@ var dashboard embed.FS
 type Server struct {
 	DB               *Database
 	Embedder         *EmbeddingProvider
+ EmbeddingTokenSource func()(string,error)
 	AdminToken       string
 	OIDC             *OIDCVerifier
 	AccessVerifier   *OIDCVerifier
@@ -91,9 +92,11 @@ func NewServer(db *Database, token string) (*Server, error) {
 	gitlab := NewGitLab(gitlabPAT)
  githubAlias:=os.Getenv("PWM_VAULT_GITHUB_ALIAS")
  gitlabAlias:=os.Getenv("PWM_VAULT_GITLAB_ALIAS")
+ embeddingsAlias:=os.Getenv("PWM_VAULT_EMBEDDINGS_ALIAS")
  brokerURL:=os.Getenv("PWM_VAULT_URL")
- if githubAlias!=""||gitlabAlias!=""||brokerURL!=""{
-  if brokerURL==""||(githubAlias==""&&gitlabAlias==""){
+ var embeddingsTokenSource func()(string,error)
+ if githubAlias!=""||gitlabAlias!=""||embeddingsAlias!=""||brokerURL!=""{
+  if brokerURL==""||(githubAlias==""&&gitlabAlias==""&&embeddingsAlias==""){
    return nil,errors.New("owner vault provider aliases and endpoint must be configured together")
   }
   broker,brokerErr:=NewVaultSecretClient(brokerURL,
@@ -109,6 +112,13 @@ func NewServer(db *Database, token string) (*Server, error) {
    if gitlabPAT!=""{return nil,errors.New("GitLab has conflicting credential authorities")}
    if !vaultSecretAlias.MatchString(gitlabAlias){return nil,errors.New("invalid GitLab vault alias")}
    gitlab.TokenSource=func()(string,error){return broker.Credential(gitlabAlias)}
+  }
+  if embeddingsAlias!=""{
+   if os.Getenv("PWM_EMBEDDINGS_TOKEN_FILE")!=""{
+    return nil,errors.New("embeddings have conflicting credential authorities")
+   }
+   if !vaultSecretAlias.MatchString(embeddingsAlias){return nil,errors.New("invalid embeddings vault alias")}
+   embeddingsTokenSource=func()(string,error){return broker.Credential(embeddingsAlias)}
   }
  }
  if gitlabAPI:=strings.TrimRight(os.Getenv("PWM_GITLAB_API_URL"),"/");gitlabAPI!=""{
@@ -141,6 +151,7 @@ func NewServer(db *Database, token string) (*Server, error) {
 	}
 	return &Server{DB: db, AdminToken: token, OIDC: verifier, AccessVerifier: access, AccessOwnerEmail: accessOwner, PublicURL: publicURL,
 		GitHub: github, GitLab: gitlab, LocalGit: localGit,
+  EmbeddingTokenSource: embeddingsTokenSource,
 		AllowedHosts:     configured("PWM_ALLOWED_HOSTS", "127.0.0.1,localhost"),
 		AllowedOrigins:   configured("PWM_ALLOWED_ORIGINS", "http://127.0.0.1,http://localhost"),
 		MaxArtifactBytes: limit}, nil

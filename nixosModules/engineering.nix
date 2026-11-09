@@ -20,6 +20,14 @@ in {
       default = null;
       description = "Private compute-service credential available only to the engineering daemon.";
     };
+    computeVaultAlias = lib.mkOption { type = lib.types.str; default = ""; description = "Vault alias for the non-administrator compute editor token."; };
+    vault = {
+      endpoint = lib.mkOption { type = lib.types.nullOr lib.types.str; default = null; description = "Private mTLS credential authority origin."; };
+      serverName = lib.mkOption { type = lib.types.str; default = ""; description = "Expected vault TLS DNS identity."; };
+      caFile = lib.mkOption { type = lib.types.nullOr lib.types.str; default = null; description = "Protected vault trust certificate."; };
+      certificateFile = lib.mkOption { type = lib.types.nullOr lib.types.str; default = null; description = "Dedicated Engineering service client certificate."; };
+      keyFile = lib.mkOption { type = lib.types.nullOr lib.types.str; default = null; description = "Dedicated Engineering service private key."; };
+    };
     allowedProjects = lib.mkOption {
       type = lib.types.listOf lib.types.str;
       default = [];
@@ -41,14 +49,16 @@ in {
         default = null;
         description = "Optional protected model token; not available to the gateway.";
       };
+      vaultAlias = lib.mkOption { type = lib.types.str; default = ""; description = "Owner vault alias for source-authoring model credential."; };
     };
   };
 
   config = lib.mkIf cfg.enable {
     assertions = [
       {
-        assertion = cfg.computeTokenFile != null && cfg.computeURL != "";
-        message = "Engineering requires a separate compute service credential and endpoint.";
+        assertion = cfg.computeURL != "" &&
+          ((cfg.computeTokenFile != null) != (cfg.computeVaultAlias != ""));
+        message = "Engineering requires exactly one protected compute editor credential source.";
       }
       {
         assertion = cfg.allowedProjects != [] && lib.length cfg.allowedProjects <= 32
@@ -59,6 +69,19 @@ in {
       {
         assertion = (cfg.model.url == "") || (cfg.model.name != "");
         message = "Model source generation requires a selected model name.";
+      }
+      {
+        assertion = (cfg.model.tokenFile == null || cfg.model.vaultAlias == "") &&
+          (cfg.model.url != "" || (cfg.model.tokenFile == null && cfg.model.vaultAlias == ""));
+        message = "The Engineering model must use one credential source with a configured endpoint.";
+      }
+      {
+        assertion = let needsVault = cfg.computeVaultAlias != "" || cfg.model.vaultAlias != "";
+        in (!needsVault && cfg.vault.endpoint == null) ||
+          (cfg.vault.endpoint != null && cfg.vault.serverName != "" &&
+           cfg.vault.caFile != null && cfg.vault.certificateFile != null &&
+           cfg.vault.keyFile != null);
+        message = "Engineering vault mode requires a pinned server identity and protected mutual TLS files.";
       }
     ];
 
@@ -79,14 +102,24 @@ in {
         HOMELAB_ENGINEERING_DIR = "/var/lib/homelab-engineeringd/runs";
         HOMELAB_ENGINEERING_PROJECTS = lib.concatStringsSep "," cfg.allowedProjects;
         HOMELAB_COMPUTE_URL = cfg.computeURL;
-        HOMELAB_COMPUTE_TOKEN_FILE =
-          "/run/credentials/homelab-engineeringd.service/compute-token";
+      } // lib.optionalAttrs (cfg.computeTokenFile != null) {
+        HOMELAB_COMPUTE_TOKEN_FILE = "/run/credentials/homelab-engineeringd.service/compute-token";
+      } // lib.optionalAttrs (cfg.computeVaultAlias != "") {
+        HOMELAB_ENGINEERING_COMPUTE_VAULT_ALIAS = cfg.computeVaultAlias;
+      } // lib.optionalAttrs (cfg.vault.endpoint != null) {
+        HOMELAB_ENGINEERING_VAULT_URL = cfg.vault.endpoint;
+        HOMELAB_ENGINEERING_VAULT_SERVER_NAME = cfg.vault.serverName;
+        HOMELAB_ENGINEERING_VAULT_CA_FILE = "/run/credentials/homelab-engineeringd.service/vault-ca";
+        HOMELAB_ENGINEERING_VAULT_CLIENT_CERT_FILE = "/run/credentials/homelab-engineeringd.service/vault-cert";
+        HOMELAB_ENGINEERING_VAULT_CLIENT_KEY_FILE = "/run/credentials/homelab-engineeringd.service/vault-key";
       } // lib.optionalAttrs (cfg.model.url != "") {
         HOMELAB_ENGINEERING_MODEL_URL = cfg.model.url;
         HOMELAB_ENGINEERING_MODEL_NAME = cfg.model.name;
       } // lib.optionalAttrs (cfg.model.tokenFile != null) {
         HOMELAB_ENGINEERING_MODEL_TOKEN_FILE =
           "/run/credentials/homelab-engineeringd.service/model-token";
+      } // lib.optionalAttrs (cfg.model.vaultAlias != "") {
+        HOMELAB_ENGINEERING_MODEL_VAULT_ALIAS = cfg.model.vaultAlias;
       };
       serviceConfig = {
         Type = "simple";
@@ -96,8 +129,13 @@ in {
         StateDirectoryMode = "0700";
         RuntimeDirectory = "homelab-engineeringd";
         RuntimeDirectoryMode = "0750";
-        LoadCredential = [ "compute-token:${cfg.computeTokenFile}" ]
-          ++ lib.optional (cfg.model.tokenFile != null) "model-token:${cfg.model.tokenFile}";
+        LoadCredential = lib.optional (cfg.computeTokenFile != null) "compute-token:${cfg.computeTokenFile}"
+          ++ lib.optional (cfg.model.tokenFile != null) "model-token:${cfg.model.tokenFile}"
+          ++ lib.optionals (cfg.vault.endpoint != null) [
+            "vault-ca:${cfg.vault.caFile}"
+            "vault-cert:${cfg.vault.certificateFile}"
+            "vault-key:${cfg.vault.keyFile}"
+          ];
         ExecStart = "${cfg.package}/bin/homelab-engineeringd";
         Restart = "on-failure";
         RestartSec = "5s";

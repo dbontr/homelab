@@ -35,26 +35,42 @@ func secret(path string) (string,error) {
     return v,nil
 }
 
-func configuredBackend(name, upper string)(transport.Backend,bool,error){
-    u:=os.Getenv("HOMELAB_"+upper+"_MCP_URL");if u==""{return transport.Backend{},false,nil}
-    path:=os.Getenv("HOMELAB_"+upper+"_MCP_TOKEN_FILE")
-    token:="";if path!=""{var e error;token,e=secret(path);if e!=nil{return transport.Backend{},false,e}}
-    return transport.Backend{Name:name,URL:u,Token:token},true,nil
+func configuredBackend(name,upper string,vault *security.RemoteAuthorizationClient)(transport.Backend,bool,error){
+ u:=os.Getenv("HOMELAB_"+upper+"_MCP_URL")
+ path:=os.Getenv("HOMELAB_"+upper+"_MCP_TOKEN_FILE")
+ alias:=os.Getenv("HOMELAB_"+upper+"_MCP_VAULT_ALIAS")
+ if u==""{
+  if path!=""||alias!=""{return transport.Backend{},false,errors.New("backend credential without endpoint")}
+  return transport.Backend{},false,nil
+ }
+ if path!=""&&alias!=""{return transport.Backend{},false,errors.New("backend has conflicting credential authorities")}
+ var source func()(string,error)
+ var err error
+ if alias!=""{
+  if vault==nil{return transport.Backend{},false,errors.New("backend vault is unavailable")}
+  source,err=vault.TokenSource(alias)
+  if err!=nil{return transport.Backend{},false,err}
+ }
+ token:=""
+ if path!=""{token,err=secret(path);if err!=nil{return transport.Backend{},false,err}}
+ return transport.Backend{Name:name,URL:u,Token:token,TokenSource:source},true,nil
 }
 
 func main(){
     token,e:=secret(os.Getenv("HOMELAB_API_TOKEN_FILE"));if e!=nil{log.Fatal(e)}
     state:=os.Getenv("HOMELAB_STATE_FILE");if state==""{state="/var/lib/homelab-platform/state.json"}
     db,e:=store.Open(state,os.Getenv("HOMELAB_TIME_ZONE"));if e!=nil{log.Fatal(e)}
+    vault,err:=security.NewVaultClientFromEnv("HOMELAB")
+    if err!=nil{log.Fatal("service credential trust: ",err)}
     backends:=[]transport.Backend{}
     for _,b:=range []struct{name,upper string}{{"workspace","WORKSPACE"},{"learning","LEARNING"},{"health","HEALTH"}}{
-        v,enabled,e:=configuredBackend(b.name,b.upper);if e!=nil{log.Fatal(e)};if enabled{backends=append(backends,v)}
+        v,enabled,e:=configuredBackend(b.name,b.upper,vault);if e!=nil{log.Fatal(e)};if enabled{backends=append(backends,v)}
     }
     server,e:=transport.New(db,token,backends);if e!=nil{log.Fatal(e)}
     workflows,err:=agentflow.Open(filepath.Join(filepath.Dir(state),"workflows"))
     if err!=nil{log.Fatal(err)}
     server.SetWorkflows(workflows)
-    planner,err:=configuredCapabilityPlanner()
+    planner,err:=configuredCapabilityPlanner(vault)
     if err!=nil{log.Fatal("capability model configuration: ",err)}
     if planner!=nil{server.SetCapabilityPlanner(planner)}
     server.StartWorkflowScheduler(context.Background())
@@ -106,11 +122,23 @@ func main(){
     }
     if url:=os.Getenv("HOMELAB_SEERR_URL");url!=""{
         path:=os.Getenv("HOMELAB_SEERR_API_KEY_FILE")
-        if path==""{log.Fatal("Seerr API credential file required")}
-        raw,e:=os.ReadFile(path);if e!=nil{log.Fatal(e)}
-        client,e:=media.NewSeerr(url,strings.TrimSpace(string(raw)));if e!=nil{log.Fatal(e)}
+        alias:=os.Getenv("HOMELAB_SEERR_VAULT_ALIAS")
+        if (path=="")==(alias==""){log.Fatal("Seerr requires exactly one credential authority")}
+        var client *media.Client
+        if alias!=""{
+            if vault==nil{log.Fatal("Seerr vault is unavailable")}
+            source,err:=vault.TokenSource(alias)
+            if err!=nil{log.Fatal(err)}
+            client,err=media.NewSeerrWithSource(url,source)
+            if err!=nil{log.Fatal(err)}
+        }else{
+            raw,e:=os.ReadFile(path);if e!=nil{log.Fatal(e)}
+            client,e=media.NewSeerr(url,strings.TrimSpace(string(raw)));if e!=nil{log.Fatal(e)}
+        }
         server.ConfigureMedia(client)
-    }else if os.Getenv("HOMELAB_SEERR_API_KEY_FILE")!=""{log.Fatal("Seerr URL required")}
+    }else if os.Getenv("HOMELAB_SEERR_API_KEY_FILE")!=""||os.Getenv("HOMELAB_SEERR_VAULT_ALIAS")!=""{
+        log.Fatal("Seerr credential requires endpoint")
+    }
     if file:=os.Getenv("HOMELAB_CALENDAR_URL_FILE");file!=""{
         raw,e:=os.ReadFile(file);if e!=nil{log.Fatal(e)}
         if e:=server.SetCalendarURL(strings.TrimSpace(string(raw)));e!=nil{log.Fatal(e)}

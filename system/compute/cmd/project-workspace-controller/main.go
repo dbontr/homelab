@@ -182,6 +182,9 @@ func command(args []string) error {
 		if endpoint:=os.Getenv("PWM_EMBEDDINGS_URL");endpoint!=""{
             model:=os.Getenv("PWM_EMBEDDINGS_MODEL")
             accessToken:=""
+            if service.EmbeddingTokenSource!=nil&&os.Getenv("PWM_EMBEDDINGS_TOKEN_FILE")!=""{
+                return errors.New("embedding credential source conflict")
+            }
             if file:=os.Getenv("PWM_EMBEDDINGS_TOKEN_FILE");file!=""{
                 info,err:=os.Stat(file)
                 if err!=nil{return err}
@@ -194,8 +197,10 @@ func command(args []string) error {
             }
             embedder,err:=controller.NewEmbeddingProvider(endpoint,model,accessToken)
             if err!=nil{return err}
+            embedder.TokenSource=service.EmbeddingTokenSource
             service.Embedder=embedder
-        }else if os.Getenv("PWM_EMBEDDINGS_MODEL")!=""||os.Getenv("PWM_EMBEDDINGS_TOKEN_FILE")!=""{
+        }else if os.Getenv("PWM_EMBEDDINGS_MODEL")!=""||os.Getenv("PWM_EMBEDDINGS_TOKEN_FILE")!=""||
+          os.Getenv("PWM_VAULT_EMBEDDINGS_ALIAS")!=""{
             return errors.New("embedding model and token require a configured endpoint")
         }
 		if !strings.HasPrefix(*addr, "127.0.0.1:") && !strings.HasPrefix(*addr, "localhost:") && os.Getenv("PWM_ALLOW_REMOTE_LISTEN") != "1" {
