@@ -2,7 +2,6 @@ package security
 
 import (
  "context"
- "encoding/json"
  "errors"
  "log"
  "net"
