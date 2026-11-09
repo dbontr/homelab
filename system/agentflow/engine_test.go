@@ -61,7 +61,8 @@ func(f *fakeCompute)Call(_ context.Context,name string,args map[string]any)(map[
   return map[string]any{"status":"succeeded","result":result},nil
  case "github_publish_artifacts":
   f.drafts++
-  if str(args["base_branch"])!="main"||len(obj(args["changes"]))==0{return nil,errors.New("invalid publication")}
+  changes,ok:=args["changes"].(map[string]string)
+  if str(args["base_branch"])!="main"||!ok||len(changes)==0{return nil,errors.New("invalid publication")}
   return map[string]any{"draft":true,"number":12,"base_sha":strings.Repeat("a",40),"url":"https://github.com/example/repo/pull/12"},nil
  default:return nil,fmt.Errorf("unexpected compute tool %s",name)
  }
