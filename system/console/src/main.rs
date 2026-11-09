@@ -1,6 +1,7 @@
 mod api;
 mod components;
 mod recipes;
+mod pantry;
 mod tasks;
 mod personal;
 mod views;

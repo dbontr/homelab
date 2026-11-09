@@ -5,6 +5,7 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
 use crate::api;
+use crate::pantry::Pantry;
 use crate::components::{Empty, Heading, Loading, Notice};
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -204,6 +205,7 @@ enum Tab {
     Library,
     Plan,
     Groceries,
+    Pantry,
     Transfer,
 }
 
@@ -326,6 +328,8 @@ pub fn Recipes(csrf: String) -> Element {
                 onclick: move |_| tab.set(Tab::Plan), "Meal plan" }
             button { class: "tab", role: "tab", aria_selected: if tab()==Tab::Groceries {"true"} else {"false"},
                 onclick: move |_| tab.set(Tab::Groceries), "Groceries" }
+            button { class: "tab", role: "tab", aria_selected: if tab()==Tab::Pantry {"true"} else {"false"},
+                onclick: move |_| tab.set(Tab::Pantry), "Pantry" }
             button { class: "tab", role: "tab", aria_selected: if tab()==Tab::Transfer {"true"} else {"false"},
                 onclick: move |_| tab.set(Tab::Transfer), "Import / export" }
         }
@@ -1039,6 +1043,7 @@ pub fn Recipes(csrf: String) -> Element {
                     }
                 }
             },
+            Tab::Pantry => rsx! { Pantry { csrf: csrf() } },
             Tab::Transfer => rsx! {
                 section { class: "card",
                     div { class: "card-header",
