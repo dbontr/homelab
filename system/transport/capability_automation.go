@@ -17,6 +17,7 @@ type AutomationRequest struct {
  Program CapabilityProgram `json:"program"`
  EveryMinutes int `json:"every_minutes"`
  Enabled bool `json:"enabled"`
+ NotifyOnChange bool `json:"notify_on_change,omitempty"`
 }
 
 func (s *Server) validateAutomationProgram(ctx context.Context,p CapabilityProgram)error{
@@ -47,6 +48,7 @@ func (s *Server) createCapabilityAutomation(ctx context.Context,input Automation
  return s.workflows.CreateAutomation(agentflow.Automation{
   ID:hex.EncodeToString(nonce[:]),Project:input.Program.Project,
   Program:encoded,EveryMinutes:input.EveryMinutes,Enabled:input.Enabled,
+  NotifyOnChange:input.NotifyOnChange,
  })
 }
 
@@ -85,6 +87,23 @@ func (s *Server) fireDueAutomations(ctx context.Context)error{
   _,_ = s.workflows.FireAutomation(a,w) // Revision conflicts are recovered in the next scan.
  }
  return nil
+}
+
+func (s *Server) automationAlerts(w http.ResponseWriter,r *http.Request) {
+ if s.workflows==nil{writeError(w,503,"automations unavailable");return}
+ alerts,err:=s.workflows.ListAutomationAlerts(100)
+ if err!=nil{writeError(w,500,"automation alerts unavailable");return}
+ writeJSON(w,200,map[string]any{"alerts":alerts})
+}
+
+func (s *Server) automationAlertAck(w http.ResponseWriter,r *http.Request) {
+ if s.workflows==nil{writeError(w,503,"automations unavailable");return}
+ var input struct{Revision uint64 `json:"revision"`}
+ if err:=decode(r,&input);err!=nil{writeError(w,400,err.Error());return}
+ alert,err:=s.workflows.AcknowledgeAutomationAlert(r.PathValue("id"),r.PathValue("run"),input.Revision)
+ if errors.Is(err,os.ErrNotExist){writeError(w,404,"automation alert not found");return}
+ if err!=nil{writeError(w,409,"automation alert revision or identity conflict");return}
+ writeJSON(w,200,alert)
 }
 
 func (s *Server) automationCollection(w http.ResponseWriter,r *http.Request){
@@ -142,6 +161,12 @@ func (s *Server) capabilityAutomationTool(ctx context.Context,name string,raw js
   var in struct{ID string `json:"id"`;Revision uint64 `json:"revision"`;Enabled bool `json:"enabled"`}
   if err:=json.Unmarshal(raw,&in);err!=nil{return nil,err}
   return s.workflows.SetAutomationEnabled(in.ID,in.Revision,in.Enabled)
+ case "automation_alerts":
+  return s.workflows.ListAutomationAlerts(100)
+ case "automation_alert_acknowledge":
+  var in struct{AutomationID string `json:"automation_id"`;WorkflowID string `json:"workflow_id"`;Revision uint64 `json:"revision"`}
+  if err:=json.Unmarshal(raw,&in);err!=nil{return nil,err}
+  return s.workflows.AcknowledgeAutomationAlert(in.AutomationID,in.WorkflowID,in.Revision)
  }
  return nil,errors.New("unrecognized automation tool")
 }

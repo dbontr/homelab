@@ -387,6 +387,9 @@ func (s *Server) StartWorkflowScheduler(ctx context.Context) {
                     }
                     nextArchive=time.Now().Add(5*time.Minute)
                 }
+                if _,err:=s.workflows.ReconcileAutomationObservations(32);err!=nil {
+                    log.Printf("automation observation reconciliation failed: %v",err)
+                }
                 period,cancel:=context.WithTimeout(ctx,8*time.Second)
                 _=s.fireDueAutomations(period)
                 cancel()
