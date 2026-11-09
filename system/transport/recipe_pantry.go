@@ -36,3 +36,10 @@ func (s *Server) pantryRecommendations(w http.ResponseWriter,r *http.Request){
 	if err!=nil{recipeFailure(w,err);return}
 	writeJSON(w,200,result)
 }
+
+func (s *Server) pantryGroceryNeeds(w http.ResponseWriter,r *http.Request) {
+	if s.recipes==nil{writeError(w,503,"recipe storage is unavailable");return}
+	needs,err:=s.recipes.GroceryNeeds(r.URL.Query().Get("start"),r.URL.Query().Get("end"))
+	if err!=nil{recipeFailure(w,err);return}
+	writeJSON(w,200,needs)
+}

@@ -155,6 +155,7 @@ func (s *Server) recipeTool(ctx context.Context, name string, raw json.RawMessag
 	case "recipe_meal_remove": return map[string]bool{"deleted":true}, s.recipes.DeleteMeal(input.ID)
 	case "recipe_meals": return s.recipes.Meals(), nil
 	case "recipe_groceries": return s.recipes.Groceries(input.Start, input.End)
+	case "recipe_grocery_needs": return s.recipes.GroceryNeeds(input.Start,input.End)
 	case "recipe_nutrition_preview": return s.recipes.Nutrition(input.ID, input.Servings)
 	case "recipe_pantry_list": return s.recipes.Pantry(),nil
 	case "recipe_pantry_set": return s.recipes.SetPantry(input.PantryItem,input.ExpectedRevision)

@@ -229,3 +229,71 @@ func (s *Store) RecommendFromPantry(req PantryRecommendationRequest)(PantryRecip
 	if len(result.Matches)>req.Limit{result.Matches=result.Matches[:req.Limit]}
 	return result,nil
 }
+
+// GroceryNeed derives the amount needed for scheduled meals from the exact
+// normalized ingredient and unit. It does not subtract purchased-status flags
+// or claim that an unrecorded pantry item is physically absent.
+type GroceryNeed struct {
+	Key string `json:"key"`
+	Name string `json:"name"`
+	Unit string `json:"unit,omitempty"`
+	Required float64 `json:"required"`
+	Available float64 `json:"available"`
+	ToBuy float64 `json:"to_buy"`
+	StockStatus string `json:"stock_status"`
+	Checked bool `json:"checked"`
+	RecipeIDs []string `json:"recipe_ids"`
+}
+
+type GroceryNeedsBoard struct {
+	GroceryRevision int `json:"grocery_revision"`
+	PantryRevision int `json:"pantry_revision"`
+	Items []GroceryNeed `json:"items"`
+	Note string `json:"note"`
+}
+
+// GroceryNeeds reads both ledgers under a single lock, producing a consistent
+// estimate. An expiration date or a missing entry is not proof of consumption.
+func (s *Store) GroceryNeeds(start, end string) (GroceryNeedsBoard, error) {
+	if !validDate(start) || !validDate(end) || (start != "" && end != "" && start > end) {
+		return GroceryNeedsBoard{}, errors.New("invalid grocery date range")
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	board := GroceryNeedsBoard{
+		GroceryRevision: s.data.GroceryRevision,
+		PantryRevision: s.data.PantryRevision,
+		Items: make([]GroceryNeed, 0),
+		Note: "To-buy quantities subtract only recorded unexpired pantry stock with matching ingredient and unit. Unrecorded supplies are unknown. Grocery checklist status is separate; this preview never consumes stock or logs meals.",
+	}
+	today := time.Now().UTC().Format("2006-01-02")
+	for _, ingredient := range collectGroceries(s.data, start, end) {
+		need := GroceryNeed{
+			Key: ingredient.Key,
+			Name: ingredient.Name,
+			Unit: ingredient.Unit,
+			Required: ingredient.Amount,
+			Checked: ingredient.Checked,
+			RecipeIDs: append([]string(nil), ingredient.RecipeIDs...),
+			StockStatus: "unrecorded",
+		}
+		if stock, found := s.data.Pantry[ingredient.Key]; found {
+			if stock.Expires != "" && stock.Expires < today {
+				need.StockStatus = "expired"
+			} else {
+				need.Available = stock.Amount
+				if stock.Amount + 1e-9 >= ingredient.Amount {
+					need.StockStatus = "covered"
+				} else {
+					need.StockStatus = "insufficient"
+				}
+			}
+		}
+		need.ToBuy = math.Max(0, need.Required-need.Available)
+		if need.ToBuy < 1e-9 {
+			need.ToBuy = 0
+		}
+		board.Items = append(board.Items, need)
+	}
+	return board, nil
+}

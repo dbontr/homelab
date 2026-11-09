@@ -54,3 +54,32 @@ func TestPantryHTTPRequiresAuthorizationAndRevision(t *testing.T){
 	}
 }
 
+
+func TestGroceryNeedsHTTPIsPrivateAndReadOnly(t *testing.T) {
+	db,err:=store.Open(filepath.Join(t.TempDir(),"tasks.json"),"UTC")
+	if err!=nil{t.Fatal(err)}
+	s,err:=New(db,strings.Repeat("n",40),nil)
+	if err!=nil{t.Fatal(err)}
+	r,err:=recipes.Open(filepath.Join(t.TempDir(),"recipes.json"))
+	if err!=nil{t.Fatal(err)}
+	recipe,err:=r.Save(recipes.Recipe{
+		Title:"Rice",Servings:2,
+		Ingredients:[]recipes.Ingredient{{Name:"Rice",Amount:200,Unit:"g"}},
+		Steps:[]recipes.Step{{Text:"Cook."}},
+	})
+	if err!=nil{t.Fatal(err)}
+	if _,err=r.AddMeal(recipes.Meal{RecipeID:recipe.ID,Date:"2032-06-08",Servings:2});err!=nil{t.Fatal(err)}
+	s.SetRecipes(r)
+	h:=s.Handler()
+	path:="/v1/groceries/needs?start=2032-06-08&end=2032-06-08"
+	if result:=request(h,"GET",path,"","");result.Code!=401{
+		t.Fatalf("anonymous grocery inventory read accepted: %d",result.Code)
+	}
+	result:=request(h,"GET",path,"",strings.Repeat("n",40))
+	if result.Code!=200||!strings.Contains(result.Body.String(),`"to_buy":200`) ||
+		!strings.Contains(result.Body.String(),`"stock_status":"unrecorded"`) {
+		t.Fatalf("grocery needs response incorrect: %d %s",result.Code,result.Body.String())
+	}
+	bad:=request(h,"GET","/v1/groceries/needs?start=2032-06-09&end=2032-06-08","",strings.Repeat("n",40))
+	if bad.Code!=400 {t.Fatalf("invalid date range accepted: %d",bad.Code)}
+}
