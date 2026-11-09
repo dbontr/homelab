@@ -59,6 +59,7 @@ func (s *Server) sessionReadAllowed(r *http.Request) bool {
 		"/v1/media/requests":true,
 		"/v1/tools":true,
 		"/v1/workspace/projects":true,
+        "/v1/workflows":true,
 		"/v1/workspace/nodes":true,
         "/v1/activity":true,
         "/v1/monitoring/summary":true,
@@ -72,6 +73,8 @@ func (s *Server) sessionReadAllowed(r *http.Request) bool {
       (len(strings.Split(p,"/"))==4 && p!="/v1/recipes/import" && p!="/v1/recipes/parse")||
       (len(strings.Split(p,"/"))==5 && (strings.HasSuffix(p,"/nutrition") || strings.HasSuffix(p,"/history"))))) &&
     !(strings.HasPrefix(p,"/v1/resources/") && len(strings.Split(p,"/"))==5) &&
+    !(strings.HasPrefix(p,"/v1/projects/") && len(strings.Split(p,"/"))==5 && strings.HasSuffix(p,"/overview")) &&
+    !(strings.HasPrefix(p,"/v1/workflows/") && len(strings.Split(p,"/"))==4) &&
     !(strings.HasPrefix(p,"/v1/workspace/projects/") && len(strings.Split(p,"/"))==6 && (strings.HasSuffix(p,"/jobs")||strings.HasSuffix(p,"/workspaces"))) &&
     !(strings.HasPrefix(p,"/v1/learning/sessions/") && (len(strings.Split(p,"/"))==5 || len(strings.Split(p,"/"))==6 && strings.HasSuffix(p,"/pending"))) {
 		return false

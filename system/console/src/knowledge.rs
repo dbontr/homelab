@@ -36,6 +36,14 @@ pub fn ProjectKnowledge() -> Element {
             else { api::get::<Value>(&project_path(&id, "context")).await }
         }
     });
+    let mut overview = use_resource(move || {
+        let id = selected();
+        async move {
+            if id.is_empty() { Ok(Value::Null) }
+            else { api::get::<Value>(&format!("/v1/projects/{id}/overview")).await }
+        }
+    });
+    let mut workflows = use_resource(|| async { api::get::<Value>("/v1/workflows").await });
     let mut repositories = use_resource(move || {
         let id = selected();
         async move {
@@ -60,7 +68,7 @@ pub fn ProjectKnowledge() -> Element {
             description: "Project context, connected repositories, shared libraries, and source-backed research.".to_owned(),
             button {
                 class: "btn btn-outline",
-                onclick: move |_| { context.restart(); repositories.restart(); research.restart(); },
+                onclick: move |_| { context.restart(); repositories.restart(); overview.restart(); workflows.restart(); research.restart(); },
                 Icon { name: "refresh".to_owned() }
                 "Refresh"
             }
@@ -126,6 +134,68 @@ pub fn ProjectKnowledge() -> Element {
                 }
             }
             Card {
+                title: "Project connections".to_owned(),
+                description: "Explicit personal task links, goals, engineering runs, and source-owned project resources.".to_owned(),
+                match overview.cloned() {
+                    None => rsx! { Loading {} },
+                    Some(Err(err)) => rsx! { Notice { message: err } },
+                    Some(Ok(value)) => rsx! {
+                        h3 { "Linked tasks" }
+                        for task in api::list(&value, &["tasks"]) {
+                            div { class: "inline-row",
+                                span { "{api::property(&task, &["title"])}" }
+                                Badge { text: api::property(&task, &["status"]) }
+                            }
+                        }
+                        h3 { "Associated goals" }
+                        for goal in api::list(&value, &["goals"]) {
+                            div { class: "inline-row",
+                                span { "{api::property(&goal, &["title"])}" }
+                            }
+                        }
+                        h3 { "Engineering runs" }
+                        for run in api::list(&value, &["engineering_runs"]) {
+                            div { class: "inline-row",
+                                span { class: "mono", "{api::property(&run, &["id"])}" }
+                                Badge { text: api::property(&run, &["status"]) }
+                            }
+                        }
+                        for missing in api::list(&value, &["unavailable"]) {
+                            span { class: "muted", "Unavailable: {missing}" }
+                        }
+                    }
+                }
+            }
+            Card {
+                title: "Autonomous workflow activity".to_owned(),
+                description: "Bounded read-only cross-capability work, with durable state and owner-controlled cancellation.".to_owned(),
+                match workflows.cloned() {
+                    None => rsx! { Loading {} },
+                    Some(Err(err)) => rsx! { Notice { message: err } },
+                    Some(Ok(value)) => {
+                        let selected_project = selected();
+                        let matching: Vec<Value> = api::list(&value, &["workflows"])
+                            .into_iter()
+                            .filter(|flow| flow.get("project").and_then(Value::as_str) == Some(selected_project.as_str()))
+                            .collect();
+                        rsx! {
+                            if matching.is_empty() {
+                                Empty {
+                                    title: "No recorded workflows".to_owned(),
+                                    description: "Submit an approved workflow through the assistant to begin a durable research or review process.".to_owned()
+                                }
+                            }
+                            for flow in matching {
+                                div { class: "inline-row",
+                                    span { "{api::property(&flow, &["objective"])}" }
+                                    Badge { text: api::property(&flow, &["status"]) }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Card {
                 title: "Source repositories".to_owned(),
                 description: "Linked source and reference repositories remain separately versioned.".to_owned(),
                 match repositories.cloned() {
@@ -178,7 +248,7 @@ pub fn ProjectKnowledge() -> Element {
                                                 "{api::property(&passage, &["text", "excerpt"])}"
                                             }
                                             span { class: "mono",
-                                                "{api::property(&passage, &["origin_revision", "revision"])}"
+                                                "{api::property(&passage, &["citation_ref", "origin_revision", "revision"])}"
                                             }
                                         }
                                     }

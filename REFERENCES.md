@@ -37,6 +37,7 @@
 - [OWASP Session Management Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html) — OWASP. Used for: short-lived browser sessions, HttpOnly/Secure/SameSite cookies, credential separation and session invalidation.
 - [Dioxus Styling and Assets](https://dioxuslabs.com/learn/0.7/essentials/ui/styling/) — Dioxus project. Used for: RSX, CSS assets and native SVG controls in the Rust console.
 - [RFC 9110: HTTP Semantics, If-Match](https://www.rfc-editor.org/rfc/rfc9110#section-13.1.1) — IETF. Used for: revision-qualified deletion of first-party recipe records.
+- [SQLite FTS5 BM25 Ranking](https://www.sqlite.org/fts5.html#the_bm25_function) — SQLite project. Used for: relevance-based ordering of project-authorized source-linked research passages.
 - [SQLite Write-Ahead Logging](https://www.sqlite.org/wal.html) — SQLite project. Used for: durable controller-local project knowledge and metadata with concurrent reads.
 - [Schema.org Recipe](https://schema.org/Recipe) — Schema.org. Used for: parsing user-provided structured recipe JSON-LD without automatically saving inferred ingredients.
 - [RecipeSage JSON-LD Exporter](https://github.com/julianpoy/RecipeSage/blob/master/packages/util/server/src/general/queue/export/handlers/jsonldExportJobHandler.ts) — RecipeSage project. Used for: the versioned `recipes` collection envelope in RecipeSage export files.

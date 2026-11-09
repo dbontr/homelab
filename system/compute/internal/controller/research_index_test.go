@@ -247,3 +247,23 @@ func researchGETStatus(t *testing.T, server *httptest.Server, path, token string
 	defer response.Body.Close()
 	return response.StatusCode
 }
+
+func TestResearchRelevanceOrdersCorroboratingPassages(t *testing.T) {
+    db,_,httpServer:=fixture(t)
+    project(t,httpServer)
+    if _,err:=db.CreateLibrary("ranking","Ranked corpus","","research");err!=nil{t.Fatal(err)}
+    if _,err:=db.LinkLibrary("demo","ranking");err!=nil{t.Fatal(err)}
+    sourceBytes:=[]byte("indexed source")
+    digest:=checksum(sourceBytes)
+    if _,err:=db.StoreLibraryObject("ranking","notes.txt","document",digest,bytes.NewReader(sourceBytes),1<<20);err!=nil{t.Fatal(err)}
+    source,err:=db.RegisterResearchSource(ResearchSourceRequest{Library:"ranking",Title:"Reference",OriginKind:"object",OriginName:"notes.txt"})
+    if err!=nil{t.Fatal(err)}
+    _,err=db.IngestResearchPassages("ranking",asString(source["id"]),"append",0,[]ResearchPassageInput{
+        {Ordinal:1,Text:"Physics is useful for research and theory. This passage contains irrelevant material about many other topics."},
+        {Ordinal:2,Text:"Physics research physics research physics research."},
+    })
+    if err!=nil{t.Fatal(err)}
+    matches,err:=db.SearchResearch("demo","physics research",10)
+    if err!=nil||len(matches)!=2{t.Fatalf("ranked search: %v %v",matches,err)}
+    if asInt(matches[0]["ordinal"])!=2{t.Fatalf("ranking did not favor term relevance: %v",matches)}
+}

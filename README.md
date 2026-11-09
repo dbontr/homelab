@@ -12,6 +12,8 @@ A self-hosted personal computing system managed through one source repository. G
 
 The unified interface supports project-scoped Engineering runs for isolated source changes, verification and draft review, together with tasks, goals, configurable personal rules, quick-win recommendations, weekly progress reporting, bounded recurrence-aware calendar availability, advisory weekly task planning, on-demand book discovery, private acquisition requests and a canonical record-derived activity feed. Movie and television search and requests use Seerr when configured. Additional capabilities are attached through Go interfaces. Projects can link multiple repositories and shared libraries; a repository does not define a project.
 
+Cross-capability read-only workflows are available through one authenticated API and MCP interface. Workflow steps use the existing durable, fenced executor; they never receive credentials for infrastructure mutation. Project overviews join task/goal links and engineering summaries with canonical controller-owned project context. See [cross-capability workflows](docs/capability-workflows.md).
+
 Compute, teaching and health implementations retain independent operating-system and database boundaries where necessary for reliability. Their separation must not require the user to choose between assistants, endpoints or inconsistent project identifiers.
 
 ## Console

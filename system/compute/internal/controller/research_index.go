@@ -234,12 +234,12 @@ func (db *Database) SearchResearch(project, query string, limit int) ([]map[stri
 		s.origin_kind,s.origin_name,s.origin_revision,s.origin_digest,s.origin_path,
 		p.epoch,p.ordinal,p.page,p.section,p.line_start,p.line_end,
 		p.body_sha256,p.topics,substr(p.body,1,1200) excerpt
-		FROM research_passages_fts f
-		JOIN research_passages p ON p.rowid=f.rowid
+		FROM research_passages_fts
+		JOIN research_passages p ON p.rowid=research_passages_fts.rowid
 		JOIN research_sources s ON s.id=p.source AND s.epoch=p.epoch
 		JOIN project_libraries l ON l.library=s.library
-		WHERE l.project=? AND f.body MATCH ?
-		ORDER BY p.created DESC,p.ordinal LIMIT ?`, project, fts, limit)
+		WHERE l.project=? AND research_passages_fts.body MATCH ?
+		ORDER BY bm25(research_passages_fts),p.created DESC,p.ordinal LIMIT ?`, project, fts, limit)
 	if err != nil {
 		return nil, err
 	}

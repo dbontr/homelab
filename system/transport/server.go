@@ -29,7 +29,7 @@ import (
  "github.com/dbontr/homelab-new/system/store"
 )
 type Backend struct { Name string; URL string; Token string }
-type Server struct { db *store.Store; token string; backend []Backend; client *http.Client; calendarURL string; gate *approval.Gate; privilegeClient *security.AdminClient; executorClient *privileged.Client; fleetClient *release.FleetClient; securityLoginURL string; allowedOrigins map[string]struct{}; media *media.Client; deviceCatalog *devices.Catalog; nodeCatalog *devices.NodeCatalog; profiles *profiles.Registry; recipes *recipes.Store; sessions *session.Manager; observability *observability.Client; bookCatalog *books.Catalog; engineering agentflow.Manager; inflight chan struct{} }
+type Server struct { db *store.Store; token string; backend []Backend; client *http.Client; calendarURL string; gate *approval.Gate; privilegeClient *security.AdminClient; executorClient *privileged.Client; fleetClient *release.FleetClient; securityLoginURL string; allowedOrigins map[string]struct{}; media *media.Client; deviceCatalog *devices.Catalog; nodeCatalog *devices.NodeCatalog; profiles *profiles.Registry; recipes *recipes.Store; sessions *session.Manager; observability *observability.Client; bookCatalog *books.Catalog; engineering agentflow.Manager; workflows *agentflow.Store; inflight chan struct{} }
 
 func New(db *store.Store,token string,backends []Backend)(*Server,error){
  if db==nil||len(token)<32||strings.ContainsAny(token,"\r\n\t"){return nil,errors.New("store and a strong access token are required")}
@@ -94,6 +94,11 @@ func(s *Server) Handler()http.Handler{
  mux.HandleFunc("GET /v1/engineering/runs/{id}/knowledge/{proposal}",s.engineeringRunKnowledge)
  mux.HandleFunc("POST /v1/engineering/runs/{id}/knowledge/{proposal}/approve",s.engineeringRunKnowledge)
  mux.HandleFunc("GET /v1/engineering/runs/{id}/diffs",s.engineeringRunDiffs)
+ mux.HandleFunc("GET /v1/projects/{project}/overview",s.uiProjectOverview)
+ mux.HandleFunc("GET /v1/workflows",s.capabilityWorkflowCollection)
+ mux.HandleFunc("POST /v1/workflows",s.capabilityWorkflowCollection)
+ mux.HandleFunc("GET /v1/workflows/{id}",s.capabilityWorkflowItem)
+ mux.HandleFunc("POST /v1/workflows/{id}/cancel",s.capabilityWorkflowItem)
  mux.HandleFunc("GET /v1/workspace/projects",s.uiProjects)
  mux.HandleFunc("GET /v1/workspace/projects/{project}/jobs",s.uiWorkspaceProjectView)
  mux.HandleFunc("GET /v1/workspace/projects/{project}/workspaces",s.uiWorkspaceProjectView)
@@ -328,6 +333,11 @@ func(s *Server)localTools()[]map[string]any{
   tool("weekly_report","Summarize recorded task completions",map[string]any{"week_of":prop("string")}),
   tool("task_review","Inspect recorded deadlines, prerequisites and missing estimates without interpreting absent logs as neglect",map[string]any{"horizon_days":prop("integer")}),
   tool("activity_recent","List confirmed personal activity from canonical records, without fabricating unobserved actions",map[string]any{"limit":prop("integer")}),
+  tool("workflow_submit","Submit an owner-scoped project workflow composed of approved read-only capability actions",map[string]any{"project":prop("string"),"objective":prop("string"),"personal_read":prop("boolean"),"steps":map[string]any{"type":"array","items":prop("object")}},"project","objective","steps"),
+  tool("workflow_list","List owner-scoped workflow status",map[string]any{}),
+  tool("workflow_get","Inspect confirmed stage results and status",map[string]any{"id":prop("string")},"id"),
+  tool("workflow_cancel","Cancel a revision-matched workflow",map[string]any{"id":prop("string"),"revision":prop("integer")},"id","revision"),
+  tool("project_overview","Read a project with linked sources, libraries, personal tasks, goals and engineering runs",map[string]any{"project_id":prop("string")},"project_id"),
   tool("resource_get","Resolve a canonical local resource identity from its owning store",map[string]any{"kind":prop("string"),"id":prop("string")},"kind","id"),
   tool("resource_resolve","Resolve a homelab:kind:id reference without copying the owning service's data",map[string]any{"ref":prop("string")},"ref"),
   tool("system_status","List configured integrations",map[string]any{}),
@@ -470,6 +480,7 @@ func(s *Server)toolList(r *http.Request)[]map[string]any{
  return out
 }
 func(s *Server)localTool(ctx context.Context,name string,raw json.RawMessage)(any,error){
+ if strings.HasPrefix(name,"workflow_"){return s.capabilityWorkflowTool(ctx,name,raw)}
  if strings.HasPrefix(name,"engineering_run_")||strings.HasPrefix(name,"engineering_team_"){return s.engineeringTool(ctx,name,raw)}
  if strings.HasPrefix(name,"monitoring_"){return s.monitoringTool(ctx,name,raw)}
  if strings.HasPrefix(name,"book_"){return s.bookTool(ctx,name,raw)}
@@ -510,11 +521,15 @@ func(s *Server)localTool(ctx context.Context,name string,raw json.RawMessage)(an
   if n==0{n=50}
   if n<1||n>200{return nil,errors.New("activity limit must be 1 through 200")}
   return s.activity(n,time.Time{}),nil
- case "resource_get":return s.resource(args.Kind,args.ID)
+ case "project_overview":
+  var request struct{ProjectID string `json:"project_id"`}
+  if err:=json.Unmarshal(raw,&request);err!=nil{return nil,err}
+  return s.projectOverview(ctx,request.ProjectID)
+ case "resource_get":return s.resource(ctx,args.Kind,args.ID)
  case "resource_resolve":
   kind,id,err:=parseResourceReference(args.Reference)
   if err!=nil{return nil,err}
-  return s.resource(kind,id)
+  return s.resource(ctx,kind,id)
  case "approval_status":return s.privilegeStatus(args.ID)
  case "security_session_status":
   if s.privilegeClient==nil{return nil,errors.New("independent security service not configured")}
