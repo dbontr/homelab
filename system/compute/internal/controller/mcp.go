@@ -1067,52 +1067,58 @@ func (s *Server) callToolFor(who caller, name string, a map[string]any) (any, er
 	}
 	switch name {
 	case "git_repository_head":
-		if localName, ok := localRepoName(repository); ok {
-			if s.LocalGit == nil {
-				return nil, errors.New("local Git storage is not configured")
-			}
-			sha, err := s.LocalGit.Resolve(localName, get("ref"))
-			if err != nil {
-				return nil, err
-			}
-			return map[string]any{"repository": repository, "ref": get("ref"), "commit_sha": sha}, nil
-		}
-		sha, err := s.GitHub.Commit(repository, get("ref"))
-		if err != nil {
-			return nil, err
-		}
-		return map[string]any{"repository": repository, "ref": get("ref"), "commit_sha": sha}, nil
+  if name,ok:=localRepoName(repository);ok{
+   if s.LocalGit==nil{return nil,errors.New("local Git storage is not configured")}
+   sha,err:=s.LocalGit.Resolve(name,get("ref"))
+   if err!=nil{return nil,err}
+   return map[string]any{"repository":repository,"ref":get("ref"),"commit_sha":sha},nil
+  }
+  if _,ok:=gitLabRepoName(repository);ok{
+   if s.GitLab==nil{return nil,errors.New("GitLab is not configured")}
+   sha,err:=s.GitLab.Commit(repository,get("ref"))
+   if err!=nil{return nil,err}
+   return map[string]any{"repository":repository,"ref":get("ref"),"commit_sha":sha},nil
+  }
+  if strings.HasPrefix(repository,"gitlab:"){return nil,errors.New("invalid GitLab locator")}
+  sha,err:=s.GitHub.Commit(repository,get("ref"))
+  if err!=nil{return nil,err}
+  return map[string]any{"repository":repository,"ref":get("ref"),"commit_sha":sha},nil
 	case "git_read_file":
-		if localName, ok := localRepoName(repository); ok {
-			if s.LocalGit == nil {
-				return nil, errors.New("local Git storage is not configured")
-			}
-			return s.LocalGit.ReadFile(localName, get("ref"), get("path"))
-		}
-		sha, err := s.GitHub.Commit(repository, get("ref"))
-		if err != nil {
-			return nil, err
-		}
-		return s.GitHub.File(repository, get("path"), sha)
+  if name,ok:=localRepoName(repository);ok{
+   if s.LocalGit==nil{return nil,errors.New("local Git storage is not configured")}
+   return s.LocalGit.ReadFile(name,get("ref"),get("path"))
+  }
+  if _,ok:=gitLabRepoName(repository);ok{
+   if s.GitLab==nil{return nil,errors.New("GitLab is not configured")}
+   sha,err:=s.GitLab.Commit(repository,get("ref"))
+   if err!=nil{return nil,err}
+   return s.GitLab.File(repository,get("path"),sha)
+  }
+  if strings.HasPrefix(repository,"gitlab:"){return nil,errors.New("invalid GitLab locator")}
+  sha,err:=s.GitHub.Commit(repository,get("ref"))
+  if err!=nil{return nil,err}
+  return s.GitHub.File(repository,get("path"),sha)
 	case "git_publish_file":
-		if a["confirm"] != true {
-			return nil, errors.New("explicit Git publication confirmation required")
-		}
-		if localName, ok := localRepoName(repository); ok {
-			if s.LocalGit == nil {
-				return nil, errors.New("local Git storage is not configured")
-			}
-			return s.LocalGit.Publish(localName, get("ref"), get("path"), get("expected_head"),
-				get("body"), get("message"))
-		}
-		return s.GitHub.CommitKnowledgeDocument(repository, get("ref"), get("path"),
-			get("expected_head"), get("body"), get("message"))
+  if a["confirm"]!=true{return nil,errors.New("explicit Git publication confirmation required")}
+  if name,ok:=localRepoName(repository);ok{
+   if s.LocalGit==nil{return nil,errors.New("local Git storage is not configured")}
+   return s.LocalGit.Publish(name,get("ref"),get("path"),get("expected_head"),
+    get("body"),get("message"))
+  }
+  if _,ok:=gitLabRepoName(repository);ok{
+   if s.GitLab==nil{return nil,errors.New("GitLab is not configured")}
+   return s.GitLab.CommitKnowledgeDocument(repository,get("ref"),get("path"),
+    get("expected_head"),get("body"),get("message"))
+  }
+  if strings.HasPrefix(repository,"gitlab:"){return nil,errors.New("invalid GitLab locator")}
+  return s.GitHub.CommitKnowledgeDocument(repository,get("ref"),get("path"),
+   get("expected_head"),get("body"),get("message"))
 	case "git_checkout_repository":
 		return s.CheckoutArchive(project, workspace, repository, get("ref"))
 	}
-	if strings.HasPrefix(repository, "local:") {
-		return nil, errors.New("Git provider capability unavailable: local bare Git has no GitHub Issues, Pull Requests, Projects or account administration; use the git_* tools")
-	}
+	if strings.HasPrefix(repository,"local:")||strings.HasPrefix(repository,"gitlab:"){
+  return nil,errors.New("GitHub-specific operations require an explicitly linked GitHub repository; use the git_* tools for source access")
+ }
 	g := s.GitHub
 	switch name {
 	case "github_repository_api":
