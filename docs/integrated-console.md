@@ -11,6 +11,13 @@ treat local personal tasks as Workspace compute tasks.
   agenda. Update full task metadata using revision guards. A completion of a
   repeated task records a completed occurrence and creates a new
   due occurrence; it does not pretend an overdue task was completed.
+  Owners can request a consent-gated model breakdown for a recorded task. Only
+  its title and duration estimate are sent to the configured planning route.
+  The Tasks page displays the proposed steps and prerequisites without saving
+  them. A separate approval commits the complete subtask graph with the exact
+  parent revision. The Go owner-session allowlist requires an authenticated
+  same-origin session and CSRF token for both operations; stale, incomplete
+  and duplicate decompositions are rejected.
 - **Calendar:** Inspect rolling calendar occurrences and advisory timebox conflicts from local tasks and a read-only iCalendar feed. Common recurring patterns, exclusions and overridden instances are expanded; unsupported recurrence constructs are reported explicitly. Nothing writes back to an external calendar.
 - **Weekly planning:** Propose timeboxes using estimated task durations, priorities, prerequisites, existing reservations and configured daily capacity. Unplanned tasks retain reasons. No automatic task or calendar mutation occurs.
 - **Monitoring:** Inspect fixed Prometheus metrics and history, scrape targets, alerts and bounded Loki journal entries through a Go-owned read-only adapter. Unknown measurements are not represented as zero.
