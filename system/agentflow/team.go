@@ -24,6 +24,7 @@ type TeamMember struct {
  Key string `json:"key"`
  Role string `json:"role"`
  RunID string `json:"run_id"`
+ AllowedPaths []string `json:"allowed_paths"`
 }
 type TeamRecord struct {
  ID string `json:"id"`
@@ -37,6 +38,11 @@ type TeamRun struct {
  Role string `json:"role"`
  Run RunSummary `json:"run"`
 }
+type TeamArtifact struct {
+ Path string `json:"path"`
+ ArtifactID string `json:"artifact_id"`
+ Member string `json:"member"`
+}
 type TeamSummary struct {
  ID string `json:"id"`
  Project string `json:"project"`
@@ -44,6 +50,9 @@ type TeamSummary struct {
  Revision string `json:"revision"`
  Status Status `json:"status"`
  Members []TeamRun `json:"members"`
+ Artifacts []TeamArtifact `json:"artifacts,omitempty"`
+ Conflicts []string `json:"conflicts,omitempty"`
+ ReadyForReview bool `json:"ready_for_review"`
 }
 type TeamManager interface {
  SubmitTeam(TeamRequest)(TeamSummary,error)
@@ -97,7 +106,7 @@ func (e *Engine) SubmitTeam(req TeamRequest)(TeamSummary,error){
   w,err:=Compile(p)
   if err!=nil{return TeamSummary{},fmt.Errorf("invalid member %s: %w",task.Key,err)}
   children=append(children,w)
-  team.Members=append(team.Members,TeamMember{Key:task.Key,Role:task.Role,RunID:w.ID})
+  team.Members=append(team.Members,TeamMember{Key:task.Key,Role:task.Role,RunID:w.ID,AllowedPaths:append([]string(nil),task.AllowedPaths...)})
  }
  if err:=e.Store.createTeamBatch(team,children);err!=nil{return TeamSummary{},err}
  return e.GetTeam(id)
@@ -159,21 +168,60 @@ func (s *Store) teamIDs()([]string,error){
  sort.Strings(ids)
  return ids,nil
 }
+// GetTeam reconciles immutable output identities from independently verified
+// member workflows. No source is combined or published by this read operation.
 func (e *Engine) GetTeam(id string)(TeamSummary,error){
  if e==nil||e.Store==nil{return TeamSummary{},errors.New("engineering store unavailable")}
  record,err:=e.Store.readTeam(id);if err!=nil{return TeamSummary{},err}
  if !e.AllowedProjects[record.Project]{return TeamSummary{},errors.New("team project not authorized")}
  team:=TeamSummary{ID:id,Project:record.Project,Repository:record.Repository,Revision:record.Revision,Status:Succeeded}
+ seen:=map[string]string{}
+ failed,cancelled,running,pending:=false,false,false,false
  for _,member:=range record.Members{
   run,err:=e.Get(member.RunID);if err!=nil{return TeamSummary{},err}
   team.Members=append(team.Members,TeamRun{Key:member.Key,Role:member.Role,Run:run})
-  switch run.Status {
-  case Failed:team.Status=Failed
-  case Cancelled:if team.Status!=Failed{team.Status=Cancelled}
-  case Running:if team.Status!=Failed&&team.Status!=Cancelled{team.Status=Running}
-  case Pending:if team.Status==Succeeded{team.Status=Pending}
+  switch run.Status{
+  case Failed:failed=true
+  case Cancelled:cancelled=true
+  case Running:running=true
+  case Pending:pending=true
   }
+  if run.Status!=Succeeded{continue}
+  allowed:=map[string]bool{}
+  for _,name:=range member.AllowedPaths{allowed[name]=true}
+  found:=false
+  for _,step:=range run.Steps{
+   if step.Kind!="export"||step.Status!=Succeeded{continue}
+   found=true
+   var result struct{Artifacts map[string]string `json:"artifacts"`}
+   if err:=json.Unmarshal(step.Result,&result);err!=nil||len(result.Artifacts)==0{
+    team.Conflicts=append(team.Conflicts,member.Key+": missing verified artifacts")
+    break
+   }
+   for name,artifact:=range result.Artifacts{
+    if !validSourcePath(name)||sensitiveSourcePath(name)||!allowed[name]||!validID(artifact){
+     team.Conflicts=append(team.Conflicts,member.Key+": unauthorized or invalid artifact path")
+     continue
+    }
+    if owner,exists:=seen[name];exists{
+     team.Conflicts=append(team.Conflicts,owner+" and "+member.Key+": overlapping source "+name)
+     continue
+    }
+    seen[name]=member.Key
+    team.Artifacts=append(team.Artifacts,TeamArtifact{Path:name,ArtifactID:artifact,Member:member.Key})
+   }
+  }
+  if !found{team.Conflicts=append(team.Conflicts,member.Key+": export not completed")}
  }
+ switch {
+ case failed:team.Status=Failed
+ case cancelled:team.Status=Cancelled
+ case running:team.Status=Running
+ case pending:team.Status=Pending
+ }
+ sort.Slice(team.Artifacts,func(i,j int)bool{return team.Artifacts[i].Path<team.Artifacts[j].Path})
+ sort.Strings(team.Conflicts)
+ team.ReadyForReview=team.Status==Succeeded&&len(team.Artifacts)>0&&len(team.Conflicts)==0
  return team,nil
 }
 func (e *Engine) ListTeams()([]TeamSummary,error){
