@@ -57,6 +57,12 @@ For fixed-plan jobs, verification records the SHA-256 digest of every authored f
 
 Immediately before export, the engine checks the workspace file against the verified digest. Export responses may report either a top-level `artifact_id` or nested `artifact.id` metadata. In either case, the service obtains `artifact_info` from the authenticated compute controller and verifies the artifact ID, project ownership, and stored SHA-256 digest. An absent or mismatched artifact blocks draft publication.
 
+## Engineering compute leases and source identity
+
+The engineering program can declare `hardware` as a bounded map of `gpu` or `npu` to device counts, with at most two accelerators in a run. `min_gpu_memory_mb` requires a GPU allocation. `node_id` and `architecture` optionally select the exact approved worker and machine architecture. CPU quantities must be finite. These declarations are forwarded unchanged to the Compute controller during `workspace_create`, where image approval, resource capacity, device ownership and lease conflicts are checked atomically. The engineering daemon does not create hardware leases itself and does not grant access to external boards. The Rust console accepts these options in its engineering run form.
+
+Every engineering run records an immutable `inputs` manifest with the complete request SHA-256, pinned primary and read-only repository revisions, selected compute image and hardware constraints, exact verification commands and permitted edit paths. Supplied file contents are represented by SHA-256 fingerprints, not copied into the public run summary. The verified export step separately records artifact IDs after source readback and controller SHA-256 verification. Together these provide inspectable provenance; they do not imply reproducible machine output unless independent builds yield matching artifact hashes.
+
 ## Configuration
 
 The NixOS service is `services.homelabEngineering`. Its module is exported from the root flake. It is disabled by default and needs an exact compute MCP endpoint, a service-scoped compute token file, and a finite list of permitted project IDs. Source-model integration is optional; without it, runs must contain complete owner-supplied `changes`.

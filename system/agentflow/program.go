@@ -5,6 +5,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"crypto/sha256"
+	"math"
 	"fmt"
 	"path"
 	"regexp"
@@ -40,6 +42,10 @@ type Program struct {
 	Review bool `json:"review,omitempty"`
 	Checks          []string          `json:"checks"`
 	ImagePoolID     string            `json:"image_pool_id"`
+	Architecture    string            `json:"architecture,omitempty"`
+	NodeID          string            `json:"node_id,omitempty"`
+	Hardware        map[string]int    `json:"hardware,omitempty"`
+	MinGPUMemoryMB  int               `json:"min_gpu_memory_mb,omitempty"`
 	CPU             float64           `json:"cpu"`
 	MemoryMB        int               `json:"memory_mb"`
 	DurationMinutes int               `json:"duration_minutes"`
@@ -63,12 +69,21 @@ func (p Program) validate() error {
 		!commitName.MatchString(p.ExpectedHead) || p.Revision != p.ExpectedHead || !branchName.MatchString(p.BaseBranch) || strings.Contains(p.BaseBranch, "..") ||
 		strings.Contains(p.BaseBranch, "//") || strings.HasSuffix(p.BaseBranch, ".lock") ||
 		strings.TrimSpace(p.Objective) == "" || len(p.Objective) > 4096 ||
-		!validID(p.ImagePoolID) || p.CPU < 0.1 || p.CPU > 8 || p.MemoryMB < 256 || p.MemoryMB > 16384 ||
+		!validID(p.ImagePoolID) || math.IsNaN(p.CPU) || math.IsInf(p.CPU,0) || p.CPU < 0.1 || p.CPU > 8 || p.MemoryMB < 256 || p.MemoryMB > 16384 ||
 		p.DurationMinutes < 10 || p.DurationMinutes > 180 ||
 		len(p.Checks) == 0 || len(p.Checks) > 8 || len(p.Changes) > 16 ||
 		len(p.ContextPaths) > 16 || len(p.AllowedPaths) > 16 || len(p.Title) == 0 || len(p.Title) > 256 || len(p.Description) > 8192 {
 		return errors.New("invalid engineering program or resource limits")
 	}
+	if p.NodeID!=""&&!validID(p.NodeID) {return errors.New("invalid exact compute node")}
+	if p.Architecture!=""&&p.Architecture!="amd64"&&p.Architecture!="arm64" {return errors.New("invalid compute architecture")}
+	if len(p.Hardware)>2||p.MinGPUMemoryMB<0||p.MinGPUMemoryMB>1000000 {return errors.New("invalid accelerator request")}
+	totalDevices:=0
+	for kind,amount:=range p.Hardware {
+		if kind!="gpu"&&kind!="npu"||amount<0||amount>2 {return errors.New("engineering requires an approved GPU or NPU quantity")}
+		totalDevices+=amount
+	}
+	if totalDevices>2||p.MinGPUMemoryMB>0&&p.Hardware["gpu"]<1 {return errors.New("GPU memory requirement needs an explicit GPU lease")}
 	if len(p.LinkedRepositories) > 8 || (len(p.LinkedRepositories) > 0 && !p.Autonomous) {
 		return errors.New("linked repositories require a bounded autonomous run")
 	}
@@ -112,6 +127,43 @@ func (p Program) validate() error {
 	}
 	return nil
 }
+// EngineeringInputs identifies the selected sources and compute resources.
+// Verified output hashes and artifact identities remain in the run steps.
+type EngineeringInputs struct {
+	ProgramSHA256 string `json:"program_sha256"`
+	Primary RepositoryPin `json:"primary"`
+	Linked []RepositoryPin `json:"linked,omitempty"`
+	BaseBranch string `json:"base_branch"`
+	ImagePoolID string `json:"image_pool_id"`
+	Architecture string `json:"architecture,omitempty"`
+	NodeID string `json:"node_id,omitempty"`
+	Hardware map[string]int `json:"hardware,omitempty"`
+	MinGPUMemoryMB int `json:"min_gpu_memory_mb,omitempty"`
+	CPU float64 `json:"cpu"`
+	MemoryMB int `json:"memory_mb"`
+	Checks []string `json:"checks"`
+	AllowedPaths []string `json:"allowed_paths,omitempty"`
+	ChangeSHA256 map[string]string `json:"change_sha256,omitempty"`
+}
+
+func engineeringInputs(p Program)(EngineeringInputs,error){
+	encoded,err:=json.Marshal(p)
+	if err!=nil{return EngineeringInputs{},err}
+	sum:=sha256.Sum256(encoded)
+	contentDigests:=make(map[string]string,len(p.Changes))
+	for name,body:=range p.Changes {hash:=sha256.Sum256([]byte(body));contentDigests[name]=hex.EncodeToString(hash[:])}
+	hardware:=make(map[string]int,len(p.Hardware))
+	for kind,n:=range p.Hardware {if n>0 {hardware[kind]=n}}
+	return EngineeringInputs{
+		ProgramSHA256:hex.EncodeToString(sum[:]),Primary:RepositoryPin{Repository:p.Repository,Revision:p.Revision},
+		Linked:append([]RepositoryPin(nil),p.LinkedRepositories...),BaseBranch:p.BaseBranch,
+		ImagePoolID:p.ImagePoolID,Architecture:p.Architecture,NodeID:p.NodeID,
+		Hardware:hardware,MinGPUMemoryMB:p.MinGPUMemoryMB,CPU:p.CPU,MemoryMB:p.MemoryMB,
+		Checks:append([]string(nil),p.Checks...),AllowedPaths:append([]string(nil),p.AllowedPaths...),
+		ChangeSHA256:contentDigests,
+	},nil
+}
+
 func encodeStep(v any) json.RawMessage { raw, _ := json.Marshal(v); return raw }
 func generateProgramID() (string, error) {
 	var b [12]byte
@@ -125,6 +177,8 @@ func Compile(p Program) (Workflow, error) {
 	if err := p.validate(); err != nil {
 		return w, err
 	}
+	inputs,err:=engineeringInputs(p)
+	if err!=nil{return w,err}
 	if p.ID == "" {
 		id, err := generateProgramID()
 		if err != nil {
@@ -135,11 +189,13 @@ func Compile(p Program) (Workflow, error) {
 	if !validID(p.ID) {
 		return w, errors.New("invalid run ID")
 	}
-	w = Workflow{ID: p.ID, Project: p.Project, CreatedAt: time.Now().UTC(), Deadline: time.Now().UTC().Add(time.Duration(p.DurationMinutes)*time.Minute)}
+	w = Workflow{ID: p.ID, Project: p.Project, Inputs: &inputs, CreatedAt: time.Now().UTC(), Deadline: time.Now().UTC().Add(time.Duration(p.DurationMinutes)*time.Minute)}
 	add := func(id, kind string, depends []string, input any) {
 		w.Steps = append(w.Steps, Step{ID: id, Kind: kind, DependsOn: depends, Input: encodeStep(input), MaxAttempts: 1})
 	}
-	add("provision", "provision", nil, map[string]any{"image_pool_id": p.ImagePoolID, "cpu": p.CPU, "memory_mb": p.MemoryMB, "duration_minutes": p.DurationMinutes})
+	add("provision", "provision", nil, map[string]any{"image_pool_id": p.ImagePoolID, "cpu": p.CPU, "memory_mb": p.MemoryMB,
+		"duration_minutes": p.DurationMinutes, "hardware": p.Hardware, "min_gpu_memory_mb": p.MinGPUMemoryMB,
+		"architecture": p.Architecture, "node_id": p.NodeID})
 	add("checkout", "checkout", []string{"provision"}, map[string]any{"repository": p.Repository, "ref": p.Revision})
 	if p.Autonomous {
 		checkoutDependencies := []string{"checkout"}
@@ -205,10 +261,11 @@ type RunSummary struct {
 	Status    Status         `json:"status"`
 	Steps     []StepSummary  `json:"steps"`
 	Agent     *AgentProgress `json:"agent,omitempty"`
+	Inputs *EngineeringInputs `json:"inputs,omitempty"`
 }
 
 func Summarize(w Workflow) RunSummary {
-	out := RunSummary{ID: w.ID, Project: w.Project, Revision: w.Revision, Cancelled: w.Cancelled, Status: Pending, Deadline: w.Deadline, Cleanup: w.Cleanup}
+	out := RunSummary{ID: w.ID, Project: w.Project, Inputs:w.Inputs, Revision: w.Revision, Cancelled: w.Cancelled, Status: Pending, Deadline: w.Deadline, Cleanup: w.Cleanup}
 	out.Agent = publicAgentProgress(w.Agent)
 	allComplete := true
 	for _, step := range w.Steps {

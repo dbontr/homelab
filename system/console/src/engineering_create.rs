@@ -16,6 +16,10 @@ struct Draft {
     linked_repositories: String,
     checks: String,
     image_pool_id: String,
+    accelerator_request: String,
+    min_gpu_memory_mb: String,
+    compute_node: String,
+    architecture: String,
     knowledge: bool,
     review: bool,
     prepare_only: bool,
@@ -32,6 +36,10 @@ impl Default for Draft {
             linked_repositories: String::new(),
             checks: String::new(),
             image_pool_id: "debian-bookworm-slim".to_owned(),
+            accelerator_request: String::new(),
+            min_gpu_memory_mb: String::new(),
+            compute_node: String::new(),
+            architecture: String::new(),
             knowledge: false,
             review: true,
             prepare_only: false,
@@ -52,6 +60,30 @@ fn program(d: &Draft) -> Result<Value, String> {
         }
         linked.push(json!({"repository": repository, "revision": revision}));
     }
+    let mut hardware = serde_json::Map::new();
+    for entry in lines(&d.accelerator_request) {
+        let Some((kind, quantity)) = entry.split_once('=') else {
+            return Err("Accelerators require gpu=1 or npu=1, one per line.".to_owned());
+        };
+        if kind != "gpu" && kind != "npu" || hardware.contains_key(kind) {
+            return Err("Only unique GPU and NPU requests are available for engineering.".to_owned());
+        }
+        let count = quantity.trim().parse::<u64>()
+            .map_err(|_| "Accelerator quantities must be whole numbers.".to_owned())?;
+        if count == 0 || count > 2 {
+            return Err("Each accelerator quantity must be one or two.".to_owned());
+        }
+        hardware.insert(kind.to_owned(), json!(count));
+    }
+    if hardware.values().filter_map(Value::as_u64).sum::<u64>() > 2 {
+        return Err("A run may reserve at most two accelerators.".to_owned());
+    }
+    let gpu_memory = if d.min_gpu_memory_mb.trim().is_empty() { 0 }
+        else { d.min_gpu_memory_mb.trim().parse::<u64>()
+            .map_err(|_| "GPU memory must be a whole number of MiB.".to_owned())? };
+    if gpu_memory > 1_000_000 || gpu_memory > 0 && !hardware.contains_key("gpu") {
+        return Err("GPU memory requires a GPU request and must not exceed 1,000,000 MiB.".to_owned());
+    }
     let allowed = lines(&d.allowed_paths);
     let checks = lines(&d.checks);
     if d.project.is_empty() || d.repository.is_empty() || d.title.trim().is_empty() ||
@@ -67,6 +99,8 @@ fn program(d: &Draft) -> Result<Value, String> {
         "autonomous": true, "include_knowledge": d.knowledge,
         "review": d.review, "prepare_only": d.prepare_only,
         "image_pool_id": d.image_pool_id, "cpu": 1, "memory_mb": 2048,
+        "hardware": hardware, "min_gpu_memory_mb": gpu_memory,
+        "architecture": d.architecture, "node_id": d.compute_node,
         "duration_minutes": 45
     }))
 }
@@ -171,6 +205,41 @@ pub fn EngineeringCreate(csrf: String) -> Element {
                         value: "{draft().image_pool_id}", oninput: move |e| {
                             let mut d = draft(); d.image_pool_id = e.value(); draft.set(d);
                         }
+                    }
+                }
+                label { class: "form-row",
+                    span { class: "label", "Optional accelerator leases · gpu=1 or npu=1, one per line" }
+                    textarea { class: "field", rows: "2",
+                        value: "{draft().accelerator_request}", oninput: move |e| {
+                            let mut d = draft(); d.accelerator_request = e.value(); draft.set(d);
+                        }
+                    }
+                }
+                label { class: "form-row",
+                    span { class: "label", "Minimum GPU memory (MiB)" }
+                    input { class: "field", type: "number", min: "0", max: "1000000",
+                        value: "{draft().min_gpu_memory_mb}", oninput: move |e| {
+                            let mut d = draft(); d.min_gpu_memory_mb = e.value(); draft.set(d);
+                        }
+                    }
+                }
+                label { class: "form-row",
+                    span { class: "label", "Optional exact worker ID" }
+                    input { class: "field",
+                        value: "{draft().compute_node}", oninput: move |e| {
+                            let mut d = draft(); d.compute_node = e.value(); draft.set(d);
+                        }
+                    }
+                }
+                label { class: "form-row",
+                    span { class: "label", "Compute architecture" }
+                    select { class: "field", value: "{draft().architecture}",
+                        onchange: move |e| {
+                            let mut d = draft(); d.architecture = e.value(); draft.set(d);
+                        },
+                        option { value: "", "Select automatically" }
+                        option { value: "amd64", "AMD64" }
+                        option { value: "arm64", "ARM64" }
                     }
                 }
                 label { class: "form-row",
