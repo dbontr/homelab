@@ -1,8 +1,12 @@
-# Homelab
+# Eminence
 
-A self-hosted personal computing system managed through one source repository. Go implements its operations, MCP and native HTTP interfaces. Nix declares the operating environment. Every capability is available through the same assistant interface; an MCP client is optional.
+Eminence is a self-hosted, adaptive personal capability system. It increases the owner's intellectual independence and useful work output while removing low-value administrative burden. Its architecture and priorities evolve with the owner's goals. See [philosophy](docs/philosophy.md) and [skills](skills/README.md).
+
+The system is managed through one source repository. Go implements its operations, MCP and native HTTP interfaces. Nix declares the operating environment. Every capability is available through the same assistant interface; an MCP client is optional.
 
 ## Source layout
+
+- `skills/` contains portable Development, Writing, Teaching and Ideas skills for consistent assistant behavior and project workflows.
 
 - `system/` contains the entire Go application source: personal planning, research execution, computation, learning, health, media, credentials and integrations. Internal Go modules preserve independent build and failure boundaries, not separate user-facing products.
 - `infrastructure/` declares the hosts, networking, K3s, storage, media applications and operational environment.

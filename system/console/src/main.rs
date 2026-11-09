@@ -117,7 +117,7 @@ fn App() -> Element {
                     section { class: "card login-card",
                         div { class: "card-header",
                             div { class: "brand-mark", Icon { name: "compute".to_owned() } }
-                            h1 { class: "card-title", "Homelab Console" }
+                            h1 { class: "card-title", "Eminence" }
                             p { class: "card-description",
                                 "Sign in to view your computing and personal workspaces."
                             }
@@ -160,7 +160,7 @@ fn App() -> Element {
                                 button { class: "btn btn-primary", type: "submit", "Sign in" }
                             }
                             p { class: "login-footer",
-                                "Authentication stays within the trusted homelab service. No MCP token is stored in this browser."
+                                "Authentication stays within the trusted Eminence service. No MCP token is stored in this browser."
                             }
                         }
                     }
@@ -182,7 +182,7 @@ fn App() -> Element {
                                 Icon { name: "compute".to_owned() }
                             }
                             div {
-                                span { class: "brand-name", "Homelab" }
+                                span { class: "brand-name", "Eminence" }
                                 span { class: "brand-caption", "Personal computing" }
                             }
                         }
@@ -253,7 +253,7 @@ fn App() -> Element {
                                     Icon { name: "menu".to_owned() }
                                 }
                                 div { class: "crumbs",
-                                    span { "Homelab" }
+                                    span { "Eminence" }
                                     Icon { name: "chevron".to_owned() }
                                     span { class: "crumb-active", "{page().label()}" }
                                 }

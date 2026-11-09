@@ -1,4 +1,4 @@
-# Unified Console
+# Eminence Console
 
 The console is a single client for the personal computing platform. It does not own an independent backend or duplicate the platform's source-of-truth data.
 
