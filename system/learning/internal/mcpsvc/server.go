@@ -414,6 +414,22 @@ func NewService(db *store.Store) *Service {
 		}
 		return db.ListSources(limit)
 	}, false)
+	register(server, "preview_source_curriculum", "Preview a prerequisite-ordered curriculum from fully audited and reviewed source claims without awarding mastery.", func(in struct {
+		SourceID string `json:"source_id"`
+		Limit int `json:"limit,omitempty"`
+	}) (store.Value, error) {
+		if in.Limit == 0 { in.Limit = 80 }
+		return db.PreviewSourceCurriculum(in.SourceID, in.Limit)
+	}, false)
+	register(server, "import_source_curriculum", "Import a reviewed source curriculum as versioned concepts and prerequisites only after confirming its exact digest. No mastery is awarded.", func(in struct {
+		SourceID string `json:"source_id"`
+		Limit int `json:"limit,omitempty"`
+		ExpectedSHA256 string `json:"expected_sha256"`
+		Confirm bool `json:"confirm"`
+	}) (store.Value, error) {
+		if in.Limit == 0 { in.Limit = 80 }
+		return db.ImportSourceCurriculum(in.SourceID, in.Limit, in.ExpectedSHA256, in.Confirm)
+	}, false)
 	register(server, "next_extraction", "Retrieve the next uncovered source span or a pending identity audit.", func(in struct {
 		SourceID string `json:"source_id"`
 	}) (store.Value, error) {
