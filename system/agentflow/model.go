@@ -21,6 +21,7 @@ type ModelAuthor struct {
 	Endpoint string
 	Model    string
 	Token    string
+ TokenSource func()(string,error)
 	Client   *http.Client
 }
 
@@ -185,9 +186,16 @@ func (m *ModelAuthor) completeJSON(ctx context.Context, system, user string) (st
 		return "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	if m.Token != "" {
-		req.Header.Set("Authorization", "Bearer "+m.Token)
-	}
+ token:=m.Token
+ if m.TokenSource!=nil{
+  if token!=""{return "",errors.New("conflicting model credential sources")}
+  var err error
+  token,err=m.TokenSource()
+  if err!=nil||len(token)<20||strings.ContainsAny(token,"\x00\r\n\t "){
+   return "",errors.New("model credential unavailable")
+  }
+ }
+ if token!=""{req.Header.Set("Authorization","Bearer "+token)}
 	res, err := m.Client.Do(req)
 	if err != nil {
 		return "", errors.New("engineering model unavailable")
