@@ -63,7 +63,9 @@ func (p *EmbeddingProvider) Embed(ctx context.Context,text string)([]float64,err
    Embedding []float64 `json:"embedding"`
   } `json:"data"`
  }
- decoder:=json.NewDecoder(io.LimitReader(response.Body,256<<10))
+ encoded,err:=io.ReadAll(io.LimitReader(response.Body,(256<<10)+1))
+ if err!=nil||len(encoded)>256<<10{return nil,errors.New("embedding provider response exceeds bound")}
+ decoder:=json.NewDecoder(bytes.NewReader(encoded))
  if err:=decoder.Decode(&reply);err!=nil{return nil,errors.New("invalid embedding provider response")}
  if err:=decoder.Decode(new(any));err!=io.EOF{return nil,errors.New("embedding response has trailing content")}
  if len(reply.Data)!=1||reply.Data[0].Index!=0||(reply.Model!=""&&reply.Model!=p.Model){
