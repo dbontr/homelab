@@ -4,6 +4,7 @@ use serde_json::Value;
 use crate::api;
 use crate::engineering_orchestration::{TeamCreate, DependencyGraph, TeamIntegration};
 use crate::engineering_knowledge::KnowledgeApproval;
+use crate::engineering_diff::SourcePreviews;
 use crate::components::{Badge, Card, Empty, Heading, Icon, Loading, Notice};
 
 fn as_items(value: &Value, key: &str) -> Vec<Value> {
@@ -107,6 +108,7 @@ fn RunDetail(run: Value, csrf: String) -> Element {
                 if let Some(cleanup) = run.get("cleanup") {
                     p { class:"muted", "Workspace cleanup: {text(cleanup, "status")}" }
                 }
+                SourcePreviews { run_id:text(&run,"id") }
                 h3 { "Execution and verification" }
                 div { class: "table-clip",
                     table { class: "table",
