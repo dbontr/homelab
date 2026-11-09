@@ -88,4 +88,5 @@ done
 for package in homelab-platform homelab-engineering homelab-security homelab-executor homelab-fleet; do
   nix --extra-experimental-features 'nix-command flakes' build --offline --no-link ".#packages.x86_64-linux.$package"
 done
+bash "$root/scripts/tests/verify-release-test.sh"
 printf '%s\n' 'All local source checks succeeded. No NixOS configuration was activated.'

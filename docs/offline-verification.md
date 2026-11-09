@@ -16,7 +16,7 @@ Runs tests, race detection and vet in the Go platform with network module downlo
 ./scripts/verify-offline.sh --all
 ```
 
-Runs the checks for the imported Compute, Learning and Health Go modules using their declared toolchain versions, evaluates all enrolled NixOS configurations, and builds the platform package without activating it. Required Go compilers, Nix inputs and module dependencies must already be cached.
+Runs Go tests, race detection, vet and builds for all four Go modules; Rust formatting, offline tests and WebAssembly type checks; Helm lint and render safety checks; Nix flake evaluation for all enrolled hosts; and local builds of the platform, engineering, security, executor and fleet packages. It also executes the standalone release-integrity regression suite. Required Go compilers, Nix inputs and module dependencies must already be cached.
 
 A successful core check is not evidence that all modules build. Successful Nix evaluation does not establish operational readiness or hardware access.
 
@@ -29,4 +29,4 @@ A successful core check is not evidence that all modules build. Successful Nix e
 - Accounts: validate allowlisted OAuth providers, PKCE and one-time callback state without displaying authorization codes, private verifiers or access tokens.
 - Failure: test unavailable integration backends and report errors rather than unverified success. Bound the size and duration of SSH inspection output without installing anything on the remote host.
 
-Build profiles are saved definitions, not permission to run a command. The security package provides reusable authorization contracts but no configured production credential broker or cluster executor. The credential library supplies encrypted, owner-only file storage and mock-tested OAuth token exchange. A local owner passphrase verifier and owner-only Unix-socket grant issuer are available for an independent operator process, with mock-only acceptance tests. Operational integration still requires an installed privileged executor process, secure owner-side UI, protected IPC between the user interface and executor, hardware-identity verification at execution, and independent release approval.
+Build profiles are saved definitions, not permission to run a command. The repository includes an independent owner security service, protected credential vault and OAuth broker, bounded privilege executor, fleet release coordinator, and owner-authenticated administrative interface. These source implementations require the verification above and explicit deployment configuration before they can be accepted as operational controls. The verifier does not connect to real vendor accounts, validate hardware identity on running hosts, establish uninterrupted media availability, or certify production recovery. Those require separately recorded live acceptance.
