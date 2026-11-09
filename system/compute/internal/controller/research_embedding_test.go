@@ -45,6 +45,9 @@ func TestSemanticResearchProjectScopeAndImmutableEvidence(t *testing.T){
  }
  unlinked,err:=db.SemanticResearch("unlinked","encoder-1",a,10)
  if err!=nil||len(unlinked)!=0{t.Fatalf("private library escaped project: %+v %v",unlinked,err)}
+ if err:=db.exec("UPDATE research_passages SET body=? WHERE id=?","tampered",first);err!=nil{t.Fatal(err)}
+ if _,err:=db.SemanticResearch("demo","encoder-1",a,10);err==nil{t.Fatal("tampered source text surfaced in semantic search")}
+ if err:=db.exec("UPDATE research_passages SET body=? WHERE id=?","The first vector is about harmonic analysis.",first);err!=nil{t.Fatal(err)}
  if _,err:=db.IngestResearchPassages("semantic",id,"replace",1,[]ResearchPassageInput{{Ordinal:1,Text:"New scientific knowledge"}});err!=nil{t.Fatal(err)}
  previous,err:=db.SemanticResearch("demo","encoder-1",a,10)
  if err!=nil||len(previous)!=0{t.Fatalf("superseded embeddings surfaced: %+v %v",previous,err)}

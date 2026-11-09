@@ -77,7 +77,7 @@ func (db *Database) SemanticResearch(project,model string,query []float64,limit 
  if err!=nil{return nil,err}
  rows,err:=db.query(`SELECT p.id,p.source,s.library,s.title,s.origin_kind,
     s.origin_name,s.origin_revision,s.origin_digest,s.origin_path,p.epoch,
-    p.ordinal,p.page,p.section,p.line_start,p.line_end,p.body_sha256,
+    p.ordinal,p.page,p.section,p.line_start,p.line_end,p.body_sha256,p.body,
     substr(p.body,1,1200) AS excerpt,e.vector,e.dimension,e.body_sha256 AS vector_digest
     FROM research_embeddings e
     JOIN research_passages p ON p.id=e.passage AND p.epoch=e.epoch
@@ -89,6 +89,10 @@ func (db *Database) SemanticResearch(project,model string,query []float64,limit 
  if len(rows)>maxSemanticCandidates{return nil,errors.New("semantic index exceeds bounded scan capacity")}
  result:=make([]map[string]any,0,len(rows))
  for _,row:=range rows{
+  if checksum([]byte(asString(row["body"])))!=asString(row["body_sha256"]){
+   return nil,errors.New("stored passage checksum mismatch")
+  }
+  delete(row,"body")
   var candidate []float64
   if err:=json.Unmarshal([]byte(asString(row["vector"])),&candidate);err!=nil{
    return nil,errors.New("stored embedding cannot be decoded")

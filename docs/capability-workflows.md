@@ -74,6 +74,14 @@ be implemented before the store reaches its 1,000-record limit.
 
 A personal task may link an engineering run using `homelab:engineering_run:<run-id>` in its `links` list (supported by the native Task API and MCP `task_add`). The derived `/v1/tasks/delegations` view and `task_delegations` tool read run status from the independent engineering service. They report completion candidates, failed or cancelled runs, unresolved references, and mismatched project links without mutating task status or fabricating successful work. The Rust weekly planner displays these observations separately from ordinary deadlines and estimates. The view remains usable when Engineering is offline, but reports its evidence as unavailable.
 
+## Planning and semantic retrieval
+
+The model proposal endpoint `POST /v1/workflows/plan` and MCP `workflow_plan` accept a project, objective, and explicit personal-read scope. An independently configured HTTPS or loopback model proposes up to 12 read stages. The platform validates identity, actions, dependencies, limits, and privacy scopes without executing the plan. The owner must explicitly submit the plan through the existing workflow API. The model never receives administrator credentials or arbitrary project content.
+
+Research indexes may attach immutable dense vectors to indexed passages through the root-authorized `research_embedding_put` tool. The same encoder model must generate both document and query vectors. `research_semantic_search` compares query vectors only with currently active passages in project-linked libraries and returns source citations with cosine similarity. Search is bounded to 2,000 candidate embeddings. The system does not infer embeddings automatically, and stale or mismatched source epochs are excluded.
+
+The engineering agent can request read-only `go_semantics` analysis, which performs Go AST parsing and local type checking. An analysis involving unresolved repository imports is marked partial. This does not replace integration builds, compiler checks for all module dependencies, or the owner-approved test suite.
+
 ## Scope and acceptance
 
 This implementation provides autonomous *execution* of an explicitly
