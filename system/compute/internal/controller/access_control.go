@@ -60,7 +60,7 @@ var readableTools = map[string]bool{
 	"knowledge_git_read":  true,
 	"git_repository_head": true, "git_read_file": true,
 	"list_project_jobs": true, "list_github_repositories": true,
-	"task_claim_list": true, "task_claim_status": true, "resource_plan": true,
+	"task_claim_list": true, "task_claim_status": true, "resource_plan": true, "resource_plan_batch": true,
 	"workspace_list": true, "workspace_operation": true,
 	"environment_list": true, "workspace_snapshot_list": true, "workspace_checkpoint_stop_status": true,
 	"list_project_artifacts": true, "artifact_info": true, "artifact_read_base64": true, "artifact_view_image": true,
@@ -190,7 +190,7 @@ func (s *Server) authorizeREST(r *http.Request, p []string, who caller) bool {
 		if r.Method != http.MethodGet {
 			needed = 2
 		}
-		if len(p) == 4 && p[3] == "resource-plan" && r.Method == http.MethodPost {
+		if len(p) >= 4 && p[3] == "resource-plan" && r.Method == http.MethodPost {
 			needed = 1
 		}
 		if len(p) == 6 && p[3] == "libraries" && p[5] == "documents" &&
