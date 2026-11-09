@@ -35,7 +35,7 @@ A service backend address is fixed at process startup and must be a numeric loop
 | Domain service runtime | Its clients receive an explicit unavailable response; no interface becomes the new domain writer |
 | Monitoring services | Existing work continues but its telemetry views become unavailable |
 
-The Go core runtime in `services/core/` owns the internal MCP dispatcher and native route implementations. The independent listeners isolate external lifecycles and credentials, not yet every package dependency. Domain handlers can be moved into their respective service modules by preserving their internal contracts and changing one call site at a time. Such moves must retain compatibility with persisted records and existing owner-session behavior.
+The Go core runtime in `services/core/` owns the internal MCP dispatcher and authenticated router. The `services/core/internal/personal/` package registers task, goal, rule, recommendation and weekly-report routes against the canonical personal state store. This separates the personal HTTP contract from the transport dispatcher without creating another database writer. Other domain routes remain under the core transport until they have equivalent service-owned contracts. The independent listeners isolate external lifecycles and credentials, not yet every package dependency. Domain handlers can be moved into their respective service modules by preserving their internal contracts and changing one call site at a time. Such moves must retain compatibility with persisted records and existing owner-session behavior.
 
 ## Source verification
 
