@@ -8,6 +8,17 @@ import (
  "time"
 )
 
+// A date-only due value remains actionable through the end of the owner's
+// local calendar day, including days with daylight-saving transitions.
+func taskDeadline(due string, zone *time.Location) (time.Time, error) {
+ if len(due) == len("2006-01-02") {
+  day, err := time.ParseInLocation("2006-01-02", due, zone)
+  if err != nil { return time.Time{}, err }
+  return day.AddDate(0, 0, 1), nil
+ }
+ return time.Parse(time.RFC3339, due)
+}
+
 // Recurrence is deliberately finite and calendar-based. The weekday form
 // accepts "weekly:mon" through "weekly:sun".
 func validRecurrence(rule string) bool {
