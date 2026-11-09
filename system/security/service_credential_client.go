@@ -74,3 +74,18 @@ func(c *RemoteAuthorizationClient)TokenSource(alias string)(func()(string,error)
   return c.ServiceCredential(ctx,alias)
  },nil
 }
+
+// NewVaultClientFromEnv reads only trusted process configuration. The caller
+// decides whether a provider credential alias is required for its operation.
+func NewVaultClientFromEnv(prefix string)(*RemoteAuthorizationClient,error){
+ if !serviceAlias.MatchString(prefix)||strings.ToUpper(prefix)!=prefix{
+  return nil,errors.New("invalid vault environment prefix")
+ }
+ variable:=func(suffix string)string{return os.Getenv(prefix+"_VAULT_"+suffix)}
+ endpoint,server:=variable("URL"),variable("SERVER_NAME")
+ ca,cert,key:=variable("CA_FILE"),variable("CLIENT_CERT_FILE"),variable("CLIENT_KEY_FILE")
+ if endpoint==""&&server==""&&ca==""&&cert==""&&key==""{
+  return nil,nil
+ }
+ return NewVaultClientFromFiles(endpoint,server,ca,cert,key)
+}
