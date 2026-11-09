@@ -2,6 +2,7 @@ package store
 
 import (
  "errors"
+ "os"
  "strings"
  "time"
 )
@@ -34,7 +35,7 @@ func (s *Store) DecomposeTask(parentID string,expectedRevision int,steps []TaskS
  s.mu.Lock()
  defer s.mu.Unlock()
  parent,ok:=s.data.Tasks[parentID]
- if !ok{return TaskDecomposition{},ErrTaskRevision}
+ if !ok{return TaskDecomposition{},os.ErrNotExist}
  if parent.Status!="open"||parent.Revision!=expectedRevision{
   return TaskDecomposition{},ErrTaskRevision
  }
