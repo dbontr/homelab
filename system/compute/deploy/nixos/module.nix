@@ -166,11 +166,11 @@ let
   });
 in {
   options.services.workspaceMcp = {
-    enable = lib.mkEnableOption "upstream Workspace Kubernetes deployments";
+    enable = lib.mkEnableOption "source-owned Compute Kubernetes deployments";
     chart = lib.mkOption {
       type = lib.types.path;
       default = ../helm/project-workspace;
-      description = "Helm chart distributed with Workspace MCP.";
+      description = "Local source-owned Compute controller and worker Helm chart.";
     };
     controllerImage = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
