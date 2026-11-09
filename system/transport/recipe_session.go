@@ -40,7 +40,7 @@ func (s *Server) sessionOwnerWriteAllowed(r *http.Request) bool {
     case r.Method == http.MethodPost && strings.HasPrefix(path, "/v1/health/food-proposals/"):
         allowed = len(strings.Split(path, "/")) == 6 && strings.HasSuffix(path, "/confirm")
     case r.Method == http.MethodPost && strings.HasPrefix(path, "/v1/recipes/"):
-        allowed = len(strings.Split(path, "/")) == 5 && (strings.HasSuffix(path, "/nutrition-proposal") || strings.HasSuffix(path, "/restore"))
+        allowed = len(strings.Split(path, "/")) == 5 && (strings.HasSuffix(path, "/nutrition-proposal") || strings.HasSuffix(path, "/restore") || strings.HasSuffix(path, "/usda-preview") || strings.HasSuffix(path, "/usda-apply"))
     case r.Method == http.MethodPost && strings.HasPrefix(path, "/v1/tasks/"):
         allowed = len(strings.Split(path, "/")) == 5 && strings.HasSuffix(path, "/complete")
     case r.Method == http.MethodPut && strings.HasPrefix(path, "/v1/groceries/items/"):

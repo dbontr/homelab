@@ -2,6 +2,7 @@ mod api;
 mod components;
 mod recipes;
 mod pantry;
+mod usda_nutrition;
 mod tasks;
 mod personal;
 mod views;

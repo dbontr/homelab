@@ -148,6 +148,8 @@ func(s *Server) Handler()http.Handler{
  mux.HandleFunc("GET /v1/recipes/{id}",s.recipeItem)
  mux.HandleFunc("PUT /v1/recipes/{id}",s.recipeItem)
  mux.HandleFunc("DELETE /v1/recipes/{id}",s.recipeItem)
+ mux.HandleFunc("POST /v1/recipes/{id}/usda-preview",s.recipeUSDAHTTP)
+ mux.HandleFunc("POST /v1/recipes/{id}/usda-apply",s.recipeUSDAHTTP)
  mux.HandleFunc("GET /v1/recipes/{id}/nutrition",s.recipeNutrition)
  mux.HandleFunc("GET /v1/recipes/{id}/history",s.recipeHistory)
  mux.HandleFunc("POST /v1/recipes/{id}/restore",s.recipeRestore)
@@ -449,6 +451,8 @@ func(s *Server)localTools()[]map[string]any{
   tool("recipe_groceries","Consolidate meal-plan ingredients by name and unit",map[string]any{"start":prop("string"),"end":prop("string")}),
   tool("recipe_grocery_needs","Estimate meal-plan grocery quantities after recorded pantry supplies; read-only",map[string]any{"start":prop("string"),"end":prop("string")}),
   tool("recipe_nutrition_preview","Preview reported or estimated recipe nutrients without logging consumption",map[string]any{"id":prop("string"),"servings":prop("number")},"id","servings"),
+  tool("recipe_usda_preview","Estimate complete nutrients for owner-reviewed USDA food IDs and edible gram amounts without writing records",map[string]any{"id":prop("string"),"expected_revision":prop("integer"),"ingredients":map[string]any{"type":"array","items":prop("object")}},"id","expected_revision","ingredients"),
+  tool("recipe_usda_apply","Save an exact digest-confirmed USDA nutrient estimate as a revisioned recipe, without logging consumption",map[string]any{"id":prop("string"),"expected_revision":prop("integer"),"ingredients":map[string]any{"type":"array","items":prop("object")},"expected_sha256":prop("string"),"confirm":prop("boolean")},"id","expected_revision","ingredients","expected_sha256","confirm"),
   tool("recipe_pantry_list","List recorded pantry inventory and revision without inferring unrecorded stock",map[string]any{}),
   tool("recipe_pantry_set","Store a pantry quantity with revision-checked updates",map[string]any{"item":prop("object"),"expected_revision":prop("integer")},"item","expected_revision"),
   tool("recipe_pantry_remove","Remove a pantry entry using an exact revision",map[string]any{"key":prop("string"),"expected_revision":prop("integer")},"key","expected_revision"),

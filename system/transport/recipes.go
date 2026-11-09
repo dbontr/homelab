@@ -117,6 +117,14 @@ func (s *Server) recipeGroceries(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) recipeTool(ctx context.Context, name string, raw json.RawMessage) (any, error) {
 	if s.recipes == nil { return nil, errors.New("recipes are not configured") }
+ if name=="recipe_usda_preview"||name=="recipe_usda_apply"{
+  var selection struct{
+   ID string `json:"id"`
+   USDARecipeRequest
+  }
+  if err:=json.Unmarshal(raw,&selection);err!=nil{return nil,err}
+  return s.recipeUSDATool(ctx,selection.ID,selection.USDARecipeRequest,name=="recipe_usda_apply")
+ }
 	var input struct {
 		ID       string         `json:"id"`
 		Query    string         `json:"query"`
