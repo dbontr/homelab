@@ -481,3 +481,19 @@ main.content { max-width: 94rem; margin: 0 auto; padding: 2rem; }
 .activity-link { display: grid; gap: .15rem; padding: .5rem 0; border-bottom: 1px solid var(--border); }
 .activity-link:last-child { border-bottom: 0; }
 @media (max-width: 900px) { .activity-layout { grid-template-columns: 1fr; } }
+
+/* Engineering workflow graph and review */
+.engineering-graph { display: grid; grid-template-columns: repeat(auto-fit,minmax(12rem,1fr)); gap: .625rem; margin: .75rem 0; }
+.engineering-graph-node { display: grid; gap: .4rem; text-align: left; color: var(--foreground); background: var(--card);
+  border: 1px solid var(--border); border-radius: var(--radius); padding: .75rem; cursor: pointer; min-height: 7rem; }
+.engineering-graph-node:hover,.engineering-graph-node:focus-visible,.engineering-graph-node[aria-pressed="true"] { border-color: var(--ring); background: var(--accent); outline-offset: .15rem; }
+.engineering-graph-role { font-weight: 600; }
+.engineering-graph-key { font-family: ui-monospace,SFMono-Regular,Consolas,monospace; font-size: .8rem; }
+.engineering-graph-deps,.engineering-graph-state { color: var(--muted-foreground); font-size: .82rem; }
+.engineering-graph-detail { display: grid; gap: .3rem; background: var(--muted); border-radius: var(--radius); padding: .75rem; }
+.engineering-activity { display: grid; gap: .45rem; padding-inline-start: 1.5rem; max-height: 22rem; overflow: auto; }
+.engineering-activity li { border-bottom: 1px solid var(--border); padding: .5rem .25rem; }
+.engineering-activity li p { margin-top: .25rem; }
+.engineering-knowledge-item { border: 1px solid var(--border); border-radius: var(--radius); padding: .65rem; }
+.engineering-knowledge-item summary { display: flex; justify-content: space-between; gap: .75rem; cursor: pointer; }
+.engineering-knowledge-item .mono { overflow-wrap: anywhere; }
