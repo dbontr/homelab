@@ -77,9 +77,9 @@ fn RunDetail(run: Value, csrf: String) -> Element {
                         ol { class: "engineering-activity",
                             for event in activity {
                                 li {
-                                    strong { "{text(&event, \"action\")}" }
-                                    span { class:"muted", "{text(&event, \"target\")}" }
-                                    p { class:"muted", "{text(&event, \"reason\")}" }
+                                    strong { "{text(&event, "action")}" }
+                                    span { class:"muted", "{text(&event, "target")}" }
+                                    p { class:"muted", "{text(&event, "reason")}" }
                                 }
                             }
                         }
@@ -88,9 +88,9 @@ fn RunDetail(run: Value, csrf: String) -> Element {
                         h3 { "Verification diagnostics" }
                         for diagnostic in diagnostics {
                             div { class:"inline-row",
-                                span { class:"mono", "{text(&diagnostic, \"command\")}" }
+                                span { class:"mono", "{text(&diagnostic, "command")}" }
                                 Badge { text:text(&diagnostic,"category") }
-                                span { class:"muted", "Exit: {text(&diagnostic, \"exit_code\")}" }
+                                span { class:"muted", "Exit: {text(&diagnostic, "exit_code")}" }
                             }
                         }
                     }
@@ -105,7 +105,7 @@ fn RunDetail(run: Value, csrf: String) -> Element {
                     }
                 }
                 if let Some(cleanup) = run.get("cleanup") {
-                    p { class:"muted", "Workspace cleanup: {text(cleanup, \"status\")}" }
+                    p { class:"muted", "Workspace cleanup: {text(cleanup, "status")}" }
                 }
                 h3 { "Execution and verification" }
                 div { class: "table-clip",
