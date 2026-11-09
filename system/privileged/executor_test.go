@@ -83,3 +83,32 @@ func TestExecutorSocketRequiresOwnerAssertion(t *testing.T){
  executor.Handler().ServeHTTP(w,r)
  if w.Code!=http.StatusForbidden||auth.calls!=0{t.Fatal("unsigned owner call accepted")}
 }
+
+
+func TestPrivilegedExecutionRequiresJournalEvenWithOwnerApproval(t *testing.T){
+ auth:=&fakeAuth{decision:security.Authorization{Allowed:true}}
+ runner:=0
+ cfg:=Config{
+  Host:"jupiter",Systemctl:"/usr/bin/systemctl",
+  AllowedServices:[]string{"eminence.service"},
+  Auth:auth,Releases:&fakeRelease{},
+  Run:func(context.Context,string,...string)error{runner++;return nil},
+ }
+ if _,err:=New(cfg);err==nil{
+  t.Fatal("constructor accepted privileged execution without private audit custody")
+ }
+ executor:=&Executor{cfg:cfg}
+ decision,err:=executor.Execute(context.Background(),"infrastructure__service_restart","jupiter",
+  json.RawMessage(`{"host":"jupiter","service":"eminence.service"}`))
+ if err==nil||decision.Allowed||auth.calls!=0||runner!=0{
+  t.Fatalf("audit bypassed in an incompletely constructed executor: %v %v",decision,err)
+ }
+ cfg.Audit=testExecutorAudit(t)
+ executor,err=New(cfg)
+ if err!=nil{t.Fatal(err)}
+ decision,err=executor.Execute(context.Background(),"infrastructure__service_restart","jupiter",
+  json.RawMessage(`{"host":"jupiter","service":"eminence.service"}`))
+ if err!=nil||!decision.Allowed||auth.calls!=1||runner!=1{
+  t.Fatalf("audited execution did not proceed: %v %v",decision,err)
+ }
+}
