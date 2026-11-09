@@ -16,6 +16,7 @@ controller:
   nodeSelector: {}
   githubPATSecretName: ""
   gitlabPATSecretName: ""
+  gitlabAPIURL: "https://gitlab.com/api/v4"
   access:
     issuer: ""
     audience: ""
