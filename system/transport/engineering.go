@@ -65,6 +65,15 @@ func (s *Server) engineeringTeam(w http.ResponseWriter,r *http.Request){
  if err!=nil{writeError(w,404,"engineering team not found");return}
  writeJSON(w,200,team)
 }
+func (s *Server) engineeringTeamIntegrate(w http.ResponseWriter,r *http.Request){
+ teams,ok:=s.engineering.(agentflow.TeamManager)
+ if !ok{writeError(w,503,"engineering teams unavailable");return}
+ var request agentflow.TeamIntegrationRequest
+ if err:=decode(r,&request);err!=nil{writeError(w,400,"invalid integration request");return}
+ team,err:=teams.IntegrateTeam(r.PathValue("id"),request)
+ if err!=nil{writeError(w,409,"team integration unavailable");return}
+ writeJSON(w,202,team)
+}
 func (s *Server) engineeringTool(_ context.Context,name string,raw json.RawMessage)(any,error){
  if s.engineering==nil{return nil,errors.New("engineering runs unavailable")}
  switch name{
@@ -91,6 +100,14 @@ func (s *Server) engineeringTool(_ context.Context,name string,raw json.RawMessa
   var req struct{ID string `json:"id"`}
   if err:=json.Unmarshal(raw,&req);err!=nil{return nil,err}
   return teams.GetTeam(req.ID)
+ case "engineering_team_integrate":
+  teams,ok:=s.engineering.(agentflow.TeamManager);if !ok{return nil,errors.New("engineering teams unavailable")}
+  var req struct{
+   ID string `json:"id"`
+   agentflow.TeamIntegrationRequest
+  }
+  if err:=json.Unmarshal(raw,&req);err!=nil{return nil,err}
+  return teams.IntegrateTeam(req.ID,req.TeamIntegrationRequest)
  case "engineering_team_cancel":
   teams,ok:=s.engineering.(agentflow.TeamManager);if !ok{return nil,errors.New("engineering teams unavailable")}
   var req struct{ID string `json:"id"`}
