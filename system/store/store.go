@@ -24,6 +24,7 @@ type Task struct {
  Links []string `json:"links,omitempty"`
  ParentID string `json:"parent_id,omitempty"`
  DependsOn []string `json:"depends_on,omitempty"`
+ Decomposed bool `json:"decomposed,omitempty"`
  Due string `json:"due,omitempty"`
  Scheduled string `json:"scheduled,omitempty"`
  Recurrence string `json:"recurrence,omitempty"`
@@ -194,6 +195,13 @@ func (s *Store) completeTask(key string,expectedRevision int,receiptKey string)(
   return Task{},errors.New("task revision conflict or task already completed")
  }
  if t.Status=="completed"{return t,nil}
+ if t.Decomposed {
+  for _,child:=range s.data.Tasks{
+   if child.ParentID==key && child.Status!="completed"{
+    return Task{},ErrTaskChildrenIncomplete
+   }
+  }
+ }
  now:=time.Now().UTC()
  next:=clone(s.data)
  t.Status="completed";t.CompletedAt=&now;t.Revision++
@@ -204,7 +212,7 @@ func (s *Store) completeTask(key string,expectedRevision int,receiptKey string)(
   following:=t
   following.ID,err=id();if err!=nil{return Task{},err}
   following.Status="open";following.CompletedAt=nil;following.CreatedAt=now
-  following.Revision=1;following.Due=due
+  following.Revision=1;following.Due=due;following.Decomposed=false
   if t.Scheduled!="" {
    following.Scheduled,err=nextRecurringTime(t.Scheduled,t.Recurrence,now,s.zone)
    if err!=nil{return Task{},err}
@@ -228,7 +236,7 @@ func (s *Store) Suggest(minutes int,energy,location,mode string,limit int)[]Task
  completed:=map[string]bool{}
  for _,task:=range tasks{if task.Status=="completed"{completed[task.ID]=true}}
  for _,t:=range tasks{
-  if t.Status!="open"{continue}
+  if t.Status!="open"||t.Decomposed{continue}
   blocked:=false
   for _,dependency:=range t.DependsOn{if !completed[dependency]{blocked=true;break}}
   if blocked{continue}
