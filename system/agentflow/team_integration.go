@@ -76,7 +76,7 @@ func (e *Engine) IntegrateTeam(id string, request TeamIntegrationRequest) (TeamS
 			Path: file.Path, ArtifactID: file.ArtifactID, SHA256: expected,
 		})
 	}
-	if len(manifest) == 0 || len(manifest) > 32 {
+	if len(manifest) == 0 || len(manifest) > 16 {
 		return TeamSummary{}, errors.New("invalid integration artifact count")
 	}
 	sort.Slice(manifest, func(i, j int) bool { return manifest[i].Path < manifest[j].Path })
@@ -219,7 +219,7 @@ func integrationFileMap(files []IntegrationArtifact) (map[string]string, error) 
 		}
 		changes[artifact.Path] = artifact.ArtifactID
 	}
-	if len(changes) == 0 || len(changes) > 32 {
+	if len(changes) == 0 || len(changes) > 16 {
 		return nil, errors.New("invalid integration change set")
 	}
 	return changes, nil
