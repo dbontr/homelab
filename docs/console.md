@@ -1,4 +1,4 @@
-# Eminence Console
+# Homelab Console
 
 The console is a single client for the personal computing platform. It does not own an independent backend or duplicate the platform's source-of-truth data.
 
@@ -70,7 +70,7 @@ Component appearance is not authorization. All enforcement takes place in the Go
 
 ## Development source
 
-The Rust/Dioxus implementation lives in `system/console`. It reproduces the neutral shadcn/ui palette and measurements in CSS, with no React runtime. The view hierarchy renders actual API responses and distinguishes missing service data from verified online state. The root Go gateway reads a separate `consolePassphraseFile` option through NixOS protected credentials when configured.
+The Rust/Dioxus implementation lives in `ui/console`. It reproduces the neutral shadcn/ui palette and measurements in CSS, with no React runtime. The view hierarchy renders actual API responses and distinguishes missing service data from verified online state. The root Go gateway reads a separate `consolePassphraseFile` option through NixOS protected credentials when configured.
 
 The design-system component set currently covers the console shell, sidebar navigation, cards, buttons, fields, tables, badges, tabs, notices and theme switcher. It is not a complete Rust port of the upstream registry. Pixel-level matching for a named shadcn component requires comparison against the corresponding upstream browser rendering.
 
