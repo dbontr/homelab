@@ -137,6 +137,7 @@ func (e *Engine) SubmitTeam(req TeamRequest)(TeamSummary,error){
   p.PrepareOnly=true
   w,err:=Compile(p)
   if err!=nil{return TeamSummary{},fmt.Errorf("invalid member %s: %w",task.Key,err)}
+  w.TeamID=id
   children=append(children,w)
   team.Members=append(team.Members,TeamMember{Key:task.Key,Role:task.Role,RunID:w.ID,AllowedPaths:append([]string(nil),task.AllowedPaths...),DependsOn:append([]string(nil),task.DependsOn...)})
  }
