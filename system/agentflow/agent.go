@@ -25,6 +25,7 @@ type AgentBrief struct {
 	AllowedPaths []string `json:"allowed_paths"`
 	Checks       []string `json:"checks"`
 	ContextPaths []string `json:"context_paths,omitempty"`
+	LinkedRepositories []RepositoryPin `json:"linked_repositories,omitempty"`
 }
 
 type PatchHunk struct {
@@ -36,6 +37,7 @@ type PatchHunk struct {
 // Only the runtime can turn it into a scoped compute operation.
 type AgentAction struct {
 	Action         string      `json:"action"`
+	Repository     string      `json:"repository,omitempty"`
 	Reason         string      `json:"reason,omitempty"`
 	Plan           []string    `json:"plan,omitempty"`
 	Path           string      `json:"path,omitempty"`
@@ -117,6 +119,16 @@ type DecisionAuthor interface {
 }
 
 func (a AgentAction) validate(brief AgentBrief) error {
+	if a.Repository != "" && a.Repository != brief.Repository {
+		found := false
+		for _, linked := range brief.LinkedRepositories {
+			if a.Repository == linked.Repository { found = true; break }
+		}
+		if !found { return errors.New("repository is not pinned to this engineering run") }
+		if a.Action != "list" && a.Action != "search" && a.Action != "map" && a.Action != "symbols" && a.Action != "references" && a.Action != "read" {
+			return errors.New("linked repository access is read-only")
+		}
+	}
 	if len(a.Reason) > 400 || len(a.Summary) > 400 || len(a.Path) > 255 || len(a.Query) > 160 || len(a.Hunks) > 8 || len(a.Content) > 24000 || len(a.Plan) > 8 {
 		return errors.New("agent decision exceeds limits")
 	}
@@ -396,7 +408,9 @@ func (e *Engine) executeAgentAction(ctx context.Context, w Workflow, brief Agent
 		return "", errors.New("agent has no pending action")
 	}
 	action := pending.Action
-	root := repoRoot(brief.Repository)
+	scope := brief
+	if action.Repository != "" { scope.Repository = action.Repository }
+	root := repoRoot(scope.Repository)
 	switch action.Action {
 	case "plan":
 		state.Plan = append([]string(nil), action.Plan...)
@@ -423,11 +437,11 @@ func (e *Engine) executeAgentAction(ctx context.Context, w Workflow, brief Agent
 		}
 		return boundObservation(result, 8000), nil
 	case "map":
-		return e.repositoryMap(ctx, w, brief, action.Path)
+		return e.repositoryMap(ctx, w, scope, action.Path)
 	case "symbols":
-		return e.repositorySymbols(ctx, w, brief, action.Path)
+		return e.repositorySymbols(ctx, w, scope, action.Path)
 	case "references":
-		return e.repositoryReferences(ctx, w, brief, action.Query, action.Path)
+		return e.repositoryReferences(ctx, w, scope, action.Query, action.Path)
 	case "read":
 		result, err := e.workspaceAction(ctx, w, "read_file", map[string]any{"path": path.Join(root, action.Path)})
 		if err != nil {
