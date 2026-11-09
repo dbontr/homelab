@@ -93,6 +93,7 @@ func(s *Server) Handler()http.Handler{
  mux.HandleFunc("POST /v1/engineering/teams/{id}/integrate",s.engineeringTeamIntegrate)
  mux.HandleFunc("GET /v1/engineering/runs/{id}/knowledge/{proposal}",s.engineeringRunKnowledge)
  mux.HandleFunc("POST /v1/engineering/runs/{id}/knowledge/{proposal}/approve",s.engineeringRunKnowledge)
+ mux.HandleFunc("GET /v1/engineering/runs/{id}/diffs",s.engineeringRunDiffs)
  mux.HandleFunc("GET /v1/workspace/projects",s.uiProjects)
  mux.HandleFunc("GET /v1/workspace/projects/{project}/jobs",s.uiWorkspaceProjectView)
  mux.HandleFunc("GET /v1/workspace/projects/{project}/workspaces",s.uiWorkspaceProjectView)
@@ -352,6 +353,9 @@ func(s *Server)localTools()[]map[string]any{
   tools=append(tools,
    tool("engineering_run_knowledge_get","Inspect a source-backed knowledge proposal",map[string]any{"id":prop("string"),"proposal_id":prop("string")},"id","proposal_id"),
    tool("engineering_run_knowledge_approve","Approve one completed-run knowledge proposal for canonical project storage",map[string]any{"id":prop("string"),"proposal_id":prop("string")},"id","proposal_id"))
+ }
+ if _,ok:=s.engineering.(agentflow.DiffManager);ok{
+  tools=append(tools,tool("engineering_run_diffs","Inspect bounded private patch previews for a scoped engineering run",map[string]any{"id":prop("string")},"id"))
  }
  if s.executorClient!=nil {
   tools=append(tools,
