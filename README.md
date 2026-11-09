@@ -2,13 +2,16 @@
 
 Homelab is a self-hosted, adaptive personal capability system. It increases the owner's intellectual independence and useful work output while removing low-value administrative burden. Its architecture and priorities evolve with the owner's goals. See [philosophy](docs/philosophy.md) and [skills](skills/README.md).
 
-The system is managed through one source repository. Go implements its operations, MCP and native HTTP interfaces. Nix declares the operating environment. Every capability is available through the same assistant interface; an MCP client is optional.
+The system is maintained in one repository but runs as independently operable services. The Rust/Dioxus UI, single aggregated MCP endpoint, and optional external API are separate presentation and integration surfaces. None owns the domain databases, background jobs, or privileged execution state. Nix declares their deployment and credentials.
 
 ## Source layout
 
 - `skills/` contains portable Development, Writing, Teaching and Ideas skills for consistent assistant behavior and project workflows.
 
-- `system/` contains the entire Go application source: personal planning, research execution, computation, learning, health, media, credentials and integrations. Internal Go modules preserve independent build and failure boundaries, not separate user-facing products.
+- `services/` defines shared private interface contracts and the domain-service ownership boundary. Existing Go service implementations remain in `system/`, including specialist Compute, Learning and Health modules; this source migration does not move their persisted state.
+- `ui/` contains the Rust/Dioxus console and its independent browser interface.
+- `mcp/` contains the independently startable, single aggregated MCP listener.
+- `api/` contains the independently startable, optionally writable native HTTP API listener.
 - `infrastructure/` declares the hosts, networking, K3s, storage, media applications and operational environment.
 - `nixosModules/` and `packages/` provide reproducible NixOS packages and activation.
 - `hardware.nix` declares nodes and devices; `flake.nix` derives enrolled NixOS hosts and pins reproducible dependencies through `flake.lock`.
@@ -20,9 +23,11 @@ Cross-capability research and explicitly authorized personal-task workflows are 
 
 Compute, teaching and health implementations retain independent operating-system and database boundaries where necessary for reliability. Their separation must not require the user to choose between assistants, endpoints or inconsistent project identifiers.
 
+See [interface boundaries](docs/interface-boundaries.md) for service ownership, availability and credential isolation. The MCP and public API listeners are disabled by default and are not prerequisites for browser or background operation.
+
 ## Console
 
-The Rust/Dioxus browser client is in [`system/console`](system/console). It uses shadcn/ui neutral design tokens and consumes authenticated native API endpoints for monitoring, workspace inspection, task and recipe workflows, health, teaching, calendar and planning. It does not ship React or embed privileged MCP credentials. See [console architecture](docs/console.md), [observability](docs/observability.md), [books](docs/books.md) and [self-hosted releases](docs/self-hosted-release.md).
+The Rust/Dioxus browser client is in [`ui/console`](ui/console). It uses shadcn/ui neutral design tokens and consumes authenticated native API endpoints for monitoring, workspace inspection, task and recipe workflows, health, teaching, calendar and planning. It does not ship React or embed privileged MCP credentials. See [console architecture](docs/console.md), [observability](docs/observability.md), [books](docs/books.md) and [self-hosted releases](docs/self-hosted-release.md).
 
 ## Development
 

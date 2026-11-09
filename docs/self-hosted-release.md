@@ -1,12 +1,14 @@
 # Self-hosted release
 
-The repository is the source of truth for the Go platform, independent Engineering execution, Compute, Learning, Health and the Rust/Dioxus console. These are capabilities of one product, with internal process isolation for credentials and failure recovery. The release process is independent of GitHub Actions and never grants deployment credentials to the primary MCP gateway.
+The repository is the source of truth for the domain Go services, independent Engineering execution, Compute, Learning, Health, Rust/Dioxus UI, and optional MCP and API entry points. These are capabilities of one product, with internal process isolation for credentials and failure recovery. The release process is independent of GitHub Actions and never grants deployment credentials to the primary MCP gateway.
 
 ## Release staging
 
 Use an operator-controlled host with the Go toolchains required by the four Go modules, Rust, Cargo, the WebAssembly target and Dioxus CLI available. The output directory must be new, and its parent must already exist.
 
 `bash scripts/stage-release.sh /srv/releases/homelab/<unique-release-id>`
+
+The release includes separately executable `homelab-mcp` and `homelab-api` adapters. Building them does not enable their optional NixOS listeners or alter running services. The web UI is built from `ui/console` and requires neither external listener.
 
 The staging script requires a clean, exact 40-character Git source revision and an operator-owned, non-symlink release parent that is not group or world writable. Before building, it runs `scripts/verify-offline.sh --all`, including module tests, Rust checks, Helm rendering, fleet NixOS evaluations and local package builds. It builds eleven Go executables from cached source dependencies, packages the Dioxus web assets, and writes `SHA256SUMS` and `RELEASE`. The independent `scripts/verify-release.sh` then checks the release envelope, declared binary set, exact source revision, and digest of every asset before the temporary directory is atomically published. It does not alter NixOS generations, start services, publish images, stop the existing homepage, or touch application databases.
 

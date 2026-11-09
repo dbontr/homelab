@@ -61,6 +61,8 @@ build_go() {
 }
 
 build_go system ./cmd/homelab-platform homelab-platform
+build_go . ./mcp homelab-mcp
+build_go . ./api homelab-api
 build_go system ./cmd/homelab-engineeringd homelab-engineeringd
 build_go system ./cmd/homelab-approve homelab-approve
 build_go system ./cmd/homelab-securityd homelab-securityd
@@ -73,7 +75,7 @@ build_go system/learning ./cmd/adaptive-teaching homelab-learning
 build_go system/health ./cmd/personal-health-mcp homelab-health
 
 (
-  cd "$root/system/console"
+  cd "$root/ui/console"
   dx bundle --web --release --out-dir "$stage/console-bundle"
 )
 if [[ ! -f "$stage/console-bundle/public/index.html" ]]; then

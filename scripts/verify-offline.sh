@@ -30,6 +30,14 @@ if ! command -v go >/dev/null 2>&1; then
 fi
 
 verify_go system
+printf 'Checking optional HTTP interfaces\n'
+(
+  cd "$root"
+  go test ./...
+  go test -race ./...
+  go vet ./...
+  go build ./mcp ./api
+)
 
 if [ "$mode" = --core-only ]; then
   printf '%s\n' 'Core offline checks complete; imported modules and NixOS remain unverified.'
@@ -45,7 +53,7 @@ if ! command -v cargo >/dev/null 2>&1; then
   exit 1
 fi
 (
-  cd "$root/system/console"
+  cd "$root/ui/console"
   cargo fmt --all -- --check
   cargo test --offline
   cargo check --offline --target wasm32-unknown-unknown

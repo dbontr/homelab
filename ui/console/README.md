@@ -4,7 +4,7 @@ The console is a Rust/Dioxus client compiled to WebAssembly for the Go personal 
 
 ## Development
 
-From `system/console`:
+From `ui/console`:
 
 ```sh
 dx serve --platform web

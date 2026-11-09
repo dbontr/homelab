@@ -1,6 +1,7 @@
 go 1.27.3
 
 use (
+  .
   ./system
   ./system/compute
   ./system/learning

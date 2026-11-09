@@ -3,7 +3,7 @@ name = "homelab-console"
 default_platform = "web"
 
 [web.app]
-title = "Eminence"
+title = "Homelab"
 
 [web.watcher]
 reload_html = true
