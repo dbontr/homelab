@@ -18,8 +18,11 @@ type Event struct {
  Recurrence string `json:"recurrence,omitempty"`
  TimeZone string `json:"time_zone,omitempty"`
  Excluded []string `json:"excluded,omitempty"`
+ ExcludedTimeZones []string `json:"excluded_time_zones,omitempty"`
  Additional []string `json:"additional,omitempty"`
+ AdditionalTimeZones []string `json:"additional_time_zones,omitempty"`
  RecurrenceID string `json:"recurrence_id,omitempty"`
+ RecurrenceIDTimeZone string `json:"recurrence_id_time_zone,omitempty"`
  Status string `json:"status,omitempty"`
 }
 type Feed struct {
@@ -86,9 +89,22 @@ func Parse(raw string)(Feed,error){
   case "DTEND":current.End=value
   case "LOCATION":current.Location=decodeText(value)
   case "RRULE":current.Recurrence=value;feed.RecurrencesUnexpanded=true
-  case "EXDATE":current.Excluded=append(current.Excluded,strings.Split(value,",")...);feed.RecurrencesUnexpanded=true
-  case "RDATE":current.Additional=append(current.Additional,strings.Split(value,",")...);feed.RecurrencesUnexpanded=true
-  case "RECURRENCE-ID":current.RecurrenceID=value;feed.RecurrencesUnexpanded=true
+  case "EXDATE":
+   for _,instant:=range strings.Split(value,","){
+    current.Excluded=append(current.Excluded,instant)
+    current.ExcludedTimeZones=append(current.ExcludedTimeZones,timeZone(attrs))
+   }
+   feed.RecurrencesUnexpanded=true
+  case "RDATE":
+   for _,instant:=range strings.Split(value,","){
+    current.Additional=append(current.Additional,instant)
+    current.AdditionalTimeZones=append(current.AdditionalTimeZones,timeZone(attrs))
+   }
+   feed.RecurrencesUnexpanded=true
+  case "RECURRENCE-ID":
+   current.RecurrenceID=value
+   current.RecurrenceIDTimeZone=timeZone(attrs)
+   feed.RecurrencesUnexpanded=true
   case "STATUS":current.Status=value
   }
  }
