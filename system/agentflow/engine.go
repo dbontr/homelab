@@ -554,7 +554,8 @@ func (e *Engine) Dispatch(ctx context.Context, claim Claim) (json.RawMessage, er
 			if len(body) > 8000 { body = body[:8000] }
 			source[name] = body
 		}
-		reviewer := e.Author.(ReviewAuthor)
+		reviewer, available := e.Author.(ReviewAuthor)
+		if !available { return nil, errors.New("review model is not configured") }
 		report, reviewErr := reviewer.Review(ctx, str(args["objective"]), source, verified)
 		if reviewErr != nil { return nil, reviewErr }
 		if err := report.Validate(); err != nil { return nil, err }
