@@ -43,7 +43,16 @@ type Step struct {
 	LastError   string          `json:"last_error,omitempty"`
 	Result      json.RawMessage `json:"result,omitempty"`
 }
+type CleanupRecord struct {
+	Status string `json:"status,omitempty"`
+	Attempts int `json:"attempts,omitempty"`
+	LastError string `json:"last_error,omitempty"`
+}
+
 type Workflow struct {
+	CreatedAt time.Time `json:"created_at,omitempty"`
+	Deadline time.Time `json:"deadline,omitempty"`
+	Cleanup CleanupRecord `json:"cleanup,omitempty"`
 	ID        string        `json:"id"`
 	Project   string        `json:"project"`
 	Revision  uint64        `json:"revision"`
@@ -279,6 +288,7 @@ func (s *Store) Create(w Workflow) error {
 	}
 	w.Revision = 1
 	w.Cancelled = false
+	if w.CreatedAt.IsZero(){w.CreatedAt=s.now().UTC()}
 	return s.save(w)
 }
 func (s *Store) Get(id string) (Workflow, error) {
