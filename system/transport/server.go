@@ -325,7 +325,35 @@ func acceptsMCPEventStream(headers http.Header)bool{
  return false
 }
 
+// Protocol versions are checked at the HTTP boundary, before any tool is
+// dispatched. Missing headers remain supported for legacy stateless clients.
+func validMCPRequestHeaders(headers http.Header)(int,string){
+ versions:=headers.Values("Mcp-Protocol-Version")
+ if len(versions)>1{
+  return http.StatusBadRequest,"ambiguous MCP protocol version"
+ }
+ if len(versions)==1 && versions[0]!="2025-06-18" && versions[0]!="2025-03-26"{
+  return http.StatusBadRequest,"unsupported MCP protocol version"
+ }
+ types:=headers.Values("Content-Type")
+ if len(types)>1{return http.StatusUnsupportedMediaType,"ambiguous request media type"}
+ if len(types)==1{
+  kind,params,err:=mime.ParseMediaType(types[0])
+  if err!=nil||kind!="application/json"{
+   return http.StatusUnsupportedMediaType,"MCP requests require application/json"
+  }
+  if len(params)>0 && (len(params)!=1||!strings.EqualFold(params["charset"],"utf-8")){
+   return http.StatusUnsupportedMediaType,"MCP requires UTF-8 JSON"
+  }
+ }
+ return 0,""
+}
+
 func(s *Server)mcp(w http.ResponseWriter,r *http.Request){
+ if status,msg:=validMCPRequestHeaders(r.Header);status!=0{
+  writeError(w,status,msg)
+  return
+ }
  if acceptsMCPEventStream(r.Header){
   w.Header().Set("Content-Type","text/event-stream")
   w.Header().Set("X-Accel-Buffering","no")
