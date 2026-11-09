@@ -42,7 +42,9 @@ func (s *Server) sessionOwnerWriteAllowed(r *http.Request) bool {
     case r.Method == http.MethodPost && strings.HasPrefix(path, "/v1/recipes/"):
         allowed = len(strings.Split(path, "/")) == 5 && (strings.HasSuffix(path, "/nutrition-proposal") || strings.HasSuffix(path, "/restore") || strings.HasSuffix(path, "/usda-preview") || strings.HasSuffix(path, "/usda-apply"))
     case r.Method == http.MethodPost && strings.HasPrefix(path, "/v1/tasks/"):
-        allowed = len(strings.Split(path, "/")) == 5 && strings.HasSuffix(path, "/complete")
+        parts:=strings.Split(path,"/")
+        allowed = len(parts)==5 && parts[3]!="" && (parts[4]=="complete"||
+            parts[4]=="decompose"||parts[4]=="decomposition-preview")
     case r.Method == http.MethodPut && strings.HasPrefix(path, "/v1/groceries/items/"):
         allowed = len(strings.Split(path, "/")) == 5
     case r.Method == http.MethodPut && strings.HasPrefix(path, "/v1/tasks/"):

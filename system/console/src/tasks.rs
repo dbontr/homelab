@@ -1,5 +1,6 @@
 use dioxus::prelude::*;
 use reqwest::Method;
+use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::api::{self, Task};
@@ -36,6 +37,33 @@ impl From<&Task> for Editor {
     }
 }
 
+#[derive(Clone, Debug, Deserialize, serde::Serialize, PartialEq)]
+struct DecompositionStep {
+    title: String,
+    minutes: i32,
+    #[serde(default)]
+    depends_on_steps: Vec<usize>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+struct DecompositionPreview {
+    parent_id: String,
+    expected_revision: i32,
+    steps: Vec<DecompositionStep>,
+    total_minutes: i32,
+    requires_owner_submission: bool,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct DecompositionResult {
+    parent: Task,
+    steps: Vec<Task>,
+}
+
+fn predecessor_labels(steps: &[usize]) -> String {
+    steps.iter().map(|index| (index + 1).to_string()).collect::<Vec<_>>().join(", ")
+}
+
 #[component]
 pub fn Tasks(csrf: String) -> Element {
     let csrf = use_signal(|| csrf);
@@ -49,6 +77,9 @@ pub fn Tasks(csrf: String) -> Element {
     let mut error = use_signal(String::new);
     let mut message = use_signal(String::new);
     let mut conflict_preview = use_signal(||None::<Value>);
+    let mut decomposition_parent = use_signal(||None::<Task>);
+    let mut decomposition_preview = use_signal(||None::<DecompositionPreview>);
+    let mut disclosure_consent = use_signal(||false);
 
     let items = records.cloned().and_then(Result::ok).unwrap_or_default();
     let today = agenda.cloned().and_then(Result::ok).unwrap_or_default();
@@ -131,7 +162,7 @@ pub fn Tasks(csrf: String) -> Element {
                     div { class: "task-items",
                         for task in visible {
                             div { class: "task-item", key: "{task.id}",
-                                if task.status == "open" {
+                                if task.status == "open" && !task.decomposed {
                                     button {
                                         class: "task-check", aria_label: format!("Complete {}", task.title),
                                         title: "Complete task", disabled: busy(),
@@ -153,6 +184,8 @@ pub fn Tasks(csrf: String) -> Element {
                                         },
                                         "○"
                                     }
+                                } else if task.status == "open" {
+                                    span { class: "badge", "Parent" }
                                 } else {
                                     span { class: "task-done", aria_label: "Completed", "✓" }
                                 }
@@ -163,6 +196,23 @@ pub fn Tasks(csrf: String) -> Element {
                                         if !task.scheduled.is_empty() { span { "Planned {task.scheduled}" } }
                                         if task.minutes > 0 { span { "{task.minutes} min" } }
                                         if !task.recurrence.is_empty() { Badge { text: task.recurrence.clone() } }
+                                        if !task.parent_id.is_empty() { Badge { text: "Subtask".to_owned() } }
+                                    }
+                                }
+                                if task.status == "open" && !task.decomposed {
+                                    button {
+                                        class: "btn btn-ghost btn-sm",
+                                        onclick: {
+                                            let selected = task.clone();
+                                            move |_| {
+                                                decomposition_parent.set(Some(selected.clone()));
+                                                decomposition_preview.set(None);
+                                                disclosure_consent.set(false);
+                                                editing.set(None);
+                                                error.set(String::new());
+                                            }
+                                        },
+                                        "Break down"
                                     }
                                 }
                                 if task.status == "open" {
@@ -179,6 +229,153 @@ pub fn Tasks(csrf: String) -> Element {
                                         "Edit"
                                     }
                                 }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if let Some(parent) = decomposition_parent() {
+            section { class: "card task-editor",
+                div { class: "card-header",
+                    h2 { class: "card-title", "Break down task" }
+                    p { class: "card-description",
+                        "Review a proposed sequence for {parent.title}. No tasks are saved until you approve the breakdown."
+                    }
+                }
+                div { class: "card-body task-editor-fields",
+                    label { class: "inline-row",
+                        input {
+                            r#type: "checkbox",
+                            checked: disclosure_consent(),
+                            disabled: busy(),
+                            onchange: move |event| {
+                                disclosure_consent.set(event.checked());
+                                decomposition_preview.set(None);
+                            }
+                        }
+                        span { "Allow the configured planning model to read only this task's title and estimated minutes." }
+                    }
+                    p { class: "small muted",
+                        "Private notes, related projects, your task history and credentials are not sent to the model. The preview can be discarded without modifying your records."
+                    }
+                    div { class: "task-actions",
+                        button {
+                            class: "btn btn-outline",
+                            r#type: "button",
+                            disabled: busy() || !disclosure_consent(),
+                            onclick: {
+                                let task_id = parent.id.clone();
+                                let revision = parent.revision;
+                                move |_| {
+                                    let id = task_id.clone();
+                                    let token = csrf();
+                                    busy.set(true);
+                                    error.set(String::new());
+                                    decomposition_preview.set(None);
+                                    spawn(async move {
+                                        let payload = json!({
+                                            "expected_revision": revision,
+                                            "share_title_with_model": true
+                                        });
+                                        match api::write::<DecompositionPreview, _>(
+                                            Method::POST,
+                                            &format!("/v1/tasks/{id}/decomposition-preview"),
+                                            &token, &payload,
+                                        ).await {
+                                            Ok(draft) => {
+                                                if draft.requires_owner_submission {
+                                                    decomposition_preview.set(Some(draft));
+                                                } else {
+                                                    error.set("The model response did not require owner approval.".to_owned());
+                                                }
+                                            }
+                                            Err(problem) => error.set(problem),
+                                        }
+                                        busy.set(false);
+                                    });
+                                }
+                            },
+                            "Generate preview"
+                        }
+                        button {
+                            class: "btn btn-outline",
+                            r#type: "button",
+                            disabled: busy(),
+                            onclick: move |_| {
+                                decomposition_parent.set(None);
+                                decomposition_preview.set(None);
+                                disclosure_consent.set(false);
+                            },
+                            "Close"
+                        }
+                    }
+                    if let Some(preview) = decomposition_preview() {
+                        if preview.parent_id == parent.id &&
+                            preview.expected_revision == parent.revision {
+                            div { class: "planner-unplanned",
+                                p { class: "small muted",
+                                    "{preview.steps.len()} proposed subtasks · {preview.total_minutes} estimated minutes"
+                                }
+                                for (index, step) in preview.steps.iter().enumerate() {
+                                    article { class: "planner-review-entry",
+                                        div { class: "inline-row",
+                                            span { class: "badge", "{index + 1}" }
+                                            strong { "{step.title}" }
+                                            span { class: "small muted", "{step.minutes} min" }
+                                        }
+                                        if !step.depends_on_steps.is_empty() {
+                                            p { class: "small muted",
+                                                "After steps {predecessor_labels(&step.depends_on_steps)}"
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            p { class: "small muted",
+                                "Confirm only if the steps, estimates and dependencies are suitable. Saving creates all subtasks atomically; an outdated parent revision is rejected."
+                            }
+                            button {
+                                class: "btn btn-primary",
+                                r#type: "button",
+                                disabled: busy(),
+                                onclick: {
+                                    let id = preview.parent_id.clone();
+                                    let revision = preview.expected_revision;
+                                    let steps = preview.steps.clone();
+                                    move |_| {
+                                        let id = id.clone();
+                                        let token = csrf();
+                                        let steps = steps.clone();
+                                        busy.set(true);
+                                        error.set(String::new());
+                                        spawn(async move {
+                                            let payload = json!({
+                                                "expected_revision": revision,
+                                                "steps": steps
+                                            });
+                                            match api::write::<DecompositionResult, _>(
+                                                Method::POST,
+                                                &format!("/v1/tasks/{id}/decompose"),
+                                                &token, &payload,
+                                            ).await {
+                                                Ok(committed) => {
+                                                    message.set(format!(
+                                                        "Created {} subtasks", committed.steps.len()
+                                                    ));
+                                                    decomposition_parent.set(None);
+                                                    decomposition_preview.set(None);
+                                                    disclosure_consent.set(false);
+                                                    records.restart();
+                                                    agenda.restart();
+                                                }
+                                                Err(problem) => error.set(problem),
+                                            }
+                                            busy.set(false);
+                                        });
+                                    }
+                                },
+                                "Save subtasks"
                             }
                         }
                     }
@@ -325,5 +522,46 @@ pub fn Tasks(csrf: String) -> Element {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod decomposition_tests {
+    use super::{DecompositionPreview, DecompositionStep};
+
+    #[test]
+    fn preview_is_reviewable_without_implicit_persistence() {
+        let input = serde_json::json!({
+            "parent_id": "parent",
+            "expected_revision": 3,
+            "steps": [
+                {"title": "Measure", "minutes": 20},
+                {"title": "Evaluate", "minutes": 30, "depends_on_steps": [0]}
+            ],
+            "total_minutes": 50,
+            "requires_owner_submission": true
+        });
+        let preview: DecompositionPreview = serde_json::from_value(input).unwrap();
+        assert_eq!(preview.parent_id, "parent");
+        assert_eq!(preview.expected_revision, 3);
+        assert!(preview.requires_owner_submission);
+        assert_eq!(preview.steps.len(), 2);
+        assert_eq!(preview.steps[1].depends_on_steps, vec![0]);
+        assert_eq!(preview.total_minutes, 50);
+
+        let saved = serde_json::to_value(&preview.steps).unwrap();
+        assert_eq!(saved[0]["title"], "Measure");
+        assert_eq!(saved[1]["depends_on_steps"], serde_json::json!([0]));
+    }
+
+    #[test]
+    fn proposed_steps_accept_only_declared_fields() {
+        let value = serde_json::json!({
+            "title": "Prove lemma", "minutes": 45, "depends_on_steps": [0]
+        });
+        let step: DecompositionStep = serde_json::from_value(value).unwrap();
+        assert_eq!(step.title, "Prove lemma");
+        assert_eq!(step.minutes, 45);
+        assert_eq!(step.depends_on_steps, vec![0]);
     }
 }

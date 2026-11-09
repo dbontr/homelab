@@ -61,7 +61,37 @@ func TestConsoleBrowserSessionScopesMutations(t *testing.T) {
 	}
 	if err:=json.Unmarshal(status.Body.Bytes(),&result);err!=nil{t.Fatal(err)}
 	if !result.Authenticated||result.CSRF==""{t.Fatal("session status missing CSRF token")}
-	if w:=call("POST","/v1/tasks",`{"title":"Authorized task"}`,cookie,result.CSRF);w.Code!=201{t.Fatalf("owner task rejected: %d %s",w.Code,w.Body.String())}
+	created:=call("POST","/v1/tasks",`{"title":"Authorized task","minutes":90}`,cookie,result.CSRF)
+ if created.Code!=201{t.Fatalf("owner task rejected: %d %s",created.Code,created.Body.String())}
+ var parent store.Task
+ if err:=json.Unmarshal(created.Body.Bytes(),&parent);err!=nil{t.Fatal(err)}
+ model:=&taskPreviewModel{output:json.RawMessage(`{"steps":[
+  {"title":"Define the task","minutes":30},
+  {"title":"Verify the result","minutes":45,"depends_on_steps":[0]}
+ ]}`)}
+ s.SetCapabilityPlanner(model)
+ previewPath:="/v1/tasks/"+parent.ID+"/decomposition-preview"
+ if w:=call("POST",previewPath,`{"expected_revision":1,"share_title_with_model":true}`,cookie,"");w.Code!=401{
+  t.Fatalf("task model disclosure bypassed CSRF: %d",w.Code)
+ }
+ if model.calls!=0{t.Fatal("model was contacted before owner session authorization")}
+ if w:=call("POST",previewPath,`{"expected_revision":1,"share_title_with_model":false}`,cookie,result.CSRF);w.Code!=422{
+  t.Fatalf("owner disclosure consent was not required: %d",w.Code)
+ }
+ preview:=call("POST",previewPath,`{"expected_revision":1,"share_title_with_model":true}`,cookie,result.CSRF)
+ if preview.Code!=200||model.calls!=1{
+  t.Fatalf("consented model preview unavailable: %d %s",preview.Code,preview.Body.String())
+ }
+ if w:=call("POST","/v1/tasks/"+parent.ID+"/decompose",
+  `{"expected_revision":1,"steps":[{"title":"A","minutes":30},{"title":"B","minutes":45,"depends_on_steps":[0]}]}`,cookie,"");w.Code!=401{
+  t.Fatalf("task decomposition bypassed CSRF: %d",w.Code)
+ }
+ decomposition:=call("POST","/v1/tasks/"+parent.ID+"/decompose",
+  `{"expected_revision":1,"steps":[{"title":"A","minutes":30},{"title":"B","minutes":45,"depends_on_steps":[0]}]}`,cookie,result.CSRF)
+ if decomposition.Code!=201{
+  t.Fatalf("owner-reviewed decomposition failed: %d %s",decomposition.Code,decomposition.Body.String())
+ }
+ if len(db.Tasks(""))!=3{t.Fatal("browser flow did not persist the complete parent and subtask graph")}
  if w:=call("POST","/mcp",`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`,cookie,result.CSRF);w.Code!=401{t.Fatalf("session reached MCP: %d",w.Code)}
  if w:=call("DELETE","/ui/session","",cookie,"wrong");w.Code!=403{
 		t.Fatalf("CSRF bypassed: %d",w.Code)
