@@ -37,6 +37,9 @@ func (e *Engine) Submit(p Program) (RunSummary, error) {
 	if !e.AllowedProjects[p.Project] {
 		return RunSummary{}, errors.New("engineering project not authorized")
 	}
+	if p.Review {
+		if _, ok := e.Author.(ReviewAuthor); !ok { return RunSummary{}, errors.New("review provider not configured") }
+	}
 	if p.Autonomous {
 		if _, ok := e.Author.(DecisionAuthor); !ok {
 			return RunSummary{}, errors.New("autonomous decision provider not configured")
@@ -531,6 +534,32 @@ func (e *Engine) Dispatch(ctx context.Context, claim Claim) (json.RawMessage, er
 				verifiedDigests[name] = shaHex(repair[name])
 			}
 		}
+	case "review":
+		verified, readErr := resultObject(w, "verify")
+		if readErr != nil || verified["passed"] != true { return nil, errors.New("verification evidence unavailable for review") }
+		paths := map[string]string{}
+		if w.Agent != nil { paths = w.Agent.Changed } else {
+			paths, readErr = stringMap(verified["file_sha256"])
+			if readErr != nil { return nil, readErr }
+		}
+		source := make(map[string]string, len(paths))
+		checkout, readErr := resultObject(w, "checkout")
+		if readErr != nil { return nil, readErr }
+		for _, name := range sortedPaths(paths) {
+			if sensitiveSourcePath(name) { return nil, errors.New("review cannot inspect protected source") }
+			read, readErr := e.workspaceAction(ctx, w, "read_file", map[string]any{"path": path.Join(repoRoot(str(checkout["repository"])), name)})
+			if readErr != nil { return nil, readErr }
+			body := str(read["content"])
+			if shaHex(body) != paths[name] { return nil, errors.New("review source differs from verified revision") }
+			if len(body) > 8000 { body = body[:8000] }
+			source[name] = body
+		}
+		reviewer := e.Author.(ReviewAuthor)
+		report, reviewErr := reviewer.Review(ctx, str(args["objective"]), source, verified)
+		if reviewErr != nil { return nil, reviewErr }
+		if err := report.Validate(); err != nil { return nil, err }
+		out = map[string]any{"verdict": report.Verdict, "risk": report.Risk, "findings": report.Findings, "recommended_tests": report.RecommendedTests, "reviewed_paths": sortedPaths(paths)}
+		if report.Verdict != "approve" { return nil, errors.New("engineering review requires source revision") }
 	case "export":
 		var changes map[string]string
 		if w.Agent != nil {
