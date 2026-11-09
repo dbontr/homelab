@@ -173,7 +173,7 @@ func (a AgentAction) validate(brief AgentBrief) error {
 		if !validSourcePath(a.Path) || sensitiveSourcePath(a.Path) {
 			return errors.New("invalid or protected repository file path")
 		}
-	case "patch", "create":
+	case "patch", "create", "format", "preview":
 		approved := false
 		for _, p := range brief.AllowedPaths {
 			if p == a.Path {
@@ -184,7 +184,7 @@ func (a AgentAction) validate(brief AgentBrief) error {
 		if !approved || !validSourcePath(a.Path) || sensitiveSourcePath(a.Path) {
 			return errors.New("edit path is outside approved scope")
 		}
-		if a.Action == "patch" {
+		if a.Action == "patch" || a.Action == "preview" {
 			if !hexDigest(a.ExpectedSHA256) || len(a.Hunks) == 0 {
 				return errors.New("patch needs a source digest and hunks")
 			}
@@ -193,6 +193,8 @@ func (a AgentAction) validate(brief AgentBrief) error {
 					return errors.New("invalid patch hunk")
 				}
 			}
+		} else if a.Action == "format" {
+			if !hexDigest(a.ExpectedSHA256) || sourceLanguage(a.Path) != "go" { return errors.New("formatting requires an approved Go source file and digest") }
 		} else if len(a.Content) == 0 {
 			return errors.New("created file must contain source")
 		}
@@ -323,7 +325,7 @@ func (e *Engine) runAgentTurn(ctx context.Context, claim Claim, w Workflow) (jso
 		}
 		pending, err := e.prepareAgentAction(ctx, w, decision)
 		if err != nil {
-			if decision.Action != "patch" {
+			if decision.Action != "patch" && decision.Action != "format" && decision.Action != "preview" {
 				return nil, err
 			}
 			// Patch context conflicts are expected when a source file changes;
@@ -378,7 +380,7 @@ func (e *Engine) runAgentTurn(ctx context.Context, claim Claim, w Workflow) (jso
 
 func (e *Engine) prepareAgentAction(ctx context.Context, w Workflow, action AgentAction) (*AgentPending, error) {
 	pending := &AgentPending{Action: action}
-	if action.Action != "patch" && action.Action != "create" {
+	if action.Action != "patch" && action.Action != "create" && action.Action != "format" && action.Action != "preview" {
 		return pending, nil
 	}
 	if action.Action == "create" {
@@ -399,7 +401,8 @@ func (e *Engine) prepareAgentAction(ctx context.Context, w Workflow, action Agen
 	if shaHex(before) != action.ExpectedSHA256 {
 		return nil, errors.New("patch source digest conflict; read the file again")
 	}
-	after, err := applyPatch(before, action.Hunks)
+	var after string
+	if action.Action == "format" { after, err = formatGoSource(before) } else { after, err = applyPatch(before, action.Hunks) }
 	if err != nil {
 		return nil, err
 	}
@@ -461,7 +464,9 @@ func (e *Engine) executeAgentAction(ctx context.Context, w Workflow, brief Agent
 			return "", errors.New("repository file exceeds agent read limit")
 		}
 		return fmt.Sprintf("sha256=%s\n%s", shaHex(contents), contents), nil
-	case "patch", "create":
+	case "preview":
+		return fmt.Sprintf("source_sha256=%s proposed_sha256=%s changed_bytes=%d (no write performed)", pending.BeforeSHA256, pending.AfterSHA256, len(pending.Contents)), nil
+	case "patch", "create", "format":
 		if err := e.executeAgentWrite(ctx, w, brief, state); err != nil {
 			return "", err
 		}
