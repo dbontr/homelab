@@ -22,6 +22,7 @@ type ComputeClient struct {
  Endpoint string
  token string
  credentialFile string
+ tokenSource func()(string,error)
  http *http.Client
 }
 var permittedComputeTools=map[string]bool{
@@ -56,6 +57,16 @@ func NewComputeClientFromFile(endpoint,filename string)(*ComputeClient,error){
  client.token=""
  return client,nil
 }
+// NewComputeClientFromSource keeps the provider credential outside durable
+// client state and checks the controller's exact editor role before use.
+func NewComputeClientFromSource(endpoint string,source func()(string,error))(*ComputeClient,error){
+ if source==nil{return nil,errors.New("compute credential source is required")}
+ client,err:=NewComputeClient(endpoint,strings.Repeat("0",32))
+ if err!=nil{return nil,err}
+ client.token=""
+ client.tokenSource=source
+ return client,nil
+}
 func readComputeCredential(filename string)(string,error){
  if filename==""{return "",errors.New("compute credential path required")}
  f,err:=os.Open(filename)
@@ -72,6 +83,13 @@ func readComputeCredential(filename string)(string,error){
  return token,nil
 }
 func(c *ComputeClient)currentToken()(string,error){
+ if c.tokenSource!=nil{
+  secret,err:=c.tokenSource()
+  if err!=nil||len(secret)<32||strings.ContainsAny(secret,"\x00\r\n\t "){
+   return "",errors.New("compute vault credential unavailable")
+  }
+  return secret,nil
+ }
  if c.credentialFile!=""{return readComputeCredential(c.credentialFile)}
  if len(c.token)<32{return "",errors.New("compute credential unavailable")}
  return c.token,nil
@@ -80,7 +98,7 @@ func(c *ComputeClient)Call(ctx context.Context,tool string,arguments map[string]
  if c==nil||c.http==nil||!permittedComputeTools[tool]{return nil,errors.New("compute operation is not authorized")}
  // Every request using a reloadable service credential must retain the
  // non-administrator identity and exact project editor grant.
- if c.credentialFile!=""{
+ if c.credentialFile!=""||c.tokenSource!=nil{
   if err:=c.VerifyProjectCredential(ctx);err!=nil{return nil,err}
   project,ok:=arguments["project_id"].(string)
   if !ok||!validID(project){return nil,errors.New("compute operation requires a scoped project")}
