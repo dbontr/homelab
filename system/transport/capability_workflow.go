@@ -62,7 +62,7 @@ type CapabilityWorkflow struct {
 
 func requiresPersonalRead(kind string) bool {
     switch kind {
-    case "project_tasks","learning_summary","learning_sessions","learning_reviews","health_goals","health_records","health_training_sets","health_food_proposals","recipe_search","recipe_meals","recipe_groceries","recipe_nutrition","task_review","media_requests": return true
+    case "project_tasks","learning_summary","learning_sessions","learning_reviews","health_goals","health_records","health_training_sets","health_food_proposals","recipe_search","recipe_meals","recipe_groceries","recipe_nutrition","task_review","weekly_report","media_requests": return true
     }
     return false
 }
@@ -82,6 +82,8 @@ func validCapabilityStage(stage CapabilityStage, allowPersonal bool) error {
         if stage.Query!=""||stage.Limit>10{return errors.New("invalid study pack stage")}
     case "task_review":
         if stage.Query!=""{return errors.New("unexpected task review query")}
+    case "weekly_report":
+        if stage.Query!=""||stage.Limit!=0{return errors.New("weekly report does not accept arbitrary parameters")}
     case "recipe_groceries":
         if stage.Limit>14||stage.Query!=""&&!validCapabilityDay(stage.Query){return errors.New("invalid grocery interval")}
     case "recipe_nutrition":
@@ -231,6 +233,10 @@ func (s *Server) executeCapabilityStep(ctx context.Context,w agentflow.Workflow,
         overview,err:=s.projectOverview(ctx,w.Project)
         if err!=nil{return nil,err}
         return map[string]any{"tasks":overview.Tasks,"goals":overview.Goals,"links":overview.Links},nil
+    case "weekly_report":
+        at:=w.AutomationDue
+        if at.IsZero(){at=time.Now().UTC()}
+        return s.db.PreviousWeekReport(at)
     case "task_review":
         overview,err:=s.projectOverview(ctx,w.Project)
         if err!=nil{return nil,err}
