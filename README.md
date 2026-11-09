@@ -42,7 +42,7 @@ go vet ./...
 go build ./cmd/homelab-platform
 ```
 
-The self-hosted `scripts/stage-release.sh` builds the integrated Go services, including the independent engineering daemon, and a Dioxus web bundle into a new, checksummed release directory without changing running services. The internal Kubernetes compute implementation includes a rootless registry image builder and a locally callable `system/compute/scripts/build-toolchain-image.sh` for Go/Rust/WASM toolchain images. NixOS operators can evaluate enrolled hosts and build the `homelab-platform` package from the root flake. Source development never activates a generation. Runtime credentials, personal state and media bytes are not stored in Git.
+The self-hosted `scripts/stage-release.sh` builds the integrated Go services, including the independent engineering daemon, and a Dioxus web bundle into a new, checksummed release directory without changing running services. The internal Kubernetes compute implementation includes a rootless registry image builder and a locally callable `services/compute/scripts/build-toolchain-image.sh` for Go/Rust/WASM toolchain images. NixOS operators can evaluate enrolled hosts and build the `homelab-platform` package from the root flake. Source development never activates a generation. Runtime credentials, personal state and media bytes are not stored in Git.
 
 ## Operating boundaries
 
