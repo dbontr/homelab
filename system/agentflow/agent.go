@@ -138,6 +138,18 @@ func (a AgentAction) validate(brief AgentBrief) error {
 		if strings.TrimSpace(a.Query) == "" || strings.ContainsAny(a.Query, "\x00\r\n") {
 			return errors.New("invalid repository search query")
 		}
+	case "map":
+		if !validCodeScope(a.Path) {
+			return errors.New("invalid source map scope")
+		}
+	case "symbols":
+		if !validSourcePath(a.Path) || sensitiveSourcePath(a.Path) || sourceLanguage(a.Path) == "" {
+			return errors.New("invalid source outline path")
+		}
+	case "references":
+		if !codeIdentifier.MatchString(a.Query) || !validCodeScope(a.Path) {
+			return errors.New("invalid source reference query")
+		}
 	case "read":
 		if !validSourcePath(a.Path) || sensitiveSourcePath(a.Path) {
 			return errors.New("invalid or protected repository file path")
@@ -318,7 +330,7 @@ func (e *Engine) runAgentTurn(ctx context.Context, claim Claim, w Workflow) (jso
 	if target == "" {
 		if action.Action == "check" {
 			target = action.Command
-		} else if action.Action == "search" {
+		} else if action.Action == "search" || action.Action == "references" {
 			target = action.Query
 		}
 	}
@@ -410,6 +422,12 @@ func (e *Engine) executeAgentAction(ctx context.Context, w Workflow, brief Agent
 			return "", errors.New("repository search failed")
 		}
 		return boundObservation(result, 8000), nil
+	case "map":
+		return e.repositoryMap(ctx, w, brief, action.Path)
+	case "symbols":
+		return e.repositorySymbols(ctx, w, brief, action.Path)
+	case "references":
+		return e.repositoryReferences(ctx, w, brief, action.Query, action.Path)
 	case "read":
 		result, err := e.workspaceAction(ctx, w, "read_file", map[string]any{"path": path.Join(root, action.Path)})
 		if err != nil {

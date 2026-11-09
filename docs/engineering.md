@@ -32,15 +32,22 @@ The compiled autonomous workflow provisions the same isolated compute workspace 
 - `plan`: record or revise up to eight development steps.
 - `list`: inspect a repository-relative directory.
 - `search`: perform a bounded literal search inside the checked-out repository; common credential files and dependency trees are excluded.
+- `map`: enumerate up to 24 source files in the selected repository directory, with bounded declaration outlines and import lists. Go declarations use the standard parser; Rust, Python, JavaScript/TypeScript, Java, C/C++, and VHDL use conservative lexical extraction.
+- `symbols`: extract declaration names, kinds, line numbers, and imports from an individual supported source file without returning the entire file body.
+- `references`: search for bounded whole-identifier matches in source files under the chosen repository directory. The search excludes dependency folders and hidden configuration directories.
 - `read`: inspect a repository-relative source file and its SHA-256 revision. Credential-bearing paths are excluded from reading and editing, even if they appear in an owner's `allowed_paths`.
 - `patch`: apply ordered, exact-match replacement hunks to an allowed file only when its SHA-256 matches the model's expectation. Ambiguous context and stale revisions are rejected.
 - `create`: create an owner-approved source file through a missing-file revision check.
 - `check`: execute one command exactly matching the owner's `checks` list in the isolated workspace.
 - `finish`: record a short completion summary only after at least one confirmed edit and every approved check has passed since the most recent edit.
 
+Repository maps are bounded by file count, file size, and observation size. They are navigation aids rather than authoritative compiler dependency graphs. Repository content remains untrusted, and map results never grant permission to edit any file outside the declared `allowed_paths`.
+
 The agent receives its objective, current plan, a bounded suffix of past observations, changed-file digests, and remaining decision budget. It can revise its plan or inspect more code when observations contradict its earlier assumptions. Each action decision is persisted before execution and its confirmed observation is saved before the next decision. The workflow permits at most 40 turns. The authenticated status API exposes the plan, turn count, edited file paths, and completion summary but does not return raw source code or model observations.
 
 Checkpoint updates are fenced by the active run, step, lease generation, and lease token. An interrupted write can be reconciled against the worker's current file digest without blindly repeating it; a write is confirmed only after a worker SHA-256 acknowledgment and source readback. An interrupted verification command is not replayed because its effects may be uncertain. Unapproved commands, out-of-scope edits, or attempts to access protected paths terminate the agent step.
+
+The engineering scheduler advances up to four independent runs concurrently. Each run remains sequential and dependency-ordered, with its own workspace, lease, and cancellation context. Project quotas and resource admission remain enforced by the compute controller; simultaneous publication attempts must still satisfy the pinned Git base revision.
 
 All approved checks are run again after the agent finishes. Before exporting, the service compares the current source digests with the files confirmed by the agent. Publication remains restricted to a pinned-base **draft** pull request; autonomous sessions cannot merge, deploy, manage infrastructure, or acquire an administrator credential. The decision model and compute worker are separate trust boundaries.
 
