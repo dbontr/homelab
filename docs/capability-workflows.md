@@ -67,6 +67,10 @@ The state directory is `workflows` under the platform's private state
 directory. As with engineering runs, archive and retention management must
 be implemented before the store reaches its 1,000-record limit.
 
+## Evidence-linked personal delegations
+
+A personal task may link an engineering run using `homelab:engineering_run:<run-id>` in its `links` list (supported by the native Task API and MCP `task_add`). The derived `/v1/tasks/delegations` view and `task_delegations` tool read run status from the independent engineering service. They report completion candidates, failed or cancelled runs, unresolved references, and mismatched project links without mutating task status or fabricating successful work. The Rust weekly planner displays these observations separately from ordinary deadlines and estimates. The view remains usable when Engineering is offline, but reports its evidence as unavailable.
+
 ## Scope and acceptance
 
 This implementation provides autonomous *execution* of an explicitly

@@ -58,6 +58,25 @@ pub struct TaskReview {
     pub note: String,
 }
 
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub struct Delegation {
+    pub task_id: String,
+    pub task_title: String,
+    pub task_status: String,
+    pub run_id: String,
+    pub run_status: String,
+    pub state: String,
+    #[serde(default)]
+    pub note: String,
+}
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub struct DelegationReport {
+    #[serde(default)]
+    pub delegations: Vec<Delegation>,
+    #[serde(default)]
+    pub limitations: Vec<String>,
+}
+
 fn short_time(time: &str) -> String {
     time.get(11..16).unwrap_or(time).to_owned()
 }
@@ -66,6 +85,9 @@ fn short_time(time: &str) -> String {
 pub fn Planner() -> Element {
     let mut daily_minutes = use_signal(|| 180_i32);
     let mut start_hour = use_signal(|| 9_i32);
+    let mut delegations = use_resource(|| async {
+        api::get::<DelegationReport>("/v1/tasks/delegations").await
+    });
     let mut review = use_resource(|| async {
         api::get::<TaskReview>("/v1/planning/review?days=7").await
     });
@@ -82,7 +104,7 @@ pub fn Planner() -> Element {
         Heading {
             title: "Weekly planner".to_owned(),
             description: "Capacity-aware timeboxes drawn from recorded tasks, prerequisites and calendar commitments.".to_owned(),
-            button { class: "btn btn-outline", onclick: move |_| { plan.restart(); review.restart(); },
+            button { class: "btn btn-outline", onclick: move |_| { plan.restart(); review.restart(); delegations.restart(); },
                 Icon { name: "refresh".to_owned() } "Recalculate"
             }
         }
@@ -120,6 +142,40 @@ pub fn Planner() -> Element {
                 }
                 p { class: "small muted",
                     "This is a proposal, not a calendar change. Tasks without durations or with unfinished prerequisites are not silently scheduled."
+                }
+            }
+        }
+        section { class: "card",
+            div { class: "card-header",
+                h2 { class: "card-title", "Delegated engineering work" }
+                p { class: "card-description",
+                    "Live engineering status is linked to personal tasks through explicit resource references. Task completion remains an owner decision."
+                }
+            }
+            div { class: "card-body",
+                match delegations.cloned() {
+                    None => rsx! { Loading {} },
+                    Some(Err(message)) => rsx! { Notice { message } },
+                    Some(Ok(report)) => rsx! {
+                        if report.delegations.is_empty() {
+                            p { class: "small muted", "No engineering runs are linked to recorded personal tasks." }
+                        }
+                        for entry in report.delegations {
+                            article { class: "planner-review-entry",
+                                div { class: "inline-row",
+                                    strong { "{entry.task_title}" }
+                                    span { class: "badge", "{entry.state}" }
+                                    span { class: "small muted", "Run: {entry.run_status}" }
+                                }
+                                if !entry.note.is_empty() {
+                                    p { class: "small muted", "{entry.note}" }
+                                }
+                            }
+                        }
+                        for limitation in report.limitations {
+                            p { class: "small muted", "{limitation}" }
+                        }
+                    }
                 }
             }
         }

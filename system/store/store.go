@@ -113,6 +113,10 @@ func (s *Store) AddTask(in TaskInput)(Task,error){
  in.Title=strings.TrimSpace(in.Title)
  if in.Title==""||len(in.Title)>500{return Task{},errors.New("title must be 1-500 characters")}
  if in.Minutes<0||in.Minutes>1440{return Task{},errors.New("minutes must be 0-1440")}
+ if len(in.Links)>32{return Task{},errors.New("too many linked resources")}
+ for _,link:=range in.Links{
+  if strings.TrimSpace(link)==""||len(link)>512||strings.ContainsAny(link,"\x00\r\n"){return Task{},errors.New("invalid linked resource")}
+ }
  if in.Priority<0||in.Priority>5{return Task{},errors.New("priority must be 0-5")}
  if !validDue(in.Due){return Task{},errors.New("due must be YYYY-MM-DD or RFC3339")}
  if in.Scheduled!=""{if _,e:=time.Parse(time.RFC3339,in.Scheduled);e!=nil{return Task{},errors.New("scheduled must be RFC3339")}}
