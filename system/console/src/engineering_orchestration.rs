@@ -162,7 +162,7 @@ pub fn TeamIntegration(team: Value, csrf: String) -> Element {
                 event.prevent_default();
                 if submitting(){return}
                 let request=json!({"title":title(),"body":body(),
-                    "base_branch":branch,"expected_head":revision});
+                    "base_branch":branch.clone(),"expected_head":revision.clone()});
                 let url=format!("/v1/engineering/teams/{id}/integrate");
                 let token=csrf.clone();
                 submitting.set(true);
