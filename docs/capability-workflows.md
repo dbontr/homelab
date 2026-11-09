@@ -95,7 +95,24 @@ A personal task may link an engineering run using `homelab:engineering_run:<run-
 
 The model proposal endpoint `POST /v1/workflows/plan` and MCP `workflow_plan` accept a project, objective, and explicit personal-read scope. An independently configured HTTPS or loopback model proposes up to 12 read stages. The platform validates identity, actions, dependencies, limits, and privacy scopes without executing the plan. The owner must explicitly submit the plan through the existing workflow API. The model never receives administrator credentials or arbitrary project content.
 
-Source deployment accepts `services.homelabPlatform.capabilityModel.{url,name,tokenFile}` for the bounded planner. Compute Kubernetes deployment accepts `services.workspaceMcp.embedding.{url,model,tokenSecretName}`; the Helm chart copies a preprovisioned token Secret into a private memory volume before starting the unprivileged controller. These options default to disabled. A configured model endpoint does not grant permission to share research content: library policy remains independently required.
+Source deployment accepts `services.homelabPlatform.capabilityModel.{url,name,tokenFile}` for a legacy single-model planner. For purpose-specific routing, use `services.homelabPlatform.capabilityModel.routes`, with up to three explicitly declared roles: `planning` (initial read-only stage proposal), `continuation` (bounded continuation using status-only observations), and `evidence` (continuation when the owner has explicitly enabled project research excerpt sharing). The routes use independently selected fixed chat-completion endpoints and model names. The optional `localOnly` property rejects all non-loopback addresses. No fallback to a different provider or role is permitted when a required route is absent or unavailable. A configured routes list and legacy single-model fields are mutually exclusive. NixOS renders only nonsecret route metadata into its store and loads each configured token through systemd `LoadCredential`; neither a token nor a provider authentication cookie appears in Git or model prompts.
+
+Example for a local, privacy-preserving setup:
+
+```nix
+services.homelabPlatform.capabilityModel.routes = [
+  { id = "plan"; purpose = "planning";
+    url = "http://127.0.0.1:8001/v1/chat/completions"; model = "planner"; localOnly = true; }
+  { id = "reason"; purpose = "continuation";
+    url = "http://127.0.0.1:8001/v1/chat/completions"; model = "reasoning"; localOnly = true; }
+  { id = "research"; purpose = "evidence";
+    url = "http://127.0.0.1:8001/v1/chat/completions"; model = "reasoning"; localOnly = true; }
+];
+```
+
+The routes do not instantiate an inference service themselves. A separately administered model endpoint is required for each configured purpose. The independent read-only stage and personal-data validators run after every model proposal and every continuation.
+
+ Compute Kubernetes deployment accepts `services.workspaceMcp.embedding.{url,model,tokenSecretName}`; the Helm chart copies a preprovisioned token Secret into a private memory volume before starting the unprivileged controller. These options default to disabled. A configured model endpoint does not grant permission to share research content: library policy remains independently required.
 
 The Compute controller can use a configured `/v1/embeddings` provider for automatic indexing. The owner must explicitly enable each shared library with `research_embedding_policy_set` before any passage text is transmitted. Policies are revision-guarded and can be revoked even when the provider is offline. The controller indexes a bounded batch of new passages periodically, validates response dimensions and model identity, checks immutable passage hashes, and fences consent and source revisions at the database write. The native `/api/projects/{project}/research/semantic?q=...` endpoint and MCP `research_semantic_query` embed the caller-provided query text, then search project-visible passages. Provider credentials are loaded only from a private file; no embedding result grants additional library access.
 
