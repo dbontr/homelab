@@ -158,6 +158,7 @@ func(s *Server) Handler()http.Handler{
   writeJSON(w,200,map[string]any{"tools":s.toolList(r)})
  })
  mux.HandleFunc("POST /v1/tools/{name}/call",s.nativeToolCall)
+ mux.HandleFunc("GET /v1/tasks/delegations",s.uiTaskDelegations)
  mux.HandleFunc("GET /v1/tasks",s.tasks)
  mux.HandleFunc("POST /v1/tasks",s.tasks)
  mux.HandleFunc("POST /v1/tasks/{id}/complete",s.complete)
@@ -322,9 +323,10 @@ func tool(name,description string,properties map[string]any,required ...string)m
 func prop(kind string)map[string]any{return map[string]any{"type":kind}}
 func(s *Server)localTools()[]map[string]any{
  tools:=[]map[string]any{
-  tool("task_add","Create a personal task",map[string]any{"parent_id":prop("string"),"depends_on":map[string]any{"type":"array","items":prop("string")},"title":prop("string"),"notes":prop("string"),"goal_id":prop("string"),"due":prop("string"),"minutes":prop("integer"),"energy":prop("string"),"location":prop("string"),"priority":prop("integer")},"title"),
+  tool("task_add","Create a personal task",map[string]any{"links":map[string]any{"type":"array","items":prop("string")},"parent_id":prop("string"),"depends_on":map[string]any{"type":"array","items":prop("string")},"title":prop("string"),"notes":prop("string"),"goal_id":prop("string"),"due":prop("string"),"minutes":prop("integer"),"energy":prop("string"),"location":prop("string"),"priority":prop("integer")},"title"),
   tool("task_complete","Mark a task complete",map[string]any{"id":prop("string")},"id"),
   tool("task_list","List personal tasks",map[string]any{"status":prop("string")}),
+  tool("task_delegations","Read evidence-linked engineering delegation status without completing personal tasks",map[string]any{}),
   tool("task_suggest","Recommend tasks by time, mental effort, location, or quick-win mode",map[string]any{"minutes":prop("integer"),"energy":prop("string"),"location":prop("string"),"mode":prop("string"),"limit":prop("integer")}),
   tool("goal_add","Add a personal goal",map[string]any{"title":prop("string"),"notes":prop("string")},"title"),
   tool("goal_list","List personal goals",map[string]any{}),
@@ -506,6 +508,7 @@ func(s *Server)localTool(ctx context.Context,name string,raw json.RawMessage)(an
  case "task_add":return s.db.AddTask(args.TaskInput)
  case "task_complete":return s.db.CompleteTask(args.ID)
  case "task_list":return s.db.Tasks(args.Status),nil
+ case "task_delegations":return s.taskDelegations(),nil
  case "task_suggest":return s.db.Suggest(args.Minutes,args.Energy,args.Location,args.Mode,args.Limit),nil
  case "goal_add":return s.db.AddGoal(args.Title,args.Notes)
  case "goal_list":return s.db.Goals(),nil
