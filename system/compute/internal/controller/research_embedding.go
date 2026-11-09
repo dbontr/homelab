@@ -81,6 +81,10 @@ func (db *Database) putResearchEmbedding(library,passage,model,digest string,vec
 // the source's active index epoch. The caller supplies the query vector from
 // the exact same encoder model. This method never invents embeddings.
 func (db *Database) SemanticResearch(project,model string,query []float64,limit int)([]map[string]any,error){
+ return db.semanticResearch(project,model,query,limit,false)
+}
+
+func (db *Database) semanticResearch(project,model string,query []float64,limit int,consentedOnly bool)([]map[string]any,error){
  if !validID.MatchString(project)||!embeddingModelID.MatchString(model)||limit<1||limit>100{
   return nil,errors.New("invalid semantic research scope")
  }
@@ -95,7 +99,9 @@ func (db *Database) SemanticResearch(project,model string,query []float64,limit 
     JOIN research_sources s ON s.id=p.source AND s.epoch=p.epoch
     JOIN project_libraries l ON l.library=s.library
     WHERE l.project=? AND e.model=? AND e.dimension=? AND e.body_sha256=p.body_sha256
-    ORDER BY p.id LIMIT ?`,project,model,len(query),maxSemanticCandidates+1)
+    AND (?=0 OR EXISTS(SELECT 1 FROM research_embedding_policies permission
+        WHERE permission.library=s.library AND permission.model=e.model AND permission.enabled=1))
+    ORDER BY p.id LIMIT ?`,project,model,len(query),boolInt(consentedOnly),maxSemanticCandidates+1)
  if err!=nil{return nil,err}
  if len(rows)>maxSemanticCandidates{return nil,errors.New("semantic index exceeds bounded scan capacity")}
  result:=make([]map[string]any,0,len(rows))

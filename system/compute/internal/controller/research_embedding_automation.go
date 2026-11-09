@@ -131,7 +131,7 @@ func (s *Server) SemanticResearchQuery(ctx context.Context,project,query string,
  if permitted==0{return nil,errors.New("semantic search requires enabled library consent")}
  vector,err:=s.Embedder.Embed(ctx,query)
  if err!=nil{return nil,err}
- return s.DB.SemanticResearch(project,s.Embedder.Model,vector,limit)
+ return s.DB.semanticResearch(project,s.Embedder.Model,vector,limit,true)
 }
 
 // Automatic indexing sends only explicitly consented source passages. Failures

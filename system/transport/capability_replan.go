@@ -19,7 +19,7 @@ func capabilityObservations(w agentflow.Workflow) []map[string]any {
     if len(w.Steps)>10{start=len(w.Steps)-10}
     for _,step:=range w.Steps[start:]{
         item:=map[string]any{"id":step.ID,"action":step.Kind,"status":step.Status}
-        if w.ShareProjectEvidence && step.Kind=="research_search" && step.Status==agentflow.Succeeded {
+        if w.ShareProjectEvidence && (step.Kind=="research_search"||step.Kind=="research_semantic_query") && step.Status==agentflow.Succeeded {
             var passages []map[string]any
             if err:=json.Unmarshal(step.Result,&passages);err==nil{
                 evidence:=make([]map[string]string,0,3)

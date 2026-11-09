@@ -82,7 +82,7 @@ func validCapabilityStage(stage CapabilityStage, allowPersonal bool) error {
         if stage.Limit>14||stage.Query!=""&&!validCapabilityDay(stage.Query){return errors.New("invalid grocery interval")}
     case "recipe_nutrition":
         if strings.TrimSpace(stage.Query)==""||strings.Contains(stage.Query,"/"){return errors.New("invalid recipe reference")}
-    case "research_search":
+    case "research_search","research_semantic_query":
         if strings.TrimSpace(stage.Query)=="" {return errors.New("research search requires a query")}
     case "recipe_search":
         if strings.TrimSpace(stage.Query)=="" {return errors.New("recipe search requires a query")}
@@ -235,6 +235,12 @@ func (s *Server) executeCapabilityRead(ctx context.Context,w agentflow.Workflow,
         if input.Limit>0&&len(passageIDs)>input.Limit{passageIDs=passageIDs[:input.Limit]}
         return s.capabilityBackendRead(ctx,"workspace","study_pack_prepare",map[string]any{
             "project_id":w.Project,"title":"Research evidence","objective":w.Objective,"passage_ids":passageIDs,
+        })
+    case "research_semantic_query":
+        limit:=input.Limit
+        if limit==0{limit=8}
+        return s.capabilityBackendRead(ctx,"workspace","research_semantic_query",map[string]any{
+            "project_id":w.Project,"query":input.Query,"limit":limit,
         })
     case "research_search":
         limit:=input.Limit

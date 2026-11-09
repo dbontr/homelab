@@ -22,7 +22,7 @@ Each stage has a stable ID, dependency IDs, and one approved read action:
 
 - `project_context` — authoritative project knowledge context
 - `project_tasks` — explicitly linked tasks and their goals
-- `research_search` — scoped search of project-linked research passages;
+- `research_search` and `research_semantic_query` — keyword or consented model-generated semantic search of project-linked research passages;
   includes source locators from the controller
 - `engineering_runs` — matching engineering run summaries
 - `learning_summary`, `learning_sessions`, `learning_reviews`,
