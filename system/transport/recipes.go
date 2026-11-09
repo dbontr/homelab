@@ -133,6 +133,10 @@ func (s *Server) recipeTool(ctx context.Context, name string, raw json.RawMessag
 		Revision int            `json:"revision"`
 		SourceRevision int       `json:"source_revision"`
 		ExpectedRevision int     `json:"expected_revision"`
+		PantryItem recipes.PantryItem `json:"item"`
+		Targets []recipes.NutrientTarget `json:"targets"`
+		Limit int `json:"limit"`
+		Key string `json:"key"`
 	}
 	if len(raw) > 0 {
 		if err := json.Unmarshal(raw, &input); err != nil { return nil, err }
@@ -152,6 +156,10 @@ func (s *Server) recipeTool(ctx context.Context, name string, raw json.RawMessag
 	case "recipe_meals": return s.recipes.Meals(), nil
 	case "recipe_groceries": return s.recipes.Groceries(input.Start, input.End)
 	case "recipe_nutrition_preview": return s.recipes.Nutrition(input.ID, input.Servings)
+	case "recipe_pantry_list": return s.recipes.Pantry(),nil
+	case "recipe_pantry_set": return s.recipes.SetPantry(input.PantryItem,input.ExpectedRevision)
+	case "recipe_pantry_remove": return s.recipes.RemovePantry(input.Key,input.ExpectedRevision)
+	case "recipe_recommend": return s.recipes.RecommendFromPantry(recipes.PantryRecommendationRequest{Servings:input.Servings,Targets:input.Targets,Limit:input.Limit})
 	default: return nil, errors.New("unknown recipe tool")
 	}
 }
