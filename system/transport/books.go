@@ -70,6 +70,9 @@ func (s *Server) bookTool(ctx context.Context,name string,raw json.RawMessage)(a
  case "book_search":
   if s.bookCatalog==nil{return nil,errors.New("book discovery is not configured")}
   return s.bookCatalog.Search(ctx,args.Query)
+ case "book_lending":
+  if s.bookCatalog==nil{return nil,errors.New("book lending discovery is not configured")}
+  return s.bookCatalog.FindReading(ctx,args.Query)
  case "book_request_list":
   return s.db.ListBookRequests(args.Status),nil
  case "book_request_add":
