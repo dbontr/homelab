@@ -33,6 +33,20 @@ in
       url = lib.mkOption { type = lib.types.str; default = ""; description = "Approved HTTPS or loopback model endpoint for read-only workflow planning."; };
       name = lib.mkOption { type = lib.types.str; default = ""; description = "Exact model name."; };
       tokenFile = lib.mkOption { type = lib.types.nullOr lib.types.str; default = null; description = "Owner-private provider token file."; };
+      routes = lib.mkOption {
+        type = lib.types.listOf (lib.types.submodule {
+          options = {
+            id = lib.mkOption { type = lib.types.str; description = "Stable route name."; };
+            purpose = lib.mkOption { type = lib.types.enum [ "planning" "continuation" "evidence" ]; };
+            url = lib.mkOption { type = lib.types.str; description = "Fixed HTTPS or loopback chat-completion endpoint."; };
+            model = lib.mkOption { type = lib.types.str; description = "Exact selected model."; };
+            localOnly = lib.mkOption { type = lib.types.bool; default = false; description = "Reject non-loopback endpoints for this purpose."; };
+            tokenFile = lib.mkOption { type = lib.types.nullOr lib.types.str; default = null; description = "Owner-private bearer token file, loaded into this service only."; };
+          };
+        });
+        default = [];
+        description = "Purpose-bound, privacy-preserving model routing for read-only capability plans.";
+      };
     };
     monitoring = {
       prometheusURL = lib.mkOption {
@@ -147,6 +161,22 @@ in
         message = "Capability planning requires a model endpoint and name; credentials cannot be configured alone.";
       }
       {
+        assertion = cfg.capabilityModel.routes == [] ||
+          (cfg.capabilityModel.url == "" && cfg.capabilityModel.name == "" && cfg.capabilityModel.tokenFile == null);
+        message = "Purpose-specific model routes cannot be combined with legacy single-model settings.";
+      }
+      {
+        assertion = let
+          routes = cfg.capabilityModel.routes;
+          purposes = map (route: route.purpose) routes;
+          names = map (route: route.id) routes;
+        in lib.length routes <= 3 &&
+           lib.length purposes == lib.length (lib.unique purposes) &&
+           lib.length names == lib.length (lib.unique names) &&
+           lib.all (route: route.id != "" && route.model != "" && route.url != "") routes;
+        message = "Model routing requires nonempty, unique purpose and identity records, with at most three routes.";
+      }
+      {
         assertion = (cfg.seerr.url == "") == (cfg.seerr.apiKeyFile == null);
         message = "Seerr requires both its origin URL and protected API key file.";
       }
@@ -208,6 +238,18 @@ in
         HOMELAB_API_TOKEN_FILE = "/run/credentials/homelab-platform.service/access_token";
         HOMELAB_PROMETHEUS_URL = cfg.monitoring.prometheusURL;
         HOMELAB_LOKI_URL = cfg.monitoring.lokiURL;
+      } // lib.optionalAttrs (cfg.capabilityModel.routes != []) {
+        HOMELAB_CAPABILITY_MODEL_ROUTES_FILE = pkgs.writeText "eminence-model-routes.json" (builtins.toJSON {
+          routes = lib.imap0 (index: route: {
+            name = route.id;
+            purpose = route.purpose;
+            endpoint = route.url;
+            model = route.model;
+            local_only = route.localOnly;
+            token_file = if route.tokenFile == null then "" else
+              "/run/credentials/homelab-platform.service/model-route-token-${toString index}";
+          }) cfg.capabilityModel.routes;
+        });
       } // lib.optionalAttrs (cfg.capabilityModel.url != "") {
         HOMELAB_CAPABILITY_MODEL_URL = cfg.capabilityModel.url;
         HOMELAB_CAPABILITY_MODEL_NAME = cfg.capabilityModel.name;
@@ -263,6 +305,10 @@ in
           ++ lib.optional (cfg.books.contactFile != null) "books_contact:${cfg.books.contactFile}"
           ++ lib.optional (cfg.seerr.apiKeyFile != null) "seerr_api_key:${cfg.seerr.apiKeyFile}"
           ++ lib.optional (cfg.capabilityModel.tokenFile != null) "capability-model-token:${cfg.capabilityModel.tokenFile}"
+          ++ lib.concatLists (lib.imap0 (index: route:
+            lib.optional (route.tokenFile != null)
+              "model-route-token-${toString index}:${route.tokenFile}"
+          ) cfg.capabilityModel.routes)
           ++ lib.concatMap (name:
             lib.optional (cfg.integrations.${name}.tokenFile != null)
               "${name}_token:${cfg.integrations.${name}.tokenFile}"
