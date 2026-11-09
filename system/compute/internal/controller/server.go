@@ -89,6 +89,15 @@ func NewServer(db *Database, token string) (*Server, error) {
 	gitlabPAT, err := configuredGitLabPAT()
 	if err != nil { return nil, err }
 	gitlab := NewGitLab(gitlabPAT)
+ if gitlabAPI:=strings.TrimRight(os.Getenv("PWM_GITLAB_API_URL"),"/");gitlabAPI!=""{
+  endpoint,parseErr:=url.Parse(gitlabAPI)
+  if parseErr!=nil||endpoint.Scheme!="https"||endpoint.Host==""||
+   endpoint.User!=nil||endpoint.RawQuery!=""||endpoint.Fragment!=""||
+   endpoint.Opaque!=""||endpoint.Path!="/api/v4"{
+   return nil,errors.New("GitLab API must be an exact HTTPS /api/v4 endpoint")
+  }
+  gitlab.API=gitlabAPI
+ }
 	var localGit *LocalGit
 	if configuredRoot := os.Getenv("PWM_GIT_LOCAL_ROOT"); configuredRoot != "" {
 		if !filepath.IsAbs(configuredRoot) {
