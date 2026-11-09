@@ -69,3 +69,52 @@ func (c *Client)Cancel(id string,revision uint64)error{
  var out RunSummary
  return c.request(http.MethodPost,"/runs/"+url.PathEscape(id)+"/cancel",map[string]any{"revision":revision},&out)
 }
+
+func (c *Client) SubmitTeam(request TeamRequest)(TeamSummary,error){
+ var team TeamSummary
+ err:=c.request(http.MethodPost,"/teams",request,&team)
+ return team,err
+}
+func (c *Client) ListTeams()([]TeamSummary,error){
+ var teams []TeamSummary
+ err:=c.request(http.MethodGet,"/teams",nil,&teams)
+ return teams,err
+}
+func (c *Client) GetTeam(id string)(TeamSummary,error){
+ var team TeamSummary
+ if !validID(id){return team,errors.New("invalid engineering team")}
+ err:=c.request(http.MethodGet,"/teams/"+url.PathEscape(id),nil,&team)
+ return team,err
+}
+func (c *Client) CancelTeam(id string)error{
+ if !validID(id){return errors.New("invalid engineering team")}
+ var team TeamSummary
+ return c.request(http.MethodPost,"/teams/"+url.PathEscape(id)+"/cancel",map[string]any{},&team)
+}
+
+func (c *Client) IntegrateTeam(id string, request TeamIntegrationRequest)(TeamSummary,error){
+ var team TeamSummary
+ if !validID(id){return team,errors.New("invalid engineering team")}
+ err:=c.request(http.MethodPost,"/teams/"+url.PathEscape(id)+"/integrate",request,&team)
+ return team,err
+}
+
+func(c *Client)Knowledge(runID,proposalID string)(KnowledgeProposal,error){
+ var result KnowledgeProposal
+ if !validID(runID)||!validID(proposalID){return result,errors.New("invalid knowledge identity")}
+ err:=c.request(http.MethodGet,"/runs/"+url.PathEscape(runID)+"/knowledge/"+url.PathEscape(proposalID),nil,&result)
+ return result,err
+}
+func(c *Client)ApproveKnowledge(runID,proposalID string)(KnowledgeProposal,error){
+ var result KnowledgeProposal
+ if !validID(runID)||!validID(proposalID){return result,errors.New("invalid knowledge identity")}
+ err:=c.request(http.MethodPost,"/runs/"+url.PathEscape(runID)+"/knowledge/"+url.PathEscape(proposalID)+"/approve",map[string]any{},&result)
+ return result,err
+}
+
+func(c *Client)SourceDiffs(id string)([]SourceDiff,error){
+ var out []SourceDiff
+ if !validID(id){return nil,errors.New("invalid engineering run")}
+ err:=c.request(http.MethodGet,"/runs/"+url.PathEscape(id)+"/diffs",nil,&out)
+ return out,err
+}

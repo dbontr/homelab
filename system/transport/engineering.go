@@ -40,6 +40,61 @@ func(s *Server)engineeringRun(w http.ResponseWriter,r *http.Request){
   writeJSON(w,200,run)
  }
 }
+func (s *Server) engineeringTeamCollection(w http.ResponseWriter,r *http.Request){
+ teams,ok:=s.engineering.(agentflow.TeamManager)
+ if !ok{writeError(w,503,"engineering teams unavailable");return}
+ if r.Method==http.MethodGet{
+  summaries,err:=teams.ListTeams()
+  if err!=nil{writeError(w,500,"team listing unavailable");return}
+  writeJSON(w,200,map[string]any{"teams":summaries});return
+ }
+ var request agentflow.TeamRequest
+ if err:=decode(r,&request);err!=nil{writeError(w,400,"invalid team request");return}
+ summary,err:=teams.SubmitTeam(request)
+ if err!=nil{writeError(w,400,err.Error());return}
+ writeJSON(w,201,summary)
+}
+func (s *Server) engineeringTeam(w http.ResponseWriter,r *http.Request){
+ teams,ok:=s.engineering.(agentflow.TeamManager)
+ if !ok{writeError(w,503,"engineering teams unavailable");return}
+ id:=r.PathValue("id")
+ if r.Method==http.MethodPost{
+  if err:=teams.CancelTeam(id);err!=nil{writeError(w,409,"team cancellation failed");return}
+ }
+ team,err:=teams.GetTeam(id)
+ if err!=nil{writeError(w,404,"engineering team not found");return}
+ writeJSON(w,200,team)
+}
+func (s *Server) engineeringTeamIntegrate(w http.ResponseWriter,r *http.Request){
+ teams,ok:=s.engineering.(agentflow.TeamManager)
+ if !ok{writeError(w,503,"engineering teams unavailable");return}
+ var request agentflow.TeamIntegrationRequest
+ if err:=decode(r,&request);err!=nil{writeError(w,400,"invalid integration request");return}
+ team,err:=teams.IntegrateTeam(r.PathValue("id"),request)
+ if err!=nil{writeError(w,409,"team integration unavailable");return}
+ writeJSON(w,202,team)
+}
+func (s *Server) engineeringRunKnowledge(w http.ResponseWriter,r *http.Request){
+ manager,ok:=s.engineering.(agentflow.KnowledgeManager)
+ if !ok{writeError(w,503,"engineering knowledge unavailable");return}
+ runID,proposalID:=r.PathValue("id"),r.PathValue("proposal")
+ var record agentflow.KnowledgeProposal
+ var err error
+ if r.Method==http.MethodPost {
+  record,err=manager.ApproveKnowledge(runID,proposalID)
+ }else{
+  record,err=manager.Knowledge(runID,proposalID)
+ }
+ if err!=nil{writeError(w,409,"knowledge operation unavailable");return}
+ writeJSON(w,200,record)
+}
+func(s *Server)engineeringRunDiffs(w http.ResponseWriter,r *http.Request){
+ diffs,ok:=s.engineering.(agentflow.DiffManager)
+ if !ok{writeError(w,503,"engineering previews unavailable");return}
+ out,err:=diffs.SourceDiffs(r.PathValue("id"))
+ if err!=nil{writeError(w,404,"source previews unavailable");return}
+ writeJSON(w,200,map[string]any{"diffs":out})
+}
 func (s *Server) engineeringTool(_ context.Context,name string,raw json.RawMessage)(any,error){
  if s.engineering==nil{return nil,errors.New("engineering runs unavailable")}
  switch name{
@@ -53,6 +108,48 @@ func (s *Server) engineeringTool(_ context.Context,name string,raw json.RawMessa
   var request struct{ID string `json:"id"`}
   if err:=json.Unmarshal(raw,&request);err!=nil{return nil,err}
   return s.engineering.Get(request.ID)
+ case "engineering_team_submit":
+  teams,ok:=s.engineering.(agentflow.TeamManager);if !ok{return nil,errors.New("engineering teams unavailable")}
+  var req agentflow.TeamRequest
+  if err:=json.Unmarshal(raw,&req);err!=nil{return nil,err}
+  return teams.SubmitTeam(req)
+ case "engineering_team_list":
+  teams,ok:=s.engineering.(agentflow.TeamManager);if !ok{return nil,errors.New("engineering teams unavailable")}
+  return teams.ListTeams()
+ case "engineering_team_get":
+  teams,ok:=s.engineering.(agentflow.TeamManager);if !ok{return nil,errors.New("engineering teams unavailable")}
+  var req struct{ID string `json:"id"`}
+  if err:=json.Unmarshal(raw,&req);err!=nil{return nil,err}
+  return teams.GetTeam(req.ID)
+ case "engineering_team_integrate":
+  teams,ok:=s.engineering.(agentflow.TeamManager);if !ok{return nil,errors.New("engineering teams unavailable")}
+  var req struct{
+   ID string `json:"id"`
+   agentflow.TeamIntegrationRequest
+  }
+  if err:=json.Unmarshal(raw,&req);err!=nil{return nil,err}
+  return teams.IntegrateTeam(req.ID,req.TeamIntegrationRequest)
+ case "engineering_team_cancel":
+  teams,ok:=s.engineering.(agentflow.TeamManager);if !ok{return nil,errors.New("engineering teams unavailable")}
+  var req struct{ID string `json:"id"`}
+  if err:=json.Unmarshal(raw,&req);err!=nil{return nil,err}
+  if err:=teams.CancelTeam(req.ID);err!=nil{return nil,err}
+  return teams.GetTeam(req.ID)
+ case "engineering_run_knowledge_get":
+  knowledge,ok:=s.engineering.(agentflow.KnowledgeManager);if !ok{return nil,errors.New("engineering knowledge unavailable")}
+  var req struct{ID string `json:"id"`;ProposalID string `json:"proposal_id"`}
+  if err:=json.Unmarshal(raw,&req);err!=nil{return nil,err}
+  return knowledge.Knowledge(req.ID,req.ProposalID)
+ case "engineering_run_knowledge_approve":
+  knowledge,ok:=s.engineering.(agentflow.KnowledgeManager);if !ok{return nil,errors.New("engineering knowledge unavailable")}
+  var req struct{ID string `json:"id"`;ProposalID string `json:"proposal_id"`}
+  if err:=json.Unmarshal(raw,&req);err!=nil{return nil,err}
+  return knowledge.ApproveKnowledge(req.ID,req.ProposalID)
+ case "engineering_run_diffs":
+  diffs,ok:=s.engineering.(agentflow.DiffManager);if !ok{return nil,errors.New("engineering previews unavailable")}
+  var req struct{ID string `json:"id"`}
+  if err:=json.Unmarshal(raw,&req);err!=nil{return nil,err}
+  return diffs.SourceDiffs(req.ID)
  case "engineering_run_cancel":
   var request struct{ID string `json:"id"`;Revision uint64 `json:"revision"`}
   if err:=json.Unmarshal(raw,&request);err!=nil{return nil,err}

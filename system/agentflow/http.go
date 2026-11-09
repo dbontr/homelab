@@ -55,6 +55,53 @@ func NewHTTPHandler(service Manager)http.Handler{
   if err!=nil{sendJSON(w,500,map[string]string{"error":"run unavailable"});return}
   sendJSON(w,200,run)
  })
+ if teams,ok:=service.(TeamManager);ok{
+  mux.HandleFunc("GET /teams",func(w http.ResponseWriter,_ *http.Request){
+   data,err:=teams.ListTeams();if err!=nil{sendJSON(w,500,map[string]string{"error":"teams unavailable"});return}
+   sendJSON(w,200,data)
+  })
+  mux.HandleFunc("POST /teams",func(w http.ResponseWriter,r *http.Request){
+   var request TeamRequest
+   if err:=readJSON(r,&request);err!=nil{sendJSON(w,400,map[string]string{"error":"invalid team request"});return}
+   summary,err:=teams.SubmitTeam(request);if err!=nil{sendJSON(w,400,map[string]string{"error":err.Error()});return}
+   sendJSON(w,201,summary)
+  })
+  mux.HandleFunc("GET /teams/{id}",func(w http.ResponseWriter,r *http.Request){
+   summary,err:=teams.GetTeam(r.PathValue("id"));if err!=nil{sendJSON(w,404,map[string]string{"error":"team not found"});return}
+   sendJSON(w,200,summary)
+  })
+  mux.HandleFunc("POST /teams/{id}/integrate",func(w http.ResponseWriter,r *http.Request){
+   var request TeamIntegrationRequest
+   if err:=readJSON(r,&request);err!=nil{sendJSON(w,400,map[string]string{"error":"invalid integration request"});return}
+   team,err:=teams.IntegrateTeam(r.PathValue("id"),request)
+   if err!=nil{sendJSON(w,409,map[string]string{"error":err.Error()});return}
+   sendJSON(w,202,team)
+  })
+  mux.HandleFunc("POST /teams/{id}/cancel",func(w http.ResponseWriter,r *http.Request){
+   if err:=teams.CancelTeam(r.PathValue("id"));err!=nil{sendJSON(w,409,map[string]string{"error":"team cannot be cancelled"});return}
+   summary,err:=teams.GetTeam(r.PathValue("id"));if err!=nil{sendJSON(w,500,map[string]string{"error":"team unavailable"});return}
+   sendJSON(w,200,summary)
+  })
+ }
+ if knowledge,ok:=service.(KnowledgeManager);ok{
+  mux.HandleFunc("GET /runs/{id}/knowledge/{proposal}",func(w http.ResponseWriter,r *http.Request){
+   record,err:=knowledge.Knowledge(r.PathValue("id"),r.PathValue("proposal"))
+   if err!=nil{sendJSON(w,404,map[string]string{"error":"knowledge proposal not found"});return}
+   sendJSON(w,200,record)
+  })
+  mux.HandleFunc("POST /runs/{id}/knowledge/{proposal}/approve",func(w http.ResponseWriter,r *http.Request){
+   record,err:=knowledge.ApproveKnowledge(r.PathValue("id"),r.PathValue("proposal"))
+   if err!=nil{sendJSON(w,409,map[string]string{"error":"knowledge approval requires reconciliation"});return}
+   sendJSON(w,200,record)
+  })
+ }
+ if diffs,ok:=service.(DiffManager);ok{
+  mux.HandleFunc("GET /runs/{id}/diffs",func(w http.ResponseWriter,r *http.Request){
+   out,err:=diffs.SourceDiffs(r.PathValue("id"))
+   if err!=nil{sendJSON(w,404,map[string]string{"error":"source previews unavailable"});return}
+   sendJSON(w,200,out)
+  })
+ }
  return mux
 }
 // ServeUnix exposes only lifecycle operations on a group-restricted local

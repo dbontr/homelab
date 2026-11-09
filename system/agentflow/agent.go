@@ -25,6 +25,9 @@ type AgentBrief struct {
 	AllowedPaths []string `json:"allowed_paths"`
 	Checks       []string `json:"checks"`
 	ContextPaths []string `json:"context_paths,omitempty"`
+	LinkedRepositories []RepositoryPin `json:"linked_repositories,omitempty"`
+	IncludeKnowledge bool `json:"include_knowledge,omitempty"`
+	Revision string `json:"revision,omitempty"`
 }
 
 type PatchHunk struct {
@@ -36,6 +39,7 @@ type PatchHunk struct {
 // Only the runtime can turn it into a scoped compute operation.
 type AgentAction struct {
 	Action         string      `json:"action"`
+	Repository     string      `json:"repository,omitempty"`
 	Reason         string      `json:"reason,omitempty"`
 	Plan           []string    `json:"plan,omitempty"`
 	Path           string      `json:"path,omitempty"`
@@ -45,6 +49,13 @@ type AgentAction struct {
 	Content        string      `json:"content,omitempty"`
 	Command        string      `json:"command,omitempty"`
 	Summary        string      `json:"summary,omitempty"`
+	KnowledgeKind  string `json:"knowledge_kind,omitempty"`
+	KnowledgeTitle string `json:"knowledge_title,omitempty"`
+	KnowledgeBody  string `json:"knowledge_body,omitempty"`
+	EvidencePaths  []string `json:"evidence_paths,omitempty"`
+	Line int `json:"line,omitempty"`
+	Column int `json:"column,omitempty"`
+	Operation string `json:"operation,omitempty"`
 }
 
 type AgentEvent struct {
@@ -70,6 +81,14 @@ type AgentSession struct {
 	Turns        int               `json:"turns"`
 	Completed    bool              `json:"completed"`
 	Summary      string            `json:"summary,omitempty"`
+	Knowledge []KnowledgeProposal `json:"knowledge,omitempty"`
+	Diagnostics []CheckDiagnostic `json:"diagnostics,omitempty"`
+}
+
+type AgentEventProgress struct {
+ Action string `json:"action"`
+ Target string `json:"target,omitempty"`
+ Reason string `json:"reason,omitempty"`
 }
 
 type AgentProgress struct {
@@ -79,6 +98,9 @@ type AgentProgress struct {
 	ChangedPaths []string `json:"changed_paths,omitempty"`
 	Completed    bool     `json:"completed"`
 	Summary      string   `json:"summary,omitempty"`
+	Knowledge []KnowledgePreview `json:"knowledge,omitempty"`
+	Diagnostics []CheckDiagnostic `json:"diagnostics,omitempty"`
+	Events []AgentEventProgress `json:"events,omitempty"`
 }
 
 func publicAgentProgress(state *AgentSession) *AgentProgress {
@@ -86,6 +108,9 @@ func publicAgentProgress(state *AgentSession) *AgentProgress {
 		return nil
 	}
 	progress := &AgentProgress{Plan: append([]string(nil), state.Plan...), Turns: state.Turns, Completed: state.Completed, Summary: state.Summary}
+	for _,proposal:=range state.Knowledge{ progress.Knowledge=append(progress.Knowledge,KnowledgePreview{ID:proposal.ID,Kind:proposal.Kind,Title:proposal.Title,Status:proposal.Status}) }
+	progress.Diagnostics=append(progress.Diagnostics,state.Diagnostics...)
+	for _,item:=range state.Events {progress.Events=append(progress.Events,AgentEventProgress{Action:item.Action,Target:item.Target,Reason:item.Reason})}
 	for path := range state.Changed {
 		progress.ChangedPaths = append(progress.ChangedPaths, path)
 	}
@@ -117,6 +142,16 @@ type DecisionAuthor interface {
 }
 
 func (a AgentAction) validate(brief AgentBrief) error {
+	if a.Repository != "" && a.Repository != brief.Repository {
+		found := false
+		for _, linked := range brief.LinkedRepositories {
+			if a.Repository == linked.Repository { found = true; break }
+		}
+		if !found { return errors.New("repository is not pinned to this engineering run") }
+		if a.Action != "list" && a.Action != "search" && a.Action != "map" && a.Action != "symbols" && a.Action != "references" && a.Action != "dependency_graph" && a.Action != "lsp" && a.Action != "read" {
+			return errors.New("linked repository access is read-only")
+		}
+	}
 	if len(a.Reason) > 400 || len(a.Summary) > 400 || len(a.Path) > 255 || len(a.Query) > 160 || len(a.Hunks) > 8 || len(a.Content) > 24000 || len(a.Plan) > 8 {
 		return errors.New("agent decision exceeds limits")
 	}
@@ -138,6 +173,11 @@ func (a AgentAction) validate(brief AgentBrief) error {
 		if strings.TrimSpace(a.Query) == "" || strings.ContainsAny(a.Query, "\x00\r\n") {
 			return errors.New("invalid repository search query")
 		}
+	case "dependency_graph":
+		if !validCodeScope(a.Path) {return errors.New("invalid source graph scope")}
+	case "lsp":
+		if !validSourcePath(a.Path)||sensitiveSourcePath(a.Path)||sourceLanguage(a.Path)!="go"||a.Line<1||a.Line>100000||a.Column<1||a.Column>500||
+			(a.Operation!="definition"&&a.Operation!="references"&&a.Operation!="hover"){return errors.New("invalid language-server navigation")}
 	case "map":
 		if !validCodeScope(a.Path) {
 			return errors.New("invalid source map scope")
@@ -150,11 +190,19 @@ func (a AgentAction) validate(brief AgentBrief) error {
 		if !codeIdentifier.MatchString(a.Query) || !validCodeScope(a.Path) {
 			return errors.New("invalid source reference query")
 		}
+	case "propose_knowledge":
+		if !brief.IncludeKnowledge || !validKnowledgeProposal(a) {return errors.New("invalid or unauthorized knowledge proposal")}
+	case "project_context":
+		if !brief.IncludeKnowledge { return errors.New("project knowledge not authorized for this run") }
+	case "knowledge_search", "research_search":
+		if !brief.IncludeKnowledge || strings.TrimSpace(a.Query) == "" || len(a.Query)>120 || strings.ContainsAny(a.Query,"\x00\r\n") { return errors.New("invalid or unauthorized knowledge search") }
+	case "library_documents", "library_resolve":
+		if !brief.IncludeKnowledge || !validID(a.Query) { return errors.New("unapproved library lookup") }
 	case "read":
 		if !validSourcePath(a.Path) || sensitiveSourcePath(a.Path) {
 			return errors.New("invalid or protected repository file path")
 		}
-	case "patch", "create":
+	case "patch", "create", "format", "preview":
 		approved := false
 		for _, p := range brief.AllowedPaths {
 			if p == a.Path {
@@ -165,7 +213,7 @@ func (a AgentAction) validate(brief AgentBrief) error {
 		if !approved || !validSourcePath(a.Path) || sensitiveSourcePath(a.Path) {
 			return errors.New("edit path is outside approved scope")
 		}
-		if a.Action == "patch" {
+		if a.Action == "patch" || a.Action == "preview" {
 			if !hexDigest(a.ExpectedSHA256) || len(a.Hunks) == 0 {
 				return errors.New("patch needs a source digest and hunks")
 			}
@@ -174,6 +222,8 @@ func (a AgentAction) validate(brief AgentBrief) error {
 					return errors.New("invalid patch hunk")
 				}
 			}
+		} else if a.Action == "format" {
+			if !hexDigest(a.ExpectedSHA256) || sourceLanguage(a.Path) != "go" { return errors.New("formatting requires an approved Go source file and digest") }
 		} else if len(a.Content) == 0 {
 			return errors.New("created file must contain source")
 		}
@@ -304,7 +354,7 @@ func (e *Engine) runAgentTurn(ctx context.Context, claim Claim, w Workflow) (jso
 		}
 		pending, err := e.prepareAgentAction(ctx, w, decision)
 		if err != nil {
-			if decision.Action != "patch" {
+			if decision.Action != "patch" && decision.Action != "format" && decision.Action != "preview" {
 				return nil, err
 			}
 			// Patch context conflicts are expected when a source file changes;
@@ -334,6 +384,9 @@ func (e *Engine) runAgentTurn(ctx context.Context, claim Claim, w Workflow) (jso
 			target = action.Query
 		}
 	}
+	if action.Repository != "" && action.Repository != brief.Repository {
+		target = action.Repository + ":" + target
+	}
 	if len(target) > 160 {
 		target = target[:160]
 	}
@@ -359,7 +412,7 @@ func (e *Engine) runAgentTurn(ctx context.Context, claim Claim, w Workflow) (jso
 
 func (e *Engine) prepareAgentAction(ctx context.Context, w Workflow, action AgentAction) (*AgentPending, error) {
 	pending := &AgentPending{Action: action}
-	if action.Action != "patch" && action.Action != "create" {
+	if action.Action != "patch" && action.Action != "create" && action.Action != "format" && action.Action != "preview" {
 		return pending, nil
 	}
 	if action.Action == "create" {
@@ -380,7 +433,8 @@ func (e *Engine) prepareAgentAction(ctx context.Context, w Workflow, action Agen
 	if shaHex(before) != action.ExpectedSHA256 {
 		return nil, errors.New("patch source digest conflict; read the file again")
 	}
-	after, err := applyPatch(before, action.Hunks)
+	var after string
+	if action.Action == "format" { after, err = formatGoSource(before) } else { after, err = applyPatch(before, action.Hunks) }
 	if err != nil {
 		return nil, err
 	}
@@ -396,7 +450,9 @@ func (e *Engine) executeAgentAction(ctx context.Context, w Workflow, brief Agent
 		return "", errors.New("agent has no pending action")
 	}
 	action := pending.Action
-	root := repoRoot(brief.Repository)
+	scope := brief
+	if action.Repository != "" { scope.Repository = action.Repository }
+	root := repoRoot(scope.Repository)
 	switch action.Action {
 	case "plan":
 		state.Plan = append([]string(nil), action.Plan...)
@@ -422,12 +478,20 @@ func (e *Engine) executeAgentAction(ctx context.Context, w Workflow, brief Agent
 			return "", errors.New("repository search failed")
 		}
 		return boundObservation(result, 8000), nil
+	case "dependency_graph":
+		return e.repositoryGraph(ctx,w,scope,action.Path)
+	case "lsp":
+		return e.goLanguageServer(ctx,w,scope,action)
 	case "map":
-		return e.repositoryMap(ctx, w, brief, action.Path)
+		return e.repositoryMap(ctx, w, scope, action.Path)
 	case "symbols":
-		return e.repositorySymbols(ctx, w, brief, action.Path)
+		return e.repositorySymbols(ctx, w, scope, action.Path)
 	case "references":
-		return e.repositoryReferences(ctx, w, brief, action.Query, action.Path)
+		return e.repositoryReferences(ctx, w, scope, action.Query, action.Path)
+	case "propose_knowledge":
+		return e.proposeKnowledge(ctx,w,brief,state,action)
+	case "project_context", "knowledge_search", "research_search", "library_documents", "library_resolve":
+		return e.readKnowledge(ctx, w.Project, action)
 	case "read":
 		result, err := e.workspaceAction(ctx, w, "read_file", map[string]any{"path": path.Join(root, action.Path)})
 		if err != nil {
@@ -438,6 +502,19 @@ func (e *Engine) executeAgentAction(ctx context.Context, w Workflow, brief Agent
 			return "", errors.New("repository file exceeds agent read limit")
 		}
 		return fmt.Sprintf("sha256=%s\n%s", shaHex(contents), contents), nil
+	case "preview":
+		current, err := e.workspaceAction(ctx, w, "read_file", map[string]any{"path": path.Join(root, action.Path)})
+		if err != nil { return "", err }
+		if shaHex(str(current["content"])) != pending.BeforeSHA256 {
+			return "", errors.New("source changed after patch preview was prepared")
+		}
+		return previewSourceChange(str(current["content"]), pending.Contents), nil
+	case "format":
+		if pending.BeforeSHA256 == pending.AfterSHA256 {
+			return "Source already matches Go formatting", nil
+		}
+		if err := e.executeAgentWrite(ctx, w, brief, state); err != nil { return "", err }
+		return "Formatted source confirmed at the target digest", nil
 	case "patch", "create":
 		if err := e.executeAgentWrite(ctx, w, brief, state); err != nil {
 			return "", err
@@ -455,7 +532,10 @@ func (e *Engine) executeAgentAction(ctx context.Context, w Workflow, brief Agent
 			return "", errors.New("check has no confirmed exit code")
 		}
 		state.ChecksPassed[action.Command] = code == 0
-		return fmt.Sprintf("check=%q exit_code=%.0f\n%s", action.Command, code, boundObservation(result, 5000)), nil
+		diagnostic:=classifyCheck(action.Command,int(code),str(result["stdout"]),str(result["stderr"]))
+		state.Diagnostics=append(state.Diagnostics,diagnostic)
+		if len(state.Diagnostics)>16{state.Diagnostics=state.Diagnostics[len(state.Diagnostics)-16:]}
+		return fmt.Sprintf("check=%q exit_code=%.0f category=%s\n%s", action.Command, code, diagnostic.Category, boundObservation(result, 5000)), nil
 	case "finish":
 		if len(state.Changed) == 0 {
 			return "", errors.New("agent cannot finish without source changes")
