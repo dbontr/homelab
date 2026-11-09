@@ -252,6 +252,9 @@ pub fn Workflows(csrf: String) -> Element {
                         onchange: move |event| {
                             let mut input = draft();
                             input.action = event.value();
+                            if input.action != "weekly_report" {
+                                input.notify_on_every_run = false;
+                            }
                             input.query.clear();
                             draft.set(input);
                         },
@@ -264,6 +267,7 @@ pub fn Workflows(csrf: String) -> Element {
                         option { value: "learning_summary", "Learning summary" }
                         option { value: "health_goals", "Health goals" }
                         option { value: "recipe_search", "Recipe search" }
+                        option { value: "weekly_report", "Previous week's task report" }
                     }
                 }
                 if matches!(draft().action.as_str(),
@@ -315,10 +319,31 @@ pub fn Workflows(csrf: String) -> Element {
                         onchange: move |event| {
                             let mut input = draft();
                             input.notify_on_change = event.value() == "yes";
+                            if input.notify_on_change { input.notify_on_every_run = false; }
                             draft.set(input);
                         },
                         option { value: "no", "Store runs without change alerts" }
                         option { value: "yes", "Alert on verified changes after baseline" }
+                    }
+                }
+                if draft().action == "weekly_report" {
+                    label { class: "form-row",
+                        span { class: "label", "Notify after each successful weekly report" }
+                        select {
+                            class: "field",
+                            value: if draft().notify_on_every_run { "yes" } else { "no" },
+                            onchange: move |event| {
+                                let mut input = draft();
+                                input.notify_on_every_run = event.value() == "yes";
+                                if input.notify_on_every_run { input.notify_on_change = false; }
+                                draft.set(input);
+                            },
+                            option { value: "no", "Store each report without completion alerts" }
+                            option { value: "yes", "Notify after each successful weekly report" }
+                        }
+                    }
+                    p { class: "small muted",
+                        "Requires personal-data consent and a 168-hour interval. An alert contains only a reference to a verified report; it does not send personal task details externally."
                     }
                 }
                 div { class: "action-row",
@@ -558,6 +583,9 @@ pub fn Workflows(csrf: String) -> Element {
                                             }
                                             if item.get("notify_on_change").and_then(Value::as_bool).unwrap_or(false) {
                                                 p { class: "muted", "Change alerts enabled" }
+                                            }
+                                            if item.get("notify_on_every_run").and_then(Value::as_bool).unwrap_or(false) {
+                                                p { class: "muted", "Weekly completion alerts enabled" }
                                             }
                                         }
                                         Badge { text: if enabled { "Enabled".to_owned() } else { "Paused".to_owned() } }
