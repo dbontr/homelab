@@ -102,6 +102,8 @@ func(s *Server) Handler()http.Handler{
  mux.HandleFunc("POST /v1/automations/{id}/alerts/{run}/ack",s.automationAlertAck)
  mux.HandleFunc("GET /v1/automations/{id}",s.automationItem)
  mux.HandleFunc("POST /v1/automations/{id}/enabled",s.automationItem)
+ mux.HandleFunc("POST /v1/research/learning/preview",s.researchLearningHTTP)
+ mux.HandleFunc("POST /v1/research/learning/import",s.researchLearningHTTP)
  mux.HandleFunc("GET /v1/workflows",s.capabilityWorkflowCollection)
  mux.HandleFunc("POST /v1/workflows",s.capabilityWorkflowCollection)
  mux.HandleFunc("GET /v1/workflows/{id}",s.capabilityWorkflowItem)
@@ -352,6 +354,8 @@ func(s *Server)localTools()[]map[string]any{
   tool("automation_alert_acknowledge","Acknowledge an observed change with an exact automation revision",map[string]any{"automation_id":prop("string"),"workflow_id":prop("string"),"revision":prop("integer")},"automation_id","workflow_id","revision"),
   tool("workflow_list","List owner-scoped workflow status",map[string]any{}),
   tool("workflow_archive_list","List settled capability workflow history without exposing recorded evidence",map[string]any{}),
+  tool("research_learning_preview","Preview source-verified project research for learning without changing learner records",map[string]any{"project_id":prop("string"),"title":prop("string"),"objective":prop("string"),"passage_ids":map[string]any{"type":"array","items":prop("string")}},"project_id","title","passage_ids"),
+  tool("research_learning_import","Import exact owner-confirmed research evidence into Learning source records without awarding mastery",map[string]any{"project_id":prop("string"),"title":prop("string"),"objective":prop("string"),"passage_ids":map[string]any{"type":"array","items":prop("string")},"expected_sha256":prop("string"),"confirm":prop("boolean")},"project_id","title","passage_ids","expected_sha256","confirm"),
   tool("workflow_get","Inspect confirmed stage results and status",map[string]any{"id":prop("string")},"id"),
   tool("workflow_cancel","Cancel a revision-matched workflow",map[string]any{"id":prop("string"),"revision":prop("integer")},"id","revision"),
   tool("project_overview","Read a project with linked sources, libraries, personal tasks, goals and engineering runs",map[string]any{"project_id":prop("string")},"project_id"),
@@ -497,6 +501,7 @@ func(s *Server)toolList(r *http.Request)[]map[string]any{
  return out
 }
 func(s *Server)localTool(ctx context.Context,name string,raw json.RawMessage)(any,error){
+ if name=="research_learning_preview"||name=="research_learning_import"{return s.researchLearningTool(ctx,name,raw)}
  if strings.HasPrefix(name,"automation_"){return s.capabilityAutomationTool(ctx,name,raw)}
  if strings.HasPrefix(name,"workflow_"){return s.capabilityWorkflowTool(ctx,name,raw)}
  if strings.HasPrefix(name,"engineering_run_")||strings.HasPrefix(name,"engineering_team_"){return s.engineeringTool(ctx,name,raw)}
