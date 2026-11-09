@@ -260,6 +260,24 @@ func (s *Server) handleAccess(w http.ResponseWriter, r *http.Request, p []string
 		send(w, rows, err)
 		return true
 	}
+	if len(p) == 4 && p[1] == "projects" && p[3] == "role" && r.Method == http.MethodGet {
+		role := "owner"
+		if !who.Root {
+			var err error
+			role, err = s.DB.ProjectRole(p[2], who.Principal)
+			if err != nil {
+				fail(w, 400, "invalid project")
+				return true
+			}
+			if role == "" {
+				fail(w, 403, "project access denied")
+				return true
+			}
+		}
+		w.Header().Set("Cache-Control", "no-store")
+		reply(w, 200, map[string]any{"project_id": p[2], "role": role})
+		return true
+	}
 
 	if len(p) == 2 && p[1] == "revocations" {
 		if !who.Root {
