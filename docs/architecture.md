@@ -1,10 +1,10 @@
-# Eminence architecture
+# Homelab architecture
 
-Eminence exists to strengthen the owner's ability to reason, learn and produce consequential work. See [the governing philosophy](philosophy.md). Architecture is subordinate to that purpose; additional services must earn their cognitive and operational costs.
+Homelab exists to strengthen the owner's ability to reason, learn and produce consequential work. See [the governing philosophy](philosophy.md). Architecture is subordinate to that purpose; additional services must earn their cognitive and operational costs.
 
 ## One system
 
-Eminence is one personal computing system. Its owner interacts with a single catalog of capabilities, operations and resources through a common Go API and MCP endpoint. Tasks, goals, projects, Git repositories, shared libraries, learning evidence, health records, computing resources and media may refer to each other using stable identifiers. A project is not defined by its Git repository. Project overview resources join controller-owned context, linked repositories, linked libraries, explicitly linked personal tasks and their goals, and engineering run summaries by exact project ID. Missing downstream services remain visibly unavailable; no global shadow database is constructed.
+Homelab is one personal computing system. Its owner interacts with a single catalog of capabilities, operations and resources through a common Go API and MCP endpoint. Tasks, goals, projects, Git repositories, shared libraries, learning evidence, health records, computing resources and media may refer to each other using stable identifiers. A project is not defined by its Git repository. Project overview resources join controller-owned context, linked repositories, linked libraries, explicitly linked personal tasks and their goals, and engineering run summaries by exact project ID. Missing downstream services remain visibly unavailable; no global shadow database is constructed.
 
 The `system/` tree is the application's source of truth. It contains a primary Go module and independently buildable implementation modules. Module boundaries exist for reliability, toolchain constraints and distinct state ownership; they must not become separate assistant identities, duplicate records or inconsistent interfaces. Go operations remain usable without an AI client. The Rust/Dioxus console invokes those same native operations through narrowly scoped owner-session routes.
 
