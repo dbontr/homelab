@@ -53,6 +53,7 @@ type Workflow struct {
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	Deadline time.Time `json:"deadline,omitempty"`
 	Cleanup CleanupRecord `json:"cleanup,omitempty"`
+	CleanupStarted time.Time `json:"cleanup_started,omitempty"`
 	ID        string        `json:"id"`
 	Project   string        `json:"project"`
 	Revision  uint64        `json:"revision"`
