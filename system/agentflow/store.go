@@ -347,6 +347,9 @@ func (s *Store) ClaimReady(id string, ttl time.Duration) (Claim, error) {
 	if w.Cancelled {
 		return claim, errors.New("workflow cancelled")
 	}
+	if !w.Deadline.IsZero() && !s.now().Before(w.Deadline) {
+		return claim, errors.New("workflow deadline exceeded")
+	}
 	statuses := map[string]Status{}
 	for _, st := range w.Steps {
 		statuses[st.ID] = st.Status
