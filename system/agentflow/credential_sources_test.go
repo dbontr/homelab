@@ -2,11 +2,9 @@ package agentflow
 
 import (
  "context"
- "encoding/json"
  "io"
  "net/http"
  "net/http/httptest"
- "strings"
  "testing"
 )
 
@@ -78,5 +76,4 @@ func TestModelRouteRejectsTwoCredentialSources(t *testing.T){
   Endpoint:"https://example.test/v1/chat/completions",Model:"bounded",
   Token:"plain-token",TokenSource:func()(string,error){return "second-token",nil}}})
  if err==nil{t.Fatal("duplicate model token sources accepted")}
- _=json.RawMessage(strings.TrimSpace("{}"))
 }
