@@ -25,7 +25,7 @@
         ));
       hostConfiguration = node: nixpkgs.lib.nixosSystem {
         system = node.system;
-        specialArgs = { workspaceMcp = ./system/compute; hardwareNode = node; };
+        specialArgs = { workspaceMcp = ./services/compute; hardwareNode = node; };
         modules = [ (./infrastructure/hosts + ("/" + node.id + "/configuration.nix")) ];
       };
     in
