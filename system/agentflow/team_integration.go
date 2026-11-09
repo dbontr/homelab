@@ -113,7 +113,7 @@ func (e *Engine) IntegrateTeam(id string, request TeamIntegrationRequest) (TeamS
 		Step{ID: "cleanup", Kind: "integration_cleanup", MaxAttempts: 1,
 			DependsOn: []string{"integration-publish"}, Input: encodeStep(map[string]any{})},
 	)
-	w := Workflow{ID: runID, Project: record.Project, Steps: steps, CreatedAt: time.Now().UTC(), Deadline: time.Now().UTC().Add(time.Duration(record.DurationMinutes)*time.Minute)}
+	w := Workflow{ID: runID, Project: record.Project, Steps: steps, IntegrationTeamID: id, CreatedAt: time.Now().UTC(), Deadline: time.Now().UTC().Add(time.Duration(record.DurationMinutes)*time.Minute)}
 	if err := Validate(w); err != nil {
 		return TeamSummary{}, err
 	}
