@@ -17,9 +17,30 @@ Runs are compiled into these dependency-ordered operations:
 7. Export the verified files as immutable project artifacts.
 8. Prepare a revision-guarded **draft pull request**. A run cannot merge it or activate a release.
 
-The engineering service authenticates with a project-scoped compute credential, not the compute controller administrator token. The controller requires an editor grant on the selected project before accepting a draft publication, and the repository must be linked to that project. The daemon checks its credential identity at startup and rechecks each operation when credentials are loaded from a protected file; rotating to an administrator credential is rejected.\n\nThe program's `allowed_paths` restricts model-generated output. `context_paths` restricts which existing files are presented to the model. Neither grants access to credentials, host files, the release controller or privileged cluster commands. Source-code and test-output inputs are untrusted and can contain adversarial instructions. The authoring client accepts only a bounded JSON file map and rejects paths outside the allowlist.
+The engineering service authenticates with a project-scoped compute credential, not the compute controller administrator token. The controller requires an editor grant on the selected project before accepting a draft publication, and the repository must be linked to that project. The daemon checks its credential identity at startup and rechecks each operation when credentials are loaded from a protected file; rotating to an administrator credential is rejected.\n\nThe program's `allowed_paths` restricts model-generated output. In fixed-plan runs, `context_paths` selects files initially supplied to the model. Autonomous runs can explore additional repository files through bounded inspection tools, subject to protected-path restrictions and compute-worker isolation. Neither grants access to credentials, host files, the release controller or privileged cluster commands. Source-code and test-output inputs are untrusted and can contain adversarial instructions. The authoring client accepts only a bounded JSON file map and rejects paths outside the allowlist.
 
 Execution uses the compute controller's authenticated MCP service, but the engineering daemon has its own narrowly scoped client with a fixed operation allowlist. The gateway uses a Unix-domain-socket client to submit, inspect and cancel runs; it never receives compute or model credentials. The engineering daemon maintains private durable state, lease-token digests, fenced generations and controlled cancellation. An ambiguous external result is not assumed to have failed; the runner does not repeat an external step beyond its single allowed attempt. The compute workspace expires according to its allocated duration, and operation history remains available for inspection.
+
+## Autonomous agent sessions
+
+An engineering program can set `"autonomous": true` to execute a model-directed, bounded development session. This mode requires an operator-configured decision model, an explicit list of `allowed_paths`, and no pre-supplied `changes`. The project, repository, image, exact commit, resource limits, and owner-provided `checks` remain mandatory. Ordinary fixed-plan runs remain available.
+
+The compiled autonomous workflow provisions the same isolated compute workspace and checks out the same pinned revision, but replaces the fixed inspect/author/apply stages with durable agent turns. Each turn selects one operation from a restricted vocabulary:
+
+- `plan`: record or revise up to eight development steps.
+- `list`: inspect a repository-relative directory.
+- `search`: perform a bounded literal search inside the checked-out repository; common credential files and dependency trees are excluded.
+- `read`: inspect a repository-relative source file and its SHA-256 revision. Credential-bearing paths are excluded from reading and editing, even if they appear in an owner's `allowed_paths`.
+- `patch`: apply ordered, exact-match replacement hunks to an allowed file only when its SHA-256 matches the model's expectation. Ambiguous context and stale revisions are rejected.
+- `create`: create an owner-approved source file through a missing-file revision check.
+- `check`: execute one command exactly matching the owner's `checks` list in the isolated workspace.
+- `finish`: record a short completion summary only after at least one confirmed edit and every approved check has passed since the most recent edit.
+
+The agent receives its objective, current plan, a bounded suffix of past observations, changed-file digests, and remaining decision budget. It can revise its plan or inspect more code when observations contradict its earlier assumptions. Each action decision is persisted before execution and its confirmed observation is saved before the next decision. The workflow permits at most 40 turns. The authenticated status API exposes the plan, turn count, edited file paths, and completion summary but does not return raw source code or model observations.
+
+Checkpoint updates are fenced by the active run, step, lease generation, and lease token. An interrupted write can be reconciled against the worker's current file digest without blindly repeating it; a write is confirmed only after a worker SHA-256 acknowledgment and source readback. An interrupted verification command is not replayed because its effects may be uncertain. Unapproved commands, out-of-scope edits, or attempts to access protected paths terminate the agent step.
+
+All approved checks are run again after the agent finishes. Before exporting, the service compares the current source digests with the files confirmed by the agent. Publication remains restricted to a pinned-base **draft** pull request; autonomous sessions cannot merge, deploy, manage infrastructure, or acquire an administrator credential. The decision model and compute worker are separate trust boundaries.
 
 ## Configuration
 
