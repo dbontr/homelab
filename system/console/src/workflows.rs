@@ -30,6 +30,7 @@ struct WorkflowDraft {
     personal_read: bool,
     every_hours: String,
     notify_on_change: bool,
+    notify_on_every_run: bool,
 }
 
 impl Default for WorkflowDraft {
@@ -42,6 +43,7 @@ impl Default for WorkflowDraft {
             personal_read: false,
             every_hours: "24".to_owned(),
             notify_on_change: false,
+            notify_on_every_run: false,
         }
     }
 }
@@ -77,11 +79,11 @@ impl WorkflowDraft {
         let needs_query = matches!(self.action.as_str(),
             "research_search" | "research_semantic_query" | "recipe_search");
         let personal = matches!(self.action.as_str(),
-            "learning_summary" | "health_goals" | "recipe_search" | "project_tasks");
+            "learning_summary" | "health_goals" | "recipe_search" | "project_tasks" | "weekly_report");
         let allowed = matches!(self.action.as_str(),
             "project_context" | "project_tasks" | "engineering_runs" |
             "research_search" | "research_semantic_query" | "research_claims" |
-            "learning_summary" | "health_goals" | "recipe_search");
+            "learning_summary" | "health_goals" | "recipe_search" | "weekly_report");
         if !allowed {
             return Err("The selected action is not approved for this workflow.".to_owned());
         }
@@ -111,11 +113,16 @@ impl WorkflowDraft {
         if !(1..=168).contains(&hours) {
             return Err("The interval must be between 1 hour and 7 days.".to_owned());
         }
+        if self.notify_on_every_run && (self.action!="weekly_report" ||
+            hours!=168 || !self.personal_read || self.notify_on_change) {
+            return Err("Report completion alerts require one weekly personal report and no change alerts.".to_owned());
+        }
         Ok(json!({
             "program":self.program()?,
             "every_minutes":hours * 60,
             "enabled":true,
             "notify_on_change":self.notify_on_change,
+            "notify_on_every_run":self.notify_on_every_run,
         }))
     }
 }
