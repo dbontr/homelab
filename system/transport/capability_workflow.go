@@ -155,7 +155,11 @@ func (s *Server) capabilityWorkflows()([]CapabilityWorkflow,error) {
     for _,id:=range ids {
         w,err:=s.workflows.Get(id)
         if err!=nil{return nil,err}
-        result=append(result,summarizeCapabilityWorkflow(w))
+        summary:=summarizeCapabilityWorkflow(w)
+        // Listings never expose full personal observations or evidence bodies.
+        // Authenticated detail reads still return explicitly approved results.
+        for i:=range summary.Steps{summary.Steps[i].Result=nil}
+        result=append(result,summary)
     }
     return result,nil
 }
