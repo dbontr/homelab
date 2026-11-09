@@ -115,6 +115,9 @@ fn RunDetail(run: Value) -> Element {
 #[component]
 fn TeamDetail(team: Value) -> Element {
     let members = as_items(&team, "members");
+    let artifacts = as_items(&team, "artifacts");
+    let conflicts = as_items(&team, "conflicts");
+    let ready = team.get("ready_for_review").and_then(Value::as_bool).unwrap_or(false);
     rsx! {
         details { class: "card",
             summary { class: "card-header",
@@ -132,6 +135,24 @@ fn TeamDetail(team: Value) -> Element {
                         span { class: "mono", "{text(&member, "key")}" }
                         Badge { text: member.get("run").map(|run| text(run, "status")).unwrap_or_default() }
                     }
+                }
+                if !artifacts.is_empty() {
+                    h3 { "Verified artifacts" }
+                    for artifact in artifacts {
+                        div { class: "inline-row",
+                            span { class: "mono", "{text(&artifact, "path")}" }
+                            span { class: "muted", "Prepared by {text(&artifact, "member")}" }
+                        }
+                    }
+                }
+                if !conflicts.is_empty() {
+                    h3 { "Reconciliation conflicts" }
+                    for conflict in conflicts {
+                        p { role: "alert", "{conflict.as_str().unwrap_or("")}" }
+                    }
+                }
+                if ready {
+                    p { class: "muted", "Verified artifact manifest is ready for owner review. It has not been published." }
                 }
             }
         }
