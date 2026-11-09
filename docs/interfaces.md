@@ -2,7 +2,7 @@
 
 The Go platform exposes authenticated loopback HTTP endpoints. Native JSON and MCP clients invoke the same business operations.
 
-The unified MCP discovery operation preserves the canonical local tool set when an integration is unreachable. Federated `tools/list` requests run concurrently under one four-second deadline, and returned entries retain configured backend order. An unavailable backend contributes no advertised tools; its timeout does not delay all other backends sequentially. Duplicate exported tool names are rejected after namespace normalization, so one tool identity cannot silently change owners. Tool execution still independently checks the selected backend's currently advertised operations and its authorization policy.
+The unified MCP discovery operation preserves the canonical local tool set when an integration is unreachable. Federated `tools/list` requests run concurrently under one four-second deadline, and returned entries retain configured backend order. An unavailable backend contributes no advertised tools; its timeout does not delay all other backends sequentially. Duplicate exported tool names are rejected after namespace normalization, so one tool identity cannot silently change owners. Tool execution still independently checks the selected backend's currently advertised operations and its authorization policy. The `system_status` observation applies the same single-deadline isolation principle to backend health checks. Each integration is available only when its tool-discovery envelope is valid; an unreachable or malformed backend is reported unavailable, without suppressing the local service status.
 
 ## Native API
 
