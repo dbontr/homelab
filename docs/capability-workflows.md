@@ -18,7 +18,7 @@ is unavailable, resolution fails closed rather than inventing a record.
 
 `POST /v1/workflows` and MCP `workflow_submit` accept a project ID,
 a bounded objective, explicit `personal_read` consent, and 1–12 named stages.
-Each stage has a stable ID, dependency IDs, and one approved read action:
+Each stage has a stable ID, dependency IDs, and one explicitly approved action. Read-only actions include:
 
 - `project_context` — authoritative project knowledge context
 - `project_tasks` — explicitly linked tasks and their goals
@@ -33,7 +33,9 @@ Each stage has a stable ID, dependency IDs, and one approved read action:
   and `media_requests` — opt-in personal application reads
 - `study_pack_preview` — compose an unsaved, cited study pack from successful prerequisite `research_search` results
 
-Every personal application operation, including `project_tasks`, requires `personal_read: true`.
+Every personal application read, including `project_tasks`, requires `personal_read: true`.
+
+Explicitly owner-submitted programs may also include `task_create`, `goal_create`, and `task_complete` when `personal_write: true` is present. Task creation links its record to the exact project; completion requires an existing task linked to that project and a matching `expected_revision`. The authoritative personal store writes each outcome and its stage-specific idempotency receipt atomically, including any recurring successor task. Repeated work with the same receipt returns the confirmed record; unrelated, changed or stale operations are rejected. Goals are personal records and are not fabricated as completed research. Neither model-proposed initial plans nor model-authored continuations can add write actions.
 `project_context`, `research_search`, and `engineering_runs` remain project-scoped and read-only. The program cannot
 name arbitrary MCP tools, issue shell commands, call privileged executor
 operations, make purchases, submit engineering changes, or publish Git
@@ -59,8 +61,9 @@ For workflows submitted with `auto_replan: true`, the scheduler can ask the conf
 The scheduler advances dependency-ready steps without further input. It shares
 the existing Go lease-token, generation-fencing, optimistic-revision,
 cross-process-locking, and atomic-state mechanisms. Read operations can be
-repeated safely after an expired lease; uncertain mutating operations have no
-route through this scheduler. Each run has a 30-minute absolute deadline and
+repeated safely after an expired lease; approved personal record mutations use exactly scoped, atomically persisted
+idempotency receipts. Privileged executor operations have no route through
+this scheduler. Each run has a 30-minute absolute deadline and
 each read stage has at most two attempts. Results are bounded and persisted
 privately so a process restart does not erase confirmed evidence.
 
@@ -69,7 +72,9 @@ MCP `workflow_list` / `workflow_get`. Listing omits recorded evidence
 bodies. Detail reads are authenticated. Cancel through an exact expected
 revision (`POST /v1/workflows/{id}/cancel` or `workflow_cancel`).
 The browser session may read summaries but cannot submit or cancel without
-the independent owner-write authorization path.
+the independent owner-write authorization path. A persisted `personal_write`
+flag is confined to its original program; it does not authorize any other
+personal, external account or privileged operation.
 
 The state directory is `workflows` under the platform's private state
 directory. As with engineering runs, archive and retention management must
