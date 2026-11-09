@@ -285,20 +285,14 @@ type rpcRequest struct { JSONRPC string `json:"jsonrpc"`; ID json.RawMessage `js
 type rpcResponse struct { JSONRPC string `json:"jsonrpc"`; ID json.RawMessage `json:"id,omitempty"`; Result json.RawMessage `json:"result,omitempty"`; Error *rpcError `json:"error,omitempty"` }
 type rpcError struct { Code int `json:"code"`; Message string `json:"message"` }
 func(s *Server)rpc(w http.ResponseWriter,id json.RawMessage,v any,e *rpcError){
- out:=map[string]any{"jsonrpc":"2.0","id":id}
- if e!=nil{out["error"]=e}else{out["result"]=v}
- if w.Header().Get("Content-Type")!="text/event-stream"{
-  writeJSON(w,200,out)
+ if w.Header().Get("Content-Type")=="text/event-stream"{
+  w.WriteHeader(http.StatusOK)
+  _=writeMCPStreamEvent(w,id,v,e)
   return
  }
- encoded,err:=json.Marshal(out)
- if err!=nil{http.Error(w,"cannot encode JSON-RPC result",http.StatusInternalServerError);return}
- // Streamable HTTP carries a complete JSON-RPC response in an SSE message.
- // Do not invent progress updates or report success before the tool finishes.
- w.WriteHeader(http.StatusOK)
- if _,err:=fmt.Fprintf(w,"event: message\ndata: %s\n\n",encoded);err==nil{
-  if flusher,ok:=w.(http.Flusher);ok{flusher.Flush()}
- }
+ out:=map[string]any{"jsonrpc":"2.0","id":id}
+ if e!=nil{out["error"]=e}else{out["result"]=v}
+ writeJSON(w,200,out)
 }
 func failure(code int,msg string)*rpcError{return &rpcError{Code:code,Message:msg}}
 func result(v any)map[string]any{
@@ -399,7 +393,14 @@ func(s *Server)mcp(w http.ResponseWriter,r *http.Request){
  case "tools/call":
   var p struct {Name string `json:"name"`; Arguments json.RawMessage `json:"arguments"`}
   if e:=json.Unmarshal(req.Params,&p);e!=nil||p.Name==""{s.rpc(w,req.ID,nil,failure(-32602,"tool name required"));return}
-  s.rpc(w,req.ID,s.invoke(security.WithAccessAssertion(r.Context(),r.Header.Get("Cf-Access-Jwt-Assertion")),p.Name,p.Arguments,req.ID),nil)
+  context:=security.WithAccessAssertion(r.Context(),r.Header.Get("Cf-Access-Jwt-Assertion"))
+  if w.Header().Get("Content-Type")=="text/event-stream"{
+   streamMCPResult(r.Context(),w,req.ID,15*time.Second,func()map[string]any{
+    return s.invoke(context,p.Name,p.Arguments,req.ID)
+   })
+   return
+  }
+  s.rpc(w,req.ID,s.invoke(context,p.Name,p.Arguments,req.ID),nil)
  default:s.rpc(w,req.ID,nil,failure(-32601,"method not found"))
  }
 }
