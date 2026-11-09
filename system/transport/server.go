@@ -155,6 +155,7 @@ func(s *Server) Handler()http.Handler{
  mux.HandleFunc("POST /v1/meals",s.mealCollection)
  mux.HandleFunc("DELETE /v1/meals/{id}",s.mealItem)
  mux.HandleFunc("GET /v1/groceries",s.recipeGroceries)
+ mux.HandleFunc("GET /v1/groceries/needs",s.pantryGroceryNeeds)
  mux.HandleFunc("GET /v1/groceries/board",s.groceryBoard)
  mux.HandleFunc("PUT /v1/groceries/items/{key}",s.groceryUpdate)
  mux.HandleFunc("GET /v1/activity",s.uiActivity)
@@ -446,6 +447,7 @@ func(s *Server)localTools()[]map[string]any{
   tool("recipe_meal_schedule","Schedule a recipe for a date",map[string]any{"meal":prop("object")},"meal"),
   tool("recipe_meal_remove","Remove a scheduled meal",map[string]any{"id":prop("string")},"id"),
   tool("recipe_groceries","Consolidate meal-plan ingredients by name and unit",map[string]any{"start":prop("string"),"end":prop("string")}),
+  tool("recipe_grocery_needs","Estimate meal-plan grocery quantities after recorded pantry supplies; read-only",map[string]any{"start":prop("string"),"end":prop("string")}),
   tool("recipe_nutrition_preview","Preview reported or estimated recipe nutrients without logging consumption",map[string]any{"id":prop("string"),"servings":prop("number")},"id","servings"),
   tool("recipe_pantry_list","List recorded pantry inventory and revision without inferring unrecorded stock",map[string]any{}),
   tool("recipe_pantry_set","Store a pantry quantity with revision-checked updates",map[string]any{"item":prop("object"),"expected_revision":prop("integer")},"item","expected_revision"),
