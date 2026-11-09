@@ -33,7 +33,21 @@ func (s *Server) GitProviderCapabilities(provider string) (map[string]any, error
 			"authorization":             "Operator-mounted bare repositories and explicit project grants required",
 			"optional_planning_bridge":  "Link an authorized GitHub planning repository separately for Issues, Pull Requests and Projects",
 		}, nil
-	case "gitlab", "gitea", "remote-git":
+	case "gitlab":
+  availability:="unconfigured"
+  if s.GitLab!=nil&&s.GitLab.configured(){availability="supported"}
+  return map[string]any{
+   "provider":provider,
+   "git_storage":availability,
+   "knowledge_storage":availability,
+   "issues":"unavailable",
+   "pull_requests":"unavailable",
+   "project_boards":"unavailable",
+   "repository_administration":"unavailable",
+   "authorization":"GitLab personal access token and explicit project repository grant required",
+   "publication_guard":"branch head preflight and per-file last_commit_id; not branch-wide atomic CAS",
+  },nil
+	case "gitea", "remote-git":
 		return map[string]any{
 			"provider":                  provider,
 			"git_storage":               "adapter-required",

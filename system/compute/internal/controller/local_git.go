@@ -30,17 +30,13 @@ func localRepoName(value string) (string, bool) {
 }
 
 func validSourceRepository(value string) bool {
-	if _, ok := localRepoName(value); ok {
-		return true
-	}
-	return validGitRepository(value)
+ if _,ok:=localRepoName(value);ok{return true}
+ if _,ok:=gitLabRepoName(value);ok{return true}
+ return validGitRepository(value)
 }
 
 func validKnowledgeRepository(value string) bool {
-	if _, ok := localRepoName(value); ok {
-		return true
-	}
-	return validGitRepository(value)
+ return validSourceRepository(value)
 }
 
 func (g *LocalGit) repository(name string) (string, error) {

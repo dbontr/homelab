@@ -74,3 +74,8 @@
 - [GNU Coreutils sha2sum utilities](https://www.gnu.org/software/coreutils/manual/html_node/sha2-utilities.html) — GNU project. Used for: reproducible SHA-256 manifests and offline staged-release file integrity checks.
 - [Docker Buildx Build Reference](https://docs.docker.com/reference/cli/docker/buildx/build/) — Docker. Used for: source-owned Compute OCI image builds, registry push/load modes and metadata digest receipts.
 - [RFC 8628: OAuth 2.0 Device Authorization Grant](https://www.rfc-editor.org/rfc/rfc8628) — IETF. Used for: owner-only device-code enrollment, verification URI presentation, interval-constrained authorization polling and provider error handling.
+- [GitLab REST API authentication](https://docs.gitlab.com/api/rest/authentication/) — GitLab. Used for: controller-held personal access token requests and the PRIVATE-TOKEN header.
+- [GitLab repository files API](https://docs.gitlab.com/api/repository_files/) — GitLab. Used for: exact file reads, base64 decoding, last_commit_id write guards and provider-confirmed file publication.
+- [GitLab commits API](https://docs.gitlab.com/api/commits/) — GitLab. Used for: resolving exact Git repository revisions and distinguishing file-guarded writes from whole-branch commit operations.
+- [GitLab repositories API](https://docs.gitlab.com/api/repositories/) — GitLab. Used for: pinned Git archive downloads and project-scoped repository snapshots.
+- [GitLab personal access tokens](https://docs.gitlab.com/user/profile/personal_access_tokens/) — GitLab. Used for: user-scoped API credentials, expiration and scope review.

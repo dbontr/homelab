@@ -251,6 +251,12 @@ spec:
                   name: {{ .Values.controller.githubPATSecretName }}
                   key: token
             {{- end }}
+            {{- if .Values.controller.gitlabPATSecretName }}
+            - name: PWM_GITLAB_PAT_FILE
+              value: /run/credentials/gitlab/token
+            - name: PWM_GITLAB_API_URL
+              value: {{ .Values.controller.gitlabAPIURL | quote }}
+            {{- end }}
             {{- if .Values.controller.localGit.existingClaimName }}
             - name: PWM_GIT_LOCAL_ROOT
               value: /git
@@ -273,6 +279,11 @@ spec:
                 name: {{ .Values.controller.offsite.backendSecretName }}
           {{- end }}
           volumeMounts:
+            {{- if .Values.controller.gitlabPATSecretName }}
+            - name: gitlab-pat
+              mountPath: /run/credentials/gitlab
+              readOnly: true
+            {{- end }}
             {{- if .Values.controller.embedding.tokenSecretName }}
             - name: embedding-token
               mountPath: /run/embeddings
@@ -322,6 +333,15 @@ spec:
             initialDelaySeconds: 10
             periodSeconds: 20
       volumes:
+        {{- if .Values.controller.gitlabPATSecretName }}
+        - name: gitlab-pat
+          secret:
+            secretName: {{ .Values.controller.gitlabPATSecretName }}
+            defaultMode: 288
+            items:
+              - key: token
+                path: token
+        {{- end }}
         {{- if .Values.controller.embedding.tokenSecretName }}
         - name: embedding-token-input
           secret:

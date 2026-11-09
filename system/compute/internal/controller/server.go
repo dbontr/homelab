@@ -27,6 +27,7 @@ type Server struct {
 	AccessOwnerEmail string
 	PublicURL        string
 	GitHub           *GitHub
+	GitLab           *GitLab
 	LocalGit         *LocalGit
 	AllowedHosts     map[string]bool
 	AllowedOrigins   map[string]bool
@@ -85,6 +86,18 @@ func NewServer(db *Database, token string) (*Server, error) {
 		}
 	}
 	github.GenericWrites = os.Getenv("PWM_GITHUB_GENERIC_WRITES") == "1"
+	gitlabPAT, err := configuredGitLabPAT()
+	if err != nil { return nil, err }
+	gitlab := NewGitLab(gitlabPAT)
+ if gitlabAPI:=strings.TrimRight(os.Getenv("PWM_GITLAB_API_URL"),"/");gitlabAPI!=""{
+  endpoint,parseErr:=url.Parse(gitlabAPI)
+  if parseErr!=nil||endpoint.Scheme!="https"||endpoint.Host==""||
+   endpoint.User!=nil||endpoint.RawQuery!=""||endpoint.Fragment!=""||
+   endpoint.Opaque!=""||endpoint.Path!="/api/v4"{
+   return nil,errors.New("GitLab API must be an exact HTTPS /api/v4 endpoint")
+  }
+  gitlab.API=gitlabAPI
+ }
 	var localGit *LocalGit
 	if configuredRoot := os.Getenv("PWM_GIT_LOCAL_ROOT"); configuredRoot != "" {
 		if !filepath.IsAbs(configuredRoot) {
@@ -105,7 +118,7 @@ func NewServer(db *Database, token string) (*Server, error) {
 		}
 	}
 	return &Server{DB: db, AdminToken: token, OIDC: verifier, AccessVerifier: access, AccessOwnerEmail: accessOwner, PublicURL: publicURL,
-		GitHub: github, LocalGit: localGit,
+		GitHub: github, GitLab: gitlab, LocalGit: localGit,
 		AllowedHosts:     configured("PWM_ALLOWED_HOSTS", "127.0.0.1,localhost"),
 		AllowedOrigins:   configured("PWM_ALLOWED_ORIGINS", "http://127.0.0.1,http://localhost"),
 		MaxArtifactBytes: limit}, nil
