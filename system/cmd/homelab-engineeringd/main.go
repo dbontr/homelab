@@ -39,6 +39,12 @@ func main(){
  err=compute.VerifyProjectCredential(probeCtx)
  stopProbe()
  if err!=nil{log.Fatal(err)}
+ for project:=range projects {
+  grantCtx,cancel:=context.WithTimeout(context.Background(),10*time.Second)
+  grantErr:=compute.VerifyProjectEditor(grantCtx,project)
+  cancel()
+  if grantErr!=nil{log.Fatalf("engineering service lacks an exact editor grant for %s: %v",project,grantErr)}
+ }
  store,err:=agentflow.Open(required("HOMELAB_ENGINEERING_DIR"));if err!=nil{log.Fatal(err)}
  var author agentflow.Author
  if endpoint:=os.Getenv("HOMELAB_ENGINEERING_MODEL_URL");endpoint!=""{

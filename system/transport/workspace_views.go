@@ -20,9 +20,20 @@ func (s *Server) uiWorkspaceProjectView(w http.ResponseWriter,r *http.Request){
  switch kind{
  case "jobs":tool="list_project_jobs"
  case "workspaces":tool="workspace_list"
+ case "context":tool="knowledge_context"
+ case "repositories":tool="repository_memberships"
+ case "research-sources":tool="research_sources"
+ case "research":tool="research_search"
  default:writeError(w,404,"unknown project view");return
  }
- raw,err:=json.Marshal(map[string]string{"project_id":project})
+ params:=map[string]any{"project_id":project}
+ if kind=="research" {
+  query:=strings.TrimSpace(r.URL.Query().Get("q"))
+  if len(query)==0||len(query)>120||strings.ContainsAny(query,"\x00\r\n"){writeError(w,400,"invalid research query");return}
+  params["query"]=query
+  params["limit"]=8
+ }
+ raw,err:=json.Marshal(params)
  if err!=nil{writeError(w,500,"invalid project lookup");return}
  result:=s.invoke(r.Context(),"workspace__"+tool,raw,json.RawMessage("1"))
  if failed,_:=result["isError"].(bool);failed{writeError(w,502,"Compute query unavailable");return}

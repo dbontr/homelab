@@ -37,6 +37,9 @@ func (e *Engine) Submit(p Program) (RunSummary, error) {
 	if !e.AllowedProjects[p.Project] {
 		return RunSummary{}, errors.New("engineering project not authorized")
 	}
+	if p.Review {
+		if _, ok := e.Author.(ReviewAuthor); !ok { return RunSummary{}, errors.New("review provider not configured") }
+	}
 	if p.Autonomous {
 		if _, ok := e.Author.(DecisionAuthor); !ok {
 			return RunSummary{}, errors.New("autonomous decision provider not configured")
@@ -298,6 +301,8 @@ func (e *Engine) Dispatch(ctx context.Context, claim Claim) (json.RawMessage, er
 		}
 	case "agent":
 		return e.runAgentTurn(ctx, claim, w)
+	case "integration_import", "integration_verify", "integration_publish", "integration_cleanup":
+		out, err = e.integrationStep(ctx, claim, w, args)
 	case "inspect":
 		repo := str(args["repository"])
 		list, _ := args["paths"].([]any)
@@ -531,7 +536,42 @@ func (e *Engine) Dispatch(ctx context.Context, claim Claim) (json.RawMessage, er
 				verifiedDigests[name] = shaHex(repair[name])
 			}
 		}
+	case "review":
+		verified, readErr := resultObject(w, "verify")
+		if readErr != nil || verified["passed"] != true { return nil, errors.New("verification evidence unavailable for review") }
+		paths := map[string]string{}
+		if w.Agent != nil { paths = w.Agent.Changed } else {
+			paths, readErr = stringMap(verified["file_sha256"])
+			if readErr != nil { return nil, readErr }
+		}
+		source := make(map[string]string, len(paths))
+		checkout, readErr := resultObject(w, "checkout")
+		if readErr != nil { return nil, readErr }
+		for _, name := range sortedPaths(paths) {
+			if sensitiveSourcePath(name) { return nil, errors.New("review cannot inspect protected source") }
+			read, readErr := e.workspaceAction(ctx, w, "read_file", map[string]any{"path": path.Join(repoRoot(str(checkout["repository"])), name)})
+			if readErr != nil { return nil, readErr }
+			body := str(read["content"])
+			if shaHex(body) != paths[name] { return nil, errors.New("review source differs from verified revision") }
+			if len(body) > 8000 { body = body[:8000] }
+			source[name] = body
+		}
+		reviewer, available := e.Author.(ReviewAuthor)
+		if !available { return nil, errors.New("review model is not configured") }
+		report, reviewErr := reviewer.Review(ctx, str(args["objective"]), source, verified)
+		if reviewErr != nil { return nil, reviewErr }
+		if err := report.Validate(); err != nil { return nil, err }
+		out = map[string]any{"verdict": report.Verdict, "risk": report.Risk, "findings": report.Findings, "recommended_tests": report.RecommendedTests, "reviewed_paths": sortedPaths(paths)}
 	case "export":
+		// A review can complete with a revise verdict. Record its findings,
+		// then block publication without discarding the evidence.
+		for _, step := range w.Steps {
+			if step.ID != "review" { continue }
+			review, reviewErr := resultObject(w, "review")
+			if reviewErr != nil || str(review["verdict"]) != "approve" {
+				return nil, errors.New("review requires source revision before export")
+			}
+		}
 		var changes map[string]string
 		if w.Agent != nil {
 			if !w.Agent.Completed {

@@ -28,6 +28,9 @@ var permittedComputeTools=map[string]bool{
  "workspace_create":true,"workspace_list":true,"workspace_call":true,
  "workspace_operation":true,"github_checkout_repository":true,
  "github_publish_artifacts":true,"artifact_info":true,
+ "workspace_import_artifact":true,"workspace_destroy":true,"repository_memberships":true,
+ "knowledge_context":true,"knowledge_search_contributions":true,"knowledge_contribute":true,"research_search":true,
+ "library_documents":true,"library_resolve":true,
 }
 func NewComputeClient(endpoint,token string)(*ComputeClient,error){
  u,err:=url.Parse(endpoint)
@@ -75,9 +78,13 @@ func(c *ComputeClient)currentToken()(string,error){
 }
 func(c *ComputeClient)Call(ctx context.Context,tool string,arguments map[string]any)(map[string]any,error){
  if c==nil||c.http==nil||!permittedComputeTools[tool]{return nil,errors.New("compute operation is not authorized")}
- // A rotated credential must not silently promote the unattended service.
+ // Every request using a reloadable service credential must retain the
+ // non-administrator identity and exact project editor grant.
  if c.credentialFile!=""{
   if err:=c.VerifyProjectCredential(ctx);err!=nil{return nil,err}
+  project,ok:=arguments["project_id"].(string)
+  if !ok||!validID(project){return nil,errors.New("compute operation requires a scoped project")}
+  if err:=c.VerifyProjectEditor(ctx,project);err!=nil{return nil,err}
  }
  body,err:=json.Marshal(map[string]any{
   "jsonrpc":"2.0","id":1,"method":"tools/call",
@@ -134,4 +141,42 @@ func (c *ComputeClient) VerifyProjectCredential(ctx context.Context) error {
   return errors.New("engineering requires a non-administrator project credential")
  }
  return nil
+}
+
+// VerifyProjectEditor confirms the authenticated principal has the exact
+// editor grant needed for isolated source operations in this project.
+func (c *ComputeClient) VerifyProjectEditor(ctx context.Context, project string) error {
+	if c == nil || c.http == nil || !validID(project) {
+		return errors.New("invalid compute project")
+	}
+	endpoint := strings.TrimSuffix(c.Endpoint, "/mcp") + "/api/projects/" + url.PathEscape(project) + "/role"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return err
+	}
+	token, err := c.currentToken()
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	response, err := c.http.Do(req)
+	if err != nil {
+		return errors.New("compute project grant unavailable")
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return fmt.Errorf("compute project grant not verified (HTTP %d)", response.StatusCode)
+	}
+	raw, err := io.ReadAll(io.LimitReader(response.Body, 4097))
+	if err != nil || len(raw) > 4096 {
+		return errors.New("invalid project grant response")
+	}
+	var result struct {
+		ProjectID string `json:"project_id"`
+		Role string `json:"role"`
+	}
+	if err := json.Unmarshal(raw, &result); err != nil || result.ProjectID != project || result.Role != "editor" {
+		return errors.New("engineering requires an exact project editor grant")
+	}
+	return nil
 }

@@ -83,7 +83,12 @@ func TestComputeCredentialRotationAndFileProtection(t *testing.T) {
  if err:=os.WriteFile(file,[]byte(first),0600);err!=nil{t.Fatal(err)}
  var observed []string
  elevated:=false
+ projectRole:="editor"
  server:=httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter,r *http.Request) {
+  if r.URL.Path=="/api/projects/demo/role"{
+   _=json.NewEncoder(w).Encode(map[string]any{"project_id":"demo","role":projectRole})
+   return
+  }
   if r.URL.Path=="/api/whoami"{
    _=json.NewEncoder(w).Encode(map[string]any{"principal":"oidc:engineering#worker","administrator":elevated})
    return
@@ -101,6 +106,11 @@ func TestComputeCredentialRotationAndFileProtection(t *testing.T) {
  if len(observed)!=2||observed[0]!="Bearer "+first||observed[1]!="Bearer "+second {
   t.Fatalf("compute credential was not reloaded")
  }
+ projectRole="viewer"
+ if _,err:=client.Call(context.Background(),"workspace_list",map[string]any{"project_id":"demo"});err==nil{
+  t.Fatal("rotated viewer grant accepted for unattended execution")
+ }
+ projectRole="editor"
  elevated=true
  if _,err:=client.Call(context.Background(),"workspace_list",map[string]any{"project_id":"demo"});err==nil{
   t.Fatal("rotated administrator credential accepted for unattended execution")
@@ -111,4 +121,64 @@ func TestComputeCredentialRotationAndFileProtection(t *testing.T) {
  if _,err:=client.Call(context.Background(),"workspace_list",map[string]any{"project_id":"demo"});err==nil {
   t.Fatal("world-readable service credential accepted")
  }
+}
+
+func TestComputeClientAllowsProjectScopedWorkspaceCleanup(t *testing.T) {
+	allowed := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			Method string `json:"method"`
+			Params struct { Name string `json:"name"` } `json:"params"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil { t.Fatal(err) }
+		if request.Method != "tools/call" || request.Params.Name != "workspace_destroy" { t.Fatal("unexpected compute operation") }
+		allowed = true
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"structuredContent":{"status":"stopping"}}}`))
+	}))
+	defer server.Close()
+	client, err := NewComputeClient(server.URL+"/mcp", strings.Repeat("s", 40))
+	if err != nil { t.Fatal(err) }
+	if _, err := client.Call(context.Background(), "workspace_destroy", map[string]any{"project_id":"research", "workspace_id":"0123456789abcdef0123456789abcdef"}); err != nil { t.Fatal(err) }
+	if !allowed { t.Fatal("project-scoped cleanup was not forwarded") }
+	if _, err := client.Call(context.Background(), "github_merge_pull_request", map[string]any{}); err == nil { t.Fatal("privileged operation bypassed allowlist") }
+}
+
+func TestComputeProjectEditorIdentityBoundary(t *testing.T) {
+	grant := "viewer"
+	authenticated := true
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/projects/research/role" || r.Method != http.MethodGet {
+			http.NotFound(w, r)
+			return
+		}
+		if !authenticated {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		if r.Header.Get("Authorization") != "Bearer "+strings.Repeat("p", 40) {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"project_id": "research", "role": grant})
+	}))
+	defer server.Close()
+	client, err := NewComputeClient(server.URL+"/mcp", strings.Repeat("p", 40))
+	if err != nil { t.Fatal(err) }
+	for _, role := range []string{"viewer","owner",""} {
+		grant = role
+		if err := client.VerifyProjectEditor(context.Background(), "research"); err == nil {
+			t.Fatalf("role %q incorrectly allowed to run engineering", role)
+		}
+	}
+	grant = "editor"
+	if err := client.VerifyProjectEditor(context.Background(), "research"); err != nil {
+		t.Fatalf("editor grant rejected: %v", err)
+	}
+	if err := client.VerifyProjectEditor(context.Background(), "../research"); err == nil {
+		t.Fatal("invalid project reached the controller")
+	}
+	authenticated = false
+	if err := client.VerifyProjectEditor(context.Background(), "research"); err == nil {
+		t.Fatal("revoked project access accepted")
+	}
 }

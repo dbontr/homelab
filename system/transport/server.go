@@ -77,11 +77,23 @@ func(s *Server) Handler()http.Handler{
  mux.HandleFunc("GET /v1/engineering/projects",s.uiProjects)
  mux.HandleFunc("GET /v1/engineering/projects/{project}/jobs",s.uiWorkspaceProjectView)
  mux.HandleFunc("GET /v1/engineering/projects/{project}/workspaces",s.uiWorkspaceProjectView)
+ mux.HandleFunc("GET /v1/engineering/projects/{project}/context",s.uiWorkspaceProjectView)
+ mux.HandleFunc("GET /v1/engineering/projects/{project}/repositories",s.uiWorkspaceProjectView)
+ mux.HandleFunc("GET /v1/engineering/projects/{project}/research-sources",s.uiWorkspaceProjectView)
+ mux.HandleFunc("GET /v1/engineering/projects/{project}/research",s.uiWorkspaceProjectView)
  mux.HandleFunc("GET /v1/engineering/nodes",s.uiComputeNodes)
  mux.HandleFunc("GET /v1/engineering/runs",s.engineeringCollection)
  mux.HandleFunc("POST /v1/engineering/runs",s.engineeringCollection)
  mux.HandleFunc("GET /v1/engineering/runs/{id}",s.engineeringRun)
  mux.HandleFunc("POST /v1/engineering/runs/{id}/cancel",s.engineeringRun)
+ mux.HandleFunc("GET /v1/engineering/teams",s.engineeringTeamCollection)
+ mux.HandleFunc("POST /v1/engineering/teams",s.engineeringTeamCollection)
+ mux.HandleFunc("GET /v1/engineering/teams/{id}",s.engineeringTeam)
+ mux.HandleFunc("POST /v1/engineering/teams/{id}/cancel",s.engineeringTeam)
+ mux.HandleFunc("POST /v1/engineering/teams/{id}/integrate",s.engineeringTeamIntegrate)
+ mux.HandleFunc("GET /v1/engineering/runs/{id}/knowledge/{proposal}",s.engineeringRunKnowledge)
+ mux.HandleFunc("POST /v1/engineering/runs/{id}/knowledge/{proposal}/approve",s.engineeringRunKnowledge)
+ mux.HandleFunc("GET /v1/engineering/runs/{id}/diffs",s.engineeringRunDiffs)
  mux.HandleFunc("GET /v1/workspace/projects",s.uiProjects)
  mux.HandleFunc("GET /v1/workspace/projects/{project}/jobs",s.uiWorkspaceProjectView)
  mux.HandleFunc("GET /v1/workspace/projects/{project}/workspaces",s.uiWorkspaceProjectView)
@@ -324,10 +336,26 @@ func(s *Server)localTools()[]map[string]any{
  }
  if s.engineering!=nil{
   tools=append(tools,
-   tool("engineering_run_submit","Submit a bounded engineering run that creates an isolated workspace, edits approved files, verifies checks and prepares a draft pull request",map[string]any{"project":prop("string"),"repository":prop("string"),"revision":prop("string"),"base_branch":prop("string"),"expected_head":prop("string"),"objective":prop("string"),"context_paths":map[string]any{"type":"array","items":prop("string")},"allowed_paths":map[string]any{"type":"array","items":prop("string")},"changes":prop("object"),"checks":map[string]any{"type":"array","items":prop("string")},"image_pool_id":prop("string"),"cpu":prop("number"),"memory_mb":prop("integer"),"duration_minutes":prop("integer"),"title":prop("string"),"description":prop("string")},"project","repository","revision","base_branch","expected_head","objective","checks","image_pool_id","cpu","memory_mb","duration_minutes","title"),
+   tool("engineering_run_submit","Submit a bounded engineering run that creates an isolated workspace, edits approved files, verifies checks and prepares a draft pull request",map[string]any{"project":prop("string"),"repository":prop("string"),"revision":prop("string"),"base_branch":prop("string"),"expected_head":prop("string"),"objective":prop("string"),"context_paths":map[string]any{"type":"array","items":prop("string")},"allowed_paths":map[string]any{"type":"array","items":prop("string")},"changes":prop("object"),"checks":map[string]any{"type":"array","items":prop("string")},"image_pool_id":prop("string"),"cpu":prop("number"),"memory_mb":prop("integer"),"duration_minutes":prop("integer"),"title":prop("string"),"description":prop("string"),"autonomous":prop("boolean"),"review":prop("boolean"),"include_knowledge":prop("boolean"),"prepare_only":prop("boolean"),"linked_repositories":map[string]any{"type":"array","items":prop("object")}},"project","repository","revision","base_branch","expected_head","objective","checks","image_pool_id","cpu","memory_mb","duration_minutes","title"),
    tool("engineering_run_list","List engineering runs and confirmed outcomes",map[string]any{}),
    tool("engineering_run_get","Inspect one engineering run without returning lease secrets",map[string]any{"id":prop("string")},"id"),
    tool("engineering_run_cancel","Cancel a revision-matched engineering run",map[string]any{"id":prop("string"),"revision":prop("integer")},"id","revision"))
+ }
+ if _,ok:=s.engineering.(agentflow.TeamManager);ok{
+  tools=append(tools,
+   tool("engineering_team_submit","Start bounded cooperating agents with disjoint editable files; no member may publish",map[string]any{"base":prop("object"),"tasks":map[string]any{"type":"array","items":prop("object")}},"base","tasks"),
+   tool("engineering_team_list","List cooperating engineering agent groups",map[string]any{}),
+   tool("engineering_team_get","Inspect one cooperating engineering group",map[string]any{"id":prop("string")},"id"),
+   tool("engineering_team_cancel","Cancel unfinished members of a cooperating engineering group",map[string]any{"id":prop("string")},"id"),
+   tool("engineering_team_integrate","Verify the combined agent artifacts and prepare one draft PR",map[string]any{"id":prop("string"),"base_branch":prop("string"),"expected_head":prop("string"),"title":prop("string"),"body":prop("string")},"id","base_branch","expected_head","title"))
+ }
+ if _,ok:=s.engineering.(agentflow.KnowledgeManager);ok{
+  tools=append(tools,
+   tool("engineering_run_knowledge_get","Inspect a source-backed knowledge proposal",map[string]any{"id":prop("string"),"proposal_id":prop("string")},"id","proposal_id"),
+   tool("engineering_run_knowledge_approve","Approve one completed-run knowledge proposal for canonical project storage",map[string]any{"id":prop("string"),"proposal_id":prop("string")},"id","proposal_id"))
+ }
+ if _,ok:=s.engineering.(agentflow.DiffManager);ok{
+  tools=append(tools,tool("engineering_run_diffs","Inspect bounded private patch previews for a scoped engineering run",map[string]any{"id":prop("string")},"id"))
  }
  if s.executorClient!=nil {
   tools=append(tools,
@@ -442,7 +470,7 @@ func(s *Server)toolList(r *http.Request)[]map[string]any{
  return out
 }
 func(s *Server)localTool(ctx context.Context,name string,raw json.RawMessage)(any,error){
- if strings.HasPrefix(name,"engineering_run_"){return s.engineeringTool(ctx,name,raw)}
+ if strings.HasPrefix(name,"engineering_run_")||strings.HasPrefix(name,"engineering_team_"){return s.engineeringTool(ctx,name,raw)}
  if strings.HasPrefix(name,"monitoring_"){return s.monitoringTool(ctx,name,raw)}
  if strings.HasPrefix(name,"book_"){return s.bookTool(ctx,name,raw)}
  if name=="calendar_occurrences"||name=="weekly_plan"{return s.calendarTool(ctx,name,raw)}

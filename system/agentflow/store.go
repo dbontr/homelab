@@ -38,11 +38,24 @@ type Step struct {
 	Attempts    int             `json:"attempts"`
 	Generation  uint64          `json:"generation"`
 	LeaseDigest string          `json:"lease_digest,omitempty"`
+	ExternalStarted bool `json:"external_started,omitempty"`
 	LeaseUntil  time.Time       `json:"lease_until,omitempty"`
 	LastError   string          `json:"last_error,omitempty"`
 	Result      json.RawMessage `json:"result,omitempty"`
 }
+type CleanupRecord struct {
+	Status string `json:"status,omitempty"`
+	Attempts int `json:"attempts,omitempty"`
+	LastError string `json:"last_error,omitempty"`
+}
+
 type Workflow struct {
+	CreatedAt time.Time `json:"created_at,omitempty"`
+	Deadline time.Time `json:"deadline,omitempty"`
+	Cleanup CleanupRecord `json:"cleanup,omitempty"`
+	CleanupStarted time.Time `json:"cleanup_started,omitempty"`
+	IntegrationTeamID string `json:"integration_team_id,omitempty"`
+	TeamID string `json:"team_id,omitempty"`
 	ID        string        `json:"id"`
 	Project   string        `json:"project"`
 	Revision  uint64        `json:"revision"`
@@ -278,6 +291,7 @@ func (s *Store) Create(w Workflow) error {
 	}
 	w.Revision = 1
 	w.Cancelled = false
+	if w.CreatedAt.IsZero(){w.CreatedAt=s.now().UTC()}
 	return s.save(w)
 }
 func (s *Store) Get(id string) (Workflow, error) {
@@ -306,8 +320,35 @@ func (s *Store) ClaimReady(id string, ttl time.Duration) (Claim, error) {
 	if err != nil {
 		return claim, err
 	}
+	if w.TeamID!="" {
+		recordFile,err:=os.Open(s.teamPath(w.TeamID))
+		if err!=nil{return claim,errNoReady}
+		var record TeamRecord
+		decodeErr:=json.NewDecoder(recordFile).Decode(&record)
+		closeErr:=recordFile.Close()
+		authorized:=false
+		for _,member:=range record.Members{
+			if member.RunID==w.ID {authorized=true;break}
+		}
+		if decodeErr!=nil||closeErr!=nil||record.ID!=w.TeamID||record.Project!=w.Project||!authorized{
+			return claim,errNoReady
+		}
+	}
+	if w.IntegrationTeamID!="" {
+		recordFile,err:=os.Open(s.teamPath(w.IntegrationTeamID))
+		if err!=nil{return claim,errNoReady}
+		var record TeamRecord
+		decodeErr:=json.NewDecoder(recordFile).Decode(&record)
+		closeErr:=recordFile.Close()
+		if decodeErr!=nil||closeErr!=nil||record.ID!=w.IntegrationTeamID||record.IntegrationRunID!=w.ID||record.Project!=w.Project {
+			return claim,errNoReady
+		}
+	}
 	if w.Cancelled {
 		return claim, errors.New("workflow cancelled")
+	}
+	if !w.Deadline.IsZero() && !s.now().Before(w.Deadline) {
+		return claim, errors.New("workflow deadline exceeded")
 	}
 	statuses := map[string]Status{}
 	for _, st := range w.Steps {

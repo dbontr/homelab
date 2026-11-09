@@ -269,3 +269,31 @@ func TestCloudflareAccessConfigurationRequiresCompleteIdentity(t *testing.T) {
 		t.Fatal("access verifier accepted no configured owner")
 	}
 }
+
+func TestOIDCProjectRoleSelfInspection(t *testing.T) {
+	db, server, endpoint := fixture(t)
+	project(t, endpoint)
+	key, issuer := testOIDCIssuer(t, server)
+	token := signedTestToken(t, key, issuer, "project-workspace", "engineering", time.Now().Add(time.Hour).Unix())
+	principal := "oidc:" + issuer + "#engineering"
+
+	code, _ := call(t, endpoint, "GET", "/api/projects/demo/role", token, nil)
+	if code != http.StatusForbidden {
+		t.Fatalf("ungranted identity disclosed project role: HTTP %d", code)
+	}
+	if _, err := db.SetProjectGrant("demo", principal, "viewer", ""); err != nil { t.Fatal(err) }
+	code, result := call(t, endpoint, "GET", "/api/projects/demo/role", token, nil)
+	wantOK(t, code, result)
+	if result["role"] != "viewer" || result["project_id"] != "demo" {
+		t.Fatalf("unexpected self-grant: %v", result)
+	}
+	if _, err := db.SetProjectGrant("demo", principal, "editor", "viewer"); err != nil { t.Fatal(err) }
+	code, result = call(t, endpoint, "GET", "/api/projects/demo/role", token, nil)
+	wantOK(t, code, result)
+	if result["role"] != "editor" { t.Fatal("project role did not reflect grant revision") }
+
+	code, _ = call(t, endpoint, "POST", "/api/projects/demo/role", token, map[string]any{"role":"owner"})
+	if code == http.StatusOK { t.Fatal("project role is not writable by its subject") }
+	code, _ = call(t, endpoint, "GET", "/api/projects/another-project/role", token, nil)
+	if code == http.StatusOK { t.Fatal("project grant escaped its project boundary") }
+}
