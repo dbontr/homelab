@@ -2,7 +2,6 @@ package transport
 
 import (
     "net/http"
-    "strings"
 
     "github.com/dbontr/homelab-new/system/agentflow"
 )
@@ -99,6 +98,3 @@ func (s *Server) uiTaskDelegations(w http.ResponseWriter,r *http.Request) {
     writeJSON(w,http.StatusOK,s.taskDelegations())
 }
 
-func engineeringRunRef(id string) string {
-    return "homelab:engineering_run:"+strings.TrimSpace(id)
-}
