@@ -137,7 +137,14 @@ func (e *Engine) ApproveKnowledge(runID, proposalID string) (KnowledgeProposal, 
 	if !e.AllowedProjects[w.Project] || Summarize(w).Status != Succeeded {
 		return KnowledgeProposal{}, errors.New("only completed authorized runs can contribute knowledge")
 	}
-	proposal, err := e.Store.beginKnowledgeContribution(runID, proposalID)
+	proposal, err := e.Knowledge(runID, proposalID)
+	if err != nil { return KnowledgeProposal{}, err }
+	for filename, evidenceHash := range proposal.EvidenceSHA256 {
+		if finalHash, edited := w.Agent.Changed[filename]; edited && finalHash != evidenceHash {
+			return KnowledgeProposal{}, errors.New("knowledge proposal cites a superseded source revision")
+		}
+	}
+	proposal, err = e.Store.beginKnowledgeContribution(runID, proposalID)
 	if err != nil {
 		return KnowledgeProposal{}, err
 	}
