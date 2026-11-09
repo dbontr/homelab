@@ -44,6 +44,7 @@ type CodeMap struct {
 var (
 	rustDeclarations = regexp.MustCompile(`^\s*(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?(fn|struct|enum|trait|type|const|static|mod)\s+([A-Za-z_][A-Za-z0-9_]*)`)
 	rustImports      = regexp.MustCompile(`^\s*(?:pub(?:\([^)]*\))?\s+)?use\s+([^;]+);`)
+	rustModuleDecl   = regexp.MustCompile(`^\s*(?:pub(?:\([^)]*\))?\s+)?mod\s+([A-Za-z_][A-Za-z0-9_]*)\s*;`)
 	pythonDeclarations = regexp.MustCompile(`^\s*(?:async\s+)?(def|class)\s+([A-Za-z_][A-Za-z0-9_]*)`)
 	pythonImports      = regexp.MustCompile(`^\s*(?:from\s+([A-Za-z_][A-Za-z0-9_.]*)\s+import\b|import\s+([A-Za-z_][A-Za-z0-9_., ]*))`)
 	scriptDeclarations = regexp.MustCompile(`^\s*(?:(?:export|declare|default|async|abstract)\s+)*(function|class|interface|type|enum|const|let)\s+([A-Za-z_$][A-Za-z0-9_$]*)`)
@@ -180,6 +181,9 @@ func outlineSource(filename, contents string) (CodeOutline, error) {
 			}
 			if m := rustImports.FindStringSubmatch(line); m != nil {
 				addImport(m[1])
+			}
+			if m := rustModuleDecl.FindStringSubmatch(line); m != nil {
+				addImport("self::"+m[1])
 			}
 		case "python":
 			if m := pythonDeclarations.FindStringSubmatch(line); m != nil {
