@@ -70,4 +70,20 @@ make_release
 : > "$release/SHA256SUMS"
 should_reject 'empty checksum manifest'
 
+make_release
+chmod 0666 "$release/console/assets/site.css"
+(
+  cd "$release"
+  find bin console -type f -print0 | sort -z | xargs -0 -r sha256sum > SHA256SUMS
+)
+should_reject 'writable release asset despite matching checksum'
+
+make_release
+find "$release/bin" "$release/console" -type f -exec chmod 0444 {} +
+find "$release/bin" -type f -exec chmod 0555 {} +
+find "$release/bin" "$release/console" -type d -exec chmod 0555 {} +
+chmod 0444 "$release/RELEASE" "$release/SHA256SUMS"
+chmod 0555 "$release"
+bash "$verify" "$release" >/dev/null
+
 printf '%s\n' 'Release bundle integrity checks passed.'
