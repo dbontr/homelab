@@ -34,7 +34,7 @@ func (s *Store) activeClaim(w Workflow, c Claim) (int, error) {
 // CheckpointAgent writes the exact committed transcript under the current
 // lease token. Cancelled or superseded workers cannot persist a decision.
 func (s *Store) CheckpointAgent(claim Claim, session AgentSession) error {
-	if claim.Kind != "agent" || session.Turns < 0 || session.Turns > maxAgentTurns || len(session.Events) > maxAgentTurns || len(session.Changed) > 16 || len(session.Knowledge)>8 {
+	if claim.Kind != "agent" || session.Turns < 0 || session.Turns > maxAgentTurns || len(session.Events) > maxAgentTurns || len(session.Changed) > 16 || len(session.Knowledge)>8 || len(session.Diagnostics)>16 {
 		return errors.New("invalid agent checkpoint")
 	}
 	for path, digest := range session.Changed {
