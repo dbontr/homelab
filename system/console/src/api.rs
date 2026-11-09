@@ -51,6 +51,10 @@ pub struct Task {
     pub id: String,
     pub title: String,
     #[serde(default)]
+    pub parent_id: String,
+    #[serde(default)]
+    pub decomposed: bool,
+    #[serde(default)]
     pub status: String,
     #[serde(default)]
     pub minutes: i32,
