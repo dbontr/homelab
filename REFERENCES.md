@@ -73,3 +73,4 @@
 - [Open Library API Usage Guidelines](https://openlibrary.org/developers/api) — Open Library. Used for: identified requests, rate limits, and bounded human-initiated book availability lookup.
 - [GNU Coreutils sha2sum utilities](https://www.gnu.org/software/coreutils/manual/html_node/sha2-utilities.html) — GNU project. Used for: reproducible SHA-256 manifests and offline staged-release file integrity checks.
 - [Docker Buildx Build Reference](https://docs.docker.com/reference/cli/docker/buildx/build/) — Docker. Used for: source-owned Compute OCI image builds, registry push/load modes and metadata digest receipts.
+- [RFC 8628: OAuth 2.0 Device Authorization Grant](https://www.rfc-editor.org/rfc/rfc8628) — IETF. Used for: owner-only device-code enrollment, verification URI presentation, interval-constrained authorization polling and provider error handling.

@@ -158,7 +158,7 @@ func ownerRequest(ctx context.Context, method, path string, input any) ([]byte, 
 
 func run(args []string) error {
 	if len(args) == 0 {
-		return errors.New("expected enroll, vault-init, login, status, pending, confirm, close, credential-add, credential-rotate, credential-list, credential-delete, oauth-list, oauth-begin or oauth-refresh")
+		return errors.New("expected enroll, vault-init, login, status, pending, confirm, close, credential-add, credential-rotate, credential-list, credential-delete, oauth-list, oauth-begin, oauth-device-begin, oauth-device-poll or oauth-refresh")
 	}
 	if args[0] == "enroll" {
 		return enroll(args[1:])
@@ -181,6 +181,9 @@ func run(args []string) error {
 	}
 	timeout := 15 * time.Second
 	if args[0] == "oauth-refresh" { timeout = 40 * time.Second }
+	if args[0] == "oauth-device-begin" || args[0] == "oauth-device-poll" {
+		timeout = 25 * time.Second
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	var path, method string
@@ -200,6 +203,26 @@ func run(args []string) error {
 		if err!=nil{return err}
 		method,path=http.MethodPost,"/v1/oauth/"+url.PathEscape(args[1])+"/begin"
 		input=map[string]string{"password":password,"totp":code}
+	case "oauth-device-begin":
+		if len(args)!=2||len(args[1])<1||len(args[1])>64||
+			strings.ContainsAny(args[1],"/?#\\ \t\r\n\x00"){
+			return errors.New("oauth-device-begin requires one configured provider")
+		}
+		password,err:=secretPrompt("Homelab administrative password:")
+		if err!=nil{return err}
+		code,err:=secretPrompt("New six-digit authenticator code:")
+		if err!=nil{return err}
+		method,path=http.MethodPost,"/v1/oauth/"+url.PathEscape(args[1])+"/device/begin"
+		input=map[string]string{"password":password,"totp":code}
+	case "oauth-device-poll":
+		if len(args)!=3||len(args[1])<1||len(args[1])>64||
+			strings.ContainsAny(args[1],"/?#\\ \t\r\n\x00")||
+			len(args[2])!=32||
+			strings.Trim(args[2],"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")!=""{
+			return errors.New("oauth-device-poll requires provider and exact pending request ID")
+		}
+		method,path=http.MethodPost,"/v1/oauth/"+url.PathEscape(args[1])+"/device/poll"
+		input=map[string]string{"id":args[2]}
 	case "oauth-refresh":
 		if len(args)!=3||len(args[1])<1||len(args[1])>64||
 			strings.ContainsAny(args[1],"/?#\\ \t\r\n\x00")||
