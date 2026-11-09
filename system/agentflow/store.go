@@ -319,6 +319,16 @@ func (s *Store) ClaimReady(id string, ttl time.Duration) (Claim, error) {
 	if err != nil {
 		return claim, err
 	}
+	if w.IntegrationTeamID!="" {
+		recordFile,err:=os.Open(s.teamPath(w.IntegrationTeamID))
+		if err!=nil{return claim,errNoReady}
+		var record TeamRecord
+		decodeErr:=json.NewDecoder(recordFile).Decode(&record)
+		closeErr:=recordFile.Close()
+		if decodeErr!=nil||closeErr!=nil||record.ID!=w.IntegrationTeamID||record.IntegrationRunID!=w.ID||record.Project!=w.Project {
+			return claim,errNoReady
+		}
+	}
 	if w.Cancelled {
 		return claim, errors.New("workflow cancelled")
 	}
