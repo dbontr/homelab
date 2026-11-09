@@ -13,7 +13,22 @@ import (
  "github.com/dbontr/homelab-new/system/store"
 )
 
-var resourceIdentifier=regexp.MustCompile(`^[a-zA-Z0-9_-]{1,80}$`)
+var resourceIdentifier=regexp.MustCompile(`^[a-zA-Z0-9_-]{1,128}package transport
+
+import (
+ "context"
+ "net/http"
+ "errors"
+ "regexp"
+ "sort"
+ "strings"
+ "strconv"
+ "time"
+
+ "github.com/dbontr/homelab-new/system/store"
+)
+
+)
 
 type ResourceLink struct{
  Relation string `json:"relation"`
@@ -47,6 +62,14 @@ func parseResourceReference(ref string)(string,string,error){
 func withReference(kind,id,owner string,data any,links []ResourceLink) Resource{
  if links==nil{links=[]ResourceLink{}}
  return Resource{Reference:resourceRef(kind,id),Kind:kind,ID:id,Owner:owner,Data:data,Links:links}
+}
+
+func sortedResourceLinks(links []ResourceLink)[]ResourceLink{
+ sort.Slice(links,func(i,j int)bool{
+  if links[i].Relation!=links[j].Relation{return links[i].Relation<links[j].Relation}
+  return links[i].Reference<links[j].Reference
+ })
+ return links
 }
 
 func taskLinks(task store.Task) []ResourceLink{
@@ -97,17 +120,55 @@ func(s *Server) resource(ctx context.Context,kind,id string)(Resource,error){
   if err!=nil{return Resource{},errResourceUnavailable}
   return withReference(kind,id,"health",data,nil),nil
  case "task":
-  for _,item:=range s.db.Tasks(""){
-   if item.ID==id{return withReference(kind,id,"personal",item,taskLinks(item)),nil}
+  tasks:=s.db.Tasks("")
+  for _,item:=range tasks{
+   if item.ID!=id{continue}
+   links:=taskLinks(item)
+   for _,candidate:=range tasks{
+    if candidate.ID==id{continue}
+    if candidate.ParentID==id{
+     links=append(links,ResourceLink{
+      Relation:"child",Reference:resourceRef("task",candidate.ID),
+     })
+    }
+    for _,dependency:=range candidate.DependsOn{
+     if dependency==id{
+      links=append(links,ResourceLink{
+       Relation:"dependent",Reference:resourceRef("task",candidate.ID),
+      })
+     }
+    }
+   }
+   return withReference(kind,id,"personal",item,sortedResourceLinks(links)),nil
   }
  case "goal":
-  for _,item:=range s.db.Goals(){
-   if item.ID==id{return withReference(kind,id,"personal",item,nil),nil}
+  goals:=s.db.Goals()
+  for _,item:=range goals{
+   if item.ID!=id{continue}
+   links:=[]ResourceLink{}
+   for _,task:=range s.db.Tasks(""){
+    if task.GoalID==id{
+     links=append(links,ResourceLink{
+      Relation:"task",Reference:resourceRef("task",task.ID),
+     })
+    }
+   }
+   return withReference(kind,id,"personal",item,sortedResourceLinks(links)),nil
   }
  case "recipe":
   if s.recipes==nil{return Resource{},errResourceUnavailable}
   item,err:=s.recipes.Get(id)
-  if err==nil{return withReference(kind,id,"recipes",item,nil),nil}
+  if err==nil{
+   links:=[]ResourceLink{}
+   for _,meal:=range s.recipes.Meals(){
+    if meal.RecipeID==id{
+     links=append(links,ResourceLink{
+      Relation:"meal",Reference:resourceRef("meal",meal.ID),
+     })
+    }
+   }
+   return withReference(kind,id,"recipes",item,sortedResourceLinks(links)),nil
+  }
  case "meal":
   if s.recipes==nil{return Resource{},errResourceUnavailable}
   for _,item:=range s.recipes.Meals(){
