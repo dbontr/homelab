@@ -19,6 +19,11 @@ func (s *Server) bookRoutes(w http.ResponseWriter,r *http.Request){
   result,err:=s.bookCatalog.Search(r.Context(),query)
   if err!=nil{writeError(w,502,"book catalog is unavailable or the search is invalid");return}
   writeJSON(w,200,result)
+ case "/v1/books/lending":
+  if s.bookCatalog==nil{writeError(w,503,"book lending discovery is unavailable");return}
+  result,err:=s.bookCatalog.FindReading(r.Context(),r.URL.Query().Get("isbn"))
+  if err!=nil{writeError(w,400,"book lending lookup unavailable or ISBN invalid");return}
+  writeJSON(w,200,result)
  case "/v1/books/requests":
   if r.Method==http.MethodGet{
    writeJSON(w,200,s.db.ListBookRequests(r.URL.Query().Get("status")))
@@ -55,6 +60,7 @@ func (s *Server) bookRoutes(w http.ResponseWriter,r *http.Request){
 func (s *Server) bookTool(ctx context.Context,name string,raw json.RawMessage)(any,error){
  var args struct {
   Query string `json:"query"`
+  ISBN string `json:"isbn"`
   Status string `json:"status"`
   ID string `json:"id"`
   ExpectedRevision int `json:"expected_revision"`
@@ -65,6 +71,9 @@ func (s *Server) bookTool(ctx context.Context,name string,raw json.RawMessage)(a
  case "book_search":
   if s.bookCatalog==nil{return nil,errors.New("book discovery is not configured")}
   return s.bookCatalog.Search(ctx,args.Query)
+ case "book_lending":
+  if s.bookCatalog==nil{return nil,errors.New("book lending discovery is not configured")}
+  return s.bookCatalog.FindReading(ctx,args.ISBN)
  case "book_request_list":
   return s.db.ListBookRequests(args.Status),nil
  case "book_request_add":

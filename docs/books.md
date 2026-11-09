@@ -14,9 +14,18 @@ The private personal state stores a canonical Open Library work ID, title, autho
 
 These requests are neither automatic purchases nor download instructions. They do not acquire copyrighted works, place library holds, or silently invoke an external provider. Any acquisition must use a separately authorized lawful channel.
 
+## Provider-managed reading and borrowing
+
+An ISBN-specific lookup uses the [Open Library Read API](https://openlibrary.org/dev/docs/api/read) to identify online-readable or borrowable editions. The operation performs one rate-limited, bounded, authenticated-to-Eminence read request per explicit ISBN-10 or ISBN-13. Open Library may report `full access`, `lendable`, `checked out` or `restricted`. An HTTPS reading/borrowing link is returned only for full-access or lendable results, and only if its host is the official Open Library or Internet Archive domain. Legacy HTTP links from those same hosts are upgraded to HTTPS. Other supplied links are discarded.
+
+An availability lookup is not a loan, hold, purchase or download. The owner chooses whether to open the link and authenticates directly on the provider's website. Library entitlements, geographic eligibility, loan limits, changing status and availability are determined exclusively by the provider. Eminence does not ask for, store or use Open Library account credentials, and it does not modify the original personal request ledger.
+
+The lookup is available as `book_lending` in MCP, `GET /v1/books/lending?isbn=...` in the native API, and an ISBN inquiry in the Rust Books page. The provider's legacy Read API can be discontinued; its failure is returned as unavailable rather than claiming that a book can be borrowed.
+
 ## Native routes
 
 - `GET /v1/books/search?q=...`: optional on-demand catalog lookup.
+- `GET /v1/books/lending?isbn=...`: legal reading/loan availability and verified provider-owned links for an exact ISBN.
 - `GET /v1/books/requests?status=...`: owner requests.
 - `POST /v1/books/requests`: store a book request.
 - `PUT /v1/books/requests/{id}`: explicit revision-guarded status change.
