@@ -21,6 +21,7 @@ type PlannedTask struct {
  Minutes int `json:"minutes"`
  Priority int `json:"priority"`
  Due string `json:"due,omitempty"`
+ DeadlineStatus string `json:"deadline_status,omitempty"`
 }
 type UnplannedTask struct {
  TaskID string `json:"task_id"`
@@ -156,7 +157,11 @@ func (s *Store) PlanWeekWithCapacities(day string, capacities [7]int, startHour 
 		if a.Due != b.Due {
 			if a.Due == "" { return false }
 			if b.Due == "" { return true }
-			return a.Due < b.Due
+			deadlineA, errA := taskDeadline(a.Due, s.zone)
+			deadlineB, errB := taskDeadline(b.Due, s.zone)
+			if errA == nil && errB == nil && !deadlineA.Equal(deadlineB) {
+				return deadlineA.Before(deadlineB)
+			}
 		}
 		if a.Priority != b.Priority { return a.Priority > b.Priority }
 		if a.Minutes != b.Minutes { return a.Minutes < b.Minutes }
@@ -167,6 +172,7 @@ func (s *Store) PlanWeekWithCapacities(day string, capacities [7]int, startHour 
 	used := [7]int{}
 	plannedEnds := make(map[string]time.Time)
 	assumedDependencies := false
+	lateProposals := false
 	for pass := 0; pass <= len(ordered) && len(remaining) > 0; pass++ {
 		progress := false
 		for _, task := range ordered {
@@ -210,6 +216,10 @@ func (s *Store) PlanWeekWithCapacities(day string, capacities [7]int, startHour 
 			}
 
 			duration := time.Duration(task.Minutes) * time.Minute
+			deadline := time.Time{}
+			if task.Due != "" {
+				deadline, _ = taskDeadline(task.Due, s.zone)
+			}
 			placed := false
 			for dayIndex := 0; dayIndex < 7 && !placed; dayIndex++ {
 				if used[dayIndex]+task.Minutes > capacities[dayIndex] {
@@ -240,10 +250,20 @@ func (s *Store) PlanWeekWithCapacities(day string, capacities [7]int, startHour 
 						}
 					}
 					if blocked { continue }
+					deadlineStatus := ""
+					if !deadline.IsZero() {
+						if next.After(deadline) {
+							deadlineStatus = "late"
+							lateProposals = true
+						} else {
+							deadlineStatus = "on_time"
+						}
+					}
 					plan.Slots = append(plan.Slots, PlannedTask{
 						TaskID: task.ID, Title: task.Title, Date: date.Format("2006-01-02"),
 						Start: cursor.Format(time.RFC3339), End: next.Format(time.RFC3339),
 						Minutes: task.Minutes, Priority: task.Priority, Due: task.Due,
+						DeadlineStatus: deadlineStatus,
 					})
 					busy = append(busy, BusyWindow{Start: cursor, End: next, Source: "proposal", Title: task.Title})
 					used[dayIndex] += task.Minutes
@@ -275,6 +295,9 @@ func (s *Store) PlanWeekWithCapacities(day string, capacities [7]int, startHour 
 	}
 	if assumedDependencies {
 		plan.Limitations = append(plan.Limitations, "Dependent timeboxes assume earlier planned tasks will be completed; this is not confirmed completion")
+	}
+	if lateProposals {
+		plan.Limitations = append(plan.Limitations, "Some proposed tasks finish after their due deadlines; these are late recovery timeboxes, not on-time completion plans")
 	}
 	sort.Slice(plan.Slots, func(i, j int) bool { return plan.Slots[i].Start < plan.Slots[j].Start })
 	return plan, nil
