@@ -126,6 +126,14 @@ func TestAutonomousSessionSurvivesStoreReopen(t *testing.T) {
 	}
 }
 func TestAgentPatchRejectsAmbiguousAndStaleContext(t *testing.T) {
+	if _, err := applyPatch("abcdef", []PatchHunk{{Find: "abc", Replace: "x"}, {Find: "bc", Replace: "y"}}); err == nil {
+		t.Fatal("overlapping patch hunks accepted")
+	}
+	result, err := applyPatch("abc def ghi", []PatchHunk{{Find: "ghi", Replace: "three"}, {Find: "abc", Replace: "one"}})
+	if err != nil || result != "one def three" {
+		t.Fatalf("multi-hunk patch changed wrong source: %q %v", result, err)
+	}
+
 	if _, err := applyPatch("repeat repeat", []PatchHunk{{Find: "repeat", Replace: "fix"}}); err == nil {
 		t.Fatal("ambiguous patch accepted")
 	}
