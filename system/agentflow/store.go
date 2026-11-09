@@ -155,7 +155,7 @@ func (s *Store) read(id string) (Workflow, error) {
 	if !validID(id) {
 		return w, errors.New("invalid workflow ID")
 	}
-	f, err := os.Open(s.filename(id))
+	f, err := os.OpenFile(s.filename(id),os.O_RDONLY|syscall.O_NOFOLLOW,0)
 	if err != nil {
 		return w, err
 	}
@@ -276,11 +276,14 @@ func (s *Store) Create(w Workflow) error {
 // createLocked shares admission and persistence with scheduled work.
 // Callers hold the cross-process lock and validate workflow content.
 func (s *Store) createLocked(w Workflow) error {
-	if _, err := os.Stat(s.filename(w.ID)); err == nil {
+	if _, err := os.Lstat(s.filename(w.ID)); err == nil {
 		return os.ErrExist
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
+	if _, err := s.readArchive(w.ID); err == nil {
+		return os.ErrExist
+	} else if !errors.Is(err,os.ErrNotExist){return err}
 	entries, err := os.ReadDir(s.dir)
 	if err != nil {
 		return err
@@ -318,7 +321,9 @@ func (s *Store) Get(id string) (Workflow, error) {
 		return Workflow{}, err
 	}
 	defer unlock()
-	return s.read(id)
+	w,err:=s.read(id)
+	if errors.Is(err,os.ErrNotExist){return s.readArchive(id)}
+	return w,err
 }
 
 // ClaimReady reserves one eligible step. A lease expires without implying
