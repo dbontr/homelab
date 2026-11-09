@@ -14,7 +14,7 @@ The unified MCP discovery operation preserves the canonical local tool set when 
 - GET /v1/tasks/agenda?date=YYYY-MM-DD: open, actionable tasks due by a selected owner-local day or scheduled on that day; RFC3339 deadlines are converted to the owner timezone before comparison
 - GET /v1/goals and POST /v1/goals: list and create long-term goals
 - GET /v1/rules and PUT /v1/rules/{key}: list and save personal constraints or preferences
-- GET /v1/recommendations: filter by available time, energy and location; quick mode favors small tasks
+- GET /v1/recommendations: filter by available time, energy and location; quick mode favors small tasks. Deadline urgency uses exact RFC3339 instants or the end of a date-only deadline in the owner timezone, with passed deadlines ranked ahead of merely upcoming ones.
 - GET /v1/reports/weekly: recorded completions against the daily minimum and associated goal progress
 - GET /v1/planning/review?days=7: classify actionable open tasks with overdue or upcoming deadlines, incomplete prerequisites, missing estimates, or undated and unscheduled tasks open for at least 14 local calendar days. The 1–30-day deadline horizon follows calendar days across daylight-saving transitions. Age prompts are not evidence of inactivity; read-only review never changes completion state.
 - GET /v1/calendar: read-only event definitions from an optional iCalendar sharing link
