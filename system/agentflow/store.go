@@ -55,6 +55,7 @@ type Workflow struct {
 	Cleanup CleanupRecord `json:"cleanup,omitempty"`
 	CleanupStarted time.Time `json:"cleanup_started,omitempty"`
 	IntegrationTeamID string `json:"integration_team_id,omitempty"`
+	TeamID string `json:"team_id,omitempty"`
 	ID        string        `json:"id"`
 	Project   string        `json:"project"`
 	Revision  uint64        `json:"revision"`
@@ -318,6 +319,20 @@ func (s *Store) ClaimReady(id string, ttl time.Duration) (Claim, error) {
 	w, err := s.read(id)
 	if err != nil {
 		return claim, err
+	}
+	if w.TeamID!="" {
+		recordFile,err:=os.Open(s.teamPath(w.TeamID))
+		if err!=nil{return claim,errNoReady}
+		var record TeamRecord
+		decodeErr:=json.NewDecoder(recordFile).Decode(&record)
+		closeErr:=recordFile.Close()
+		authorized:=false
+		for _,member:=range record.Members{
+			if member.RunID==w.ID {authorized=true;break}
+		}
+		if decodeErr!=nil||closeErr!=nil||record.ID!=w.TeamID||record.Project!=w.Project||!authorized{
+			return claim,errNoReady
+		}
 	}
 	if w.IntegrationTeamID!="" {
 		recordFile,err:=os.Open(s.teamPath(w.IntegrationTeamID))
