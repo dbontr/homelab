@@ -351,3 +351,23 @@ pub fn Pantry(csrf: String) -> Element {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn nutrient_targets_are_explicit_and_bounded() {
+        let values = parse_nutrient_targets("protein | g | 40\nfiber | g | 28").unwrap();
+        assert_eq!(values.len(), 2);
+        assert_eq!(values[0].remaining, 40.0);
+        assert_eq!(values[1].name, "fiber");
+
+        for malformed in [
+            "protein | 40", "protein | g | -3", "protein | g | NaN", "protein | g | infinity",
+        ] {
+            assert!(parse_nutrient_targets(malformed).is_err());
+        }
+        assert!(parse_nutrient_targets(&"protein | g | 1\n".repeat(33)).is_err());
+    }
+}
