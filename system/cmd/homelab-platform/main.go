@@ -67,6 +67,22 @@ func main(){
         v,enabled,e:=configuredBackend(b.name,b.upper,vault);if e!=nil{log.Fatal(e)};if enabled{backends=append(backends,v)}
     }
     server,e:=transport.New(db,token,backends);if e!=nil{log.Fatal(e)}
+    mcpInterfaceToken,apiInterfaceToken:="",""
+    if path:=os.Getenv("HOMELAB_MCP_INTERFACE_TOKEN_FILE");path!=""{
+        mcpInterfaceToken,e=secret(path)
+        if e!=nil{log.Fatal("MCP service identity: ",e)}
+    }
+    if path:=os.Getenv("HOMELAB_API_INTERFACE_TOKEN_FILE");path!=""{
+        apiInterfaceToken,e=secret(path)
+        if e!=nil{log.Fatal("API service identity: ",e)}
+    }
+    var apiWritePaths []string
+    if raw:=os.Getenv("HOMELAB_API_INTERFACE_WRITE_PATHS");raw!=""{
+        apiWritePaths=strings.Split(raw,",")
+    }
+    if e:=server.SetInterfaceTokens(mcpInterfaceToken,apiInterfaceToken,apiWritePaths);e!=nil{
+        log.Fatal("interface service policy: ",e)
+    }
     workflows,err:=agentflow.Open(filepath.Join(filepath.Dir(state),"workflows"))
     if err!=nil{log.Fatal(err)}
     server.SetWorkflows(workflows)
