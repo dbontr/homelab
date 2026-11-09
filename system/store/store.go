@@ -163,12 +163,36 @@ func (s *Store) addTask(in TaskInput,receiptKey string)(Task,error){
  key,e:=id();if e!=nil{return Task{},e}
  t:=Task{ID:key,Title:in.Title,Notes:in.Notes,GoalID:in.GoalID,Links:append([]string(nil),in.Links...),ParentID:in.ParentID,DependsOn:append([]string(nil),in.DependsOn...),Due:in.Due,Scheduled:in.Scheduled,Recurrence:in.Recurrence,Revision:1,Minutes:in.Minutes,Energy:in.Energy,Location:in.Location,Priority:in.Priority,Status:"open",CreatedAt:time.Now().UTC()}
  next:=clone(s.data);next.Tasks[key]=t
- if receiptKey!="" {next.AutomationReceipts[receiptKey]=taskAutomationReceipt{Fingerprint:fingerprint,TaskID:key}}
+ if receiptKey!="" {next.AutomationReceipts[receiptKey]=taskAutomationReceipt{Fingerprint:fingerprint,TaskID:key,Action:"task_create",ConfirmedAt:t.CreatedAt}}
  return t,s.save(next)
 }
-func (s *Store) CompleteTask(key string)(Task,error){
+func (s *Store) CompleteTask(key string)(Task,error){return s.completeTask(key,0,"")}
+
+// CompleteTaskOnce guards the exact task revision and persists a durable
+// receipt together with the completion and any recurring successor task.
+func (s *Store) CompleteTaskOnce(receiptKey,key string,expectedRevision int)(Task,error){
+ decoded,err:=hex.DecodeString(receiptKey)
+ if err!=nil||len(decoded)!=32||expectedRevision<1{return Task{},errors.New("invalid task completion grant")}
+ return s.completeTask(key,expectedRevision,receiptKey)
+}
+func (s *Store) completeTask(key string,expectedRevision int,receiptKey string)(Task,error){
  s.mu.Lock();defer s.mu.Unlock()
+ var fingerprint string
+ if receiptKey!="" {
+  digest:=sha256.Sum256([]byte("task_complete:"+key+":"+strconv.Itoa(expectedRevision)))
+  fingerprint=hex.EncodeToString(digest[:])
+  if receipt,exists:=s.data.AutomationReceipts[receiptKey];exists{
+   if receipt.Fingerprint!=fingerprint||receipt.TaskID!=key||receipt.Action!="task_complete"{return Task{},errors.New("task completion receipt conflict")}
+   previous,ok:=s.data.Tasks[key]
+   if !ok||previous.Status!="completed"{return Task{},errors.New("completed task is unavailable")}
+   return previous,nil
+  }
+  if len(s.data.AutomationReceipts)>=10000{return Task{},errors.New("automation receipt retention limit reached")}
+ }
  t,ok:=s.data.Tasks[key];if !ok{return Task{},os.ErrNotExist}
+ if receiptKey!="" && (t.Revision!=expectedRevision || t.Status!="open") {
+  return Task{},errors.New("task revision conflict or task already completed")
+ }
  if t.Status=="completed"{return t,nil}
  now:=time.Now().UTC()
  next:=clone(s.data)
@@ -186,6 +210,9 @@ func (s *Store) CompleteTask(key string)(Task,error){
    if err!=nil{return Task{},err}
   }
   next.Tasks[following.ID]=following
+ }
+ if receiptKey!="" {
+  next.AutomationReceipts[receiptKey]=taskAutomationReceipt{Fingerprint:fingerprint,TaskID:key,Action:"task_complete",ConfirmedAt:now}
  }
  return t,s.save(next)
 }
@@ -235,11 +262,36 @@ func (s *Store) Suggest(minutes int,energy,location,mode string,limit int)[]Task
  if limit<=0{limit=3};if limit>50{limit=50};if len(out)>limit{out=out[:limit]}
  return out
 }
-func (s *Store) AddGoal(title,notes string)(Goal,error){
- title=strings.TrimSpace(title);if title==""||len(title)>500{return Goal{},errors.New("goal title must be 1-500 characters")}
+func (s *Store) AddGoal(title,notes string)(Goal,error){return s.addGoal(title,notes,"")}
+
+// AddGoalOnce creates a goal exactly once for a stable workflow action key.
+func (s *Store) AddGoalOnce(receiptKey,title,notes string)(Goal,error){
+ decoded,err:=hex.DecodeString(receiptKey)
+ if err!=nil||len(decoded)!=32{return Goal{},errors.New("invalid goal creation idempotency key")}
+ return s.addGoal(title,notes,receiptKey)
+}
+func (s *Store) addGoal(title,notes,receiptKey string)(Goal,error){
+ title=strings.TrimSpace(title)
+ if title==""||len(title)>500||len(notes)>8192{return Goal{},errors.New("invalid goal title or notes")}
+ s.mu.Lock();defer s.mu.Unlock()
+ fingerprint:=""
+ if receiptKey!="" {
+  payload,_:=json.Marshal(struct{Title string;Notes string}{title,notes})
+  sum:=sha256.Sum256(payload)
+  fingerprint=hex.EncodeToString(sum[:])
+  if receipt,exists:=s.data.AutomationReceipts[receiptKey];exists{
+   if receipt.Fingerprint!=fingerprint||receipt.Action!="goal_create"{return Goal{},errors.New("goal creation receipt conflict")}
+   prior,ok:=s.data.Goals[receipt.GoalID]
+   if !ok{return Goal{},errors.New("goal receipt refers to an unavailable goal")}
+   return prior,nil
+  }
+  if len(s.data.AutomationReceipts)>=10000{return Goal{},errors.New("automation receipt retention limit reached")}
+ }
  key,e:=id();if e!=nil{return Goal{},e}
- g:=Goal{ID:key,Title:title,Notes:notes,CreatedAt:time.Now().UTC()}
- s.mu.Lock();defer s.mu.Unlock();next:=clone(s.data);next.Goals[key]=g
+ now:=time.Now().UTC()
+ g:=Goal{ID:key,Title:title,Notes:notes,CreatedAt:now}
+ next:=clone(s.data);next.Goals[key]=g
+ if receiptKey!=""{next.AutomationReceipts[receiptKey]=taskAutomationReceipt{Fingerprint:fingerprint,GoalID:key,Action:"goal_create",ConfirmedAt:now}}
  return g,s.save(next)
 }
 func (s *Store) Goals()[]Goal{
