@@ -13,7 +13,7 @@ The Go platform exposes authenticated loopback HTTP endpoints. Native JSON and M
 - GET /v1/reports/weekly: recorded completions against the daily minimum and associated goal progress
 - GET /v1/calendar: read-only event definitions from an optional iCalendar sharing link
 - GET /v1/calendar/occurrences: bounded expanded events and recurrence limitations
-- GET /v1/planning/week: advisory weekly allocation of tasks into unoccupied calendar time; never mutates tasks or the calendar
+- GET /v1/planning/week: advisory weekly allocation of tasks into unoccupied calendar time, with optional `day_minutes` (seven comma-separated daily budgets, zero or 30–480); respects dependency ordering across the plan and never mutates tasks or the calendar
 - GET /v1/monitoring/summary, /series, /targets, /alerts, /logs: owner-authenticated fixed telemetry and journal views from configured local Prometheus and Loki sources
 - GET /v1/devices: declared device inventory and access policy, not live device status
 - GET /v1/nodes: enrolled and agentless node inventory, not live node status

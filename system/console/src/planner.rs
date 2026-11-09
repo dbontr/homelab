@@ -27,6 +27,8 @@ pub struct WeeklyPlan {
     pub from: String,
     pub until: String,
     pub daily_minutes: i32,
+    #[serde(default)]
+    pub daily_capacities: [i32; 7],
     pub start_hour: i32,
     #[serde(default)]
     pub slots: Vec<PlanSlot>,
@@ -85,6 +87,7 @@ fn short_time(time: &str) -> String {
 pub fn Planner() -> Element {
     let mut daily_minutes = use_signal(|| 180_i32);
     let mut start_hour = use_signal(|| 9_i32);
+    let mut day_minutes = use_signal(String::new);
     let mut delegations = use_resource(|| async {
         api::get::<DelegationReport>("/v1/tasks/delegations").await
     });
@@ -94,9 +97,22 @@ pub fn Planner() -> Element {
     let mut plan = use_resource(move || {
         let minutes = daily_minutes();
         let hour = start_hour();
+        let per_day = day_minutes();
         async move {
+            let custom = per_day.trim();
+            let day_filter = if custom.is_empty() {
+                String::new()
+            } else {
+                let values: Vec<&str> = custom.split(',').map(str::trim).collect();
+                if values.len()!=7 || values.iter().any(|v| {
+                    v.parse::<i32>().map_or(true, |n| n != 0 && (n < 30 || n > 480) || n < 0)
+                }) {
+                    return Err("Provide seven daily capacities: zero or 30–480 minutes each.".to_owned());
+                }
+                format!("&day_minutes={}", values.join(","))
+            };
             api::get::<WeeklyPlan>(&format!(
-                "/v1/planning/week?daily_minutes={minutes}&start_hour={hour}"
+                "/v1/planning/week?daily_minutes={minutes}&start_hour={hour}{day_filter}"
             )).await
         }
     });
@@ -126,6 +142,15 @@ pub fn Planner() -> Element {
                         }
                     }
                     label { class: "form-row",
+                        "Daily availability (optional, seven days)"
+                        input {
+                            class: "field",
+                            placeholder: "0,120,180,60,180,240,0",
+                            value: "{day_minutes}",
+                            oninput: move |event| day_minutes.set(event.value()),
+                        }
+                    }
+                    label { class: "form-row",
                         "Earliest planning hour"
                         select { class: "field", value: "{start_hour}",
                             onchange: move |event| if let Ok(value) = event.value().parse::<i32>() {
@@ -141,7 +166,7 @@ pub fn Planner() -> Element {
                     }
                 }
                 p { class: "small muted",
-                    "This is a proposal, not a calendar change. Tasks without durations or with unfinished prerequisites are not silently scheduled."
+                    "This is a proposal, not a calendar change. Use seven comma-separated capacities beginning with the first plan day; zero closes a day. Unfinished prerequisites may be proposed earlier in the week, but completion is not assumed."
                 }
             }
         }

@@ -5,6 +5,7 @@ import (
  "errors"
  "net/http"
  "strconv"
+ "strings"
  "time"
 
  "github.com/dbontr/homelab-new/system/calendar"
@@ -14,9 +15,15 @@ import (
 // The planner is advisory. External calendar reads do not modify tasks,
 // calendar entries, Workspace scheduling, or persistent state.
 func (s *Server) planWeek(ctx context.Context,day string,capacity,hour int)(store.WeeklyPlan,error){
+ var capacities [7]int
+ for i:=range capacities{capacities[i]=capacity}
+ return s.planWeekCapacities(ctx,day,capacities,hour)
+}
+
+func (s *Server) planWeekCapacities(ctx context.Context,day string,capacities [7]int,hour int)(store.WeeklyPlan,error){
  first,err:=s.db.PlanningStart(day)
  if err!=nil{return store.WeeklyPlan{},err}
- if capacity<30||capacity>480||hour<0||hour>16{
+ if hour<0||hour>16{
   return store.WeeklyPlan{},errors.New("invalid capacity or starting hour")
  }
  reserved:=[]store.BusyWindow{}
@@ -44,7 +51,7 @@ func (s *Server) planWeek(ctx context.Context,day string,capacity,hour int)(stor
  }else{
   limitations=append(limitations,"No read-only calendar is configured")
  }
- plan,err:=s.db.PlanWeek(day,capacity,hour,reserved)
+ plan,err:=s.db.PlanWeekWithCapacities(day,capacities,hour,reserved)
  if err!=nil{return store.WeeklyPlan{},err}
  plan.Limitations=append(plan.Limitations,limitations...)
  return plan,nil
@@ -67,7 +74,23 @@ func(s *Server) uiWeekPlan(w http.ResponseWriter,r *http.Request){
   }
   hour=value
  }
- plan,err:=s.planWeek(r.Context(),query.Get("from"),capacity,hour)
+ var plan store.WeeklyPlan
+ var err error
+ if raw:=query.Get("day_minutes");raw!=""{
+  parts:=strings.Split(raw,",")
+  if len(parts)!=7{writeError(w,400,"day_minutes must contain exactly seven comma-separated values");return}
+  var capacities [7]int
+  for i,part:=range parts{
+   value,parseErr:=strconv.Atoi(strings.TrimSpace(part))
+   if parseErr!=nil||value<0||value>480||value>0&&value<30{
+    writeError(w,400,"day_minutes values must be zero or 30..480");return
+   }
+   capacities[i]=value
+  }
+  plan,err=s.planWeekCapacities(r.Context(),query.Get("from"),capacities,hour)
+ }else{
+  plan,err=s.planWeek(r.Context(),query.Get("from"),capacity,hour)
+ }
  if err!=nil{writeError(w,400,err.Error());return}
  writeJSON(w,200,plan)
 }
