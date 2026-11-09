@@ -180,6 +180,7 @@ func(s *Server) Handler()http.Handler{
  mux.HandleFunc("POST /v1/tasks",s.tasks)
  mux.HandleFunc("POST /v1/tasks/{id}/complete",s.complete)
  mux.HandleFunc("POST /v1/tasks/{id}/decompose",s.taskDecompose)
+ mux.HandleFunc("POST /v1/tasks/{id}/decomposition-preview",s.uiTaskDecompositionPreview)
  mux.HandleFunc("POST /v1/tasks/capture",s.taskCapture)
  mux.HandleFunc("GET /v1/tasks/agenda",s.taskAgenda)
  mux.HandleFunc("GET /v1/tasks/conflicts",s.taskConflicts)
@@ -394,6 +395,10 @@ func(s *Server)localTools()[]map[string]any{
     },"required":[]string{"title","minutes"},
    }},
   },"parent_id","expected_revision","steps"),
+  tool("task_decomposition_preview","Ask the configured planning model for an unsaved, owner-reviewed task breakdown; explicitly authorize disclosure of only title and duration",map[string]any{
+   "parent_id":prop("string"),"expected_revision":prop("integer"),
+   "share_title_with_model":prop("boolean"),
+  },"parent_id","expected_revision","share_title_with_model"),
   tool("task_list","List personal tasks",map[string]any{"status":prop("string")}),
   tool("task_delegations","Read evidence-linked engineering delegation status without completing personal tasks",map[string]any{}),
   tool("task_suggest","Recommend tasks by time, mental effort, location, or quick-win mode",map[string]any{"minutes":prop("integer"),"energy":prop("string"),"location":prop("string"),"mode":prop("string"),"limit":prop("integer")}),
@@ -619,6 +624,15 @@ func(s *Server)toolList(r *http.Request)[]map[string]any{
  return out
 }
 func(s *Server)localTool(ctx context.Context,name string,raw json.RawMessage)(any,error){
+ if name=="task_decomposition_preview"{
+  var request struct{
+   ParentID string `json:"parent_id"`
+   ExpectedRevision int `json:"expected_revision"`
+   ShareTitleWithModel bool `json:"share_title_with_model"`
+  }
+  if err:=json.Unmarshal(raw,&request);err!=nil{return nil,errors.New("invalid task planning arguments")}
+  return s.taskDecompositionPreview(ctx,request.ParentID,request.ExpectedRevision,request.ShareTitleWithModel)
+ }
  if name=="task_decompose" {
   var request struct{
    ParentID string `json:"parent_id"`

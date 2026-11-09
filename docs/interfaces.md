@@ -10,6 +10,7 @@ The unified MCP discovery operation preserves the canonical local tool set when 
 - GET /v1/tasks and POST /v1/tasks: list and create tasks
 - POST /v1/tasks/{id}/complete: idempotently mark a task complete
 - POST /v1/tasks/{id}/decompose: atomically create 2–32 actionable subtasks from `{"expected_revision":1,"steps":[{"title":"...","minutes":30,"depends_on_steps":[0]}]}`; every dependency index must refer to an earlier step. The operation updates the parent revision, inherits its goal, project links, deadline and prerequisite context, and creates all subtasks or none.
+- POST /v1/tasks/{id}/decomposition-preview: request a proposed breakdown from the explicitly configured planning model, using `{"expected_revision":1,"share_title_with_model":true}`. Only the parent task title and duration estimate are disclosed to the planning provider; personal notes, project links, and task history are not sent. The proposal is checked against the canonical task-graph validator, does not modify records, and must be separately reviewed and submitted through `/decompose` before the parent revision changes. The MCP `task_decomposition_preview` and `task_decompose` tools share these same independent operations.
 - GET /v1/goals and POST /v1/goals: list and create long-term goals
 - GET /v1/rules and PUT /v1/rules/{key}: list and save personal constraints or preferences
 - GET /v1/recommendations: filter by available time, energy and location; quick mode favors small tasks
