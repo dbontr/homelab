@@ -61,7 +61,13 @@ func (s *Store) Agenda(day string)([]Task,error){
  for _,task:=range rows {
   if task.Decomposed{continue}
   due:=task.Due
-  if len(due)>10{due=due[:10]}
+  if len(due)>10 {
+   if at,err:=time.Parse(time.RFC3339,due);err==nil {
+    due=at.In(s.zone).Format("2006-01-02")
+   }else {
+    due=""
+   }
+  }
   scheduled:=task.Scheduled
   if len(scheduled)>=10{if at,err:=time.Parse(time.RFC3339,scheduled);err==nil{scheduled=at.In(s.zone).Format("2006-01-02")}}
   if (due!=""&&due<=day)||scheduled==day{selected=append(selected,task)}
