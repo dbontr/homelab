@@ -476,7 +476,7 @@ pub fn Workflows(csrf: String) -> Element {
                                             strong { "{project}" }
                                             p { class: "muted", "Observed: {observed}" }
                                         }
-                                        Badge { text: if acknowledged { "Acknowledged" } else { "Changed" } }
+                                        Badge { text: if acknowledged { "Acknowledged".to_owned() } else { "Changed".to_owned() } }
                                         button {
                                             class: "btn btn-outline",
                                             onclick: move |_| selected_run.set(selected.clone()),

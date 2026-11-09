@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
-
 )
 
 func TestChangeAutomationRoutesArePrivateAndRevisionFenced(t *testing.T) {
