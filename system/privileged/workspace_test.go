@@ -107,7 +107,7 @@ func TestWorkspaceExecutorReauthorizesEveryMutation(t *testing.T){
  }))
  defer done()
  auth:=&fakeAuth{decision:security.Authorization{Reason:"owner confirmation required"}}
- executor,err:=New(Config{
+ executor,err:=New(Config{Audit:testExecutorAudit(t),
   Host:"saturn",Systemctl:"/usr/bin/systemctl",Auth:auth,Releases:&fakeRelease{},
   Run:func(context.Context,string,...string)error{t.Fatal("Workspace op fell through to shell");return nil},
   Workspace:policy,
