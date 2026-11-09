@@ -111,3 +111,10 @@ func(c *Client)ApproveKnowledge(runID,proposalID string)(KnowledgeProposal,error
  err:=c.request(http.MethodPost,"/runs/"+url.PathEscape(runID)+"/knowledge/"+url.PathEscape(proposalID)+"/approve",map[string]any{},&result)
  return result,err
 }
+
+func(c *Client)SourceDiffs(id string)([]SourceDiff,error){
+ var out []SourceDiff
+ if !validID(id){return nil,errors.New("invalid engineering run")}
+ err:=c.request(http.MethodGet,"/runs/"+url.PathEscape(id)+"/diffs",nil,&out)
+ return out,err
+}
