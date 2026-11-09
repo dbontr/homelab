@@ -85,6 +85,9 @@ func New(cfg Config)(http.Handler,error){
    out:=pr.Out.Header
    out.Del("Authorization")
    out.Del("Cookie")
+   // Origin is verified at the interface boundary, not delegated to the
+   // private service's browser-origin policy.
+   out.Del("Origin")
    out.Del("Proxy-Authorization")
    out.Del("Forwarded")
    for name:=range out{
