@@ -45,7 +45,7 @@ func TestKubernetesExecutorIndependentAuthorization(t *testing.T){
  auth:=&fakeAuth{decision:security.Authorization{Reason:"owner confirmation required"}}
  called:=0
  p:=&KubernetesPolicy{Binary:"/usr/bin/kubectl",Kubeconfig:"/run/credentials/homelab-executord.service/kubeconfig",Namespaces:map[string][]string{"apps":{"workspace"}},MaxReplicas:3}
- e,err:=New(Config{Host:"saturn",Systemctl:"/usr/bin/systemctl",Kubernetes:p,Auth:auth,Releases:&fakeRelease{},Run:func(_ context.Context,command string,args ...string)error{
+ e,err:=New(Config{Audit:testExecutorAudit(t),Host:"saturn",Systemctl:"/usr/bin/systemctl",Kubernetes:p,Auth:auth,Releases:&fakeRelease{},Run:func(_ context.Context,command string,args ...string)error{
   called++
   if command!="/usr/bin/kubectl"||len(args)!=6||args[3]!="rollout"||args[4]!="restart"||args[5]!="deployment/workspace"{t.Fatalf("unexpected fixed command: %s %v",command,args)}
   return nil

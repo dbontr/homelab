@@ -82,7 +82,7 @@ func FixedRun(ctx context.Context,command string,args ...string)error{
 
 func New(cfg Config)(*Executor,error){
  if !nodePattern.MatchString(cfg.Host)||!filepath.IsAbs(cfg.Systemctl)||cfg.Auth==nil||cfg.Run==nil||
- cfg.Releases==nil||len(cfg.AllowedServices)>64{return nil,errors.New("invalid executor configuration")}
+ cfg.Releases==nil||cfg.Audit==nil||len(cfg.AllowedServices)>64{return nil,errors.New("invalid executor configuration")}
  if err:=cfg.Kubernetes.validate();err!=nil{return nil,err}
  if err:=cfg.Workspace.validate();err!=nil{return nil,err}
  services:=make(map[string]bool,len(cfg.AllowedServices))
@@ -137,6 +137,11 @@ func(e *Executor) Execute(ctx context.Context,operation,target string,args json.
  default:
   return security.Authorization{Reason:"unregistered privileged operation"},nil
  }
+ // Require an audit destination before consuming a one-time owner approval.
+ // A partially constructed executor must also fail closed.
+ if e.cfg.Audit==nil {
+  return security.Authorization{Reason:"protected audit journal required"},errors.New("audit journal unavailable")
+ }
  // Authentication/confirmation takes place in the separate security process.
  // No gateway-supplied claim of approval is accepted.
  decision,err:=e.cfg.Auth.Authorize(ctx,operation,target,canonical)
@@ -148,17 +153,14 @@ func(e *Executor) Execute(ctx context.Context,operation,target string,args json.
   log.Print("security audit privileged_operation denied")
   return decision,nil
  }
- // An audit append is required before execution when the owner has enabled
- // durable audit custody. Unavailable audit storage must not permit a write.
- var auditID string
- if e.cfg.Audit!=nil {
-  var entropy [16]byte
-  if _,err:=rand.Read(entropy[:]);err!=nil{return security.Authorization{Reason:"audit identity unavailable"},err}
-  auditID=hex.EncodeToString(entropy[:])
-  digest:=sha256.Sum256(canonical)
-  if err:=e.cfg.Audit.Record(auditID,operation,target,hex.EncodeToString(digest[:]),"started");err!=nil{
-   return security.Authorization{Reason:"audit recording unavailable"},err
-  }
+ // A durable start entry must exist before any privileged side effect.
+ var entropy [16]byte
+ if _,err:=rand.Read(entropy[:]);err!=nil{return security.Authorization{Reason:"audit identity unavailable"},err}
+ auditID:=hex.EncodeToString(entropy[:])
+ digest:=sha256.Sum256(canonical)
+ argumentDigest:=hex.EncodeToString(digest[:])
+ if err:=e.cfg.Audit.Record(auditID,operation,target,argumentDigest,"started");err!=nil{
+  return security.Authorization{Reason:"audit recording unavailable"},err
  }
  switch operation{
  case "infrastructure__service_start","infrastructure__service_stop","infrastructure__service_reload","infrastructure__service_restart":
@@ -178,13 +180,10 @@ func(e *Executor) Execute(ctx context.Context,operation,target string,args json.
   if err==nil{err=e.cfg.Run(ctx,command,argv...)}
 
  }
- if e.cfg.Audit!=nil {
-  outcome:="succeeded"
-  if err!=nil{outcome="failed"}
-  digest:=sha256.Sum256(canonical)
-  if auditErr:=e.cfg.Audit.Record(auditID,operation,target,hex.EncodeToString(digest[:]),outcome);auditErr!=nil {
-   return security.Authorization{Reason:"privileged outcome is uncertain: audit unavailable"},errors.Join(err,auditErr)
-  }
+ outcome:="succeeded"
+ if err!=nil{outcome="failed"}
+ if auditErr:=e.cfg.Audit.Record(auditID,operation,target,argumentDigest,outcome);auditErr!=nil {
+  return security.Authorization{Reason:"privileged outcome is uncertain: audit unavailable"},errors.Join(err,auditErr)
  }
  if err!=nil{
   log.Print("security audit privileged_operation failed")
