@@ -645,14 +645,36 @@ func(s *Server)localTool(ctx context.Context,name string,raw json.RawMessage)(an
  case "software_catalog":return s.softwareEntries(ctx)
  case "system_status":
   statuses:=map[string]string{}
-  for _,b:=range s.backend{
-   checkCtx,cancel:=context.WithTimeout(ctx,4*time.Second)
-   var output any
-   e:=s.forward(checkCtx,b,rpcRequest{JSONRPC:"2.0",ID:json.RawMessage("1"),Method:"tools/list"},&output)
-   cancel()
-   namespace:=b.Name
+  type observation struct{
+   name string
+   available bool
+  }
+  checkCtx,cancel:=context.WithTimeout(ctx,4*time.Second)
+  defer cancel()
+  completed:=make(chan observation,len(s.backend))
+  for _,backend:=range s.backend{
+   namespace:=backend.Name
    if namespace=="workspace"{namespace="compute"}
-   if e!=nil{statuses[namespace]="unavailable"}else{statuses[namespace]="available"}
+   statuses[namespace]="unavailable"
+   go func(b Backend,name string){
+    var output any
+    err:=s.forward(checkCtx,b,rpcRequest{
+     JSONRPC:"2.0",ID:json.RawMessage("1"),Method:"tools/list",
+    },&output)
+    reply,ok:=output.(map[string]any)
+    _,hasList:=reply["tools"].([]any)
+    completed<-observation{name:name,available:err==nil&&ok&&hasList}
+   }(backend,namespace)
+  }
+  remaining:=len(s.backend)
+  for remaining>0{
+   select{
+   case result:=<-completed:
+    if result.available{statuses[result.name]="available"}
+    remaining--
+   case <-checkCtx.Done():
+    remaining=0
+   }
   }
   return map[string]any{"integrations":statuses,"local":"available"},nil
  default:return nil,fmt.Errorf("unknown tool: %s",name)
