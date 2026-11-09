@@ -149,7 +149,7 @@ func Compile(p Program) (Workflow, error) {
 		}
 		add("agent", "agent", checkoutDependencies, AgentBrief{
 			Objective: p.Objective, Repository: p.Repository, AllowedPaths: p.AllowedPaths,
-			Checks: p.Checks, ContextPaths: p.ContextPaths, LinkedRepositories: p.LinkedRepositories, IncludeKnowledge: p.IncludeKnowledge,
+			Checks: p.Checks, ContextPaths: p.ContextPaths, LinkedRepositories: p.LinkedRepositories, IncludeKnowledge: p.IncludeKnowledge, Revision: p.Revision,
 		})
 		w.Steps[len(w.Steps)-1].MaxAttempts = 5
 		add("verify", "verify", []string{"agent"}, map[string]any{"commands": p.Checks})
