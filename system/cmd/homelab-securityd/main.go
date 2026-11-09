@@ -99,7 +99,7 @@ func main() {
 	dir := "/run/homelab-securityd"
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	failures := make(chan error, 3)
+	failures := make(chan error, 4)
 	go func() {
 		failures <- manager.ServeSockets(ctx, filepath.Join(dir, "owner.sock"), filepath.Join(dir, "client.sock"), gid)
 	}()
