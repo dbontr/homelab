@@ -26,7 +26,7 @@ let
       ExecStart = "${package}/bin/homelab-${kind}";
       LoadCredential = [
         "client-token:${settings.clientTokenFile}"
-        "service-token:${config.services.homelabPlatform.tokenFile}"
+        "service-token:${settings.serviceTokenFile}"
       ];
       Restart = "on-failure";
       RestartSec = "5s";
@@ -56,6 +56,11 @@ let
       default = null;
       description = "Protected client-facing credential, distinct from the service runtime token.";
     };
+    serviceTokenFile = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "Dedicated private service identity token; never reuse a platform administrator token.";
+    };
     allowedOrigins = lib.mkOption {
       type = lib.types.listOf lib.types.str;
       default = [];
@@ -69,7 +74,10 @@ let
   };
   secure = settings:
     builtins.match "^(127\\.0\\.0\\.1|\\[::1\\]):[0-9]+$" settings.listenAddress != null
-      && settings.clientTokenFile != null;
+      && settings.clientTokenFile != null
+      && settings.serviceTokenFile != null
+      && settings.clientTokenFile != settings.serviceTokenFile
+      && settings.serviceTokenFile != config.services.homelabPlatform.tokenFile;
 in {
   options.services.homelabInterfaces = {
     mcp = lib.mkOption {
@@ -96,13 +104,25 @@ in {
       {
         assertion = !(cfg.mcp.enable && cfg.api.enable) ||
           (cfg.mcp.listenAddress != cfg.api.listenAddress &&
-           cfg.mcp.clientTokenFile != cfg.api.clientTokenFile);
+           cfg.mcp.clientTokenFile != cfg.api.clientTokenFile &&
+           cfg.mcp.serviceTokenFile != cfg.api.serviceTokenFile &&
+           cfg.mcp.clientTokenFile != cfg.api.serviceTokenFile &&
+           cfg.api.clientTokenFile != cfg.mcp.serviceTokenFile);
         message = "MCP and API listeners and credentials must be independent.";
       }
       {
         assertion = !cfg.mcp.enable || cfg.mcp.writePaths == [];
         message = "The unified MCP has no native API write-path configuration.";
       }
+    ];
+    services.homelabPlatform = lib.mkMerge [
+      (lib.mkIf cfg.mcp.enable {
+        mcpInterfaceTokenFile = cfg.mcp.serviceTokenFile;
+      })
+      (lib.mkIf cfg.api.enable {
+        apiInterfaceTokenFile = cfg.api.serviceTokenFile;
+        apiInterfaceWritePaths = cfg.api.writePaths;
+      })
     ];
     systemd.services.homelab-mcp = lib.mkIf cfg.mcp.enable (common "mcp" cfg.mcp);
     systemd.services.homelab-api = lib.mkIf cfg.api.enable (common "api" cfg.api);
