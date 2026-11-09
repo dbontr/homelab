@@ -460,7 +460,7 @@ func(s *Server)localTools()[]map[string]any{
   tool("recipe_recommend","Rank recipes by recorded supplies and explicit nutritional targets without logging meals",map[string]any{"servings":prop("number"),"targets":map[string]any{"type":"array","items":prop("object")},"limit":prop("integer")}))}
  if s.bookCatalog!=nil {tools=append(tools,
   tool("book_search","Discover published books through the official Open Library catalog",map[string]any{"query":prop("string")},"query"),
-   tool("book_lending","Look up provider-authorized online reading and borrowing links for an exact ISBN; does not borrow or download books",map[string]any{"query":prop("string")},"query"))}
+   tool("book_lending","Look up provider-authorized online reading and borrowing links for an exact ISBN; does not borrow or download books",map[string]any{"isbn":prop("string")},"isbn"))}
  tools=append(tools,
   tool("book_request_list","List personal book wishes without claiming provider acquisition",map[string]any{"status":prop("string")}),
   tool("book_request_add","Record an independently identified book wish with format and revision",map[string]any{"request":prop("object")},"request"),
