@@ -37,6 +37,10 @@ if [[ -n "$(find "$release/bin" "$release/console" -type l -print -quit)" ||
   printf '%s\n' 'Release contains a symlink or unsupported file type' >&2
   exit 1
 fi
+if [[ -n "$(find "$release" -perm /022 -print -quit)" ]]; then
+  printf '%s\n' 'Release envelope contains group-writable or world-writable entries' >&2
+  exit 1
+fi
 
 mapfile -t metadata < "$release/RELEASE"
 if [[ ${#metadata[@]} -ne 2 ||
