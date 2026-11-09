@@ -69,3 +69,25 @@ func (c *Client)Cancel(id string,revision uint64)error{
  var out RunSummary
  return c.request(http.MethodPost,"/runs/"+url.PathEscape(id)+"/cancel",map[string]any{"revision":revision},&out)
 }
+
+func (c *Client) SubmitTeam(request TeamRequest)(TeamSummary,error){
+ var team TeamSummary
+ err:=c.request(http.MethodPost,"/teams",request,&team)
+ return team,err
+}
+func (c *Client) ListTeams()([]TeamSummary,error){
+ var teams []TeamSummary
+ err:=c.request(http.MethodGet,"/teams",nil,&teams)
+ return teams,err
+}
+func (c *Client) GetTeam(id string)(TeamSummary,error){
+ var team TeamSummary
+ if !validID(id){return team,errors.New("invalid engineering team")}
+ err:=c.request(http.MethodGet,"/teams/"+url.PathEscape(id),nil,&team)
+ return team,err
+}
+func (c *Client) CancelTeam(id string)error{
+ if !validID(id){return errors.New("invalid engineering team")}
+ var team TeamSummary
+ return c.request(http.MethodPost,"/teams/"+url.PathEscape(id)+"/cancel",map[string]any{},&team)
+}
