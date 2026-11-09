@@ -108,6 +108,7 @@ func summarizeCapabilityWorkflow(w agentflow.Workflow) CapabilityWorkflow {
 }
 
 func (s *Server) SetWorkflows(store *agentflow.Store) {s.workflows=store}
+func (s *Server) SetCapabilityPlanner(planner *agentflow.ModelAuthor){s.capabilityPlanner=planner}
 
 func (s *Server) submitCapabilityWorkflow(ctx context.Context,program CapabilityProgram)(CapabilityWorkflow,error) {
     if s.workflows==nil{return CapabilityWorkflow{},errors.New("workflow store unavailable")}
@@ -302,6 +303,10 @@ func (s *Server) capabilityWorkflowItem(w http.ResponseWriter,r *http.Request) {
 func (s *Server) capabilityWorkflowTool(ctx context.Context,name string,raw json.RawMessage)(any,error) {
     if s.workflows==nil{return nil,errors.New("workflows unavailable")}
     switch name {
+    case "workflow_plan":
+        var input CapabilityPlanInput
+        if err:=json.Unmarshal(raw,&input);err!=nil{return nil,err}
+        return s.proposeCapabilityWorkflow(ctx,input)
     case "workflow_submit":
         var program CapabilityProgram
         if err:=json.Unmarshal(raw,&program);err!=nil{return nil,err}

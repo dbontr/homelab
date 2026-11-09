@@ -54,6 +54,17 @@ func main(){
     workflows,err:=agentflow.Open(filepath.Join(filepath.Dir(state),"workflows"))
     if err!=nil{log.Fatal(err)}
     server.SetWorkflows(workflows)
+    if endpoint:=os.Getenv("HOMELAB_CAPABILITY_MODEL_URL");endpoint!=""{
+        token:=""
+        if path:=os.Getenv("HOMELAB_CAPABILITY_MODEL_TOKEN_FILE");path!=""{
+            var err error
+            token,err=secret(path)
+            if err!=nil{log.Fatal(err)}
+        }
+        planner,err:=agentflow.NewModelAuthor(endpoint,os.Getenv("HOMELAB_CAPABILITY_MODEL_NAME"),token)
+        if err!=nil{log.Fatal(err)}
+        server.SetCapabilityPlanner(planner)
+    }
     server.StartWorkflowScheduler(context.Background())
     if socket:=os.Getenv("HOMELAB_ENGINEERING_SOCKET");socket!=""{
         client,err:=agentflow.NewClient(socket)
