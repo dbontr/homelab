@@ -24,6 +24,7 @@ Each stage has a stable ID, dependency IDs, and one approved read action:
 - `project_tasks` — explicitly linked tasks and their goals
 - `research_search` and `research_semantic_query` — keyword or consented model-generated semantic search of project-linked research passages;
   includes source locators from the controller
+- `research_claims` and `research_claim_detail` — source-linked project hypotheses, conflicting evidence and explicit unavailable provenance
 - `engineering_runs` — matching engineering run summaries
 - `learning_summary`, `learning_sessions`, `learning_reviews`,
   `health_goals`, `health_records`, `health_training_sets`,

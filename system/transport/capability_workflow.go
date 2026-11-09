@@ -74,7 +74,7 @@ func validCapabilityStage(stage CapabilityStage, allowPersonal bool) error {
         return errors.New("personal capability access requires explicit authorization")
     }
     switch stage.Action {
-    case "project_context","project_tasks","engineering_runs","learning_summary","learning_sessions","learning_reviews","health_goals","health_records","health_training_sets","health_food_proposals","recipe_meals","media_requests":
+    case "project_context","project_tasks","engineering_runs","research_claims","learning_summary","learning_sessions","learning_reviews","health_goals","health_records","health_training_sets","health_food_proposals","recipe_meals","media_requests":
         if stage.Query!=""||stage.Limit!=0{return errors.New("unexpected capability parameters")}
     case "study_pack_preview":
         if stage.Query!=""||stage.Limit>10{return errors.New("invalid study pack stage")}
@@ -84,6 +84,8 @@ func validCapabilityStage(stage CapabilityStage, allowPersonal bool) error {
         if stage.Limit>14||stage.Query!=""&&!validCapabilityDay(stage.Query){return errors.New("invalid grocery interval")}
     case "recipe_nutrition":
         if strings.TrimSpace(stage.Query)==""||strings.Contains(stage.Query,"/"){return errors.New("invalid recipe reference")}
+    case "research_claim_detail":
+        if strings.TrimSpace(stage.Query)==""||stage.Limit!=0{return errors.New("claim details require an exact claim ID")}
     case "research_search","research_semantic_query":
         if strings.TrimSpace(stage.Query)=="" {return errors.New("research search requires a query")}
     case "recipe_search":
@@ -251,6 +253,10 @@ func (s *Server) executeCapabilityStep(ctx context.Context,w agentflow.Workflow,
         return s.capabilityBackendRead(ctx,"workspace","research_search",map[string]any{
             "project_id":w.Project,"query":input.Query,"limit":limit,
         })
+    case "research_claims":
+        return s.capabilityBackendRead(ctx,"workspace","research_claims",map[string]any{"project_id":w.Project})
+    case "research_claim_detail":
+        return s.capabilityBackendRead(ctx,"workspace","research_claim_detail",map[string]any{"project_id":w.Project,"claim_id":input.Query})
     case "engineering_runs":
         if s.engineering==nil{return nil,errResourceUnavailable}
         runs,err:=s.engineering.List()
