@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::api;
 use crate::pantry::Pantry;
+use crate::usda_nutrition::USDANutrition;
 use crate::components::{Empty, Heading, Loading, Notice};
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -225,6 +226,7 @@ enum Tab {
     Plan,
     Groceries,
     Pantry,
+    USDA,
     Transfer,
 }
 
@@ -350,6 +352,8 @@ pub fn Recipes(csrf: String) -> Element {
                 onclick: move |_| {tab.set(Tab::Groceries); grocery_needs.restart();}, "Groceries" }
             button { class: "tab", role: "tab", aria_selected: if tab()==Tab::Pantry {"true"} else {"false"},
                 onclick: move |_| tab.set(Tab::Pantry), "Pantry" }
+            button { class: "tab", role: "tab", aria_selected: if tab()==Tab::USDA {"true"} else {"false"},
+                onclick: move |_| tab.set(Tab::USDA), "USDA nutrition" }
             button { class: "tab", role: "tab", aria_selected: if tab()==Tab::Transfer {"true"} else {"false"},
                 onclick: move |_| tab.set(Tab::Transfer), "Import / export" }
         }
@@ -1104,6 +1108,27 @@ pub fn Recipes(csrf: String) -> Element {
                 }
             },
             Tab::Pantry => rsx! { Pantry { csrf: csrf() } },
+            Tab::USDA => rsx! {
+                if let Some(record) = active.clone() {
+                    USDANutrition {
+                        key: "{record.id}",
+                        recipe_id: record.id.clone(),
+                        recipe_revision: record.revision,
+                        recipe_servings: record.servings,
+                        ingredients: record.ingredients.iter().map(|item| item.name.clone()).collect(),
+                        csrf: csrf(),
+                        on_saved: move |_| {
+                            recipes.restart();
+                            tab.set(Tab::Library);
+                        },
+                    }
+                } else {
+                    Empty {
+                        title: "Select a recipe".to_owned(),
+                        description: "Choose a saved recipe before reviewing USDA ingredient compositions.".to_owned()
+                    }
+                }
+            },
             Tab::Transfer => rsx! {
                 section { class: "card",
                     div { class: "card-header",
