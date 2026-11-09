@@ -178,6 +178,7 @@ func(s *Server) Handler()http.Handler{
  mux.HandleFunc("GET /v1/tasks",s.tasks)
  mux.HandleFunc("POST /v1/tasks",s.tasks)
  mux.HandleFunc("POST /v1/tasks/{id}/complete",s.complete)
+ mux.HandleFunc("POST /v1/tasks/{id}/decompose",s.taskDecompose)
  mux.HandleFunc("POST /v1/tasks/capture",s.taskCapture)
  mux.HandleFunc("GET /v1/tasks/agenda",s.taskAgenda)
  mux.HandleFunc("GET /v1/tasks/conflicts",s.taskConflicts)
@@ -342,6 +343,17 @@ func(s *Server)localTools()[]map[string]any{
  tools:=[]map[string]any{
   tool("task_add","Create a personal task",map[string]any{"links":map[string]any{"type":"array","items":prop("string")},"parent_id":prop("string"),"depends_on":map[string]any{"type":"array","items":prop("string")},"title":prop("string"),"notes":prop("string"),"goal_id":prop("string"),"due":prop("string"),"minutes":prop("integer"),"energy":prop("string"),"location":prop("string"),"priority":prop("integer")},"title"),
   tool("task_complete","Mark a task complete",map[string]any{"id":prop("string")},"id"),
+  tool("task_decompose","Atomically split an open parent task into actionable subtasks, with prerequisites referencing earlier step indices",map[string]any{
+   "parent_id":prop("string"),
+   "expected_revision":prop("integer"),
+   "steps":map[string]any{"type":"array","minItems":2,"maxItems":32,"items":map[string]any{
+    "type":"object","properties":map[string]any{
+     "title":prop("string"),"notes":prop("string"),"minutes":prop("integer"),
+     "energy":prop("string"),"location":prop("string"),"priority":prop("integer"),
+     "depends_on_steps":map[string]any{"type":"array","items":prop("integer")},
+    },"required":[]string{"title","minutes"},
+   }},
+  },"parent_id","expected_revision","steps"),
   tool("task_list","List personal tasks",map[string]any{"status":prop("string")}),
   tool("task_delegations","Read evidence-linked engineering delegation status without completing personal tasks",map[string]any{}),
   tool("task_suggest","Recommend tasks by time, mental effort, location, or quick-win mode",map[string]any{"minutes":prop("integer"),"energy":prop("string"),"location":prop("string"),"mode":prop("string"),"limit":prop("integer")}),
@@ -567,6 +579,15 @@ func(s *Server)toolList(r *http.Request)[]map[string]any{
  return out
 }
 func(s *Server)localTool(ctx context.Context,name string,raw json.RawMessage)(any,error){
+ if name=="task_decompose" {
+  var request struct{
+   ParentID string `json:"parent_id"`
+   ExpectedRevision int `json:"expected_revision"`
+   Steps []store.TaskStepInput `json:"steps"`
+  }
+  if err:=json.Unmarshal(raw,&request);err!=nil{return nil,errors.New("invalid decomposition arguments")}
+  return s.db.DecomposeTask(request.ParentID,request.ExpectedRevision,request.Steps)
+ }
  if name=="research_learning_preview"||name=="research_learning_import"{return s.researchLearningTool(ctx,name,raw)}
  if strings.HasPrefix(name,"automation_"){return s.capabilityAutomationTool(ctx,name,raw)}
  if strings.HasPrefix(name,"workflow_"){return s.capabilityWorkflowTool(ctx,name,raw)}
