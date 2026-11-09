@@ -66,7 +66,7 @@ The authenticated owner session is bound to the verified Cloudflare Access princ
 
 The security service stores the identity binding and all confirmations internally. Requests from another principal cannot inspect, use or revoke that session. Legacy local terminal logins have a separate local principal and never unlock the ChatGPT gateway. An active session is not an unrestricted capability token.
 
-The `homelab-executord` process holds local operating-system authority and permits typed, allowlisted service start, stop, reload and restart actions, Kubernetes deployment operations, and protected NixOS generation activation/reversion. Its optional mutual-TLS host endpoint can stage a clean, exact Git revision without activating it.
+The `homelab-executord` process holds local operating-system authority and permits typed, allowlisted service start, stop, reload and restart actions, Kubernetes deployment operations, and protected NixOS generation activation/reversion. Its optional mutual-TLS host endpoint can stage a clean, exact Git revision without activating it. Every privileged mutation requires an owner-only audit journal. Missing audit custody prevents executor startup or execution, and a journal append failure prevents the side effect. All side effects have distinct started and outcome records; an interrupted record must be treated as an uncertain outcome.
 
 The executor refuses network, security, orchestration, monitoring and media-critical service names even if included in an administrator configuration. Each lifecycle mutation requires an explicit allowlisted unit, exact host and arguments, independent owner authorization, and a one-time destructive confirmation; arbitrary systemctl flags and unit files are never accepted.
 
