@@ -21,8 +21,8 @@ The unified MCP discovery operation preserves the canonical local tool set when 
 - GET /v1/calendar/occurrences: bounded expanded events and recurrence limitations
 - GET /v1/planning/week: advisory weekly allocation of tasks into unoccupied calendar time, with optional `day_minutes` (seven comma-separated daily budgets, zero or 30–480); respects dependency ordering across the plan and never mutates tasks or the calendar
 - GET /v1/monitoring/summary, /series, /targets, /alerts, /logs: owner-authenticated fixed telemetry and journal views from configured local Prometheus and Loki sources
-- GET /v1/devices: declared device inventory and access policy, not live device status
-- GET /v1/nodes: enrolled and agentless node inventory, not live node status
+- GET /v1/devices: declared device inventory and access policy, not live device status; returns 503 when no catalog is configured
+- GET /v1/nodes: enrolled and agentless node inventory, not live node status; returns 503 when no catalog is configured. The MCP inventory tools are advertised only for configured catalogs. Workspace planning and allocation requests fail closed when the required device policy is unavailable.
 - GET /v1/software: read the Workspace-backed approved image, software, and program catalogs
 - GET /v1/tools: discover local and configured backend capabilities using the MCP tool catalog
 - POST /v1/tools/{name}/call: invoke the same authorized operation as MCP, with a JSON body containing `arguments`; the result uses MCP tool-content semantics
