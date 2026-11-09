@@ -229,10 +229,16 @@ func monthSetPos(rule recurrenceRule, origin, day time.Time)(bool){
  return false
 }
 
+func exceptionTimeZone(zones []string,index int,fallback string)string{
+ if index<len(zones)&&zones[index]!=""{return zones[index]}
+ return fallback
+}
+
 func exclusionSet(event Event, loc *time.Location)(map[string]bool,error){
  excludes:=map[string]bool{}
- for _,value:=range event.Excluded{
-  instant,err:=ParseInstant(value,event.TimeZone,loc)
+ for index,value:=range event.Excluded{
+  zone:=exceptionTimeZone(event.ExcludedTimeZones,index,event.TimeZone)
+  instant,err:=ParseInstant(value,zone,loc)
   if err!=nil{return nil,err}
   excludes[instant.UTC().Format(time.RFC3339Nano)]=true
  }
@@ -262,9 +268,18 @@ func Expand(feed Feed,start,end time.Time)(Expansion,error){
  }
  seen:=map[string]bool{}
  overrides:=map[string]map[string]bool{}
+ masterZones:=map[string]string{}
+ for _,event:=range feed.Events{
+  if event.RecurrenceID==""&&event.UID!=""{
+   masterZones[event.UID]=event.TimeZone
+  }
+ }
  for _,event:=range feed.Events{
   if event.RecurrenceID==""||event.UID==""{continue}
-  original,err:=ParseInstant(event.RecurrenceID,event.TimeZone,start.Location())
+  zone:=event.RecurrenceIDTimeZone
+  if zone==""{zone=masterZones[event.UID]}
+  if zone==""{zone=event.TimeZone}
+  original,err:=ParseInstant(event.RecurrenceID,zone,start.Location())
   if err!=nil{out.Limitations=append(out.Limitations,"Calendar override has an unsupported date");continue}
   if overrides[event.UID]==nil{overrides[event.UID]=map[string]bool{}}
   overrides[event.UID][original.UTC().Format(time.RFC3339Nano)]=true
@@ -337,8 +352,9 @@ func Expand(feed Feed,start,end time.Time)(Expansion,error){
    }
    if !complete{out.Limitations=append(out.Limitations,"Calendar recurrence exceeded the expansion horizon")}
   }
-  for _,date:=range event.Additional{
-   at,err:=ParseInstant(date,event.TimeZone,start.Location())
+  for index,date:=range event.Additional{
+   zone:=exceptionTimeZone(event.AdditionalTimeZones,index,event.TimeZone)
+   at,err:=ParseInstant(date,zone,start.Location())
    if err!=nil{out.Limitations=append(out.Limitations,"Calendar additional date is unsupported");continue}
    emit(at)
   }
