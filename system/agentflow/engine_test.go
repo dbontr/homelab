@@ -21,6 +21,9 @@ type fakeCompute struct {
 	mismatchWrite    bool
 	mismatchRevision bool
 	mismatchDraft    bool
+	flatExport       bool
+	mismatchArtifact bool
+	exported         map[string]string
 	drafts           int
 	writes           int
 }
@@ -82,7 +85,20 @@ func (f *fakeCompute) Call(_ context.Context, name string, args map[string]any) 
 		case "list_directory":
 			result["stdout"] = "README.md\n"
 		case "export_file":
-			result["artifact_id"] = "artifact1"
+			filename := str(obj(args["payload"])["path"])
+			body, ok := f.files[filename]
+			if !ok {
+				return nil, errors.New("exported source file does not exist")
+			}
+			if f.exported == nil {
+				f.exported = map[string]string{}
+			}
+			f.exported["artifact1"] = body
+			if f.flatExport {
+				result["artifact_id"] = "artifact1"
+			} else {
+				result["artifact"] = map[string]any{"id": "artifact1", "sha256": shaHex(body), "size": len(body)}
+			}
 		default:
 			return nil, errors.New("unexpected workspace action")
 		}
@@ -102,6 +118,17 @@ func (f *fakeCompute) Call(_ context.Context, name string, args map[string]any) 
 			return nil, errors.New("unknown operation")
 		}
 		return map[string]any{"status": "succeeded", "result": result}, nil
+	case "artifact_info":
+		id := str(args["artifact_id"])
+		body, ok := f.exported[id]
+		if !ok {
+			return nil, errors.New("artifact unavailable")
+		}
+		digest := shaHex(body)
+		if f.mismatchArtifact {
+			digest = strings.Repeat("0", 64)
+		}
+		return map[string]any{"id": id, "project": str(args["project_id"]), "sha256": digest, "size": len(body)}, nil
 	case "github_publish_artifacts":
 		f.drafts++
 		changes, ok := args["changes"].(map[string]string)
@@ -408,5 +435,48 @@ func TestDraftPublicationRequiresExpectedRevisionProof(t *testing.T) {
 	}
 	if final.Status != Failed || compute.drafts != 1 {
 		t.Fatal("wrong revision publication was reported as successful")
+	}
+}
+
+func TestFlatWorkerArtifactResponsePublishesVerifiedDraft(t *testing.T) {
+	e, compute := testEngine(t)
+	compute.flatExport = true
+	created, err := e.Submit(sampleProgram())
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner := Runner{Store: e.Store, Worker: e, Lease: time.Minute}
+	for i := 0; i < 8; i++ {
+		progress, err := runner.RunOne(context.Background(), created.ID)
+		if err != nil || !progress {
+			t.Fatalf("engineering step %d: progressed=%v err=%v", i, progress, err)
+		}
+	}
+	complete, err := e.Get(created.ID)
+	if err != nil || complete.Status != Succeeded || compute.drafts != 1 {
+		t.Fatalf("verified draft was not published: run=%+v error=%v", complete, err)
+	}
+}
+
+func TestStoredArtifactDigestMismatchBlocksPublication(t *testing.T) {
+	e, compute := testEngine(t)
+	compute.mismatchArtifact = true
+	created, err := e.Submit(sampleProgram())
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner := Runner{Store: e.Store, Worker: e, Lease: time.Minute}
+	for i := 0; i < 8; i++ {
+		advanced, err := runner.RunOne(context.Background(), created.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !advanced {
+			break
+		}
+	}
+	failed, err := e.Get(created.ID)
+	if err != nil || failed.Status != Failed || compute.drafts != 0 {
+		t.Fatalf("unverified artifact could reach publication: run=%+v error=%v", failed, err)
 	}
 }
