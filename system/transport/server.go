@@ -82,6 +82,10 @@ func(s *Server) Handler()http.Handler{
  mux.HandleFunc("POST /v1/engineering/runs",s.engineeringCollection)
  mux.HandleFunc("GET /v1/engineering/runs/{id}",s.engineeringRun)
  mux.HandleFunc("POST /v1/engineering/runs/{id}/cancel",s.engineeringRun)
+ mux.HandleFunc("GET /v1/engineering/teams",s.engineeringTeamCollection)
+ mux.HandleFunc("POST /v1/engineering/teams",s.engineeringTeamCollection)
+ mux.HandleFunc("GET /v1/engineering/teams/{id}",s.engineeringTeam)
+ mux.HandleFunc("POST /v1/engineering/teams/{id}/cancel",s.engineeringTeam)
  mux.HandleFunc("GET /v1/workspace/projects",s.uiProjects)
  mux.HandleFunc("GET /v1/workspace/projects/{project}/jobs",s.uiWorkspaceProjectView)
  mux.HandleFunc("GET /v1/workspace/projects/{project}/workspaces",s.uiWorkspaceProjectView)
@@ -329,6 +333,13 @@ func(s *Server)localTools()[]map[string]any{
    tool("engineering_run_get","Inspect one engineering run without returning lease secrets",map[string]any{"id":prop("string")},"id"),
    tool("engineering_run_cancel","Cancel a revision-matched engineering run",map[string]any{"id":prop("string"),"revision":prop("integer")},"id","revision"))
  }
+ if _,ok:=s.engineering.(agentflow.TeamManager);ok{
+  tools=append(tools,
+   tool("engineering_team_submit","Start bounded cooperating agents with disjoint editable files; no member may publish",map[string]any{"base":prop("object"),"tasks":map[string]any{"type":"array","items":prop("object")}},"base","tasks"),
+   tool("engineering_team_list","List cooperating engineering agent groups",map[string]any{}),
+   tool("engineering_team_get","Inspect one cooperating engineering group",map[string]any{"id":prop("string")},"id"),
+   tool("engineering_team_cancel","Cancel unfinished members of a cooperating engineering group",map[string]any{"id":prop("string")},"id"))
+ }
  if s.executorClient!=nil {
   tools=append(tools,
    tool("infrastructure__workspace_stop","Stop an allowlisted Workspace project instance via the privileged Workspace bridge",map[string]any{"host":prop("string"),"project_id":prop("string"),"workspace_id":prop("string")},"host","project_id","workspace_id"),
@@ -442,7 +453,7 @@ func(s *Server)toolList(r *http.Request)[]map[string]any{
  return out
 }
 func(s *Server)localTool(ctx context.Context,name string,raw json.RawMessage)(any,error){
- if strings.HasPrefix(name,"engineering_run_"){return s.engineeringTool(ctx,name,raw)}
+ if strings.HasPrefix(name,"engineering_run_")||strings.HasPrefix(name,"engineering_team_"){return s.engineeringTool(ctx,name,raw)}
  if strings.HasPrefix(name,"monitoring_"){return s.monitoringTool(ctx,name,raw)}
  if strings.HasPrefix(name,"book_"){return s.bookTool(ctx,name,raw)}
  if name=="calendar_occurrences"||name=="weekly_plan"{return s.calendarTool(ctx,name,raw)}
