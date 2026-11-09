@@ -80,7 +80,7 @@ func TestCrossCapabilityWorkflowPersistedAndExactlyScoped(t *testing.T) {
     _,err=server.db.AddTask(store.TaskInput{Title:"Read source",GoalID:goal.ID,Links:[]string{"homelab:project:study"}})
     if err!=nil{t.Fatal(err)}
     submitted,err:=server.submitCapabilityWorkflow(ctx,CapabilityProgram{
-        Project:"study",Objective:"Investigate Fourier methods",
+        Project:"study",Objective:"Investigate Fourier methods",PersonalRead:true,
         Steps:[]CapabilityStage{
             {ID:"context",Action:"project_context"},
             {ID:"research",Action:"research_search",Query:"Fourier",DependsOn:[]string{"context"},Limit:2},

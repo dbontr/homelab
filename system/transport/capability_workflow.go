@@ -53,7 +53,7 @@ type CapabilityWorkflow struct {
 
 func requiresPersonalRead(kind string) bool {
     switch kind {
-    case "learning_summary","health_goals","recipe_search","media_requests": return true
+    case "project_tasks","learning_summary","learning_sessions","learning_reviews","health_goals","health_records","health_training_sets","health_food_proposals","recipe_search","recipe_meals","media_requests": return true
     }
     return false
 }
@@ -67,7 +67,7 @@ func validCapabilityStage(stage CapabilityStage, allowPersonal bool) error {
         return errors.New("personal capability access requires explicit authorization")
     }
     switch stage.Action {
-    case "project_context","project_tasks","engineering_runs","learning_summary","health_goals","media_requests":
+    case "project_context","project_tasks","engineering_runs","learning_summary","learning_sessions","learning_reviews","health_goals","health_records","health_training_sets","health_food_proposals","recipe_meals","media_requests":
         if stage.Query!=""||stage.Limit!=0{return errors.New("unexpected capability parameters")}
     case "research_search":
         if strings.TrimSpace(stage.Query)=="" {return errors.New("research search requires a query")}
@@ -108,6 +108,7 @@ func summarizeCapabilityWorkflow(w agentflow.Workflow) CapabilityWorkflow {
 }
 
 func (s *Server) SetWorkflows(store *agentflow.Store) {s.workflows=store}
+func (s *Server) SetCapabilityPlanner(planner *agentflow.ModelAuthor){s.capabilityPlanner=planner}
 
 func (s *Server) submitCapabilityWorkflow(ctx context.Context,program CapabilityProgram)(CapabilityWorkflow,error) {
     if s.workflows==nil{return CapabilityWorkflow{},errors.New("workflow store unavailable")}
@@ -192,11 +193,24 @@ func (s *Server) executeCapabilityRead(ctx context.Context,w agentflow.Workflow,
         return filtered,nil
     case "learning_summary":
         return s.capabilityBackendRead(ctx,"learning","get_learning_summary",map[string]any{})
+    case "learning_sessions":
+        return s.capabilityBackendRead(ctx,"learning","list_learning_sessions",map[string]any{"limit":20})
+    case "learning_reviews":
+        return s.capabilityBackendRead(ctx,"learning","get_review_queue",map[string]any{})
     case "health_goals":
         return s.capabilityBackendRead(ctx,"health","health_goal_list",map[string]any{})
+    case "health_records":
+        return s.capabilityBackendRead(ctx,"health","health_record_list",map[string]any{})
+    case "health_training_sets":
+        return s.capabilityBackendRead(ctx,"health","health_training_set_list",map[string]any{})
+    case "health_food_proposals":
+        return s.capabilityBackendRead(ctx,"health","health_food_proposal_list",map[string]any{})
     case "recipe_search":
         if s.recipes==nil{return nil,errResourceUnavailable}
         return s.recipes.List(input.Query),nil
+    case "recipe_meals":
+        if s.recipes==nil{return nil,errResourceUnavailable}
+        return s.recipes.Meals(),nil
     case "media_requests":
         if s.media==nil{return nil,errResourceUnavailable}
         return s.media.Requests(ctx)
@@ -302,6 +316,10 @@ func (s *Server) capabilityWorkflowItem(w http.ResponseWriter,r *http.Request) {
 func (s *Server) capabilityWorkflowTool(ctx context.Context,name string,raw json.RawMessage)(any,error) {
     if s.workflows==nil{return nil,errors.New("workflows unavailable")}
     switch name {
+    case "workflow_plan":
+        var input CapabilityPlanInput
+        if err:=json.Unmarshal(raw,&input);err!=nil{return nil,err}
+        return s.proposeCapabilityWorkflow(ctx,input)
     case "workflow_submit":
         var program CapabilityProgram
         if err:=json.Unmarshal(raw,&program);err!=nil{return nil,err}

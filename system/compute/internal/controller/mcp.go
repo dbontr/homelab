@@ -163,6 +163,8 @@ var tools = []toolDefinition{
 	{"research_ingest_passages", "Append or replace bounded source-linked text passages with an expected index revision", []string{"library", "source_id", "mode", "expected_revision", "passages"}, nil},
 	{"research_sources", "List indexed research sources visible through a project's linked libraries", []string{"project_id"}, nil},
 	{"research_search", "Search indexed passages with source locators within the caller's permitted project", []string{"project_id", "query"}, []string{"limit"}},
+	{"research_embedding_put", "Store a checked encoder vector for a fixed, source-linked passage", []string{"library", "passage_id", "model", "body_sha256", "embedding"}, nil},
+	{"research_semantic_search", "Search project-visible passages by a validated vector from the same embedding model", []string{"project_id", "model", "embedding"}, []string{"limit"}},
 	{"research_topics", "List topic labels and passage counts in the project's linked research libraries", []string{"project_id"}, nil},
 	{"research_browse_topic", "Retrieve source-linked passages for one project-visible research topic", []string{"project_id", "topic"}, []string{"limit"}},
 	{"research_read_passage", "Retrieve and verify a source-linked research passage at its immutable citation ID", []string{"project_id", "passage_id"}, nil},
@@ -188,7 +190,7 @@ func kindFor(key string) string {
 		return "integer"
 	case "usb_passthrough", "draft", "confirm", "cleanup_branch", "enabled", "allowed", "cleanup_verified":
 		return "boolean"
-	case "packages", "software_ids", "artifact_ids", "tags", "passages", "passage_ids", "questions":
+	case "packages", "software_ids", "artifact_ids", "tags", "passages", "passage_ids", "questions", "embedding":
 		return "array"
 	case "hardware", "payload", "params", "changes", "pack":
 		return "object"
@@ -202,6 +204,11 @@ func (t toolDefinition) schema() map[string]any {
 		if key == "software_ids" || key == "packages" || key == "artifact_ids" || key == "tags" || key == "passage_ids" || key == "questions" {
 			prop["items"] = map[string]any{"type": "string"}
 		}
+		if key=="embedding"{
+            prop["items"]=map[string]any{"type":"number"}
+            prop["minItems"]=8
+            prop["maxItems"]=1536
+        }
 		if key == "passages" {
 			prop["items"] = map[string]any{
 				"type": "object", "additionalProperties": false,
@@ -804,6 +811,16 @@ func (s *Server) callToolFor(who caller, name string, a map[string]any) (any, er
 			limit = 30
 		}
 		return db.ResearchTopicPassages(project, get("topic"), limit)
+	case "research_embedding_put":
+		var vector []float64
+		if err:=JSONRequest(a["embedding"],&vector);err!=nil{return nil,err}
+		return db.PutResearchEmbedding(get("library"),get("passage_id"),get("model"),get("body_sha256"),vector)
+	case "research_semantic_search":
+		var vector []float64
+		if err:=JSONRequest(a["embedding"],&vector);err!=nil{return nil,err}
+		limit:=asInt(a["limit"])
+		if limit==0{limit=20}
+		return db.SemanticResearch(project,get("model"),vector,limit)
 	case "research_search":
 		limit := asInt(a["limit"])
 		if limit == 0 {
