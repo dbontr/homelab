@@ -16,8 +16,8 @@ import (
 // independent vault. Neither provider codes nor tokens reach the MCP gateway.
 func(a *AdminSessions)SetOAuthBroker(b *OAuthBroker,client *http.Client)error{
  if b==nil{return errors.New("OAuth provider registry is required")}
- callback,err:=b.CallbackListenAddress()
- if err!=nil||callback==""{return errors.New("OAuth callback must use one exact loopback listener")}
+ _,err:=b.CallbackListenAddress()
+ if err!=nil{return errors.New("OAuth callback must use an exact loopback listener when configured")}
  a.mu.Lock()
  defer a.mu.Unlock()
  if a.vault==nil||a.oauth!=nil{return errors.New("OAuth requires an unused owner-only credential vault")}
@@ -43,6 +43,12 @@ func(b *OAuthBroker)CallbackListenAddress()(string,error){
   if tokenErr!=nil||token.Scheme!="https"||token.Host==""||token.User!=nil||
    token.RawQuery!=""||token.Fragment!=""||token.Opaque!=""{
    return "",errors.New("invalid OAuth HTTPS token endpoint")
+  }
+  if p.DeviceAuthorizationURL!=""{
+   if p.AuthorizeURL!=""||p.RedirectURL!=""||p.DeviceVerificationHost==""{
+    return "",errors.New("OAuth device provider cannot use the browser callback")
+   }
+   continue
   }
   target,err:=url.Parse(p.RedirectURL)
   if err!=nil||target.Scheme!="http"||target.Hostname()!="127.0.0.1"||
@@ -89,6 +95,41 @@ func(a *AdminSessions)registerOAuthOwner(mux *http.ServeMux){
   if err!=nil{http.Error(w,"OAuth provider unavailable",400);return}
   log.Print("security audit oauth_enrollment initiated")
   respondJSON(w,200,authorization)
+ })
+ mux.HandleFunc("POST /v1/oauth/{provider}/device/begin",func(w http.ResponseWriter,r *http.Request){
+  if a.oauth==nil||a.vault==nil{http.Error(w,"OAuth device authorization unavailable",503);return}
+  var in struct{
+   Password string `json:"password"`
+   TOTP string `json:"totp"`
+  }
+  if err:=readJSON(r,&in);err!=nil{http.Error(w,"invalid device authorization request",400);return}
+  if err:=a.VerifyOwnerFactors(in.Password,in.TOTP);err!=nil{
+   log.Print("security audit oauth_device_enrollment denied")
+   http.Error(w,"owner authentication denied",403);return
+  }
+  ctx,cancel:=context.WithTimeout(r.Context(),20*time.Second)
+  defer cancel()
+  instructions,err:=a.oauth.BeginDevice(ctx,r.PathValue("provider"),a.oauthClient)
+  if err!=nil{
+   log.Print("security audit oauth_device_enrollment failed")
+   http.Error(w,"device authorization unavailable",503);return
+  }
+  log.Print("security audit oauth_device_enrollment initiated")
+  respondJSON(w,200,instructions)
+ })
+ mux.HandleFunc("POST /v1/oauth/{provider}/device/poll",func(w http.ResponseWriter,r *http.Request){
+  if a.oauth==nil||a.vault==nil{http.Error(w,"OAuth device authorization unavailable",503);return}
+  var in struct{ID string `json:"id"`}
+  if err:=readJSON(r,&in);err!=nil{http.Error(w,"invalid device poll",400);return}
+  ctx,cancel:=context.WithTimeout(r.Context(),20*time.Second)
+  defer cancel()
+  status,err:=a.oauth.PollDevice(ctx,r.PathValue("provider"),in.ID,a.oauthClient,a.vault)
+  if err!=nil{
+   log.Print("security audit oauth_device_poll failed")
+   http.Error(w,"OAuth device poll unavailable or authorization denied",400);return
+  }
+  if status.State=="authorized"{log.Print("security audit oauth_device_credential stored")}
+  respondJSON(w,200,status)
  })
  mux.HandleFunc("POST /v1/oauth/{provider}/refresh",func(w http.ResponseWriter,r *http.Request){
   if a.oauth==nil||a.vault==nil{
