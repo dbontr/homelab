@@ -67,7 +67,7 @@ func TestReviewTasksFlagsOnlyAgedUndatedActionableWork(t *testing.T) {
     if !strings.Contains(review.Note, "does not establish inactivity") {
         t.Fatalf("review must disclose the age-only signal: %s", review.Note)
     }
-    for _, task := range s.Tasks("open") {
+    for _, task := range s.Tasks("") {
         if task.ID == aged.ID && task.Status != "open" {
             t.Fatal("review changed task completion state")
         }
@@ -129,5 +129,48 @@ func TestAgendaConvertsTimestampDeadlinesToLocalDates(t *testing.T) {
     }
     if len(rows) != 1 || rows[0].ID != earlier.ID {
         t.Fatalf("agenda included the wrong local deadline; later=%s rows=%+v", later.ID, rows)
+    }
+}
+
+func TestTaskDeadlineUsesLocalMidnightOnDSTChanges(t *testing.T) {
+    s, _ := testStore(t)
+    for _, tt := range []struct {
+        due string
+        deadline string
+    }{
+        {"2026-03-08", "2026-03-09T00:00:00-05:00"},
+        {"2026-11-01", "2026-11-02T00:00:00-06:00"},
+        {"2026-11-09T23:15:00Z", "2026-11-09T23:15:00Z"},
+    } {
+        got, err := taskDeadline(tt.due, s.zone)
+        if err != nil {
+            t.Fatalf("deadline %q: %v", tt.due, err)
+        }
+        if got.Format(time.RFC3339) != tt.deadline {
+            t.Fatalf("deadline %q = %s, want %s", tt.due, got.Format(time.RFC3339), tt.deadline)
+        }
+    }
+}
+
+func TestSuggestPrioritizesRecentlyOverdueTasks(t *testing.T) {
+    s, _ := testStore(t)
+    now := time.Now().UTC()
+    _, err := s.AddTask(TaskInput{
+        Title: "Due later today", Minutes: 20, Priority: 3,
+        Due: now.Add(5 * time.Hour).Format(time.RFC3339),
+    })
+    if err != nil {
+        t.Fatal(err)
+    }
+    overdue, err := s.AddTask(TaskInput{
+        Title: "Past exact deadline", Minutes: 20, Priority: 3,
+        Due: now.Add(-5 * time.Minute).Format(time.RFC3339),
+    })
+    if err != nil {
+        t.Fatal(err)
+    }
+    suggested := s.Suggest(30, "", "", "", 2)
+    if len(suggested) != 2 || suggested[0].ID != overdue.ID {
+        t.Fatalf("overdue task must outrank a future task: %+v", suggested)
     }
 }
