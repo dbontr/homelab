@@ -25,6 +25,7 @@ controller:
     clientIdentitySecretName: ""
     githubAlias: ""
     gitlabAlias: ""
+    embeddingsAlias: ""
   access:
     issuer: ""
     audience: ""
