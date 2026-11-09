@@ -144,6 +144,92 @@ shows authorized project context, repository links, shared libraries, and
 source-linked research searches. Native endpoints continue to enforce the
 same owner-session authentication and CSRF controls as other applications.
 
+
+## Autonomous task allocation
+
+Cooperative engineering accepts either owner-specified tasks or an explicitly
+requested `auto_plan`. The planning model may assign two to four tasks, but
+cannot expand the owner's approved file list, repository pins, checks, project
+authorization, or resource limits. The engine checks the proposed roles,
+objectives, nonoverlapping source paths, and acyclic `depends_on` graph before
+committing workflows. Dependencies are durable and the scheduler admits each
+member only after all predecessor runs have succeeded. Scheduling interleaves
+projects and limits concurrent steps to four overall and two per project.
+
+## Integrated publication
+
+A cooperative team can schedule one separate integration workflow once all
+members have verified and exported authorized artifacts. The coordinator
+checks project ownership, exact source SHA-256 and file ownership, then
+allocates an isolated workspace and checks out the common pinned base commit.
+It imports every artifact into the source tree and verifies each readback
+digest. It then runs the original owner's approved checks against the
+**combined** files, and verifies again that those files did not change.
+
+Only after combined verification can the controller prepare a single draft
+pull request against the exact expected Git base revision. External
+publication intent is durably recorded before the GitHub call. An interrupted
+or uncertain response cannot be retried without owner reconciliation. A
+team's integration run must be linked from its durable team record before
+any of its steps can be claimed. Neither agents nor the coordinator can merge
+or deploy. Integration approval requires an authenticated owner request.
+
+## Durable engineering knowledge
+
+When project knowledge is enabled, an autonomous agent may propose a decision,
+finding, or note supported by one to three readable source files. The service
+records source path hashes, the pinned repository commit, a content-derived
+proposal identity and a bounded body in private workflow state. Repeated
+proposals with the same provenance and content are deduplicated.
+
+Proposals are not written automatically to canonical project knowledge.
+The owner can inspect the complete proposed text and source evidence through
+the authenticated gateway. Approval is permitted only for a successful run.
+The approval state is durably marked before the controller's
+`knowledge_contribute` call, and an uncertain contribution requires
+reconciliation instead of blind replay. Existing project knowledge policies
+and repository grants remain authoritative.
+
+## Source navigation and diagnostics
+
+The `dependency_graph` action returns a bounded graph of declared imports
+and source files, not a compiler-certified dependency graph. A read-only
+`lsp` action requests Go definition, reference or hover information from
+`gopls` installed inside the isolated workspace. The action is restricted to
+pinned source files and positional arguments, with Go module network
+resolution disabled. If `gopls` is not installed, the agent can continue
+with the existing AST-based outlines and source search.
+
+Every model-selected approved verification command records a bounded
+diagnostic category, exit code, SHA-256 of its output, and parsed coverage
+percentage when present. These records help the autonomous planner diagnose
+failures, change only allowed code or regression tests, and rerun the same
+owner-approved checks. The model may suggest tests, but cannot invent shell
+commands outside the existing program authorization.
+
+## Execution budgets and workspace recovery
+
+Every compiled workflow carries an absolute execution deadline derived from
+its approved resource duration. Running tasks use a deadline-bounded context;
+an overdue workflow is cancelled rather than silently extended. The
+scheduler never admits an integration run that is not linked to its owning
+team.
+
+After a run succeeds, fails or is cancelled, a separate reconciler inspects
+the real worker state, requests workspace teardown, and confirms that the
+workspace stopped or disappeared. Cleanup status and attempts survive daemon
+restarts. Attempts are bounded, and an uncertain state is visible to the
+owner instead of being reported as successful cleanup.
+
+## Engineering console
+
+The Rust/WASM engineering console presents owner-authorized task planning,
+a selectable agent dependency graph, the integrated artifact manifest, final
+verification and cleanup status, source review findings, and links to the
+reviewable GitHub draft diff. It displays bounded agent activity and check
+diagnostics. Knowledge proposals require the owner to inspect their contents
+and provenance before approving contribution to project knowledge.
+
 ## Verification and operational constraints
 
 Source presence is not evidence of a tested runtime. Before enabling the daemon, build the Go service, run the behavioral and negative-authorization tests, exercise a linked test repository through the actual compute worker, verify artifacts and Git publication, and confirm project/credential isolation.
