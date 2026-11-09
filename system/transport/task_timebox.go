@@ -33,7 +33,7 @@ func (s *Server) taskConflicts(w http.ResponseWriter,r *http.Request){
  end:=start.Add(time.Duration(minutes)*time.Minute)
  out:=ConflictPreview{Start:start.Format(time.RFC3339),End:end.Format(time.RFC3339),Conflicts:[]Conflict{},Limitations:[]string{}}
  for _,task:=range s.db.Tasks("open"){
-  if task.ID==r.URL.Query().Get("exclude_id"){continue}
+  if task.Decomposed||task.ID==r.URL.Query().Get("exclude_id"){continue}
   if task.Scheduled==""||task.Minutes<1{continue}
   other,err:=time.Parse(time.RFC3339,task.Scheduled)
   if err!=nil{continue}
