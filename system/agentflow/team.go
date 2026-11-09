@@ -83,6 +83,7 @@ func validTeam(req TeamRequest)error{
    req.Base.Revision!=req.Base.ExpectedHead {return errors.New("invalid cooperative project scope")}
  seen:=map[string]bool{}
  paths:=map[string]bool{}
+ totalPaths:=0
  ownerScope:=map[string]bool{}
  for _,p:=range req.Base.AllowedPaths{if !validSourcePath(p)||sensitiveSourcePath(p){return errors.New("invalid team owner scope")};ownerScope[p]=true}
  for _,task:=range req.Tasks{
@@ -97,6 +98,8 @@ func validTeam(req TeamRequest)error{
     return errors.New("cooperative agents require disjoint source paths")
    }
    paths[p]=true
+   totalPaths++
+   if totalPaths>16 {return errors.New("cooperative publication supports at most sixteen distinct source files")}
   }
  }
  if err:=validateTaskDependencies(req.Tasks);err!=nil{return err}
