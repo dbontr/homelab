@@ -156,3 +156,27 @@ func TestWorkspaceStopFailsOnUncertainCleanup(t *testing.T) {
 		t.Fatal("failed workspace state accepted")
 	}
 }
+
+type fakeRepositoryControl struct {
+	memberships []any
+}
+func (f fakeRepositoryControl) Call(_ context.Context, name string, args map[string]any) (map[string]any, error) {
+	if name != "repository_memberships" || args["project_id"] != "research" {
+		return nil, errors.New("unexpected project or operation")
+	}
+	return map[string]any{"result": f.memberships}, nil
+}
+func TestAcceptanceRequiresLinkedSourceRepository(t *testing.T) {
+	ctx := context.Background()
+	service := fakeRepositoryControl{memberships: []any{map[string]any{"repository":"example/repo","role":"source"}}}
+	if err := verifyLinkedRepository(ctx, service, "research", "example/repo"); err != nil {
+		t.Fatal(err)
+	}
+	if err := verifyLinkedRepository(ctx, service, "research", "example/other"); err == nil {
+		t.Fatal("unlinked repository accepted")
+	}
+	service.memberships = []any{map[string]any{"repository":"example/repo","role":"reference"}}
+	if err := verifyLinkedRepository(ctx, service, "research", "example/repo"); err == nil {
+		t.Fatal("read-only linked repository accepted as source")
+	}
+}
