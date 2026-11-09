@@ -27,6 +27,7 @@ type Server struct {
 	AccessOwnerEmail string
 	PublicURL        string
 	GitHub           *GitHub
+	GitLab           *GitLab
 	LocalGit         *LocalGit
 	AllowedHosts     map[string]bool
 	AllowedOrigins   map[string]bool
@@ -85,6 +86,9 @@ func NewServer(db *Database, token string) (*Server, error) {
 		}
 	}
 	github.GenericWrites = os.Getenv("PWM_GITHUB_GENERIC_WRITES") == "1"
+	gitlabPAT, err := configuredGitLabPAT()
+	if err != nil { return nil, err }
+	gitlab := NewGitLab(gitlabPAT)
 	var localGit *LocalGit
 	if configuredRoot := os.Getenv("PWM_GIT_LOCAL_ROOT"); configuredRoot != "" {
 		if !filepath.IsAbs(configuredRoot) {
@@ -105,7 +109,7 @@ func NewServer(db *Database, token string) (*Server, error) {
 		}
 	}
 	return &Server{DB: db, AdminToken: token, OIDC: verifier, AccessVerifier: access, AccessOwnerEmail: accessOwner, PublicURL: publicURL,
-		GitHub: github, LocalGit: localGit,
+		GitHub: github, GitLab: gitlab, LocalGit: localGit,
 		AllowedHosts:     configured("PWM_ALLOWED_HOSTS", "127.0.0.1,localhost"),
 		AllowedOrigins:   configured("PWM_ALLOWED_ORIGINS", "http://127.0.0.1,http://localhost"),
 		MaxArtifactBytes: limit}, nil
