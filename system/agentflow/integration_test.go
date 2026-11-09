@@ -52,3 +52,24 @@ func TestComputeClientEnforcesToolAllowlistAndResponseIdentity(t *testing.T){
  id=2
  if _,err:=client.Call(context.Background(),"workspace_list",map[string]any{"project_id":"research"});err==nil{t.Fatal("accepted mismatched RPC reply")}
 }
+
+func TestComputeCredentialMustBeProjectScoped(t *testing.T) {
+ administrator:=false
+ server:=httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter,r *http.Request) {
+  if r.URL.Path!="/api/whoami"||r.Method!=http.MethodGet{
+   http.NotFound(w,r)
+   return
+  }
+  _=json.NewEncoder(w).Encode(map[string]any{
+   "principal":"oidc:test#engineering","administrator":administrator,
+  })
+ }))
+ defer server.Close()
+ client,err:=NewComputeClient(server.URL+"/mcp",strings.Repeat("p",32))
+ if err!=nil{t.Fatal(err)}
+ if err:=client.VerifyProjectCredential(context.Background());err!=nil{t.Fatal(err)}
+ administrator=true
+ if err:=client.VerifyProjectCredential(context.Background());err==nil{
+  t.Fatal("administrator credential accepted for unattended engineering")
+ }
+}
