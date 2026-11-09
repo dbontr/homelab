@@ -2,7 +2,7 @@ package agentflow
 
 import (
  "encoding/json"
- "errors"
+ 
  "testing"
  "time"
 )
@@ -51,7 +51,7 @@ func TestScheduledWeeklyReportAlertsAfterEachConfirmedRun(t *testing.T){
  run(a,`{}`,true)
  alerts,err=s.ListAutomationAlerts(10)
  if err!=nil||len(alerts)!=2{t.Fatalf("failed report was marked successful: %+v %v",alerts,err)}
- if _,err:=s.AcknowledgeAutomationAlert(a.ID,alerts[0].WorkflowID,alerts[0].Revision);!errors.Is(err,nil)&&err!=nil{
+ if _,err:=s.AcknowledgeAutomationAlert(a.ID,alerts[0].WorkflowID,alerts[0].Revision);err!=nil{
   t.Fatal(err)
  }
 }
