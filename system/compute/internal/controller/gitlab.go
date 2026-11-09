@@ -162,6 +162,7 @@ func (g *GitLab) File(repo,path,ref string)(map[string]any,error){
  }
  query:=url.Values{"ref":{ref}}
  status,record,err:=g.requestJSON("GET",prefix+"/repository/files/"+url.PathEscape(path),query,nil)
+ if status==http.StatusNotFound{return nil,fmt.Errorf("GitLab HTTP 404: %w",os.ErrNotExist)}
  if err!=nil||status!=http.StatusOK{return nil,errors.New("GitLab repository file unavailable")}
  if record["encoding"]!="base64" || asString(record["file_path"])!=path{
   return nil,errors.New("unexpected GitLab repository file")
