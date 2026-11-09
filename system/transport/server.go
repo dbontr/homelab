@@ -90,6 +90,7 @@ func(s *Server) Handler()http.Handler{
  mux.HandleFunc("POST /v1/engineering/teams",s.engineeringTeamCollection)
  mux.HandleFunc("GET /v1/engineering/teams/{id}",s.engineeringTeam)
  mux.HandleFunc("POST /v1/engineering/teams/{id}/cancel",s.engineeringTeam)
+ mux.HandleFunc("POST /v1/engineering/teams/{id}/integrate",s.engineeringTeamIntegrate)
  mux.HandleFunc("GET /v1/workspace/projects",s.uiProjects)
  mux.HandleFunc("GET /v1/workspace/projects/{project}/jobs",s.uiWorkspaceProjectView)
  mux.HandleFunc("GET /v1/workspace/projects/{project}/workspaces",s.uiWorkspaceProjectView)
@@ -342,7 +343,8 @@ func(s *Server)localTools()[]map[string]any{
    tool("engineering_team_submit","Start bounded cooperating agents with disjoint editable files; no member may publish",map[string]any{"base":prop("object"),"tasks":map[string]any{"type":"array","items":prop("object")}},"base","tasks"),
    tool("engineering_team_list","List cooperating engineering agent groups",map[string]any{}),
    tool("engineering_team_get","Inspect one cooperating engineering group",map[string]any{"id":prop("string")},"id"),
-   tool("engineering_team_cancel","Cancel unfinished members of a cooperating engineering group",map[string]any{"id":prop("string")},"id"))
+   tool("engineering_team_cancel","Cancel unfinished members of a cooperating engineering group",map[string]any{"id":prop("string")},"id"),
+   tool("engineering_team_integrate","Verify the combined agent artifacts and prepare one draft PR",map[string]any{"id":prop("string"),"base_branch":prop("string"),"expected_head":prop("string"),"title":prop("string"),"body":prop("string")},"id","base_branch","expected_head","title"))
  }
  if s.executorClient!=nil {
   tools=append(tools,
