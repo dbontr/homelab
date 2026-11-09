@@ -1,6 +1,9 @@
 package controller
 
-import "testing"
+import (
+ "context"
+ "testing"
+)
 
 func TestHybridRankingPreservesCitationsAndDeduplicates(t *testing.T){
  lexical:=[]map[string]any{
@@ -22,12 +25,12 @@ func TestHybridSearchWorksWithoutEmbeddingProvider(t *testing.T){
  db,_,httpServer:=fixture(t)
  project(t,httpServer)
  srv:=&Server{DB:db}
- if _,err:=srv.HybridResearch(t.Context(),"other","physics",5);err==nil{
+ if _,err:=srv.HybridResearch(context.Background(),"INVALID-PROJECT","physics",5);err==nil{
   t.Fatal("hybrid bypassed unknown project")
  }
  // Empty lexical results are valid for an existing project; no embedding
  // service is created or falsely reported as available.
- result,err:=srv.HybridResearch(t.Context(),"demo","quantum",5)
+ result,err:=srv.HybridResearch(context.Background(),"demo","quantum",5)
  if err!=nil||result["mode"]!="lexical_only"{
   t.Fatalf("degraded retrieval reported as hybrid: %+v %v",result,err)
  }
