@@ -35,7 +35,7 @@ sudo homelab-releasectl activate STAGED_RELEASE_ID
 sudo homelab-releasectl recover
 ```
 
-The staging command validates the exact checked-out Git commit and requires a clean working tree. It uses `nix build --offline --no-link --print-out-paths` to obtain the local host's `config.system.build.toplevel` store path. No arbitrary path can be selected by an MCP call. All generation records are kept in a private, process-locked directory with fsynced atomic updates.
+The staging command validates the exact checked-out Git commit and requires a clean working tree. A remote stage request must be approved by the independent owner authorizer and must append a durable, hashed `started` audit entry before invoking any Nix build. A corresponding `succeeded` or `failed` entry records the result. Missing audit custody denies staging, and a failed completion append leaves the operation's outcome explicitly uncertain. The audit journal does not contain source revisions, credentials, or raw request arguments. It uses `nix build --offline --no-link --print-out-paths` to obtain the local host's `config.system.build.toplevel` store path. No arbitrary path can be selected by an MCP call. All generation records are kept in a private, process-locked directory with fsynced atomic updates.
 
 Activation records the previous NixOS system before changing the profile. It switches to the staged generation, probes exact allowlisted systemd services, and restores the previous generation when the switch or a health check fails. A crash during activation leaves an interrupted journal that must be handled by `recover` before another activation. The controller is local-host scoped; independent staging and acceptance are required for each compute node.
 
