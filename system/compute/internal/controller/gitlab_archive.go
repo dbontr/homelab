@@ -32,7 +32,9 @@ func (g *GitLab) SnapshotReader(repo,ref string)(string,io.ReadCloser,error){
  target.RawQuery=query.Encode()
  req,err:=http.NewRequest(http.MethodGet,target.String(),nil)
  if err!=nil{return "",nil,errors.New("invalid GitLab archive request")}
- req.Header.Set("PRIVATE-TOKEN",g.Token)
+ token,err:=g.credential()
+ if err!=nil{return "",nil,err}
+ req.Header.Set("PRIVATE-TOKEN",token)
  req.Header.Set("User-Agent","eminence-compute")
  client:=*g.Client
  client.Timeout=5*time.Minute
