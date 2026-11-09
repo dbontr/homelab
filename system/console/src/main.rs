@@ -11,6 +11,8 @@ mod books;
 mod activity;
 mod engineering;
 mod engineering_create;
+mod engineering_orchestration;
+mod engineering_knowledge;
 mod knowledge;
 
 use dioxus::prelude::*;
