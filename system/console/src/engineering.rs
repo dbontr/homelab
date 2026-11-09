@@ -175,7 +175,8 @@ pub fn EngineeringRuns() -> Element {
         }
         Heading {
             title: "Cooperative engineering".to_owned(),
-            description: "Bounded parallel agents with separate workspaces and disjoint source ownership.".to_owned()
+            description: "Bounded parallel agents with separate workspaces and disjoint source ownership.".to_owned(),
+            span {}
         }
         match teams.cloned() {
             None => rsx! { Loading {} },
