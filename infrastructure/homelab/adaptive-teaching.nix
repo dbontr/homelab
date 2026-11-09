@@ -10,12 +10,12 @@ in {
     package = lib.mkOption {
       type = lib.types.nullOr lib.types.package;
       default = null;
-      description = "Verified upstream release containing bin/adaptive-teaching.";
+      description = "Verified local Nix package containing bin/adaptive-teaching.";
     };
     binaryPath = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
       default = null;
-      description = "Immutable release executable on the host, installed from an authenticated upstream artifact.";
+      description = "Exact SHA-256-pinned executable, including a local unified source release bin/homelab-learning.";
     };
     binarySHA256 = lib.mkOption {
       type = lib.types.str;
