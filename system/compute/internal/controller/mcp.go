@@ -1082,6 +1082,9 @@ func (s *Server) callToolFor(who caller, name string, a map[string]any) (any, er
 	case "github_checkout_repository":
 		return s.CheckoutArchive(project, workspace, repository, get("ref"))
 	case "github_publish_artifacts":
+		if !db.RepositoryLinked(project, repository) {
+			return nil, errors.New("publication requires a repository linked to the authorized project")
+		}
 		base := get("base_branch")
 		expected := get("expected_head")
 		changes, ok := a["changes"].(map[string]any)
