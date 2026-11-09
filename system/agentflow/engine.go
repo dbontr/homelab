@@ -3,6 +3,8 @@ package agentflow
 import (
  "bytes"
  "context"
+ "crypto/sha256"
+ "encoding/hex"
  "encoding/json"
  "errors"
  "fmt"
@@ -137,6 +139,19 @@ func (e *Engine) workspaceAction(ctx context.Context,w Workflow,action string,pa
  if err!=nil{return nil,err}
  return e.awaitOperation(ctx,w.Project,ws,str(reply["operation_id"]))
 }
+// writeVerifiedFile compares the worker-reported digest and the actual
+// sandbox contents with the intended source bytes before recording success.
+func (e *Engine) writeVerifiedFile(ctx context.Context,w Workflow,filename,contents string)error{
+ reply,err:=e.workspaceAction(ctx,w,"write_file",map[string]any{"path":filename,"content":contents})
+ if err!=nil{return err}
+ digest:=sha256.Sum256([]byte(contents))
+ expected:=hex.EncodeToString(digest[:])
+ if str(reply["sha256"])!=expected{return errors.New("workspace write digest mismatch")}
+ readback,err:=e.workspaceAction(ctx,w,"read_file",map[string]any{"path":filename})
+ if err!=nil{return err}
+ if readback["content"]!=contents{return errors.New("workspace write verification failed")}
+ return nil
+}
 func (e *Engine) Dispatch(ctx context.Context,key,kind string,input json.RawMessage)(json.RawMessage,error){
  if e==nil||e.Store==nil||e.Compute==nil{return nil,errors.New("engineering service not configured")}
  keys:=strings.Split(key,"/")
@@ -200,9 +215,7 @@ func (e *Engine) Dispatch(ctx context.Context,key,kind string,input json.RawMess
   if !repositoryName.MatchString(repo){return nil,errors.New("invalid checked-out repository identity")}
   paths:=sortedPaths(changes)
   for _,name:=range paths{
-   result,e2:=e.workspaceAction(ctx,w,"write_file",map[string]any{"path":path.Join(repoRoot(repo),name),"content":changes[name]})
-   if e2!=nil{return nil,e2}
-   if code,ok:=result["exit_code"].(float64);ok&&code!=0{return nil,errors.New("source update failed")}
+   if err:=e.writeVerifiedFile(ctx,w,path.Join(repoRoot(repo),name),changes[name]);err!=nil{return nil,err}
   }
   out=map[string]any{"applied":paths}
  case "verify":
@@ -264,9 +277,7 @@ func (e *Engine) Dispatch(ctx context.Context,key,kind string,input json.RawMess
    if err:=validateChanges(repair);err!=nil{return nil,err}
    for _,name:=range sortedPaths(repair){
     if !allowed[name]||source[name]==""{return nil,errors.New("repair attempted an unauthorized source change")}
-    result,callErr:=e.workspaceAction(ctx,w,"write_file",map[string]any{"path":path.Join(repoRoot(repo),name),"content":repair[name]})
-    if callErr!=nil{return nil,callErr}
-    if code,ok:=result["exit_code"].(float64);ok&&code!=0{return nil,errors.New("repair file write failed")}
+    if err:=e.writeVerifiedFile(ctx,w,path.Join(repoRoot(repo),name),repair[name]);err!=nil{return nil,err}
    }
   }
  case "export":
