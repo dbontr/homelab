@@ -83,6 +83,18 @@ func NewHTTPHandler(service Manager)http.Handler{
    sendJSON(w,200,summary)
   })
  }
+ if knowledge,ok:=service.(KnowledgeManager);ok{
+  mux.HandleFunc("GET /runs/{id}/knowledge/{proposal}",func(w http.ResponseWriter,r *http.Request){
+   record,err:=knowledge.Knowledge(r.PathValue("id"),r.PathValue("proposal"))
+   if err!=nil{sendJSON(w,404,map[string]string{"error":"knowledge proposal not found"});return}
+   sendJSON(w,200,record)
+  })
+  mux.HandleFunc("POST /runs/{id}/knowledge/{proposal}/approve",func(w http.ResponseWriter,r *http.Request){
+   record,err:=knowledge.ApproveKnowledge(r.PathValue("id"),r.PathValue("proposal"))
+   if err!=nil{sendJSON(w,409,map[string]string{"error":"knowledge approval requires reconciliation"});return}
+   sendJSON(w,200,record)
+  })
+ }
  return mux
 }
 // ServeUnix exposes only lifecycle operations on a group-restricted local
