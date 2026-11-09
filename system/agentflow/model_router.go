@@ -16,6 +16,12 @@ type CapabilityPlanner interface {
  ContinueWorkflowStages(context.Context,string,string,[]map[string]any,int)(json.RawMessage,error)
 }
 
+// TaskBreakdownPlanner proposes a bounded graph. The personal store alone
+// accepts owner-approved changes and validates the exact task revision.
+type TaskBreakdownPlanner interface {
+ ProposeTaskSteps(context.Context,string,int)(json.RawMessage,error)
+}
+
 // ModelRoute binds one declared task purpose to an exact operator-selected
 // model. Tokens are supplied from protected service credentials, never Git.
 type ModelRoute struct {
@@ -89,4 +95,11 @@ func (r *ModelRouter) AllowsAutomaticContinuation(shareEvidence bool)bool{
 
 func (r *ModelRouter) SupportsEvidence()bool{
  return r!=nil&&r.routes["evidence"]!=nil
+}
+
+func (r *ModelRouter)ProposeTaskSteps(ctx context.Context,title string,minutes int)(json.RawMessage,error){
+ if r==nil||r.routes["planning"]==nil{
+  return nil,errors.New("planning model route is unavailable")
+ }
+ return r.routes["planning"].ProposeTaskSteps(ctx,title,minutes)
 }
