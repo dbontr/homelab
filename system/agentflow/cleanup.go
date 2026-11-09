@@ -3,7 +3,6 @@ package agentflow
 import (
 	"context"
 	"errors"
-	"os"
 	"time"
 )
 
@@ -35,19 +34,12 @@ func (s *Store) startCleanup(id string) (CleanupClaim, bool, error) {
 	if workflow.Cleanup.Status == "stopped" || workflow.Cleanup.Attempts >= 3 {
 		return claim, false, nil
 	}
-	if workflow.Cleanup.Status == "stopping" &&
-		s.now().Sub(workflow.CreatedAt) < 0 {
-		return claim, false, errors.New("invalid cleanup clock")
-	}
 	if workflow.Cleanup.Status == "stopping" && !workflow.CleanupStarted.IsZero() &&
 		s.now().Sub(workflow.CleanupStarted) < 60*time.Second {
 		return claim, false, nil
 	}
 	workspace, err := workspaceID(workflow)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return claim, false, nil
-		}
 		// There is no worker identity to destroy when provisioning failed.
 		return claim, false, nil
 	}
