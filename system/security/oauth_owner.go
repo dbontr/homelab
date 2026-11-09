@@ -36,6 +36,15 @@ func(b *OAuthBroker)CallbackListenAddress()(string,error){
  if len(b.providers)==0{return "",errors.New("OAuth provider list is empty")}
  var address string
  for _,p:=range b.providers{
+  if p.Name==""||len(p.Name)>64||strings.ContainsAny(p.Name,"/?#\\ \t\r\n\x00")||
+   p.ClientID==""||len(p.ClientID)>256||len(p.Scopes)>16{
+   return "",errors.New("invalid OAuth public-client identity or scopes")
+  }
+  token,tokenErr:=url.Parse(p.TokenURL)
+  if tokenErr!=nil||token.Scheme!="https"||token.Host==""||token.User!=nil||
+   token.RawQuery!=""||token.Fragment!=""||token.Opaque!=""{
+   return "",errors.New("invalid OAuth HTTPS token endpoint")
+  }
   target,err:=url.Parse(p.RedirectURL)
   if err!=nil||target.Scheme!="http"||target.Hostname()!="127.0.0.1"||
    target.Port()==""||target.Path!="/oauth/callback"||
