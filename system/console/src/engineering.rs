@@ -139,7 +139,7 @@ fn TeamDetail(team: Value) -> Element {
 }
 
 #[component]
-pub fn EngineeringRuns() -> Element {
+pub fn EngineeringRuns(csrf: String) -> Element {
     let mut runs = use_resource(|| async { api::get::<Value>("/v1/engineering/runs").await });
     let mut teams = use_resource(|| async { api::get::<Value>("/v1/engineering/teams").await });
     rsx! {
@@ -153,6 +153,7 @@ pub fn EngineeringRuns() -> Element {
                 "Refresh"
             }
         }
+        crate::engineering_create::EngineeringCreate { csrf: csrf.clone() }
         Card {
             title: "Publication boundary".to_owned(),
             description: "Only draft changes may be prepared automatically. Merging and deployment require independent owner authorization.".to_owned(),
