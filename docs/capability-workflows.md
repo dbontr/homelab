@@ -28,7 +28,9 @@ Each stage has a stable ID, dependency IDs, and one approved read action:
 - `learning_summary`, `learning_sessions`, `learning_reviews`,
   `health_goals`, `health_records`, `health_training_sets`,
   `health_food_proposals`, `recipe_search`, `recipe_meals`,
+  `recipe_groceries`, `recipe_nutrition`, `task_review`,
   and `media_requests` — opt-in personal application reads
+- `study_pack_preview` — compose an unsaved, cited study pack from successful prerequisite `research_search` results
 
 Every personal application operation, including `project_tasks`, requires `personal_read: true`.
 `project_context`, `research_search`, and `engineering_runs` remain project-scoped and read-only. The program cannot
