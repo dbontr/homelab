@@ -347,6 +347,7 @@ func(s *Server)localTools()[]map[string]any{
   tool("automation_get","Inspect one scheduled workflow and its last run identity",map[string]any{"id":prop("string")},"id"),
   tool("automation_set_enabled","Revision-fence a recurring workflow pause or resume",map[string]any{"id":prop("string"),"revision":prop("integer"),"enabled":prop("boolean")},"id","revision","enabled"),
   tool("workflow_list","List owner-scoped workflow status",map[string]any{}),
+  tool("workflow_archive_list","List settled capability workflow history without exposing recorded evidence",map[string]any{}),
   tool("workflow_get","Inspect confirmed stage results and status",map[string]any{"id":prop("string")},"id"),
   tool("workflow_cancel","Cancel a revision-matched workflow",map[string]any{"id":prop("string"),"revision":prop("integer")},"id","revision"),
   tool("project_overview","Read a project with linked sources, libraries, personal tasks, goals and engineering runs",map[string]any{"project_id":prop("string")},"project_id"),

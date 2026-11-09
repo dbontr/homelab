@@ -140,6 +140,7 @@ fn property(value: &Value, key: &str) -> String {
 pub fn Workflows(csrf: String) -> Element {
     let csrf = use_signal(|| csrf);
     let mut runs = use_resource(|| async { api::get::<Value>("/v1/workflows").await });
+    let mut archives = use_resource(|| async { api::get::<Value>("/v1/workflows?archived=true").await });
     let mut schedules = use_resource(|| async { api::get::<Value>("/v1/automations").await });
     let mut draft = use_signal(WorkflowDraft::default);
     let mut busy = use_signal(|| false);
@@ -158,6 +159,7 @@ pub fn Workflows(csrf: String) -> Element {
         }
     });
     let visible_runs = items(runs.cloned(), "workflows");
+    let archived_runs = items(archives.cloned(), "workflows");
     let visible_schedules = items(schedules.cloned(), "automations");
 
     rsx! {
@@ -166,7 +168,7 @@ pub fn Workflows(csrf: String) -> Element {
             description: "Run bounded project reads and inspect owner-controlled recurring work.".to_owned(),
             button {
                 class: "btn btn-outline",
-                onclick: move |_| { runs.restart(); schedules.restart(); },
+                onclick: move |_| { runs.restart(); archives.restart(); schedules.restart(); },
                 "Refresh"
             }
         }
@@ -531,6 +533,51 @@ pub fn Workflows(csrf: String) -> Element {
                 }
             }
         }
+        section { class: "card",
+            div { class: "card-header",
+                h2 { class: "card-title", "Archived workflows" }
+                p { class: "card-description",
+                    "Settled runs remain available for evidence inspection without occupying active workflow capacity."
+                }
+            }
+            div { class: "card-body",
+                if archives.cloned().is_none() {
+                    Loading {}
+                } else if let Some(Err(message)) = archives.cloned() {
+                    Notice { message: message }
+                } else if archived_runs.is_empty() {
+                    Empty {
+                        title: "No archived workflows".to_owned(),
+                        description: "Settled workflows appear here after the retention interval.".to_owned()
+                    }
+                } else {
+                    div { class: "item-list",
+                        for run in archived_runs.into_iter().take(40) {
+                            {
+                                let id = property(&run, "id");
+                                let project = property(&run, "project");
+                                let status = property(&run, "status");
+                                let target = id.clone();
+                                rsx! {
+                                    article { class: "list-item", key: "{id}",
+                                        div {
+                                            strong { "{project}" }
+                                            p { class: "muted", "{id}" }
+                                        }
+                                        Badge { text: status }
+                                        button {
+                                            class: "btn btn-outline",
+                                            onclick: move |_| selected_run.set(target.clone()),
+                                            "Inspect"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
         if !selected_run().is_empty() {
             section { class: "card",
                 div { class: "card-header",
@@ -540,7 +587,7 @@ pub fn Workflows(csrf: String) -> Element {
                 div { class: "card-body",
                     if let Some(Ok(record)) = detail.cloned() {
                         Badge { text: property(&record,"status") }
-                        if !matches!(property(&record,"status").as_str(), "succeeded" | "failed" | "cancelled") {
+                        if !matches!(property(&record,"status").as_str(), "succeeded" | "failed" | "cancelled" | "expired" | "planning_failed") {
                             button {
                                 class: "btn btn-outline", disabled: busy(),
                                 onclick: move |_| {

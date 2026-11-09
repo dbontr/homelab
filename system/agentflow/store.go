@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -170,8 +171,13 @@ func (s *Store) readPath(location,id string) (Workflow, error) {
 	if !fi.Mode().IsRegular() || fi.Mode().Perm()&0077 != 0 || fi.Size() > 1<<20 {
 		return w, errors.New("unsafe workflow record")
 	}
-	if err := json.NewDecoder(f).Decode(&w); err != nil {
+	decoder := json.NewDecoder(f)
+	if err := decoder.Decode(&w); err != nil {
 		return w, err
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		return w, errors.New("workflow record contains trailing data")
 	}
 	if w.ID != id {
 		return w, errors.New("workflow record ID mismatch")

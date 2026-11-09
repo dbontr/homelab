@@ -84,8 +84,21 @@ flag is confined to its original program; it does not authorize any other
 personal, external account or privileged operation.
 
 The state directory is `workflows` under the platform's private state
-directory. As with engineering runs, archive and retention management must
-be implemented before the store reaches its 1,000-record limit.
+directory. A private `archive` subdirectory holds terminal capability
+workflow records after a 24-hour settling period. The scheduler checks
+for eligible records every five minutes and moves at most 100 per pass.
+Running steps, unresolved model continuations and engineering runs remain
+in active storage. A cross-process lock and directory sync protect archival,
+and archived IDs cannot be reused for new workflows or automation occurrences.
+
+`GET /v1/workflows` and MCP `workflow_list` expose active workflow summaries.
+`GET /v1/workflows?archived=true` and `workflow_archive_list` expose up to
+100 archived workflow summaries, newest first. Both listings omit stage
+result bodies. `GET /v1/workflows/{id}` and `workflow_get` can retrieve
+the full authorized detail of an active or archived capability workflow.
+Archived records cannot be claimed, cancelled, or otherwise revised.
+Archival frees entries from the active 1,000-record limit while retaining
+historical evidence; there is no automatic deletion of archived records.
 
 ## Evidence-linked personal delegations
 
