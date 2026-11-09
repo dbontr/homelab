@@ -24,7 +24,7 @@ func TestPersonalRoutesPreserveExistingStoreAndResponseContracts(t *testing.T){
  if err!=nil{t.Fatal(err)}
  router:=http.NewServeMux()
  Register(router,db)
- if response:=call(router,"GET","/v1/tasks","","");response.Code!=http.StatusOK{
+ if response:=call(router,"GET","/v1/tasks","");response.Code!=http.StatusOK{
   t.Fatalf("task listing returned %d",response.Code)
  }
  response:=call(router,"POST","/v1/tasks",`{"title":"Review control systems","minutes":20}`)
@@ -40,7 +40,7 @@ func TestPersonalRoutesPreserveExistingStoreAndResponseContracts(t *testing.T){
  if response=call(router,"POST","/v1/goals",`{"title":"Understand feedback"}`);response.Code!=http.StatusCreated{
   t.Fatalf("goal creation returned %d",response.Code)
  }
- if response=call(router,"PUT","/v1/rules/study",`{"text":"Review weekly","kind":"habit"}`);response.Code!=http.StatusOK{
+ if response=call(router,"PUT","/v1/rules/study",`{"text":"Review weekly","kind":"preference"}`);response.Code!=http.StatusOK{
   t.Fatalf("rule update returned %d: %s",response.Code,response.Body.String())
  }
  if response=call(router,"GET","/v1/recommendations","");response.Code!=http.StatusOK{
