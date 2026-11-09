@@ -67,3 +67,11 @@ The Go server implements durable state and deterministic checks. Host-mediated e
 ## Private data continuity
 
 Learning evidence, source provenance and original work are durable user-owned records. Exporting the SQLite database must preserve all of them together, including unanswered assessments and sealed solutions. A backup is a protected copy of private data; it is not a new assessment or a publishing action. Restore success must be tested independently of taking the snapshot.
+
+## Source-audited curricula
+
+The Learning source library keeps the immutable text of uploaded material and an explicit extraction/audit ledger. `preview_source_curriculum` constructs a prerequisite-ordered route from propositions that have both accepted source-span provenance and a separate `reviewed` standing. Reasoning chains contribute prerequisite edges only when their reviews and required formalization checks permit it. Each curriculum step identifies the exact source span, quotation, underlying proposition and stable concept identifier.
+
+A preview is blocked by unprocessed spans, unreviewed claims, missing reasoning premises, cyclic dependencies, an exceeded selection limit or missing source integrity. These blockers are returned rather than silently treating incomplete material as comprehensive knowledge.
+
+`import_source_curriculum` requires the exact digest from a ready preview and `confirm: true`. It recomputes the source evidence inside the canonical Learning transaction, creates only previously absent concepts and required prerequisites, and refuses conflicting identities. Repeating an unchanged import is idempotent. The imported concepts can be used with `start_learning_session` and the established diagnostic, teaching, practice and delayed-reassessment process. No import awards mastery, invents learner responses, writes assessment results or certifies proof soundness. The tutor remains responsible for producing questions and evaluating actual work.
