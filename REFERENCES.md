@@ -72,3 +72,4 @@
 - [Open Library Read API](https://openlibrary.org/dev/docs/api/read) — Open Library. Used for: provider-owned online reading and borrowing availability lookup by exact ISBN and documented result status.
 - [Open Library API Usage Guidelines](https://openlibrary.org/developers/api) — Open Library. Used for: identified requests, rate limits, and bounded human-initiated book availability lookup.
 - [GNU Coreutils sha2sum utilities](https://www.gnu.org/software/coreutils/manual/html_node/sha2-utilities.html) — GNU project. Used for: reproducible SHA-256 manifests and offline staged-release file integrity checks.
+- [Docker Buildx Build Reference](https://docs.docker.com/reference/cli/docker/buildx/build/) — Docker. Used for: source-owned Compute OCI image builds, registry push/load modes and metadata digest receipts.
