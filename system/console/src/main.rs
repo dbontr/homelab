@@ -10,6 +10,7 @@ mod planner;
 mod books;
 mod activity;
 mod engineering;
+mod engineering_create;
 mod knowledge;
 
 use dioxus::prelude::*;
@@ -286,7 +287,7 @@ fn App() -> Element {
                             match page() {
                                 Page::Overview => rsx! { views::Overview {} },
                                 Page::Projects => rsx! { views::Projects {} },
-                                Page::EngineeringRuns => rsx! { engineering::EngineeringRuns {} },
+                                Page::EngineeringRuns => rsx! { engineering::EngineeringRuns { csrf: csrf.clone() } },
                                 Page::Knowledge => rsx! { knowledge::ProjectKnowledge {} },
                                 Page::Compute => rsx! { views::Compute {} },
                                 Page::Software => rsx! { views::Software {} },
