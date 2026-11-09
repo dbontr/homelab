@@ -82,17 +82,19 @@ in
       };
     };
     oauth = {
-      enable = lib.mkEnableOption "owner-only PKCE public-client authorization through a fixed localhost callback";
+      enable = lib.mkEnableOption "owner-only OAuth authorization-code/PKCE or device-code enrollment";
       providers = lib.mkOption {
         default = [];
-        description = "Allowlisted public OAuth clients, endpoints, requested scopes, and one shared local callback; no provider secrets.";
+        description = "Allowlisted OAuth public clients; either a fixed loopback authorization callback or a provider-specific device authorization URL with an exact verification hostname. No provider secrets.";
         type = lib.types.listOf (lib.types.submodule {
           options = {
             name = lib.mkOption { type = lib.types.str; };
-            authorizeURL = lib.mkOption { type = lib.types.str; };
+            authorizeURL = lib.mkOption { type = lib.types.str; default = ""; };
             tokenURL = lib.mkOption { type = lib.types.str; };
             clientID = lib.mkOption { type = lib.types.str; };
-            redirectURL = lib.mkOption { type = lib.types.str; };
+            redirectURL = lib.mkOption { type = lib.types.str; default = ""; };
+            deviceAuthorizationURL = lib.mkOption { type = lib.types.str; default = ""; };
+            deviceVerificationHost = lib.mkOption { type = lib.types.str; default = ""; };
             scopes = lib.mkOption { type = lib.types.listOf lib.types.str; default = []; };
           };
         });
