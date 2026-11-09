@@ -41,6 +41,15 @@ func (db *Database) SetEmbeddingPolicy(library,model string,enabled bool,revisio
 
 func boolInt(value bool)int{if value{return 1};return 0}
 
+// Revocation remains available when the model provider is offline or removed.
+func (db *Database) DisableEmbeddingPolicy(library string,revision int)(map[string]any,error){
+ if !validID.MatchString(library)||revision<1{return nil,errors.New("invalid embedding permission")}
+ rows,err:=db.query("SELECT model FROM research_embedding_policies WHERE library=?",library)
+ if err!=nil{return nil,err}
+ if len(rows)!=1{return nil,errors.New("embedding permission not found")}
+ return db.SetEmbeddingPolicy(library,asString(rows[0]["model"]),false,revision)
+}
+
 func (db *Database) ProjectEmbeddingPolicy(project,library string)(map[string]any,error){
  if !validID.MatchString(project)||!validID.MatchString(library){
   return nil,errors.New("invalid embedding policy scope")

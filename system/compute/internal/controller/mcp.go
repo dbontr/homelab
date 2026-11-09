@@ -821,8 +821,9 @@ func (s *Server) callToolFor(who caller, name string, a map[string]any) (any, er
 		if err:=JSONRequest(a["embedding"],&vector);err!=nil{return nil,err}
 		return db.PutResearchEmbedding(get("library"),get("passage_id"),get("model"),get("body_sha256"),vector)
 	case "research_embedding_policy_set":
+        if !asBool(a["enabled"]){return db.DisableEmbeddingPolicy(get("library"),asInt(a["expected_revision"]))}
 		if s.Embedder==nil{return nil,errors.New("embedding provider is not configured")}
-		return db.SetEmbeddingPolicy(get("library"),s.Embedder.Model,asBool(a["enabled"]),asInt(a["expected_revision"]))
+		return db.SetEmbeddingPolicy(get("library"),s.Embedder.Model,true,asInt(a["expected_revision"]))
 	case "research_embedding_policy_get":
 		return db.ProjectEmbeddingPolicy(project,get("library"))
 	case "research_semantic_query":
