@@ -1,4 +1,15 @@
 {{- if .Values.controller.enabled }}
+{{- if .Values.controller.vault.enabled }}
+{{- if not (and .Values.controller.vault.endpoint .Values.controller.vault.serverName .Values.controller.vault.caSecretName .Values.controller.vault.clientIdentitySecretName (or .Values.controller.vault.githubAlias .Values.controller.vault.gitlabAlias)) }}
+{{- fail "vault credential retrieval requires a private HTTPS endpoint, server identity, trust Secret, client identity Secret, and at least one provider alias" }}
+{{- end }}
+{{- if and .Values.controller.vault.githubAlias .Values.controller.githubPATSecretName }}
+{{- fail "GitHub must use exactly one credential authority" }}
+{{- end }}
+{{- if and .Values.controller.vault.gitlabAlias .Values.controller.gitlabPATSecretName }}
+{{- fail "GitLab must use exactly one credential authority" }}
+{{- end }}
+{{- end }}
 {{- if not (regexMatch "^[a-z0-9][a-z0-9.-]*(?::[0-9]{2,5})?(/[a-z0-9][a-z0-9._-]*)+@sha256:[a-f0-9]{64}$" .Values.controller.image) }}
 {{- fail "controller.image must be a verified immutable OCI reference with a SHA-256 digest" }}
 {{- end }}
@@ -222,6 +233,26 @@ spec:
             - name: PWM_EMBEDDINGS_TOKEN_FILE
               value: /run/embeddings/token
             {{- end }}
+            {{- if .Values.controller.vault.enabled }}
+            - name: PWM_VAULT_URL
+              value: {{ .Values.controller.vault.endpoint | quote }}
+            - name: PWM_VAULT_SERVER_NAME
+              value: {{ .Values.controller.vault.serverName | quote }}
+            - name: PWM_VAULT_CA_FILE
+              value: /run/vault/ca/ca.crt
+            - name: PWM_VAULT_CLIENT_CERT_FILE
+              value: /run/vault/client/tls.crt
+            - name: PWM_VAULT_CLIENT_KEY_FILE
+              value: /run/vault/client/tls.key
+            {{- if .Values.controller.vault.githubAlias }}
+            - name: PWM_VAULT_GITHUB_ALIAS
+              value: {{ .Values.controller.vault.githubAlias | quote }}
+            {{- end }}
+            {{- if .Values.controller.vault.gitlabAlias }}
+            - name: PWM_VAULT_GITLAB_ALIAS
+              value: {{ .Values.controller.vault.gitlabAlias | quote }}
+            {{- end }}
+            {{- end }}
             - name: PWM_ADMIN_TOKEN
               valueFrom:
                 secretKeyRef:
@@ -279,6 +310,14 @@ spec:
                 name: {{ .Values.controller.offsite.backendSecretName }}
           {{- end }}
           volumeMounts:
+            {{- if .Values.controller.vault.enabled }}
+            - name: vault-ca
+              mountPath: /run/vault/ca
+              readOnly: true
+            - name: vault-client
+              mountPath: /run/vault/client
+              readOnly: true
+            {{- end }}
             {{- if .Values.controller.gitlabPATSecretName }}
             - name: gitlab-pat
               mountPath: /run/credentials/gitlab
@@ -333,6 +372,24 @@ spec:
             initialDelaySeconds: 10
             periodSeconds: 20
       volumes:
+        {{- if .Values.controller.vault.enabled }}
+        - name: vault-ca
+          secret:
+            secretName: {{ .Values.controller.vault.caSecretName }}
+            defaultMode: 288
+            items:
+              - key: ca.crt
+                path: ca.crt
+        - name: vault-client
+          secret:
+            secretName: {{ .Values.controller.vault.clientIdentitySecretName }}
+            defaultMode: 288
+            items:
+              - key: tls.crt
+                path: tls.crt
+              - key: tls.key
+                path: tls.key
+        {{- end }}
         {{- if .Values.controller.gitlabPATSecretName }}
         - name: gitlab-pat
           secret:

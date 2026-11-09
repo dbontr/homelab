@@ -142,6 +142,11 @@ func githubTokenScope(requestPath string) (string, error) {
 }
 
 func (g *GitHub) credential(requestPath string) (string, error) {
+ if g.TokenSource!=nil{
+  token,err:=g.TokenSource()
+  if err!=nil||len(token)<20{return "",errors.New("GitHub vault credential unavailable")}
+  return token,nil
+ }
 	if g.Token != "" {
 		return g.Token, nil
 	}

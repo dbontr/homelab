@@ -54,7 +54,7 @@ type gitCommitIdentity struct {
 // The ID-based no-reply address associates commits with the account without
 // exposing its personal email address.
 func (g *GitHub) commitIdentity() (gitCommitIdentity, error) {
-	if g.Token == "" {
+	if g.Token == "" && g.TokenSource == nil {
 		return gitCommitIdentity{}, errors.New("user-owned GitHub PAT required for commit publication")
 	}
 	response, err := g.request("GET", "/user", nil, nil)
@@ -90,7 +90,7 @@ func (g *GitHub) PATReadiness(repositories []string) (map[string]any, error) {
 	if len(repositories) > 64 {
 		return nil, errors.New("too many repositories for a credential check")
 	}
-	if g.Token == "" {
+	if g.Token == "" && g.TokenSource == nil {
 		return map[string]any{
 			"pat_configured":   false,
 			"ready":            false,

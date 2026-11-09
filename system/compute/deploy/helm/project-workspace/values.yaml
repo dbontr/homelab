@@ -17,6 +17,14 @@ controller:
   githubPATSecretName: ""
   gitlabPATSecretName: ""
   gitlabAPIURL: "https://gitlab.com/api/v4"
+  vault:
+    enabled: false
+    endpoint: ""
+    serverName: ""
+    caSecretName: ""
+    clientIdentitySecretName: ""
+    githubAlias: ""
+    gitlabAlias: ""
   access:
     issuer: ""
     audience: ""

@@ -106,6 +106,7 @@ type AdminSessions struct {
 	access *AccessVerifier
 	gatewayAudience string
 	vault *Vault
+	serviceCredentialGrants map[string]ServiceCredentialGrant
 	oauth *OAuthBroker
 	oauthClient *http.Client
 	verifier  PassphraseRecord

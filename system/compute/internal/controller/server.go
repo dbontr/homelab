@@ -89,6 +89,28 @@ func NewServer(db *Database, token string) (*Server, error) {
 	gitlabPAT, err := configuredGitLabPAT()
 	if err != nil { return nil, err }
 	gitlab := NewGitLab(gitlabPAT)
+ githubAlias:=os.Getenv("PWM_VAULT_GITHUB_ALIAS")
+ gitlabAlias:=os.Getenv("PWM_VAULT_GITLAB_ALIAS")
+ brokerURL:=os.Getenv("PWM_VAULT_URL")
+ if githubAlias!=""||gitlabAlias!=""||brokerURL!=""{
+  if brokerURL==""||(githubAlias==""&&gitlabAlias==""){
+   return nil,errors.New("owner vault provider aliases and endpoint must be configured together")
+  }
+  broker,brokerErr:=NewVaultSecretClient(brokerURL,
+   os.Getenv("PWM_VAULT_SERVER_NAME"),os.Getenv("PWM_VAULT_CA_FILE"),
+   os.Getenv("PWM_VAULT_CLIENT_CERT_FILE"),os.Getenv("PWM_VAULT_CLIENT_KEY_FILE"))
+  if brokerErr!=nil{return nil,brokerErr}
+  if githubAlias!=""{
+   if pat!=""||github.App!=nil{return nil,errors.New("GitHub has conflicting credential authorities")}
+   if !vaultSecretAlias.MatchString(githubAlias){return nil,errors.New("invalid GitHub vault alias")}
+   github.TokenSource=func()(string,error){return broker.Credential(githubAlias)}
+  }
+  if gitlabAlias!=""{
+   if gitlabPAT!=""{return nil,errors.New("GitLab has conflicting credential authorities")}
+   if !vaultSecretAlias.MatchString(gitlabAlias){return nil,errors.New("invalid GitLab vault alias")}
+   gitlab.TokenSource=func()(string,error){return broker.Credential(gitlabAlias)}
+  }
+ }
  if gitlabAPI:=strings.TrimRight(os.Getenv("PWM_GITLAB_API_URL"),"/");gitlabAPI!=""{
   endpoint,parseErr:=url.Parse(gitlabAPI)
   if parseErr!=nil||endpoint.Scheme!="https"||endpoint.Host==""||

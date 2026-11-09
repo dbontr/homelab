@@ -77,6 +77,15 @@ func main() {
   if err!=nil{log.Fatal("invalid OAuth provider policy: ",err)}
   if err:=manager.SetOAuthBroker(broker,nil);err!=nil{log.Fatal(err)}
  }
+ if raw:=os.Getenv("HOMELAB_SECURITY_SERVICE_CREDENTIAL_GRANTS");raw!=""{
+  var grants []security.ServiceCredentialGrant
+  if err:=json.Unmarshal([]byte(raw),&grants);err!=nil||len(grants)==0{
+   log.Fatal("invalid service credential grants")
+  }
+  if err:=manager.SetServiceCredentialGrants(grants);err!=nil{
+   log.Fatal("invalid service credential policy: ",err)
+  }
+ }
  var verifier *security.AccessVerifier
  gatewayAudience:=os.Getenv("HOMELAB_SECURITY_ACCESS_GATEWAY_AUD")
  if gatewayAudience!="" {

@@ -16,6 +16,7 @@ import (
 
 type GitHub struct {
 	Token         string
+ TokenSource func()(string,error)
 	API           string
 	Client        *http.Client
 	GenericWrites bool
