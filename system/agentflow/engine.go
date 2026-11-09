@@ -554,9 +554,29 @@ func (e *Engine) Dispatch(ctx context.Context, claim Claim) (json.RawMessage, er
 			if e2 != nil {
 				return nil, e2
 			}
+			// Worker generations expose either a flat ID or artifact metadata.
+			// Verify the persisted artifact against the source revision before publication.
+			metadata := obj(result["artifact"])
 			id := str(result["artifact_id"])
+			if id == "" {
+				id = str(metadata["id"])
+			}
 			if !validID(id) {
 				return nil, errors.New("export did not return an artifact identity")
+			}
+			expected := changes[name]
+			if w.Agent == nil {
+				expected = shaHex(expected)
+			}
+			if digest := str(metadata["sha256"]); digest != "" && digest != expected {
+				return nil, errors.New("worker export digest does not match verified source")
+			}
+			stored, err := e.Compute.Call(ctx, "artifact_info", map[string]any{"project_id": w.Project, "artifact_id": id})
+			if err != nil {
+				return nil, err
+			}
+			if str(stored["id"]) != id || str(stored["project"]) != w.Project || str(stored["sha256"]) != expected {
+				return nil, errors.New("stored artifact does not match verified source")
 			}
 			artifacts[name] = id
 		}
