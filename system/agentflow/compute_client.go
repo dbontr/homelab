@@ -29,7 +29,7 @@ var permittedComputeTools=map[string]bool{
  "workspace_operation":true,"github_checkout_repository":true,
  "github_publish_artifacts":true,"artifact_info":true,
  "workspace_import_artifact":true,"workspace_destroy":true,
- "knowledge_context":true,"knowledge_search_contributions":true,"research_search":true,
+ "knowledge_context":true,"knowledge_search_contributions":true,"knowledge_contribute":true,"research_search":true,
  "library_documents":true,"library_resolve":true,
 }
 func NewComputeClient(endpoint,token string)(*ComputeClient,error){
