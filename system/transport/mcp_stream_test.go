@@ -36,7 +36,7 @@ func decodeStreamedMCPResponse(t *testing.T,w *httptest.ResponseRecorder)map[str
 
 func TestMCPStreamableHTTPResponsePreservesJSONRPCIdentity(t *testing.T){
  h:=makeTestServer(t,nil)
- token:=strings.Repeat("s",40)
+ token:=strings.Repeat("a",40)
  if response:=requestMCPWithAccept(h,`{"jsonrpc":"2.0","id":1,"method":"ping"}`,
   "application/json, text/event-stream", "");response.Code!=http.StatusUnauthorized{
   t.Fatalf("unprotected MCP stream accepted: %d",response.Code)
@@ -65,7 +65,7 @@ func TestMCPStreamableHTTPResponsePreservesJSONRPCIdentity(t *testing.T){
 
 func TestMCPEventStreamNegotiationAndNotificationSemantics(t *testing.T){
  h:=makeTestServer(t,nil)
- token:=strings.Repeat("k",40)
+ token:=strings.Repeat("a",40)
  ping:=`{"jsonrpc":"2.0","id":10,"method":"ping"}`
  for _,accept:=range []string{
   "", "application/json","application/json, text/event-stream;q=0",
@@ -94,7 +94,7 @@ func TestMCPEventStreamNegotiationAndNotificationSemantics(t *testing.T){
 
 func TestMCPProtocolErrorsRemainFramedInEventStream(t *testing.T){
  h:=makeTestServer(t,nil)
- token:=strings.Repeat("e",40)
+ token:=strings.Repeat("a",40)
  for _,payload:=range []string{`{invalid`,`{"jsonrpc":"1.0","method":"ping","id":2}`} {
   response:=requestMCPWithAccept(h,payload,"text/event-stream",token)
   message:=decodeStreamedMCPResponse(t,response)
