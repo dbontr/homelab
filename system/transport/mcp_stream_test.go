@@ -95,7 +95,7 @@ func TestMCPEventStreamNegotiationAndNotificationSemantics(t *testing.T){
 func TestMCPProtocolErrorsRemainFramedInEventStream(t *testing.T){
  h:=makeTestServer(t,nil)
  token:=strings.Repeat("e",40)
- for _,payload:=range []string{`{invalid`,`{"jsonrpc":"2.0","method":"ping","id":null}`} {
+ for _,payload:=range []string{`{invalid`,`{"jsonrpc":"1.0","method":"ping","id":2}`} {
   response:=requestMCPWithAccept(h,payload,"text/event-stream",token)
   message:=decodeStreamedMCPResponse(t,response)
   if len(message["error"])==0{
