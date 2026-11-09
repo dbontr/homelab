@@ -80,7 +80,7 @@ var fdcNutrientMap=map[int64]fdcNutrientDefinition{
  1170:{"pantothenic_acid_b5","mg"},
  1175:{"vitamin_b6","mg"},
  1178:{"vitamin_b12","µg"},
- 1177:{"folate_dfe","µg"},
+ 1190:{"folate_dfe","µg"},
  1180:{"choline","mg"},
 }
 type fdcDetail struct{
@@ -108,6 +108,7 @@ func fdcDetailFacts(raw json.RawMessage,expectedID int64)(fdcDetail,map[string]f
   return food,nil,errors.New("USDA food identity or nutrient list is invalid")
  }
  facts:=map[string]float64{}
+ ambiguous:=map[string]bool{}
  energyPriority:=-1
  for _,entry:=range food.Nutrients{
   def,known:=fdcNutrientMap[entry.Nutrient.ID]
@@ -125,9 +126,11 @@ func fdcDetailFacts(raw json.RawMessage,expectedID int64)(fdcDetail,map[string]f
    if priority<=energyPriority{continue}
    energyPriority=priority
   }else{
+   if ambiguous[def.Metric]{continue}
    if _,exists:=facts[def.Metric];exists{
     // Conflicting duplicate measurements must not be arbitrarily selected.
     delete(facts,def.Metric)
+    ambiguous[def.Metric]=true
     continue
    }
   }
