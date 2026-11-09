@@ -1,6 +1,6 @@
 ---
-name: adaptive-teaching
-description: Provide adaptive teaching and sustained problem solving through a connected Eminence learning server. Use when a learner wants to study, explain, derive, solve difficult exercises, work on proofs or calculations, prepare for an exam, practise independently, inspect a knowledge graph, or assess mastery. Preserve student-authored work, reason from foundations, identify missing justifications, and use the persistent graph and problem workspace without treating concept familiarity as practical competence.
+name: teaching
+description: Teach from first principles to develop independent reasoning, problem-solving, mathematical and scientific insight, practical competence, and long-term mastery. Use for adaptive tutoring, proofs, exam preparation, deliberate practice, conceptual explanations, curriculum design, and evidence-based learning with the Eminence knowledge graph when connected.
 ---
 
 # Teaching

@@ -79,6 +79,7 @@ var tools = []toolDefinition{
 	{"task_claim_renew", "Renew a live task lease by generation and secret token", []string{"project_id", "work_key", "lease_token", "generation"}, []string{"lease_seconds"}},
 	{"task_claim_finish", "Complete or release a task lease, validating result artifact ownership", []string{"project_id", "work_key", "lease_token", "generation", "status"}, []string{"artifact_ids"}},
 	{"resource_plan", "Rank eligible Docker workers and explain resource constraints without reserving anything", []string{"project_id"}, []string{"image", "cpu", "memory_mb", "duration_minutes", "environment", "image_pool_id", "hardware", "usb_passthrough", "usb_node", "usb_device_id", "node_id", "min_gpu_memory_mb", "architecture", "display", "display_width", "display_height"}},
+	{"resource_plan_batch", "Plan project compute workloads by priority and available worker capacity without reserving resources", []string{"project_id", "workloads"}, nil},
 	{"workspace_create", "Reserve resources and start a workspace", []string{"project_id"}, []string{"image", "cpu", "memory_mb", "duration_minutes", "environment", "image_pool_id", "hardware", "usb_passthrough", "usb_node", "usb_device_id", "node_id", "min_gpu_memory_mb", "architecture", "display", "display_width", "display_height"}},
 	{"workspace_list", "List project workspaces", []string{"project_id"}, nil},
 	{"workspace_call", "Queue a command or file operation", []string{"project_id", "workspace_id", "action", "payload"}, nil},
@@ -162,6 +163,11 @@ var tools = []toolDefinition{
 	{"study_pack_prepare", "Compose a cited study pack from verified indexed passages without automatically storing it", []string{"project_id", "title", "passage_ids"}, []string{"objective", "questions"}},
 	{"research_register_source", "Register an immutable library object or pinned Git source for research indexing", []string{"library", "title", "origin_kind", "origin_name"}, []string{"origin_revision", "origin_path"}},
 	{"research_ingest_passages", "Append or replace bounded source-linked text passages with an expected index revision", []string{"library", "source_id", "mode", "expected_revision", "passages"}, nil},
+	{"research_hybrid_query", "Rank project-linked source passages using lexical and opt-in semantic retrieval with explicit provenance", []string{"project_id", "query"}, []string{"limit"}},
+	{"research_claims", "List project assertions and hypotheses with recorded evidence counts", []string{"project_id"}, nil},
+	{"research_claim_detail", "Read a project claim and its current or unavailable provenance links", []string{"project_id", "claim_id"}, nil},
+	{"research_claim_create", "Record an explicitly stated research claim without assuming it is true", []string{"project_id", "statement", "kind"}, nil},
+	{"research_claim_evidence_add", "Link cited research evidence with revision control; never infer truth from a text match", []string{"project_id", "claim_id", "passage_id", "relation", "expected_revision"}, nil},
 	{"research_sources", "List indexed research sources visible through a project's linked libraries", []string{"project_id"}, nil},
 	{"research_search", "Search indexed passages with source locators within the caller's permitted project", []string{"project_id", "query"}, []string{"limit"}},
 	{"research_embedding_put", "Store a checked encoder vector for a fixed, source-linked passage", []string{"library", "passage_id", "model", "body_sha256", "embedding"}, nil},
@@ -195,7 +201,7 @@ func kindFor(key string) string {
 		return "integer"
 	case "usb_passthrough", "draft", "confirm", "cleanup_branch", "enabled", "allowed", "cleanup_verified":
 		return "boolean"
-	case "packages", "software_ids", "artifact_ids", "tags", "passages", "passage_ids", "questions", "embedding":
+	case "packages", "software_ids", "artifact_ids", "tags", "passages", "passage_ids", "questions", "embedding", "workloads":
 		return "array"
 	case "hardware", "payload", "params", "changes", "pack":
 		return "object"
@@ -214,6 +220,13 @@ func (t toolDefinition) schema() map[string]any {
             prop["minItems"]=8
             prop["maxItems"]=1536
         }
+		if key == "workloads" {
+			prop["minItems"], prop["maxItems"] = 1, 12
+			prop["items"] = map[string]any{"type":"object", "properties":map[string]any{
+				"id":map[string]any{"type":"string"}, "priority":map[string]any{"type":"integer"},
+				"request":map[string]any{"type":"object"},
+			}, "required":[]string{"id","request"}}
+		}
 		if key == "passages" {
 			prop["items"] = map[string]any{
 				"type": "object", "additionalProperties": false,
@@ -649,6 +662,10 @@ func (s *Server) callToolFor(who caller, name string, a map[string]any) (any, er
 			}
 		}
 		return db.FinishTaskClaim(project, get("work_key"), get("lease_token"), get("status"), asInt(a["generation"]), artifacts)
+	case "resource_plan_batch":
+		var req BatchPlanRequest
+		if err:=JSONRequest(a,&req);err!=nil{return nil,err}
+		return db.PlanWorkspaceBatch(req)
 	case "resource_plan":
 		var req WorkspaceRequest
 		if err := JSONRequest(a, &req); err != nil {
@@ -806,6 +823,18 @@ func (s *Server) callToolFor(who caller, name string, a map[string]any) (any, er
 			return nil, err
 		}
 		return db.IngestResearchPassages(get("library"), get("source_id"), get("mode"), asInt(a["expected_revision"]), passages)
+	case "research_hybrid_query":
+		limit:=asInt(a["limit"])
+		if limit==0{limit=20}
+		return s.HybridResearch(context.Background(),project,get("query"),limit)
+	case "research_claims":
+		return db.ResearchClaims(project)
+	case "research_claim_detail":
+		return db.ReadResearchClaim(project,get("claim_id"))
+	case "research_claim_create":
+		return db.CreateResearchClaim(project,get("statement"),get("kind"))
+	case "research_claim_evidence_add":
+		return db.AddResearchClaimEvidence(project,get("claim_id"),get("passage_id"),get("relation"),asInt(a["expected_revision"]))
 	case "research_sources":
 		return db.ResearchSources(project)
 	case "research_topics":

@@ -1,6 +1,6 @@
 ---
-name: professional-code
-description: Apply professional, production-quality coding standards to software creation, editing, debugging, refactoring, review, testing, documentation, configuration, and repository work. Use for coding tasks that should match repository conventions, choose the least complex correct mechanism, fix root causes at the correct ownership boundary, avoid unnecessary dependencies and abstractions, review changes for removable complexity, maintain root REFERENCES.md, remove AI-development and local-work residue, preserve security, accessibility, compatibility, and data integrity, verify changes proportionally to risk, and target ASD-STE100 Issue 9 for durable technical English.
+name: development
+description: Develop, review, debug, refactor and organize software with production-grade code quality, GitHub issues and pull requests, multi-repository projects, shared libraries, secure compute workspaces, research references, and verified engineering delivery. Use for programming, software architecture, code analysis, repository work, project orchestration or professional coding.
 ---
 
 # Development
