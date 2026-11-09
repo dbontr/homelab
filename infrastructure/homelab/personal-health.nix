@@ -10,7 +10,7 @@ in {
     binaryPath = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
       default = null;
-      description = "Verified immutable executable outside the Nix store.";
+      description = "Exact, SHA-256-pinned executable built from the unified source release or the approved standalone health release.";
     };
     binarySHA256 = lib.mkOption {
       type = lib.types.str;
@@ -34,7 +34,9 @@ in {
     assertions = [
       {
         assertion = cfg.binaryPath != null &&
-          lib.hasPrefix "/srv/releases/personal-health-mcp/" cfg.binaryPath;
+          (lib.hasPrefix "/srv/releases/personal-health-mcp/" cfg.binaryPath ||
+           (lib.hasPrefix "/srv/releases/homelab/" cfg.binaryPath &&
+            lib.hasSuffix "/bin/homelab-health" cfg.binaryPath));
         message = "Personal Health MCP requires an immutable release executable.";
       }
       {
