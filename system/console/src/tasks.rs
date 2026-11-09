@@ -524,3 +524,44 @@ pub fn Tasks(csrf: String) -> Element {
         }
     }
 }
+
+#[cfg(test)]
+mod decomposition_tests {
+    use super::{DecompositionPreview, DecompositionStep};
+
+    #[test]
+    fn preview_is_reviewable_without_implicit_persistence() {
+        let input = serde_json::json!({
+            "parent_id": "parent",
+            "expected_revision": 3,
+            "steps": [
+                {"title": "Measure", "minutes": 20},
+                {"title": "Evaluate", "minutes": 30, "depends_on_steps": [0]}
+            ],
+            "total_minutes": 50,
+            "requires_owner_submission": true
+        });
+        let preview: DecompositionPreview = serde_json::from_value(input).unwrap();
+        assert_eq!(preview.parent_id, "parent");
+        assert_eq!(preview.expected_revision, 3);
+        assert!(preview.requires_owner_submission);
+        assert_eq!(preview.steps.len(), 2);
+        assert_eq!(preview.steps[1].depends_on_steps, vec![0]);
+        assert_eq!(preview.total_minutes, 50);
+
+        let saved = serde_json::to_value(&preview.steps).unwrap();
+        assert_eq!(saved[0]["title"], "Measure");
+        assert_eq!(saved[1]["depends_on_steps"], serde_json::json!([0]));
+    }
+
+    #[test]
+    fn proposed_steps_accept_only_declared_fields() {
+        let value = serde_json::json!({
+            "title": "Prove lemma", "minutes": 45, "depends_on_steps": [0]
+        });
+        let step: DecompositionStep = serde_json::from_value(value).unwrap();
+        assert_eq!(step.title, "Prove lemma");
+        assert_eq!(step.minutes, 45);
+        assert_eq!(step.depends_on_steps, vec![0]);
+    }
+}
