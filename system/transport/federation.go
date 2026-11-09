@@ -56,30 +56,46 @@ func (s *Server) forward(ctx context.Context, backend Backend, rpc rpcRequest, o
     return nil
 }
 
-// streamReply returns only a complete JSON-RPC reply matching the outbound request ID.
-// Notifications and unrelated event data are never treated as a tool response.
-func streamReply(stream []byte, id json.RawMessage) ([]byte, error) {
-    lines := strings.Split(strings.ReplaceAll(string(stream), "\r\n", "\n"), "\n")
-    data := make([]string, 0, 4)
-    var reply []byte
-    finish := func() {
-        if len(data) == 0 { return }
-        candidate := []byte(strings.Join(data, "\n"))
-        data = data[:0]
-        var rpc rpcResponse
-        if json.Unmarshal(candidate, &rpc) == nil &&
-           rpc.JSONRPC == "2.0" && bytes.Equal(bytes.TrimSpace(rpc.ID), bytes.TrimSpace(id)) {
-            reply = append([]byte(nil), candidate...)
-        }
-    }
-    for _,line := range lines {
-        if line == "" { finish(); continue }
-        if strings.HasPrefix(line, "data:") {
-            value := strings.TrimPrefix(line, "data:")
-            data = append(data, strings.TrimPrefix(value, " "))
-        }
-    }
-    finish()
-    if reply == nil { return nil, errors.New("no matching JSON-RPC event") }
-    return reply, nil
+// streamReply accepts at most one complete, unambiguous JSON-RPC response
+// for the requested ID. Other events are not authority to confirm a mutation.
+func streamReply(stream []byte,id json.RawMessage)([]byte,error){
+ lines:=strings.Split(strings.ReplaceAll(string(stream),"\r\n","\n"),"\n")
+ var data []string
+ event:=""
+ var reply []byte
+ finish:=func()error{
+  defer func(){data=nil;event=""}()
+  if len(data)==0||event!=""&&event!="message"{return nil}
+  candidate:=[]byte(strings.Join(data,"\n"))
+  var rpc rpcResponse
+  if json.Unmarshal(candidate,&rpc)!=nil||rpc.JSONRPC!="2.0"||
+    !bytes.Equal(bytes.TrimSpace(rpc.ID),bytes.TrimSpace(id)){
+   return nil
+  }
+  if (len(rpc.Result)==0)==(rpc.Error==nil){
+   return errors.New("matching upstream JSON-RPC event has invalid result envelope")
+  }
+  if reply!=nil{return errors.New("duplicate upstream JSON-RPC responses")}
+  reply=append([]byte(nil),candidate...)
+  return nil
+ }
+ for index,line:=range lines{
+  if line==""{
+   // The final split field is not an SSE message delimiter.
+   if index==len(lines)-1{break}
+   if err:=finish();err!=nil{return nil,err}
+   continue
+  }
+  if strings.HasPrefix(line,":"){continue}
+  switch {
+  case strings.HasPrefix(line,"event:"):
+   event=strings.TrimSpace(line[len("event:"):])
+  case strings.HasPrefix(line,"data:"):
+   data=append(data,strings.TrimPrefix(strings.TrimPrefix(line,"data:")," "))
+  }
+ }
+ // SSE messages must terminate with a blank line before they are delivered.
+ if len(data)!=0{return nil,errors.New("incomplete upstream event stream")}
+ if reply==nil{return nil,errors.New("no matching JSON-RPC event")}
+ return reply,nil
 }
