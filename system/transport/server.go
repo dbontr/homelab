@@ -7,6 +7,7 @@ import (
  "errors"
  "fmt"
  "io"
+ "mime"
  "net/http"
  "net/url"
  "os"
@@ -285,7 +286,18 @@ type rpcError struct { Code int `json:"code"`; Message string `json:"message"` }
 func(s *Server)rpc(w http.ResponseWriter,id json.RawMessage,v any,e *rpcError){
  out:=map[string]any{"jsonrpc":"2.0","id":id}
  if e!=nil{out["error"]=e}else{out["result"]=v}
- writeJSON(w,200,out)
+ if w.Header().Get("Content-Type")!="text/event-stream"{
+  writeJSON(w,200,out)
+  return
+ }
+ encoded,err:=json.Marshal(out)
+ if err!=nil{http.Error(w,"cannot encode JSON-RPC result",http.StatusInternalServerError);return}
+ // Streamable HTTP carries a complete JSON-RPC response in an SSE message.
+ // Do not invent progress updates or report success before the tool finishes.
+ w.WriteHeader(http.StatusOK)
+ if _,err:=fmt.Fprintf(w,"event: message\ndata: %s\n\n",encoded);err==nil{
+  if flusher,ok:=w.(http.Flusher);ok{flusher.Flush()}
+ }
 }
 func failure(code int,msg string)*rpcError{return &rpcError{Code:code,Message:msg}}
 func result(v any)map[string]any{
@@ -294,7 +306,29 @@ func result(v any)map[string]any{
  return map[string]any{"content":[]any{map[string]string{"type":"text","text":string(b)}},"isError":false}
 }
 func toolError(msg string)map[string]any{return map[string]any{"content":[]any{map[string]string{"type":"text","text":msg}},"isError":true}}
+
+// Streamable HTTP clients may request a JSON response or an SSE response to
+// a POST. An explicit zero-quality event stream must not change negotiation.
+func acceptsMCPEventStream(headers http.Header)bool{
+ for _,header:=range headers.Values("Accept"){
+  for _,part:=range strings.Split(header,","){
+   kind,params,err:=mime.ParseMediaType(strings.TrimSpace(part))
+   if err!=nil||!strings.EqualFold(kind,"text/event-stream"){continue}
+   if value,has:=params["q"];has{
+    quality,err:=strconv.ParseFloat(value,64)
+    if err!=nil||quality<=0||quality>1{continue}
+   }
+   return true
+  }
+ }
+ return false
+}
+
 func(s *Server)mcp(w http.ResponseWriter,r *http.Request){
+ if acceptsMCPEventStream(r.Header){
+  w.Header().Set("Content-Type","text/event-stream")
+  w.Header().Set("X-Accel-Buffering","no")
+ }
  r.Body=http.MaxBytesReader(w,r.Body,8<<20)
  var req rpcRequest
  decoder:=json.NewDecoder(r.Body)
@@ -303,7 +337,12 @@ func(s *Server)mcp(w http.ResponseWriter,r *http.Request){
  if e:=decoder.Decode(&trailing);e!=io.EOF{s.rpc(w,nil,nil,failure(-32700,"multiple JSON messages are not permitted"));return}
  if req.JSONRPC!="2.0"||req.Method==""{s.rpc(w,req.ID,nil,failure(-32600,"invalid JSON-RPC request"));return}
  if len(req.ID)==0{
-  if strings.HasPrefix(req.Method,"notifications/"){w.WriteHeader(http.StatusAccepted);return}
+  if strings.HasPrefix(req.Method,"notifications/"){
+   w.Header().Del("Content-Type")
+   w.Header().Del("X-Accel-Buffering")
+   w.WriteHeader(http.StatusAccepted)
+   return
+  }
   s.rpc(w,nil,nil,failure(-32600,"request ID required"));return
  }
  switch req.Method{
