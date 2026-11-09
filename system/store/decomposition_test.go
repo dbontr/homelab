@@ -56,6 +56,11 @@ isolated:
  });!errors.Is(err,ErrTaskRevision){
   t.Fatalf("stale parent revision allowed another decomposition: %v",err)
  }
+ if _,err:=s.DecomposeTask(parent.ID,parent.Revision+1,[]TaskStepInput{
+  {Title:"Another 1",Minutes:10},{Title:"Another 2",Minutes:10},
+ });!errors.Is(err,ErrTaskRevision){
+  t.Fatalf("decomposed parent accepted a second task graph: %v",err)
+ }
 }
 
 func TestTaskDecompositionRejectsInvalidDependenciesWithoutPartialWrites(t *testing.T){
