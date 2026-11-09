@@ -98,6 +98,8 @@ func(s *Server) Handler()http.Handler{
  mux.HandleFunc("POST /v1/workflows/plan",s.capabilityWorkflowPlan)
  mux.HandleFunc("GET /v1/automations",s.automationCollection)
  mux.HandleFunc("POST /v1/automations",s.automationCollection)
+ mux.HandleFunc("GET /v1/automations/alerts",s.automationAlerts)
+ mux.HandleFunc("POST /v1/automations/{id}/alerts/{run}/ack",s.automationAlertAck)
  mux.HandleFunc("GET /v1/automations/{id}",s.automationItem)
  mux.HandleFunc("POST /v1/automations/{id}/enabled",s.automationItem)
  mux.HandleFunc("GET /v1/workflows",s.capabilityWorkflowCollection)
@@ -346,6 +348,8 @@ func(s *Server)localTools()[]map[string]any{
   tool("automation_list","List persisted owner-configured workflows and next occurrences",map[string]any{}),
   tool("automation_get","Inspect one scheduled workflow and its last run identity",map[string]any{"id":prop("string")},"id"),
   tool("automation_set_enabled","Revision-fence a recurring workflow pause or resume",map[string]any{"id":prop("string"),"revision":prop("integer"),"enabled":prop("boolean")},"id","revision","enabled"),
+  tool("automation_alerts","List confirmed changes to scheduled read results without disclosing the observations",map[string]any{}),
+  tool("automation_alert_acknowledge","Acknowledge an observed change with an exact automation revision",map[string]any{"automation_id":prop("string"),"workflow_id":prop("string"),"revision":prop("integer")},"automation_id","workflow_id","revision"),
   tool("workflow_list","List owner-scoped workflow status",map[string]any{}),
   tool("workflow_archive_list","List settled capability workflow history without exposing recorded evidence",map[string]any{}),
   tool("workflow_get","Inspect confirmed stage results and status",map[string]any{"id":prop("string")},"id"),

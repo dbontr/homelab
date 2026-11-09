@@ -16,6 +16,9 @@ func (s *Server) sessionOwnerWriteAllowed(r *http.Request) bool {
 	switch {
 	case r.Method == http.MethodPost && (path == "/v1/recipes" || path == "/v1/recipes/import" || path == "/v1/recipes/parse" || path == "/v1/recipes/import-url" || path == "/v1/recipes/bundle" || path == "/v1/recipes/recipesage/preview" || path == "/v1/recipes/recipesage/import" || path == "/v1/recipes/images" || path == "/v1/meals" || path == "/v1/books/requests" || path == "/v1/tasks" || path == "/v1/tasks/capture" || path == "/v1/goals"):
         allowed = true
+    case r.Method == http.MethodPost && strings.HasPrefix(path, "/v1/automations/"):
+        parts := strings.Split(path, "/")
+        allowed = len(parts)==7 && parts[4]=="alerts" && parts[6]=="ack"
     case r.Method == http.MethodPost && path == "/v1/learning/sessions":
         allowed = true
     case r.Method == http.MethodPost && strings.HasPrefix(path, "/v1/learning/questions/"):

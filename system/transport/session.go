@@ -62,6 +62,7 @@ func (s *Server) sessionReadAllowed(r *http.Request) bool {
 		"/v1/workspace/projects":true,
         "/v1/workflows":true,
         "/v1/automations":true,
+        "/v1/automations/alerts":true,
 		"/v1/workspace/nodes":true,
         "/v1/activity":true,
         "/v1/monitoring/summary":true,

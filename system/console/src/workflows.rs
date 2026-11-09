@@ -29,6 +29,7 @@ struct WorkflowDraft {
     query: String,
     personal_read: bool,
     every_hours: String,
+    notify_on_change: bool,
 }
 
 impl Default for WorkflowDraft {
@@ -40,6 +41,7 @@ impl Default for WorkflowDraft {
             query: String::new(),
             personal_read: false,
             every_hours: "24".to_owned(),
+            notify_on_change: false,
         }
     }
 }
@@ -113,6 +115,7 @@ impl WorkflowDraft {
             "program":self.program()?,
             "every_minutes":hours * 60,
             "enabled":true,
+            "notify_on_change":self.notify_on_change,
         }))
     }
 }
@@ -142,6 +145,7 @@ pub fn Workflows(csrf: String) -> Element {
     let mut runs = use_resource(|| async { api::get::<Value>("/v1/workflows").await });
     let mut archives = use_resource(|| async { api::get::<Value>("/v1/workflows?archived=true").await });
     let mut schedules = use_resource(|| async { api::get::<Value>("/v1/automations").await });
+    let mut alerts = use_resource(|| async { api::get::<Value>("/v1/automations/alerts").await });
     let mut draft = use_signal(WorkflowDraft::default);
     let mut busy = use_signal(|| false);
     let mut error = use_signal(String::new);
@@ -161,6 +165,7 @@ pub fn Workflows(csrf: String) -> Element {
     let visible_runs = items(runs.cloned(), "workflows");
     let archived_runs = items(archives.cloned(), "workflows");
     let visible_schedules = items(schedules.cloned(), "automations");
+    let visible_alerts = items(alerts.cloned(), "alerts");
 
     rsx! {
         Heading {
@@ -168,7 +173,7 @@ pub fn Workflows(csrf: String) -> Element {
             description: "Run bounded project reads and inspect owner-controlled recurring work.".to_owned(),
             button {
                 class: "btn btn-outline",
-                onclick: move |_| { runs.restart(); archives.restart(); schedules.restart(); },
+                onclick: move |_| { runs.restart(); archives.restart(); schedules.restart(); alerts.restart(); },
                 "Refresh"
             }
         }
@@ -293,6 +298,20 @@ pub fn Workflows(csrf: String) -> Element {
                             input.every_hours = event.value();
                             draft.set(input);
                         }
+                    }
+                }
+                label { class: "form-row",
+                    span { class: "label", "Notify when observed results change" }
+                    select {
+                        class: "field",
+                        value: if draft().notify_on_change { "yes" } else { "no" },
+                        onchange: move |event| {
+                            let mut input = draft();
+                            input.notify_on_change = event.value() == "yes";
+                            draft.set(input);
+                        },
+                        option { value: "no", "Store runs without change alerts" }
+                        option { value: "yes", "Alert on verified changes after baseline" }
                     }
                 }
                 div { class: "action-row",
@@ -423,6 +442,79 @@ pub fn Workflows(csrf: String) -> Element {
         }
         section { class: "card",
             div { class: "card-header",
+                h2 { class: "card-title", "Change alerts" }
+                p { class: "card-description",
+                    "Notifications reference changed scheduled observations. Private result bodies remain accessible only through authorized workflow detail."
+                }
+            }
+            div { class: "card-body",
+                if alerts.cloned().is_none() {
+                    Loading {}
+                } else if let Some(Err(message)) = alerts.cloned() {
+                    Notice { message: message }
+                } else if visible_alerts.is_empty() {
+                    Empty {
+                        title: "No change alerts".to_owned(),
+                        description: "Enable change alerts on a recurring read to monitor verified result changes.".to_owned()
+                    }
+                } else {
+                    div { class: "item-list",
+                        for item in visible_alerts {
+                            {
+                                let workflow_id = property(&item, "workflow_id");
+                                let automation_id = property(&item, "automation_id");
+                                let project = property(&item, "project");
+                                let observed = property(&item, "observed_at");
+                                let revision = item.get("revision").and_then(Value::as_u64).unwrap_or(0);
+                                let acknowledged = item.get("acknowledged").and_then(Value::as_bool).unwrap_or(false);
+                                let selected = workflow_id.clone();
+                                let target = automation_id.clone();
+                                let run_id = workflow_id.clone();
+                                rsx! {
+                                    article { class: "list-item", key: "{workflow_id}",
+                                        div {
+                                            strong { "{project}" }
+                                            p { class: "muted", "Observed: {observed}" }
+                                        }
+                                        Badge { text: if acknowledged { "Acknowledged".to_owned() } else { "Changed".to_owned() } }
+                                        button {
+                                            class: "btn btn-outline",
+                                            onclick: move |_| selected_run.set(selected.clone()),
+                                            "Inspect"
+                                        }
+                                        if !acknowledged {
+                                            button {
+                                                class: "btn btn-outline", disabled: busy(),
+                                                onclick: move |_| {
+                                                    if busy() || revision==0 { return; }
+                                                    let id = target.clone();
+                                                    let run = run_id.clone();
+                                                    let token = csrf();
+                                                    busy.set(true);
+                                                    error.set(String::new());
+                                                    spawn(async move {
+                                                        let path = format!("/v1/automations/{id}/alerts/{run}/ack");
+                                                        let input = json!({"revision":revision});
+                                                        match api::write::<Value,_>(Method::POST,&path,&token,&input).await {
+                                                            Ok(_) => { alerts.restart(); schedules.restart(); }
+                                                            Err(message) => error.set(message),
+                                                        }
+                                                        busy.set(false);
+                                                    });
+                                                },
+                                                "Acknowledge"
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        section { class: "card",
+            div { class: "card-header",
                 h2 { class: "card-title", "Recurring schedules" }
                 p { class: "card-description",
                     "These schedules are independent of model planning and cannot perform writes."
@@ -456,6 +548,9 @@ pub fn Workflows(csrf: String) -> Element {
                                             p { class: "muted", "Next: {next}" }
                                             if !last.is_empty() {
                                                 p { class: "muted", "Last run: {last}" }
+                                            }
+                                            if item.get("notify_on_change").and_then(Value::as_bool).unwrap_or(false) {
+                                                p { class: "muted", "Change alerts enabled" }
                                             }
                                         }
                                         Badge { text: if enabled { "Enabled".to_owned() } else { "Paused".to_owned() } }
