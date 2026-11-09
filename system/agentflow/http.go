@@ -70,6 +70,13 @@ func NewHTTPHandler(service Manager)http.Handler{
    summary,err:=teams.GetTeam(r.PathValue("id"));if err!=nil{sendJSON(w,404,map[string]string{"error":"team not found"});return}
    sendJSON(w,200,summary)
   })
+  mux.HandleFunc("POST /teams/{id}/integrate",func(w http.ResponseWriter,r *http.Request){
+   var request TeamIntegrationRequest
+   if err:=readJSON(r,&request);err!=nil{sendJSON(w,400,map[string]string{"error":"invalid integration request"});return}
+   team,err:=teams.IntegrateTeam(r.PathValue("id"),request)
+   if err!=nil{sendJSON(w,409,map[string]string{"error":err.Error()});return}
+   sendJSON(w,202,team)
+  })
   mux.HandleFunc("POST /teams/{id}/cancel",func(w http.ResponseWriter,r *http.Request){
    if err:=teams.CancelTeam(r.PathValue("id"));err!=nil{sendJSON(w,409,map[string]string{"error":"team cannot be cancelled"});return}
    summary,err:=teams.GetTeam(r.PathValue("id"));if err!=nil{sendJSON(w,500,map[string]string{"error":"team unavailable"});return}
