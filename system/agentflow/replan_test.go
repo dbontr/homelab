@@ -2,13 +2,12 @@ package agentflow
 
 import (
  "encoding/json"
- "strings"
  "testing"
  "time"
 )
 
 func TestCapabilityReplanRevisionAndDependencyFencing(t *testing.T){
- store:=newStore(t)
+ store:=testStore(t)
  original:=Workflow{ID:"study",Project:"project",CapabilityPlan:true,AutoReplan:true,
    Deadline:time.Now().Add(20*time.Minute),
    Steps:[]Step{{ID:"context",Kind:"project_context",Input:json.RawMessage("{}"),MaxAttempts:2}}}
@@ -42,7 +41,7 @@ func TestCapabilityReplanRevisionAndDependencyFencing(t *testing.T){
 }
 
 func TestCapabilityReplanRejectsPrivilegeAndInvalidStructure(t *testing.T){
- store:=newStore(t)
+ store:=testStore(t)
  original:=Workflow{ID:"ready",Project:"project",CapabilityPlan:true,AutoReplan:true,
    Deadline:time.Now().Add(20*time.Minute),
    Steps:[]Step{{ID:"a",Kind:"project_context",Input:json.RawMessage("{}"),Status:Succeeded,MaxAttempts:2}}}
@@ -50,14 +49,6 @@ func TestCapabilityReplanRejectsPrivilegeAndInvalidStructure(t *testing.T){
  claim,err:=store.ClaimReady("ready",time.Minute);if err!=nil{t.Fatal(err)}
  if err:=store.Complete(claim,json.RawMessage("{}"),"");err!=nil{t.Fatal(err)}
  get:=func()Workflow{w,e:=store.Get("ready");if e!=nil{t.Fatal(e)};return w}
- bad:=[]Step{{ID:"unauthorized",Kind:"fleet_restart",DependsOn:[]string{"a"},Input:json.RawMessage("{}"),MaxAttempts:2}}
- // The capability store enforces structure, while the transport enforces the
- // action allowlist; this boundary must never gain privileged dispatch.
- if err:=store.ExtendCapabilityPlan("ready",get().Revision,bad,false,"");err==nil{
-    // Store supports generic kinds for engineering. A privileged dispatcher
-    // must remain impossible on capability workflows at the transport layer.
-    t.Log("store accepted a syntactically valid kind; transport must reject it")
- }
  for _,steps:=range [][]Step{
   {{ID:"duplicate",Kind:"project_context",Input:json.RawMessage("{}"),MaxAttempts:2}},
   {{ID:"cycle",Kind:"project_context",DependsOn:[]string{"cycle"},Input:json.RawMessage("{}"),MaxAttempts:2}},
@@ -67,5 +58,5 @@ func TestCapabilityReplanRejectsPrivilegeAndInvalidStructure(t *testing.T){
    t.Fatalf("invalid dependent continuation accepted: %+v",steps)
   }
  }
- if strings.TrimSpace(get().ID)!="ready"{t.Fatal("workflow identity drift")}
+ if get().ID!="ready"{t.Fatal("workflow identity drift")}
 }
