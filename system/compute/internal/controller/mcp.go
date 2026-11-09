@@ -360,23 +360,24 @@ func (s *Server) callToolFor(who caller, name string, a map[string]any) (any, er
 	case "git_provider_capabilities":
 		return s.GitProviderCapabilities(get("provider"))
 	case "git_link_repository":
-		repository := get("repository")
-		if get("role") == "planning" && strings.HasPrefix(repository, "local:") {
-			return nil, errors.New("GitHub planning capabilities require a separate GitHub repository, not a local Git locator")
-		}
-		if name, ok := localRepoName(repository); ok {
-			if s.LocalGit == nil {
-				return nil, errors.New("local Git storage is not configured")
-			}
-			if _, err := s.LocalGit.Resolve(name, get("ref")); err != nil {
-				return nil, err
-			}
-		} else {
-			if _, err := s.GitHub.Commit(repository, get("ref")); err != nil {
-				return nil, err
-			}
-		}
-		return db.LinkRepositoryWithRole(project, repository, get("role"), get("ref"))
+  repository:=get("repository")
+  if get("role")=="planning"&&(strings.HasPrefix(repository,"local:")||strings.HasPrefix(repository,"gitlab:")){
+   return nil,errors.New("GitHub planning requires a linked GitHub repository")
+  }
+  if name,ok:=localRepoName(repository);ok{
+   if s.LocalGit==nil{return nil,errors.New("local Git storage is not configured")}
+   if _,err:=s.LocalGit.Resolve(name,get("ref"));err!=nil{return nil,err}
+  }else if _,ok:=gitLabRepoName(repository);ok{
+   if s.GitLab==nil{return nil,errors.New("GitLab is not configured")}
+   if _,err:=s.GitLab.Project(repository);err!=nil{return nil,err}
+   if _,err:=s.GitLab.Commit(repository,get("ref"));err!=nil{return nil,err}
+  }else{
+   if strings.HasPrefix(repository,"local:")||strings.HasPrefix(repository,"gitlab:"){
+    return nil,errors.New("invalid Git repository locator")
+   }
+   if _,err:=s.GitHub.Commit(repository,get("ref"));err!=nil{return nil,err}
+  }
+  return db.LinkRepositoryWithRole(project,repository,get("role"),get("ref"))
 	case "list_projects":
 		return db.Projects()
 	case "create_project":
@@ -396,89 +397,85 @@ func (s *Server) callToolFor(who caller, name string, a map[string]any) (any, er
 	case "knowledge_policy":
 		return db.KnowledgePolicy(project)
 	case "knowledge_configure":
-		mode := get("mode")
-		if mode == "git" {
-			repository := get("repository")
-			if name, ok := localRepoName(repository); ok {
-				if s.LocalGit == nil {
-					return nil, errors.New("local Git storage is not configured")
-				}
-				if _, err := s.LocalGit.branchHead(name, get("branch")); err != nil {
-					return nil, err
-				}
-			} else {
-				if strings.HasPrefix(repository, "local:") {
-					return nil, errors.New("invalid local Git repository identifier")
-				}
-				remote, err := s.GitHub.AccountRepository(repository)
-				if err != nil {
-					return nil, err
-				}
-				perms := gitObj(remote["permissions"])
-				if !asBool(perms["push"]) && !asBool(perms["admin"]) {
-					return nil, errors.New("Git knowledge destination requires provider write permission")
-				}
-				if _, err := s.GitHub.Commit(repository, get("branch")); err != nil {
-					return nil, err
-				}
-			}
-		}
-		return db.ConfigureKnowledgePolicy(project, mode, get("repository"), get("branch"), get("prefix"), asInt(a["expected_version"]))
+  mode:=get("mode")
+  if mode=="git"{
+   repository:=get("repository")
+   if name,ok:=localRepoName(repository);ok{
+    if s.LocalGit==nil{return nil,errors.New("local Git storage is not configured")}
+    if _,err:=s.LocalGit.branchHead(name,get("branch"));err!=nil{return nil,err}
+   }else if _,ok:=gitLabRepoName(repository);ok{
+    if s.GitLab==nil{return nil,errors.New("GitLab is not configured")}
+    if _,err:=s.GitLab.Project(repository);err!=nil{return nil,err}
+    if _,err:=s.GitLab.Commit(repository,get("branch"));err!=nil{return nil,err}
+   }else{
+    if strings.HasPrefix(repository,"local:")||strings.HasPrefix(repository,"gitlab:"){
+     return nil,errors.New("invalid Git knowledge locator")
+    }
+    remote,err:=s.GitHub.AccountRepository(repository)
+    if err!=nil{return nil,err}
+    perms:=gitObj(remote["permissions"])
+    if !asBool(perms["push"])&&!asBool(perms["admin"]){
+     return nil,errors.New("Git knowledge destination requires provider write permission")
+    }
+    if _,err:=s.GitHub.Commit(repository,get("branch"));err!=nil{return nil,err}
+   }
+  }
+  return db.ConfigureKnowledgePolicy(project,mode,get("repository"),get("branch"),get("prefix"),asInt(a["expected_version"]))
 	case "knowledge_git_read":
-		policy, err := db.KnowledgePolicy(project)
-		if err != nil {
-			return nil, err
-		}
-		if asString(policy["mode"]) != "git" {
-			return nil, errors.New("Git project knowledge is not enabled")
-		}
-		path := get("path")
-		if !validRelativePath(path) || !(strings.HasSuffix(path, ".md") || strings.HasSuffix(path, ".json")) {
-			return nil, errors.New("invalid Git knowledge document path")
-		}
-		repository := asString(policy["repository"])
-		branch := asString(policy["branch"])
-		fullPath := strings.TrimRight(asString(policy["prefix"]), "/") + "/" + path
-		if name, ok := localRepoName(repository); ok {
-			if s.LocalGit == nil {
-				return nil, errors.New("local Git storage is not configured")
-			}
-			return s.LocalGit.ReadFile(name, branch, fullPath)
-		}
-		revision, err := s.GitHub.Commit(repository, branch)
-		if err != nil {
-			return nil, err
-		}
-		remote, err := s.GitHub.File(repository, fullPath, revision)
-		if err != nil {
-			return nil, err
-		}
-		result := gitObj(remote)
-		result["repository"], result["branch"], result["commit_sha"] = repository, branch, revision
-		return result, nil
+  policy,err:=db.KnowledgePolicy(project)
+  if err!=nil{return nil,err}
+  if asString(policy["mode"])!="git"{return nil,errors.New("Git project knowledge is not enabled")}
+  path:=get("path")
+  if !validRelativePath(path)||!(strings.HasSuffix(path,".md")||strings.HasSuffix(path,".json")){
+   return nil,errors.New("invalid Git knowledge document path")
+  }
+  repository:=asString(policy["repository"])
+  branch:=asString(policy["branch"])
+  fullPath:=strings.TrimRight(asString(policy["prefix"]),"/")+"/"+path
+  if name,ok:=localRepoName(repository);ok{
+   if s.LocalGit==nil{return nil,errors.New("local Git storage is not configured")}
+   return s.LocalGit.ReadFile(name,branch,fullPath)
+  }
+  if _,ok:=gitLabRepoName(repository);ok{
+   if s.GitLab==nil{return nil,errors.New("GitLab is not configured")}
+   revision,err:=s.GitLab.Commit(repository,branch)
+   if err!=nil{return nil,err}
+   result,err:=s.GitLab.File(repository,fullPath,revision)
+   if err!=nil{return nil,err}
+   result["branch"],result["commit_sha"]=branch,revision
+   return result,nil
+  }
+  if strings.HasPrefix(repository,"gitlab:"){return nil,errors.New("invalid GitLab locator")}
+  revision,err:=s.GitHub.Commit(repository,branch)
+  if err!=nil{return nil,err}
+  remote,err:=s.GitHub.File(repository,fullPath,revision)
+  if err!=nil{return nil,err}
+  result:=gitObj(remote)
+  result["repository"],result["branch"],result["commit_sha"]=repository,branch,revision
+  return result,nil
 	case "knowledge_git_publish":
-		policy, err := db.KnowledgePolicy(project)
-		if err != nil {
-			return nil, err
-		}
-		if asString(policy["mode"]) != "git" {
-			return nil, errors.New("Git project knowledge is not enabled")
-		}
-		path := get("path")
-		if !validRelativePath(path) || !(strings.HasSuffix(path, ".md") || strings.HasSuffix(path, ".json")) {
-			return nil, errors.New("knowledge path must be a relative Markdown or JSON file")
-		}
-		prefix := strings.TrimRight(asString(policy["prefix"]), "/")
-		repository := asString(policy["repository"])
-		if name, ok := localRepoName(repository); ok {
-			if s.LocalGit == nil {
-				return nil, errors.New("local Git storage is not configured")
-			}
-			return s.LocalGit.Publish(name, asString(policy["branch"]), prefix+"/"+path,
-				get("expected_head"), get("body"), get("message"))
-		}
-		return s.GitHub.CommitKnowledgeDocument(repository, asString(policy["branch"]),
-			prefix+"/"+path, get("expected_head"), get("body"), get("message"))
+  policy,err:=db.KnowledgePolicy(project)
+  if err!=nil{return nil,err}
+  if asString(policy["mode"])!="git"{return nil,errors.New("Git project knowledge is not enabled")}
+  path:=get("path")
+  if !validRelativePath(path)||!(strings.HasSuffix(path,".md")||strings.HasSuffix(path,".json")){
+   return nil,errors.New("knowledge path must be relative Markdown or JSON")
+  }
+  prefix:=strings.TrimRight(asString(policy["prefix"]),"/")
+  repository:=asString(policy["repository"])
+  if name,ok:=localRepoName(repository);ok{
+   if s.LocalGit==nil{return nil,errors.New("local Git storage is not configured")}
+   return s.LocalGit.Publish(name,asString(policy["branch"]),prefix+"/"+path,
+    get("expected_head"),get("body"),get("message"))
+  }
+  if _,ok:=gitLabRepoName(repository);ok{
+   if s.GitLab==nil{return nil,errors.New("GitLab is not configured")}
+   return s.GitLab.CommitKnowledgeDocument(repository,asString(policy["branch"]),prefix+"/"+path,
+    get("expected_head"),get("body"),get("message"))
+  }
+  if strings.HasPrefix(repository,"gitlab:"){return nil,errors.New("invalid GitLab locator")}
+  return s.GitHub.CommitKnowledgeDocument(repository,asString(policy["branch"]),prefix+"/"+path,
+   get("expected_head"),get("body"),get("message"))
 	case "knowledge_context":
 		return s.ProjectKnowledgeContext(project)
 	case "knowledge_contribute":
