@@ -1,14 +1,13 @@
 package personal
 
 import (
- "encoding/json"
  "errors"
- "io"
  "net/http"
  "os"
  "strconv"
  "time"
 
+ "github.com/dbontr/homelab-new/system/internal/httpjson"
  "github.com/dbontr/homelab-new/system/store"
 )
 
@@ -37,52 +36,41 @@ func Register(mux *http.ServeMux, db *store.Store) {
  mux.HandleFunc("GET /v1/reports/weekly",h.weekly)
 }
 
-func writeJSON(w http.ResponseWriter,code int,v any){w.Header().Set("Content-Type","application/json");w.WriteHeader(code);_ = json.NewEncoder(w).Encode(v)}
-func writeError(w http.ResponseWriter,code int,msg string){writeJSON(w,code,map[string]string{"error":msg})}
-func decode(r *http.Request,v any)error{
- r.Body=http.MaxBytesReader(nil,r.Body,1<<20)
- d:=json.NewDecoder(r.Body);d.DisallowUnknownFields()
- if e:=d.Decode(v);e!=nil{return e}
- var extra any
- if e:=d.Decode(&extra);e!=io.EOF{return errors.New("request must contain one JSON object")}
- return nil
-}
-
 func(h *Handler) tasks(w http.ResponseWriter,r *http.Request){
- if r.Method=="GET"{writeJSON(w,200,h.db.Tasks(r.URL.Query().Get("status")));return}
+ if r.Method=="GET"{httpjson.Write(w,200,h.db.Tasks(r.URL.Query().Get("status")));return}
  var in store.TaskInput
- if e:=decode(r,&in);e!=nil{writeError(w,400,e.Error());return}
- t,e:=h.db.AddTask(in);if e!=nil{writeError(w,400,e.Error());return}
- writeJSON(w,201,t)
+ if e:=httpjson.Decode(r,&in);e!=nil{httpjson.Error(w,400,e.Error());return}
+ t,e:=h.db.AddTask(in);if e!=nil{httpjson.Error(w,400,e.Error());return}
+ httpjson.Write(w,201,t)
 }
 func(h *Handler) complete(w http.ResponseWriter,r *http.Request){
  t,e:=h.db.CompleteTask(r.PathValue("id"))
- if errors.Is(e,os.ErrNotExist){writeError(w,404,"task not found");return}
- if errors.Is(e,store.ErrTaskChildrenIncomplete){writeError(w,409,"complete recorded subtasks before the parent");return}
- if e!=nil{writeError(w,500,"task completion failed");return}
- writeJSON(w,200,t)
+ if errors.Is(e,os.ErrNotExist){httpjson.Error(w,404,"task not found");return}
+ if errors.Is(e,store.ErrTaskChildrenIncomplete){httpjson.Error(w,409,"complete recorded subtasks before the parent");return}
+ if e!=nil{httpjson.Error(w,500,"task completion failed");return}
+ httpjson.Write(w,200,t)
 }
 func(h *Handler) goals(w http.ResponseWriter,r *http.Request){
- if r.Method=="GET"{writeJSON(w,200,h.db.Goals());return}
+ if r.Method=="GET"{httpjson.Write(w,200,h.db.Goals());return}
  var in struct {Title string `json:"title"`; Notes string `json:"notes"`}
- if e:=decode(r,&in);e!=nil{writeError(w,400,e.Error());return}
- g,e:=h.db.AddGoal(in.Title,in.Notes);if e!=nil{writeError(w,400,e.Error());return}
- writeJSON(w,201,g)
+ if e:=httpjson.Decode(r,&in);e!=nil{httpjson.Error(w,400,e.Error());return}
+ g,e:=h.db.AddGoal(in.Title,in.Notes);if e!=nil{httpjson.Error(w,400,e.Error());return}
+ httpjson.Write(w,201,g)
 }
 func(h *Handler) rules(w http.ResponseWriter,r *http.Request){
- if r.Method=="GET"{writeJSON(w,200,h.db.Rules());return}
+ if r.Method=="GET"{httpjson.Write(w,200,h.db.Rules());return}
  var in struct {Text string `json:"text"`; Kind string `json:"kind"`}
- if e:=decode(r,&in);e!=nil{writeError(w,400,e.Error());return}
- v,e:=h.db.SetRule(r.PathValue("key"),in.Text,in.Kind);if e!=nil{writeError(w,400,e.Error());return}
- writeJSON(w,200,v)
+ if e:=httpjson.Decode(r,&in);e!=nil{httpjson.Error(w,400,e.Error());return}
+ v,e:=h.db.SetRule(r.PathValue("key"),in.Text,in.Kind);if e!=nil{httpjson.Error(w,400,e.Error());return}
+ httpjson.Write(w,200,v)
 }
 func(h *Handler) recommendations(w http.ResponseWriter,r *http.Request){
  q:=r.URL.Query();minutes,_:=strconv.Atoi(q.Get("minutes"));limit,_:=strconv.Atoi(q.Get("limit"))
- writeJSON(w,200,h.db.Suggest(minutes,q.Get("energy"),q.Get("location"),q.Get("mode"),limit))
+ httpjson.Write(w,200,h.db.Suggest(minutes,q.Get("energy"),q.Get("location"),q.Get("mode"),limit))
 }
 func(h *Handler) weekly(w http.ResponseWriter,r *http.Request){
- v,e:=h.db.Report(r.URL.Query().Get("week_of"));if e!=nil{writeError(w,400,e.Error());return}
- writeJSON(w,200,v)
+ v,e:=h.db.Report(r.URL.Query().Get("week_of"));if e!=nil{httpjson.Error(w,400,e.Error());return}
+ httpjson.Write(w,200,v)
 }
 
 func(h *Handler) taskDecompose(w http.ResponseWriter,r *http.Request){
@@ -90,40 +78,40 @@ func(h *Handler) taskDecompose(w http.ResponseWriter,r *http.Request){
   ExpectedRevision int `json:"expected_revision"`
   Steps []store.TaskStepInput `json:"steps"`
  }
- if err:=decode(r,&input);err!=nil{writeError(w,400,"invalid decomposition request");return}
+ if err:=httpjson.Decode(r,&input);err!=nil{httpjson.Error(w,400,"invalid decomposition request");return}
  result,err:=h.db.DecomposeTask(r.PathValue("id"),input.ExpectedRevision,input.Steps)
  switch {
- case errors.Is(err,os.ErrNotExist):writeError(w,404,"parent task not found")
- case errors.Is(err,store.ErrTaskRevision):writeError(w,409,"parent task revision conflict")
- case err!=nil:writeError(w,400,err.Error())
- default:writeJSON(w,http.StatusCreated,result)
+ case errors.Is(err,os.ErrNotExist):httpjson.Error(w,404,"parent task not found")
+ case errors.Is(err,store.ErrTaskRevision):httpjson.Error(w,409,"parent task revision conflict")
+ case err!=nil:httpjson.Error(w,400,err.Error())
+ default:httpjson.Write(w,http.StatusCreated,result)
  }
 }
 
 func(h *Handler) taskCapture(w http.ResponseWriter,r *http.Request){
  var request struct{ Text string `json:"text"` }
- if err:=decode(r,&request);err!=nil{writeError(w,400,err.Error());return}
+ if err:=httpjson.Decode(r,&request);err!=nil{httpjson.Error(w,400,err.Error());return}
  task,err:=h.db.Capture(request.Text)
- if err!=nil{writeError(w,400,err.Error());return}
- writeJSON(w,http.StatusCreated,task)
+ if err!=nil{httpjson.Error(w,400,err.Error());return}
+ httpjson.Write(w,http.StatusCreated,task)
 }
 
 func(h *Handler) taskAgenda(w http.ResponseWriter,r *http.Request){
  day:=r.URL.Query().Get("date")
  if day==""{day=time.Now().Format("2006-01-02")}
  rows,err:=h.db.Agenda(day)
- if err!=nil{writeError(w,400,err.Error());return}
- writeJSON(w,200,rows)
+ if err!=nil{httpjson.Error(w,400,err.Error());return}
+ httpjson.Write(w,200,rows)
 }
 
 func(h *Handler) taskUpdate(w http.ResponseWriter,r *http.Request){
  var change store.TaskChanges
- if err:=decode(r,&change);err!=nil{writeError(w,400,err.Error());return}
+ if err:=httpjson.Decode(r,&change);err!=nil{httpjson.Error(w,400,err.Error());return}
  task,err:=h.db.UpdateTask(r.PathValue("id"),change)
  switch {
- case errors.Is(err,os.ErrNotExist):writeError(w,404,"task not found")
- case errors.Is(err,store.ErrTaskRevision):writeError(w,409,"task revision conflict")
- case err!=nil:writeError(w,400,err.Error())
- default:writeJSON(w,200,task)
+ case errors.Is(err,os.ErrNotExist):httpjson.Error(w,404,"task not found")
+ case errors.Is(err,store.ErrTaskRevision):httpjson.Error(w,409,"task revision conflict")
+ case err!=nil:httpjson.Error(w,400,err.Error())
+ default:httpjson.Write(w,200,task)
  }
 }
