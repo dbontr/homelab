@@ -246,6 +246,11 @@ func run(ctx context.Context, c acceptanceConfig) (runErr error) {
 		if _, err := client.List(); err == nil {
 			break
 		}
+		select {
+		case serveErr := <-serverErr:
+			return fmt.Errorf("engineering socket startup failed: %w", serveErr)
+		default:
+		}
 		if time.Now().After(deadline) {
 			return errors.New("local engineering acceptance socket unavailable")
 		}
@@ -265,10 +270,8 @@ func run(ctx context.Context, c acceptanceConfig) (runErr error) {
 	var final agentflow.RunSummary
 	defer func() {
 		stopRun()
-		if final.ID == "" {
-			if w, err := store.Get(submitted.ID); err == nil {
-				final = agentflow.Summarize(w)
-			}
+		if w, err := store.Get(submitted.ID); err == nil {
+			final = agentflow.Summarize(w)
 		}
 		ws := provisionedWorkspace(final)
 		if ws != "" {
