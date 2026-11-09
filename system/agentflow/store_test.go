@@ -75,3 +75,16 @@ func TestCancelRequiresExpectedRevision(t *testing.T){
  w,err:=s.Get("engineering-1");if err!=nil{t.Fatal(err)}
  if !w.Cancelled||w.Steps[0].Status!=Cancelled{t.Fatalf("not cancelled: %+v",w)}
 }
+
+func TestCompletedWorkflowCannotBeCancelled(t *testing.T){
+ s:=testStore(t)
+ w:=sample()
+ w.Steps=w.Steps[:1]
+ if err:=s.Create(w);err!=nil{t.Fatal(err)}
+ claim,err:=s.ClaimReady(w.ID,time.Minute);if err!=nil{t.Fatal(err)}
+ if err:=s.Complete(claim,json.RawMessage(`{"ok":true}`),"");err!=nil{t.Fatal(err)}
+ complete,err:=s.Get(w.ID);if err!=nil{t.Fatal(err)}
+ if err:=s.Cancel(w.ID,complete.Revision);err==nil{t.Fatal("completed workflow could be reclassified as cancelled")}
+ unchanged,err:=s.Get(w.ID);if err!=nil{t.Fatal(err)}
+ if unchanged.Cancelled||unchanged.Revision!=complete.Revision{t.Fatal("completed workflow history was modified")}
+}
