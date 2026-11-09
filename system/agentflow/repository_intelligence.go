@@ -10,7 +10,6 @@ import (
 	"go/token"
 	"path"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 )
@@ -329,19 +328,3 @@ func (e *Engine) repositoryReferences(ctx context.Context, w Workflow, brief Age
 	return boundObservation(result, 8000), nil
 }
 
-// Map results are intentionally bounded and heuristic. They help the model
-// select further reads; they are not an authoritative compiler dependency graph.
-func (m CodeMap) SourceDependencies() []string {
-	set := map[string]bool{}
-	for _, file := range m.Files {
-		for _, imported := range file.Imports {
-			set[imported] = true
-		}
-	}
-	deps := make([]string, 0, len(set))
-	for imported := range set {
-		deps = append(deps, imported)
-	}
-	sort.Strings(deps)
-	return deps
-}
