@@ -85,6 +85,12 @@ type AgentSession struct {
 	Diagnostics []CheckDiagnostic `json:"diagnostics,omitempty"`
 }
 
+type AgentEventProgress struct {
+ Action string `json:"action"`
+ Target string `json:"target,omitempty"`
+ Reason string `json:"reason,omitempty"`
+}
+
 type AgentProgress struct {
 	Plan         []string `json:"plan,omitempty"`
 	Turns        int      `json:"turns"`
@@ -94,6 +100,7 @@ type AgentProgress struct {
 	Summary      string   `json:"summary,omitempty"`
 	Knowledge []KnowledgePreview `json:"knowledge,omitempty"`
 	Diagnostics []CheckDiagnostic `json:"diagnostics,omitempty"`
+	Events []AgentEventProgress `json:"events,omitempty"`
 }
 
 func publicAgentProgress(state *AgentSession) *AgentProgress {
@@ -103,6 +110,7 @@ func publicAgentProgress(state *AgentSession) *AgentProgress {
 	progress := &AgentProgress{Plan: append([]string(nil), state.Plan...), Turns: state.Turns, Completed: state.Completed, Summary: state.Summary}
 	for _,proposal:=range state.Knowledge{ progress.Knowledge=append(progress.Knowledge,KnowledgePreview{ID:proposal.ID,Kind:proposal.Kind,Title:proposal.Title,Status:proposal.Status}) }
 	progress.Diagnostics=append(progress.Diagnostics,state.Diagnostics...)
+	for _,item:=range state.Events {progress.Events=append(progress.Events,AgentEventProgress{Action:item.Action,Target:item.Target,Reason:item.Reason})}
 	for path := range state.Changed {
 		progress.ChangedPaths = append(progress.ChangedPaths, path)
 	}
