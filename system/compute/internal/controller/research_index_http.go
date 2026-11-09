@@ -45,6 +45,30 @@ func (s *Server) handleResearch(w http.ResponseWriter, r *http.Request, p []stri
 		return false
 	}
 	project := p[2]
+	if p[4]=="claims" {
+		if len(p)==5 {
+			switch r.Method {
+			case http.MethodGet:
+				result,err:=s.DB.ResearchClaims(project);send(w,result,err)
+			case http.MethodPost:
+				var in struct {Statement string `json:"statement"`;Kind string `json:"kind"`}
+				if err:=bodyJSON(r,&in);err!=nil{fail(w,400,err.Error());return true}
+				result,err:=s.DB.CreateResearchClaim(project,in.Statement,in.Kind);send(w,result,err)
+			default:fail(w,405,"method not allowed")
+			}
+			return true
+		}
+		if len(p)==6 && r.Method==http.MethodGet {
+			result,err:=s.DB.ReadResearchClaim(project,p[5]);send(w,result,err);return true
+		}
+		if len(p)==7 && p[6]=="evidence" && r.Method==http.MethodPost {
+			var in struct {PassageID string `json:"passage_id"`;Relation string `json:"relation"`;ExpectedRevision int `json:"expected_revision"`}
+			if err:=bodyJSON(r,&in);err!=nil{fail(w,400,err.Error());return true}
+			result,err:=s.DB.AddResearchClaimEvidence(project,p[5],in.PassageID,in.Relation,in.ExpectedRevision);send(w,result,err)
+			return true
+		}
+		fail(w,404,"research claim endpoint not found");return true
+	}
 	if r.Method != http.MethodGet {
 		fail(w, 405, "research search is read-only for project clients")
 		return true

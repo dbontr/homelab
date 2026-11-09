@@ -163,6 +163,10 @@ var tools = []toolDefinition{
 	{"study_pack_prepare", "Compose a cited study pack from verified indexed passages without automatically storing it", []string{"project_id", "title", "passage_ids"}, []string{"objective", "questions"}},
 	{"research_register_source", "Register an immutable library object or pinned Git source for research indexing", []string{"library", "title", "origin_kind", "origin_name"}, []string{"origin_revision", "origin_path"}},
 	{"research_ingest_passages", "Append or replace bounded source-linked text passages with an expected index revision", []string{"library", "source_id", "mode", "expected_revision", "passages"}, nil},
+	{"research_claims", "List project assertions and hypotheses with recorded evidence counts", []string{"project_id"}, nil},
+	{"research_claim_detail", "Read a project claim and its current or unavailable provenance links", []string{"project_id", "claim_id"}, nil},
+	{"research_claim_create", "Record an explicitly stated research claim without assuming it is true", []string{"project_id", "statement", "kind"}, nil},
+	{"research_claim_evidence_add", "Link cited research evidence with revision control; never infer truth from a text match", []string{"project_id", "claim_id", "passage_id", "relation", "expected_revision"}, nil},
 	{"research_sources", "List indexed research sources visible through a project's linked libraries", []string{"project_id"}, nil},
 	{"research_search", "Search indexed passages with source locators within the caller's permitted project", []string{"project_id", "query"}, []string{"limit"}},
 	{"research_embedding_put", "Store a checked encoder vector for a fixed, source-linked passage", []string{"library", "passage_id", "model", "body_sha256", "embedding"}, nil},
@@ -818,6 +822,14 @@ func (s *Server) callToolFor(who caller, name string, a map[string]any) (any, er
 			return nil, err
 		}
 		return db.IngestResearchPassages(get("library"), get("source_id"), get("mode"), asInt(a["expected_revision"]), passages)
+	case "research_claims":
+		return db.ResearchClaims(project)
+	case "research_claim_detail":
+		return db.ReadResearchClaim(project,get("claim_id"))
+	case "research_claim_create":
+		return db.CreateResearchClaim(project,get("statement"),get("kind"))
+	case "research_claim_evidence_add":
+		return db.AddResearchClaimEvidence(project,get("claim_id"),get("passage_id"),get("relation"),asInt(a["expected_revision"]))
 	case "research_sources":
 		return db.ResearchSources(project)
 	case "research_topics":
