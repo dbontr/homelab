@@ -31,6 +31,7 @@ func (s *Server) sessionReadAllowed(r *http.Request) bool {
         "/v1/groceries/board":true,
         "/v1/groceries":true,
         "/v1/recipes":true,
+        "/v1/pantry":true,
         "/v1/recipes/health-goals":true,
         "/v1/recipes/export":true,
         "/v1/recipes/bundle":true,
