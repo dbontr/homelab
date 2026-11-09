@@ -67,3 +67,5 @@
 - [gopls Command-line Interface](https://go.dev/gopls/command-line) — Go tools project. Used for: optional read-only Go symbol navigation in isolated compute workspaces; command-line interface is experimental.
 - [Language Server Protocol Specification](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/) — Microsoft and LSP community. Used for: language-aware definition, reference and hover navigation semantics.
 - [Dioxus 0.7 RSX](https://dioxuslabs.com/learn/0.7/tutorial/rsx/) — Dioxus project. Used for: interactive Rust/WASM engineering forms and dependency graph components.
+- [USDA FoodData Central API Guide](https://fdc.nal.usda.gov/api-guide/) — USDA Agricultural Research Service. Used for: API-key protected food lookups, Food Details schema, and reviewed FDC identifiers.
+- [USDA FoodData Central Foundation Foods Documentation](https://fdc.nal.usda.gov/Foundation_Foods_Documentation/) — USDA Agricultural Research Service. Used for: source-reported nutrients per 100 grams, Atwater energy identifiers, and explicit missing-nutrient treatment.
