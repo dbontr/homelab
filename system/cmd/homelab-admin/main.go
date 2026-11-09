@@ -125,7 +125,7 @@ func ownerRequest(ctx context.Context, method, path string, input any) ([]byte, 
 	transport := &http.Transport{DisableKeepAlives: true, DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 		return (&net.Dialer{Timeout: 3 * time.Second}).DialContext(ctx, "unix", ownerSocket)
 	}}
-	client := &http.Client{Transport: transport, Timeout: 5 * time.Second}
+	client := &http.Client{Transport: transport, Timeout: 35 * time.Second}
 	var body io.Reader
 	if input != nil {
 		data, err := json.Marshal(input)
@@ -158,7 +158,7 @@ func ownerRequest(ctx context.Context, method, path string, input any) ([]byte, 
 
 func run(args []string) error {
 	if len(args) == 0 {
-		return errors.New("expected enroll, vault-init, login, status, pending, confirm, close, credential-add, credential-rotate, credential-list, credential-delete, oauth-list or oauth-begin")
+		return errors.New("expected enroll, vault-init, login, status, pending, confirm, close, credential-add, credential-rotate, credential-list, credential-delete, oauth-list, oauth-begin or oauth-refresh")
 	}
 	if args[0] == "enroll" {
 		return enroll(args[1:])
@@ -179,7 +179,9 @@ func run(args []string) error {
 		defer func() { for i := range key { key[i] = 0 } }()
 		return createProtectedFile(*destination, key)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	timeout := 15 * time.Second
+	if args[0] == "oauth-refresh" { timeout = 40 * time.Second }
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	var path, method string
 	var input any
@@ -198,6 +200,21 @@ func run(args []string) error {
 		if err!=nil{return err}
 		method,path=http.MethodPost,"/v1/oauth/"+url.PathEscape(args[1])+"/begin"
 		input=map[string]string{"password":password,"totp":code}
+	case "oauth-refresh":
+		if len(args)!=3||len(args[1])<1||len(args[1])>64||
+			strings.ContainsAny(args[1],"/?#\\ \t\r\n\x00")||
+			len(args[2])!=32||
+			strings.Trim(args[2],"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")!=""{
+			return errors.New("oauth-refresh requires a provider and exact opaque credential handle")
+		}
+		password,err:=secretPrompt("Homelab administrative password:")
+		if err!=nil{return err}
+		code,err:=secretPrompt("New six-digit authenticator code:")
+		if err!=nil{return err}
+		method,path=http.MethodPost,"/v1/oauth/"+url.PathEscape(args[1])+"/refresh"
+		input=map[string]any{
+			"handle":args[2],"password":password,"totp":code,"confirm":true,
+		}
 	case "credential-list":
 		if len(args) != 1 { return errors.New("credential-list accepts no arguments") }
 		method, path = http.MethodGet, "/v1/credentials"
