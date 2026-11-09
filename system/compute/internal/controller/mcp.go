@@ -172,6 +172,10 @@ var tools = []toolDefinition{
 	{"research_search", "Search indexed passages with source locators within the caller's permitted project", []string{"project_id", "query"}, []string{"limit"}},
 	{"research_embedding_put", "Store a checked encoder vector for a fixed, source-linked passage", []string{"library", "passage_id", "model", "body_sha256", "embedding"}, nil},
 	{"research_semantic_search", "Search project-visible passages by a validated vector from the same embedding model", []string{"project_id", "model", "embedding"}, []string{"limit"}},
+	{"research_text_policy_set", "Set revision-fenced opt-in for local text-source indexing of a research library", []string{"library", "enabled", "expected_revision"}, nil},
+	{"research_text_policy_get", "Read project-linked library consent for automatic local text indexing", []string{"project_id", "library"}, nil},
+	{"research_text_index_pending", "Index a bounded batch of explicitly enabled local text objects", nil, []string{"limit"}},
+	{"research_text_failures", "Inspect local document indexing errors for an authorized library", []string{"library"}, nil},
 	{"research_embedding_policy_set", "Set revision-fenced permission for indexing a library with the configured embedding provider", []string{"library", "enabled", "expected_revision"}, nil},
 	{"research_embedding_policy_get", "Read a linked library's embedding policy", []string{"project_id", "library"}, nil},
 	{"research_semantic_query", "Search linked research using a text query sent to the library-authorized configured embedding provider", []string{"project_id", "query"}, []string{"limit"}},
@@ -849,6 +853,16 @@ func (s *Server) callToolFor(who caller, name string, a map[string]any) (any, er
 		var vector []float64
 		if err:=JSONRequest(a["embedding"],&vector);err!=nil{return nil,err}
 		return db.PutResearchEmbedding(get("library"),get("passage_id"),get("model"),get("body_sha256"),vector)
+	case "research_text_policy_set":
+		return db.SetTextIndexPolicy(get("library"),asBool(a["enabled"]),asInt(a["expected_revision"]))
+	case "research_text_policy_get":
+		return db.ProjectTextIndexPolicy(project,get("library"))
+	case "research_text_index_pending":
+		limit:=asInt(a["limit"])
+		if limit==0{limit=4}
+		return s.IndexPendingText(context.Background(),limit)
+	case "research_text_failures":
+		return db.TextIndexFailures(get("library"))
 	case "research_embedding_policy_set":
         if !asBool(a["enabled"]){return db.DisableEmbeddingPolicy(get("library"),asInt(a["expected_revision"]))}
 		if s.Embedder==nil{return nil,errors.New("embedding provider is not configured")}

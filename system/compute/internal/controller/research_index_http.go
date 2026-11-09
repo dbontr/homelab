@@ -6,6 +6,13 @@ import (
 )
 
 func (s *Server) handleResearch(w http.ResponseWriter, r *http.Request, p []string) bool {
+	if len(p)==5 && p[0]=="api" && p[1]=="libraries" && p[3]=="research" && p[4]=="text-policy" {
+		if r.Method!=http.MethodPut {fail(w,405,"method not allowed");return true}
+		var in struct {Enabled bool `json:"enabled"`;ExpectedRevision int `json:"expected_revision"`}
+		if err:=bodyJSON(r,&in);err!=nil{fail(w,400,err.Error());return true}
+		result,err:=s.DB.SetTextIndexPolicy(p[2],in.Enabled,in.ExpectedRevision)
+		send(w,result,err);return true
+	}
 	if len(p) >= 5 && p[0] == "api" && p[1] == "libraries" &&
 		p[3] == "research" && p[4] == "sources" {
 		library := p[2]
@@ -74,6 +81,11 @@ func (s *Server) handleResearch(w http.ResponseWriter, r *http.Request, p []stri
 		return true
 	}
 	switch p[4] {
+	case "text-policy":
+		if len(p)==6 && r.Method==http.MethodGet {
+			result,err:=s.DB.ProjectTextIndexPolicy(project,p[5])
+			send(w,result,err);return true
+		}
 	case "topics":
 		if len(p) == 5 {
 			v, err := s.DB.ResearchTopics(project)
