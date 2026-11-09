@@ -135,8 +135,8 @@ func (f *fakeCompute) Call(_ context.Context, name string, args map[string]any) 
 		return map[string]any{"id": id, "project": str(args["project_id"]), "sha256": digest, "size": len(body)}, nil
 	case "github_publish_artifacts":
 		f.drafts++
-		changes, ok := args["changes"].(map[string]string)
-		if str(args["base_branch"]) != "main" || !ok || len(changes) == 0 {
+		changes, err := stringMap(args["changes"])
+		if str(args["base_branch"]) != "main" || err != nil || len(changes) == 0 {
 			return nil, errors.New("invalid publication")
 		}
 		base := strings.Repeat("a", 40)
