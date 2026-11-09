@@ -832,4 +832,33 @@ mod tests {
         form.every_hours = "168".to_owned();
         assert!(form.schedule().is_ok());
     }
+    #[test]
+    fn weekly_report_requires_personal_consent_and_exclusive_completion_alerts() {
+        let mut form = WorkflowDraft::default();
+        form.project = "research".to_owned();
+        form.objective = "Review confirmed work".to_owned();
+        form.action = "weekly_report".to_owned();
+        form.every_hours = "168".to_owned();
+        assert!(form.schedule().is_err());
+
+        form.personal_read = true;
+        form.notify_on_every_run = true;
+        let schedule = form.schedule().expect("approved weekly report");
+        assert_eq!(schedule["program"]["steps"][0]["action"], "weekly_report");
+        assert_eq!(schedule["every_minutes"], 10080);
+        assert_eq!(schedule["notify_on_every_run"], true);
+        assert_eq!(schedule["notify_on_change"], false);
+
+        form.notify_on_change = true;
+        assert!(form.schedule().is_err());
+        form.notify_on_change = false;
+        form.every_hours = "24".to_owned();
+        assert!(form.schedule().is_err());
+        form.every_hours = "168".to_owned();
+        form.action = "research_claims".to_owned();
+        assert!(form.schedule().is_err());
+        form.notify_on_every_run = false;
+        assert!(form.schedule().is_ok());
+    }
+
 }
