@@ -3,7 +3,7 @@ go 1.27.3
 use (
   .
   ./system
-  ./system/compute
-  ./system/learning
-  ./system/health
+  ./services/compute
+  ./services/learning
+  ./services/health
 )
