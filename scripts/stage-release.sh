@@ -28,6 +28,11 @@ if [[ ! -d "$parent" ]]; then
   printf 'Release parent does not exist: %s\n' "$parent" >&2
   exit 2
 fi
+if [[ -L "$parent" || ! -O "$parent" ||
+      -n "$(find "$parent" -maxdepth 0 -perm /022 -print -quit)" ]]; then
+  printf '%s\n' 'Release parent must be an operator-owned, non-symlink directory without group or world write access' >&2
+  exit 2
+fi
 
 revision=$(git -C "$root" rev-parse --verify 'HEAD^{commit}' 2>/dev/null) || {
   printf '%s\n' 'A trusted exact Git commit is required for the release' >&2
@@ -87,6 +92,13 @@ rm -rf -- "$stage/console-bundle"
   printf 'build_utc=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> RELEASE
 )
 
+# Artifacts contain no runtime credentials. Allow isolated DynamicUser
+# services to execute source-built binaries without making releases writable.
+find "$stage/bin" "$stage/console" -type f -exec chmod 0444 {} +
+find "$stage/bin" -type f -exec chmod 0555 {} +
+find "$stage/bin" "$stage/console" -type d -exec chmod 0555 {} +
+chmod 0444 "$stage/RELEASE" "$stage/SHA256SUMS"
+chmod 0555 "$stage"
 bash "$root/scripts/verify-release.sh" "$stage"
 mv -- "$stage" "$destination"
 stage=""
