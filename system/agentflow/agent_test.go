@@ -38,7 +38,7 @@ func autonomousProgram() Program {
 }
 func agentDecisions() []AgentAction {
 	return []AgentAction{
-		{Action: "plan", Plan: []string{"Inspect documentation", "Patch source", "Verify changes"}},
+		{Action: "plan", Reason: "Inspect source and establish a verified baseline", Plan: []string{"Inspect documentation", "Patch source", "Verify changes"}},
 		{Action: "list"},
 		{Action: "search", Query: "package"},
 		{Action: "read", Path: "README.md"},
@@ -90,7 +90,7 @@ func TestAutonomousAgentExploresPlansPatchesChecksAndPublishes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(persisted.Agent.Events) != 7 || !persisted.Agent.Completed {
+	if len(persisted.Agent.Events) != 7 || !persisted.Agent.Completed || !strings.Contains(persisted.Agent.Events[0].Reason, "verified baseline") {
 		t.Fatalf("agent transcript incomplete: %+v", persisted.Agent)
 	}
 	raw, _ := json.Marshal(current)
