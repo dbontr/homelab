@@ -200,7 +200,7 @@ func EstimateRecipeNutrients(raw []json.RawMessage,items []USDAIngredient,servin
 // performs automatic ingredient matching nor writes food measurements.
 func(c *Client)RecipeEstimate(ctx context.Context,items []USDAIngredient,servings float64)(RecipeNutrientEstimate,error){
  if len(items)<1||len(items)>12{return RecipeNutrientEstimate{},errors.New("recipe ingredient limit exceeded")}
- context, cancel:=context.WithTimeout(ctx,30*time.Second)
+ bounded,cancel:=context.WithTimeout(ctx,30*time.Second)
  defer cancel()
  raw:=make([]json.RawMessage,0,len(items))
  for _,item:=range items{
@@ -208,7 +208,7 @@ func(c *Client)RecipeEstimate(ctx context.Context,items []USDAIngredient,serving
    item.Grams>10000||item.IngredientIndex<0{
    return RecipeNutrientEstimate{},errors.New("invalid USDA ingredient selection")
   }
-  details,err:=c.USDADetail(context,item.FDCID)
+  details,err:=c.USDADetail(bounded,item.FDCID)
   if err!=nil{return RecipeNutrientEstimate{},fmt.Errorf("USDA food %d unavailable: %w",item.FDCID,err)}
   raw=append(raw,details)
  }
