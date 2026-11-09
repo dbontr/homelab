@@ -28,6 +28,7 @@ var permittedComputeTools=map[string]bool{
  "workspace_create":true,"workspace_list":true,"workspace_call":true,
  "workspace_operation":true,"github_checkout_repository":true,
  "github_publish_artifacts":true,"artifact_info":true,
+ "workspace_destroy":true,
 }
 func NewComputeClient(endpoint,token string)(*ComputeClient,error){
  u,err:=url.Parse(endpoint)
