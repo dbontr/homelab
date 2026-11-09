@@ -82,7 +82,12 @@ func TestComputeCredentialRotationAndFileProtection(t *testing.T) {
  second:=strings.Repeat("b",40)
  if err:=os.WriteFile(file,[]byte(first),0600);err!=nil{t.Fatal(err)}
  var observed []string
+ elevated:=false
  server:=httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter,r *http.Request) {
+  if r.URL.Path=="/api/whoami"{
+   _=json.NewEncoder(w).Encode(map[string]any{"principal":"oidc:engineering#worker","administrator":elevated})
+   return
+  }
   observed=append(observed,r.Header.Get("Authorization"))
   w.Header().Set("Content-Type","application/json")
   _,_=w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"isError":false,"structuredContent":{"result":[]}}}`))
@@ -96,6 +101,12 @@ func TestComputeCredentialRotationAndFileProtection(t *testing.T) {
  if len(observed)!=2||observed[0]!="Bearer "+first||observed[1]!="Bearer "+second {
   t.Fatalf("compute credential was not reloaded")
  }
+ elevated=true
+ if _,err:=client.Call(context.Background(),"workspace_list",map[string]any{"project_id":"demo"});err==nil{
+  t.Fatal("rotated administrator credential accepted for unattended execution")
+ }
+ if len(observed)!=2{t.Fatal("elevated credential reached a compute operation")}
+ elevated=false
  if err:=os.Chmod(file,0644);err!=nil{t.Fatal(err)}
  if _,err:=client.Call(context.Background(),"workspace_list",map[string]any{"project_id":"demo"});err==nil {
   t.Fatal("world-readable service credential accepted")
