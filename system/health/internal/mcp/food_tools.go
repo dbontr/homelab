@@ -49,4 +49,28 @@ func(s *Server)registerFoodTools(){
   if err:=json.Unmarshal(a["fdc_id"],&id);err!=nil||id<=0{return nil,errors.New("fdc_id must be a positive integer")}
   return s.food.USDADetail(ctx,id)
  })
+ s.add("health_food_recipe_estimate","Estimate documented macro- and micronutrients from owner-selected USDA food identities and measured gram portions. Incomplete nutrients remain unknown; this does not log intake.",true,false,
+ []string{"ingredients","servings"},
+ map[string]any{
+  "ingredients":map[string]any{"type":"array","items":map[string]any{"type":"object","properties":map[string]any{
+   "ingredient_index":field("integer","Zero-based index of the corresponding recipe ingredient"),
+   "fdc_id":field("integer","Explicitly reviewed USDA FoodData Central food identifier"),
+   "grams":field("number","Edible mass in grams, confirmed by the owner"),
+  },"required":[]string{"ingredient_index","fdc_id","grams"}}},
+  "servings":field("number","Recipe yield in servings; must match the reviewed recipe"),
+ },
+ func(ctx context.Context,a map[string]json.RawMessage)(json.RawMessage,error){
+  var ingredients []fooddata.USDAIngredient
+  if err:=json.Unmarshal(a["ingredients"],&ingredients);err!=nil{
+   return nil,errors.New("ingredients must be a list of USDA IDs and edible gram weights")
+  }
+  var servings float64
+  if err:=json.Unmarshal(a["servings"],&servings);err!=nil{
+   return nil,errors.New("recipe servings must be numeric")
+  }
+  estimated,err:=s.food.RecipeEstimate(ctx,ingredients,servings)
+  if err!=nil{return nil,err}
+  return send(estimated)
+ })
+
 }
