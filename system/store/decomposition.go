@@ -98,6 +98,10 @@ func (s *Store) DecomposeTask(parentID string,expectedRevision int,steps []TaskS
  if err:=s.save(next);err!=nil{return TaskDecomposition{},err}
  parent.Links=append([]string(nil),parent.Links...)
  parent.DependsOn=append([]string(nil),parent.DependsOn...)
+ for i:=range result.Steps{
+  result.Steps[i].Links=append([]string(nil),result.Steps[i].Links...)
+  result.Steps[i].DependsOn=append([]string(nil),result.Steps[i].DependsOn...)
+ }
  result.Parent=parent
  return result,nil
 }
