@@ -27,6 +27,7 @@ type AgentBrief struct {
 	ContextPaths []string `json:"context_paths,omitempty"`
 	LinkedRepositories []RepositoryPin `json:"linked_repositories,omitempty"`
 	IncludeKnowledge bool `json:"include_knowledge,omitempty"`
+	Revision string `json:"revision,omitempty"`
 }
 
 type PatchHunk struct {
@@ -48,6 +49,10 @@ type AgentAction struct {
 	Content        string      `json:"content,omitempty"`
 	Command        string      `json:"command,omitempty"`
 	Summary        string      `json:"summary,omitempty"`
+	KnowledgeKind  string `json:"knowledge_kind,omitempty"`
+	KnowledgeTitle string `json:"knowledge_title,omitempty"`
+	KnowledgeBody  string `json:"knowledge_body,omitempty"`
+	EvidencePaths  []string `json:"evidence_paths,omitempty"`
 }
 
 type AgentEvent struct {
@@ -73,6 +78,7 @@ type AgentSession struct {
 	Turns        int               `json:"turns"`
 	Completed    bool              `json:"completed"`
 	Summary      string            `json:"summary,omitempty"`
+	Knowledge []KnowledgeProposal `json:"knowledge,omitempty"`
 }
 
 type AgentProgress struct {
@@ -82,6 +88,7 @@ type AgentProgress struct {
 	ChangedPaths []string `json:"changed_paths,omitempty"`
 	Completed    bool     `json:"completed"`
 	Summary      string   `json:"summary,omitempty"`
+	Knowledge []KnowledgePreview `json:"knowledge,omitempty"`
 }
 
 func publicAgentProgress(state *AgentSession) *AgentProgress {
@@ -89,6 +96,7 @@ func publicAgentProgress(state *AgentSession) *AgentProgress {
 		return nil
 	}
 	progress := &AgentProgress{Plan: append([]string(nil), state.Plan...), Turns: state.Turns, Completed: state.Completed, Summary: state.Summary}
+	for _,proposal:=range state.Knowledge{ progress.Knowledge=append(progress.Knowledge,KnowledgePreview{ID:proposal.ID,Kind:proposal.Kind,Title:proposal.Title,Status:proposal.Status}) }
 	for path := range state.Changed {
 		progress.ChangedPaths = append(progress.ChangedPaths, path)
 	}
@@ -163,6 +171,8 @@ func (a AgentAction) validate(brief AgentBrief) error {
 		if !codeIdentifier.MatchString(a.Query) || !validCodeScope(a.Path) {
 			return errors.New("invalid source reference query")
 		}
+	case "propose_knowledge":
+		if !brief.IncludeKnowledge || !validKnowledgeProposal(a) {return errors.New("invalid or unauthorized knowledge proposal")}
 	case "project_context":
 		if !brief.IncludeKnowledge { return errors.New("project knowledge not authorized for this run") }
 	case "knowledge_search", "research_search":
@@ -455,6 +465,8 @@ func (e *Engine) executeAgentAction(ctx context.Context, w Workflow, brief Agent
 		return e.repositorySymbols(ctx, w, scope, action.Path)
 	case "references":
 		return e.repositoryReferences(ctx, w, scope, action.Query, action.Path)
+	case "propose_knowledge":
+		return e.proposeKnowledge(ctx,w,brief,state,action)
 	case "project_context", "knowledge_search", "research_search", "library_documents", "library_resolve":
 		return e.readKnowledge(ctx, w.Project, action)
 	case "read":
