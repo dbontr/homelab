@@ -249,10 +249,14 @@ func (s *Store) Suggest(minutes int,energy,location,mode string,limit int)[]Task
  score:=func(t Task)int{
   p:=t.Priority*10
   if t.Due!=""{
-   d,e:=time.Parse(time.RFC3339,t.Due)
-   if e!=nil{d,_=time.ParseInLocation("2006-01-02",t.Due,s.zone);d=d.Add(24*time.Hour-time.Nanosecond)}
-   days:=int(d.Sub(now).Hours()/24)
-   if days<0{p+=100}else if days<2{p+=70}else if days<7{p+=30}
+   deadline,err:=taskDeadline(t.Due,s.zone)
+   if err==nil{
+    switch {
+    case !deadline.After(now):p+=100
+    case deadline.Before(now.AddDate(0,0,2)):p+=70
+    case deadline.Before(now.AddDate(0,0,7)):p+=30
+    }
+   }
   }
   if t.GoalID!=""{p+=8}
   return p
