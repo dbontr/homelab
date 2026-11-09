@@ -50,6 +50,8 @@ type CleanupRecord struct {
 }
 
 type Workflow struct {
+	Objective string `json:"objective,omitempty"`
+	PersonalRead bool `json:"personal_read,omitempty"`
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	Deadline time.Time `json:"deadline,omitempty"`
 	Cleanup CleanupRecord `json:"cleanup,omitempty"`
@@ -202,7 +204,7 @@ func (s *Store) save(w Workflow) error {
 	return d.Sync()
 }
 func Validate(w Workflow) error {
-	if !validID(w.ID) || !validID(w.Project) || len(w.Steps) == 0 || len(w.Steps) > 128 {
+	if !validID(w.ID) || !validID(w.Project) || len(w.Steps) == 0 || len(w.Steps) > 128 || len(w.Objective) > 2000 {
 		return errors.New("invalid workflow identity, project or size")
 	}
 	found := map[string]Step{}
