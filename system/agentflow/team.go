@@ -248,6 +248,12 @@ func (e *Engine) GetTeam(id string)(TeamSummary,error){
  sort.Slice(team.Artifacts,func(i,j int)bool{return team.Artifacts[i].Path<team.Artifacts[j].Path})
  sort.Strings(team.Conflicts)
  team.ReadyForReview=team.Status==Succeeded&&len(team.Artifacts)>0&&len(team.Conflicts)==0
+ if record.IntegrationRunID!="" {
+  execution,err:=e.Get(record.IntegrationRunID)
+  if err!=nil{return TeamSummary{},err}
+  team.Integration=&execution
+  team.ReadyForReview=false
+ }
  return team,nil
 }
 func (e *Engine) ListTeams()([]TeamSummary,error){
