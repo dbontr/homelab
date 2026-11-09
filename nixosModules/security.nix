@@ -80,6 +80,18 @@ in
         default = [];
         description = "Exact certificate DNS identities permitted to request operation authorization.";
       };
+      serviceCredentialGrants = lib.mkOption {
+        default = [];
+        description = "Exact service identity and opaque vault handle bindings for mutually authenticated credential reads. Never put credential values in this configuration.";
+        type = lib.types.listOf (lib.types.submodule {
+          options = {
+            clientDNS = lib.mkOption { type = lib.types.str; };
+            alias = lib.mkOption { type = lib.types.str; };
+            provider = lib.mkOption { type = lib.types.str; };
+            handle = lib.mkOption { type = lib.types.str; };
+          };
+        });
+      };
     };
     oauth = {
       enable = lib.mkEnableOption "owner-only OAuth authorization-code/PKCE or device-code enrollment";
@@ -133,6 +145,10 @@ in
            cfg.remote.keyFile != null && cfg.remote.clientCAFile != null &&
            cfg.remote.allowedClientDNS != [] && cfg.access.gatewayAudience != "");
         message = "Remote authorization needs exact client identities, TLS credentials, a private listener and signed owner verification."; }
+      { assertion = cfg.remote.serviceCredentialGrants == [] ||
+          (cfg.remote.enable && cfg.vaultKeyFile != null &&
+           lib.all (grant: lib.elem grant.clientDNS cfg.remote.allowedClientDNS) cfg.remote.serviceCredentialGrants);
+        message = "Service credentials require independent vault custody, private remote TLS, and an explicitly allowed client certificate identity."; }
       { assertion = cfg.owner != ""; message = "Security daemon requires an owner identity."; }
       { assertion = cfg.passwordVerifierFile != null && cfg.totpSecretFile != null;
         message = "Security daemon requires separate password and TOTP credential files."; }
@@ -196,6 +212,13 @@ in
         HOMELAB_SECURITY_REMOTE_KEY = "/run/credentials/homelab-securityd.service/remote-key";
         HOMELAB_SECURITY_REMOTE_CLIENT_CA = "/run/credentials/homelab-securityd.service/remote-client-ca";
         HOMELAB_SECURITY_REMOTE_CLIENT_IDENTITIES = builtins.toJSON cfg.remote.allowedClientDNS;
+        HOMELAB_SECURITY_SERVICE_CREDENTIAL_GRANTS = if cfg.remote.serviceCredentialGrants == []
+          then "" else builtins.toJSON (map (grant: {
+            client_dns = grant.clientDNS;
+            alias = grant.alias;
+            provider = grant.provider;
+            handle = grant.handle;
+          }) cfg.remote.serviceCredentialGrants);
       } // lib.optionalAttrs cfg.oauth.enable {
         HOMELAB_SECURITY_OAUTH_PROVIDERS = builtins.toJSON cfg.oauth.providers;
       } // lib.optionalAttrs cfg.browser.enable {
