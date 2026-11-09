@@ -18,6 +18,7 @@ type AutomationRequest struct {
  EveryMinutes int `json:"every_minutes"`
  Enabled bool `json:"enabled"`
  NotifyOnChange bool `json:"notify_on_change,omitempty"`
+ NotifyOnEveryRun bool `json:"notify_on_every_run,omitempty"`
 }
 
 func (s *Server) validateAutomationProgram(ctx context.Context,p CapabilityProgram)error{
@@ -40,6 +41,14 @@ func (s *Server) validateAutomationProgram(ctx context.Context,p CapabilityProgr
 func (s *Server) createCapabilityAutomation(ctx context.Context,input AutomationRequest)(agentflow.Automation,error){
  if s.workflows==nil{return agentflow.Automation{},errors.New("workflow store unavailable")}
  if input.EveryMinutes<60||input.EveryMinutes>10080{return agentflow.Automation{},errors.New("automation interval must be between 60 and 10080 minutes")}
+ if input.NotifyOnChange&&input.NotifyOnEveryRun{
+  return agentflow.Automation{},errors.New("choose either change alerts or completion alerts")
+ }
+ if input.NotifyOnEveryRun&&(
+  input.EveryMinutes!=10080||!input.Program.PersonalRead||
+  len(input.Program.Steps)!=1||input.Program.Steps[0].Action!="weekly_report"){
+  return agentflow.Automation{},errors.New("completion alerts require a weekly owner-approved report")
+ }
  if err:=s.validateAutomationProgram(ctx,input.Program);err!=nil{return agentflow.Automation{},err}
  encoded,err:=json.Marshal(input.Program)
  if err!=nil{return agentflow.Automation{},err}
@@ -48,7 +57,7 @@ func (s *Server) createCapabilityAutomation(ctx context.Context,input Automation
  return s.workflows.CreateAutomation(agentflow.Automation{
   ID:hex.EncodeToString(nonce[:]),Project:input.Program.Project,
   Program:encoded,EveryMinutes:input.EveryMinutes,Enabled:input.Enabled,
-  NotifyOnChange:input.NotifyOnChange,
+  NotifyOnChange:input.NotifyOnChange,NotifyOnEveryRun:input.NotifyOnEveryRun,
  })
 }
 
