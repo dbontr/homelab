@@ -19,13 +19,25 @@ import (
 type Client struct {
 	base *url.URL
 	key  string
+ keySource func()(string,error)
 	http *http.Client
 }
 
 func NewSeerr(raw, apiKey string) (*Client, error) {
-	if strings.TrimSpace(apiKey) == "" {
-		return nil, errors.New("Seerr API key required")
-	}
+ return newSeerr(raw,apiKey,nil)
+}
+
+// NewSeerrWithSource takes the key from a trusted service identity on each
+// request. A failed source never falls back to a previously cached key.
+func NewSeerrWithSource(raw string,source func()(string,error))(*Client,error){
+ if source==nil{return nil,errors.New("Seerr credential source required")}
+ return newSeerr(raw,"",source)
+}
+
+func newSeerr(raw,apiKey string,source func()(string,error))(*Client,error){
+ if (strings.TrimSpace(apiKey)=="")==(source==nil){
+  return nil,errors.New("exactly one Seerr credential authority is required")
+ }
 	u, err := url.Parse(raw)
 	if err != nil || u == nil || u.User != nil || u.Fragment != "" || u.RawQuery != "" || (u.Path != "" && u.Path != "/") {
 		return nil, errors.New("Seerr URL must be an origin without credentials")
@@ -48,6 +60,7 @@ func NewSeerr(raw, apiKey string) (*Client, error) {
 	return &Client{
 		base: u,
 		key: apiKey,
+  keySource: source,
 		http: &http.Client{
 			Timeout: 15 * time.Second,
 			CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
@@ -81,7 +94,15 @@ func (c *Client) request(ctx context.Context, method, path string, body any) (js
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("X-Api-Key", c.key)
+ key:=c.key
+ if c.keySource!=nil{
+  if key!=""{return nil,errors.New("conflicting Seerr credential authority")}
+  key,err=c.keySource()
+  if err!=nil||len(key)<20||strings.ContainsAny(key,"\x00\r\n\t "){
+   return nil,errors.New("Seerr credential unavailable")
+  }
+ }
+ req.Header.Set("X-Api-Key",key)
 	req.Header.Set("Accept", "application/json")
 	if payload != nil {
 		req.Header.Set("Content-Type", "application/json")
