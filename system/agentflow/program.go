@@ -210,7 +210,7 @@ func Summarize(w Workflow) RunSummary {
 	allComplete := true
 	for _, step := range w.Steps {
 		var visible json.RawMessage
-		if step.Kind == "provision" || step.Kind == "checkout" || step.Kind == "verify" || step.Kind == "review" || step.Kind == "export" || step.Kind == "publish" {
+		if step.Kind == "provision" || step.Kind == "checkout" || step.Kind == "verify" || step.Kind == "review" || step.Kind == "export" || step.Kind == "publish" || step.Kind == "integration_verify" || step.Kind == "integration_publish" || step.Kind == "integration_cleanup" {
 			visible = append(json.RawMessage(nil), step.Result...)
 		}
 		out.Steps = append(out.Steps, StepSummary{ID: step.ID, Kind: step.Kind, Status: step.Status, Attempts: step.Attempts, Error: step.LastError, Result: visible})
