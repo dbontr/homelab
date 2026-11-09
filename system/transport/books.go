@@ -19,6 +19,11 @@ func (s *Server) bookRoutes(w http.ResponseWriter,r *http.Request){
   result,err:=s.bookCatalog.Search(r.Context(),query)
   if err!=nil{writeError(w,502,"book catalog is unavailable or the search is invalid");return}
   writeJSON(w,200,result)
+ case "/v1/books/lending":
+  if s.bookCatalog==nil{writeError(w,503,"book lending discovery is unavailable");return}
+  result,err:=s.bookCatalog.FindReading(r.Context(),r.URL.Query().Get("isbn"))
+  if err!=nil{writeError(w,400,"book lending lookup unavailable or ISBN invalid");return}
+  writeJSON(w,200,result)
  case "/v1/books/requests":
   if r.Method==http.MethodGet{
    writeJSON(w,200,s.db.ListBookRequests(r.URL.Query().Get("status")))
