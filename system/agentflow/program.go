@@ -16,6 +16,11 @@ var repositoryName = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1
 var commitName = regexp.MustCompile(`^[0-9a-f]{40}$`)
 var branchName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/-]{0,150}$`)
 
+type RepositoryPin struct {
+	Repository string `json:"repository"`
+	Revision string `json:"revision"`
+}
+
 type Program struct {
 	ID              string            `json:"id,omitempty"`
 	Project         string            `json:"project"`
@@ -28,6 +33,8 @@ type Program struct {
 	AllowedPaths    []string          `json:"allowed_paths,omitempty"`
 	Changes         map[string]string `json:"changes,omitempty"`
 	Autonomous      bool              `json:"autonomous,omitempty"`
+	LinkedRepositories []RepositoryPin `json:"linked_repositories,omitempty"`
+	PrepareOnly bool `json:"prepare_only,omitempty"`
 	Checks          []string          `json:"checks"`
 	ImagePoolID     string            `json:"image_pool_id"`
 	CPU             float64           `json:"cpu"`
@@ -58,6 +65,16 @@ func (p Program) validate() error {
 		len(p.Checks) == 0 || len(p.Checks) > 8 || len(p.Changes) > 16 ||
 		len(p.ContextPaths) > 16 || len(p.AllowedPaths) > 16 || len(p.Title) == 0 || len(p.Title) > 256 || len(p.Description) > 8192 {
 		return errors.New("invalid engineering program or resource limits")
+	}
+	if len(p.LinkedRepositories) > 8 || (len(p.LinkedRepositories) > 0 && !p.Autonomous) {
+		return errors.New("linked repositories require a bounded autonomous run")
+	}
+	seenRepositories := map[string]bool{p.Repository: true}
+	for _, linked := range p.LinkedRepositories {
+		if !repositoryName.MatchString(linked.Repository) || !commitName.MatchString(linked.Revision) || seenRepositories[linked.Repository] {
+			return errors.New("linked repository must have a unique name and pinned commit")
+		}
+		seenRepositories[linked.Repository] = true
 	}
 	for _, s := range p.Checks {
 		if strings.TrimSpace(s) == "" || len(s) > 512 || strings.ContainsAny(s, "\x00\r\n") {
@@ -122,14 +139,22 @@ func Compile(p Program) (Workflow, error) {
 	add("provision", "provision", nil, map[string]any{"image_pool_id": p.ImagePoolID, "cpu": p.CPU, "memory_mb": p.MemoryMB, "duration_minutes": p.DurationMinutes})
 	add("checkout", "checkout", []string{"provision"}, map[string]any{"repository": p.Repository, "ref": p.Revision})
 	if p.Autonomous {
-		add("agent", "agent", []string{"checkout"}, AgentBrief{
+		checkoutDependencies := []string{"checkout"}
+		for i, linked := range p.LinkedRepositories {
+			id := fmt.Sprintf("checkout-link-%d", i+1)
+			add(id, "checkout", []string{"checkout"}, map[string]any{"repository": linked.Repository, "ref": linked.Revision})
+			checkoutDependencies = append(checkoutDependencies, id)
+		}
+		add("agent", "agent", checkoutDependencies, AgentBrief{
 			Objective: p.Objective, Repository: p.Repository, AllowedPaths: p.AllowedPaths,
-			Checks: p.Checks, ContextPaths: p.ContextPaths,
+			Checks: p.Checks, ContextPaths: p.ContextPaths, LinkedRepositories: p.LinkedRepositories,
 		})
 		w.Steps[len(w.Steps)-1].MaxAttempts = 5
 		add("verify", "verify", []string{"agent"}, map[string]any{"commands": p.Checks})
 		add("export", "export", []string{"verify"}, map[string]any{})
-		add("publish", "publish", []string{"export"}, map[string]any{"repository": p.Repository, "base_branch": p.BaseBranch, "expected_head": p.ExpectedHead, "title": p.Title, "body": p.Description})
+		if !p.PrepareOnly {
+			add("publish", "publish", []string{"export"}, map[string]any{"repository": p.Repository, "base_branch": p.BaseBranch, "expected_head": p.ExpectedHead, "title": p.Title, "body": p.Description})
+		}
 		if err := Validate(w); err != nil {
 			return Workflow{}, fmt.Errorf("invalid compiled workflow: %w", err)
 		}
