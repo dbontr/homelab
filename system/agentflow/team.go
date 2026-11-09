@@ -48,6 +48,7 @@ type TeamRecord struct {
 type TeamRun struct {
  Key string `json:"key"`
  Role string `json:"role"`
+ DependsOn []string `json:"depends_on,omitempty"`
  Run RunSummary `json:"run"`
 }
 type TeamArtifact struct {
@@ -60,6 +61,7 @@ type TeamSummary struct {
  Project string `json:"project"`
  Repository string `json:"repository"`
  Revision string `json:"revision"`
+ BaseBranch string `json:"base_branch"`
  Status Status `json:"status"`
  Members []TeamRun `json:"members"`
  Artifacts []TeamArtifact `json:"artifacts,omitempty"`
@@ -106,6 +108,7 @@ func (e *Engine) SubmitTeam(req TeamRequest)(TeamSummary,error){
  }
  if _,ok:=e.Author.(DecisionAuthor);!ok{return TeamSummary{},errors.New("autonomous model unavailable")}
  if req.AutoPlan {
+  req.Base.Autonomous=true
   if len(req.Tasks)!=0{return TeamSummary{},errors.New("automatic planning cannot override supplied task assignments")}
   planner,ok:=e.Author.(TeamPlanningAuthor);if !ok{return TeamSummary{},errors.New("team planning provider unavailable")}
   ctx,cancel:=context.WithTimeout(context.Background(),45*time.Second)
@@ -200,12 +203,12 @@ func (e *Engine) GetTeam(id string)(TeamSummary,error){
  if e==nil||e.Store==nil{return TeamSummary{},errors.New("engineering store unavailable")}
  record,err:=e.Store.readTeam(id);if err!=nil{return TeamSummary{},err}
  if !e.AllowedProjects[record.Project]{return TeamSummary{},errors.New("team project not authorized")}
- team:=TeamSummary{ID:id,Project:record.Project,Repository:record.Repository,Revision:record.Revision,Status:Succeeded}
+ team:=TeamSummary{ID:id,Project:record.Project,Repository:record.Repository,Revision:record.Revision,BaseBranch:record.BaseBranch,Status:Succeeded}
  seen:=map[string]string{}
  failed,cancelled,running,pending:=false,false,false,false
  for _,member:=range record.Members{
   run,err:=e.Get(member.RunID);if err!=nil{return TeamSummary{},err}
-  team.Members=append(team.Members,TeamRun{Key:member.Key,Role:member.Role,Run:run})
+  team.Members=append(team.Members,TeamRun{Key:member.Key,Role:member.Role,DependsOn:append([]string(nil),member.DependsOn...),Run:run})
   switch run.Status{
   case Failed:failed=true
   case Cancelled:cancelled=true
