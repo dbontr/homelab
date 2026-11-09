@@ -20,6 +20,9 @@ import (
  "github.com/dbontr/homelab-new/system/devices"
  "github.com/dbontr/homelab-new/system/media"
  "github.com/dbontr/homelab-new/system/internal/personal"
+ "github.com/dbontr/homelab-new/system/internal/monitoring"
+ "github.com/dbontr/homelab-new/system/internal/mediahttp"
+ "github.com/dbontr/homelab-new/system/internal/httpjson"
  "github.com/dbontr/homelab-new/system/observability"
  "github.com/dbontr/homelab-new/system/profiles"
  "github.com/dbontr/homelab-new/system/recipes"
@@ -167,10 +170,7 @@ func(s *Server) Handler()http.Handler{
  mux.HandleFunc("GET /v1/resources/{kind}/{id}",s.uiResource)
  mux.HandleFunc("GET /v1/resources/resolve",s.uiResourceReference)
  mux.HandleFunc("GET /v1/workspace/nodes",s.uiComputeNodes)
- for _,path:=range []string{"/v1/monitoring/summary","/v1/monitoring/targets",
-   "/v1/monitoring/alerts","/v1/monitoring/security","/v1/monitoring/series","/v1/monitoring/logs"} {
-  mux.HandleFunc("GET "+path,s.uiMonitoring)
- }
+ monitoring.Register(mux,s.observability)
  mux.HandleFunc("POST /mcp",s.mcp)
  mux.HandleFunc("GET /v1/software",s.softwareLibrary)
  mux.HandleFunc("GET /v1/tools",func(w http.ResponseWriter,r *http.Request) {
@@ -201,9 +201,7 @@ func(s *Server) Handler()http.Handler{
  mux.HandleFunc("GET /v1/books/requests",s.bookRoutes)
  mux.HandleFunc("POST /v1/books/requests",s.bookRoutes)
  mux.HandleFunc("PUT /v1/books/requests/{id}",s.bookRoutes)
- mux.HandleFunc("GET /v1/media/search",s.mediaSearch)
- mux.HandleFunc("GET /v1/media/requests",s.mediaRequests)
- mux.HandleFunc("POST /v1/media/requests",s.mediaRequests)
+ mediahttp.Register(mux,s.media)
  return http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){
   w.Header().Set("Cache-Control","no-store")
   w.Header().Set("X-Content-Type-Options","nosniff")
@@ -225,16 +223,9 @@ func(s *Server) Handler()http.Handler{
   mux.ServeHTTP(w,r)
  })
 }
-func writeJSON(w http.ResponseWriter,code int,v any){w.Header().Set("Content-Type","application/json");w.WriteHeader(code);_ = json.NewEncoder(w).Encode(v)}
-func writeError(w http.ResponseWriter,code int,msg string){writeJSON(w,code,map[string]string{"error":msg})}
-func decode(r *http.Request,v any)error{
- r.Body=http.MaxBytesReader(nil,r.Body,1<<20)
- d:=json.NewDecoder(r.Body);d.DisallowUnknownFields()
- if e:=d.Decode(v);e!=nil{return e}
- var extra any
- if e:=d.Decode(&extra);e!=io.EOF{return errors.New("request must contain one JSON object")}
- return nil
-}
+func writeJSON(w http.ResponseWriter,code int,v any){httpjson.Write(w,code,v)}
+func writeError(w http.ResponseWriter,code int,msg string){httpjson.Error(w,code,msg)}
+func decode(r *http.Request,v any)error{return httpjson.Decode(r,v)}
 func(s *Server)calendarEvents(w http.ResponseWriter,r *http.Request){
  if s.calendarURL==""{writeError(w,503,"calendar is not configured");return}
  feed,e:=calendar.Fetch(r.Context(),s.client,s.calendarURL)
