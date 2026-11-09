@@ -55,6 +55,7 @@ expected=(
   homelab-platform homelab-engineeringd homelab-approve homelab-securityd
   homelab-executord homelab-release homelab-admin homelab-compute-controller
   homelab-compute-worker homelab-learning homelab-health
+  homelab-mcp homelab-api
 )
 for binary in "${expected[@]}"; do
   if [[ ! -f "$release/bin/$binary" || -L "$release/bin/$binary" ||
