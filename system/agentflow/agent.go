@@ -82,6 +82,7 @@ type AgentSession struct {
 	Completed    bool              `json:"completed"`
 	Summary      string            `json:"summary,omitempty"`
 	Knowledge []KnowledgeProposal `json:"knowledge,omitempty"`
+	Diagnostics []CheckDiagnostic `json:"diagnostics,omitempty"`
 }
 
 type AgentProgress struct {
@@ -92,6 +93,7 @@ type AgentProgress struct {
 	Completed    bool     `json:"completed"`
 	Summary      string   `json:"summary,omitempty"`
 	Knowledge []KnowledgePreview `json:"knowledge,omitempty"`
+	Diagnostics []CheckDiagnostic `json:"diagnostics,omitempty"`
 }
 
 func publicAgentProgress(state *AgentSession) *AgentProgress {
@@ -100,6 +102,7 @@ func publicAgentProgress(state *AgentSession) *AgentProgress {
 	}
 	progress := &AgentProgress{Plan: append([]string(nil), state.Plan...), Turns: state.Turns, Completed: state.Completed, Summary: state.Summary}
 	for _,proposal:=range state.Knowledge{ progress.Knowledge=append(progress.Knowledge,KnowledgePreview{ID:proposal.ID,Kind:proposal.Kind,Title:proposal.Title,Status:proposal.Status}) }
+	progress.Diagnostics=append(progress.Diagnostics,state.Diagnostics...)
 	for path := range state.Changed {
 		progress.ChangedPaths = append(progress.ChangedPaths, path)
 	}
@@ -521,7 +524,10 @@ func (e *Engine) executeAgentAction(ctx context.Context, w Workflow, brief Agent
 			return "", errors.New("check has no confirmed exit code")
 		}
 		state.ChecksPassed[action.Command] = code == 0
-		return fmt.Sprintf("check=%q exit_code=%.0f\n%s", action.Command, code, boundObservation(result, 5000)), nil
+		diagnostic:=classifyCheck(action.Command,int(code),str(result["stdout"]),str(result["stderr"]))
+		state.Diagnostics=append(state.Diagnostics,diagnostic)
+		if len(state.Diagnostics)>16{state.Diagnostics=state.Diagnostics[len(state.Diagnostics)-16:]}
+		return fmt.Sprintf("check=%q exit_code=%.0f category=%s\n%s", action.Command, code, diagnostic.Category, boundObservation(result, 5000)), nil
 	case "finish":
 		if len(state.Changed) == 0 {
 			return "", errors.New("agent cannot finish without source changes")
