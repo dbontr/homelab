@@ -382,6 +382,16 @@ in {
         ${lib.optionalString (cfg.access.ownerEmailSecretName != "") ''
           kubectl -n pwm-system get secret ${lib.escapeShellArg cfg.access.ownerEmailSecretName} >/dev/null
         ''}
+        ${lib.optionalString (cfg.gitlabPATSecretName != "") ''
+          kubectl -n pwm-system get secret ${lib.escapeShellArg cfg.gitlabPATSecretName} >/dev/null
+        ''}
+        ${lib.optionalString cfg.vault.enable ''
+          kubectl -n pwm-system get secret ${lib.escapeShellArg cfg.vault.caSecretName} >/dev/null
+          kubectl -n pwm-system get secret ${lib.escapeShellArg cfg.vault.clientIdentitySecretName} >/dev/null
+        ''}
+        ${lib.optionalString (cfg.embedding.tokenSecretName != "") ''
+          kubectl -n pwm-system get secret ${lib.escapeShellArg cfg.embedding.tokenSecretName} >/dev/null
+        ''}
         helm upgrade --install pwm-controller ${lib.escapeShellArg chartPath} \
           --namespace pwm-system --values ${controllerValues} \
           --wait --timeout 10m
