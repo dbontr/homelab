@@ -23,6 +23,7 @@ type fakeCompute struct {
 	mismatchDraft    bool
 	flatExport       bool
 	mismatchArtifact bool
+	mutateOnCheck    bool
 	exported         map[string]string
 	drafts           int
 	writes           int
@@ -79,6 +80,9 @@ func (f *fakeCompute) Call(_ context.Context, name string, args map[string]any) 
 			code := float64(0)
 			if f.failCheck {
 				code = 1
+			}
+			if f.mutateOnCheck && code == 0 {
+				f.files["repos/example__repo/README.md"] = "unexpected source mutation"
 			}
 			result["exit_code"] = code
 			result["stdout"] = "source:README.md:1:package sample"
@@ -333,8 +337,8 @@ func TestAuthorizedRepairRerunsVerificationBeforePublication(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if final.Status != Succeeded || compute.drafts != 1 || author.calls != 1 {
-		t.Fatalf("failed to verify bounded repair: status=%s drafts=%d calls=%d steps=%+v", final.Status, compute.drafts, author.calls, final.Steps)
+	if final.Status != Succeeded || compute.drafts != 1 || author.calls != 1 || compute.exported["artifact1"] != "Corrected after verification" {
+		t.Fatalf("failed to export verified repair: status=%s drafts=%d calls=%d artifact=%q steps=%+v", final.Status, compute.drafts, author.calls, compute.exported["artifact1"], final.Steps)
 	}
 }
 func TestUnauthorizedRepairCannotReachDraftPublication(t *testing.T) {
@@ -478,5 +482,22 @@ func TestStoredArtifactDigestMismatchBlocksPublication(t *testing.T) {
 	failed, err := e.Get(created.ID)
 	if err != nil || failed.Status != Failed || compute.drafts != 0 {
 		t.Fatalf("unverified artifact could reach publication: run=%+v error=%v", failed, err)
+	}
+}
+
+func TestVerificationRefusesUnexpectedSourceMutation(t *testing.T) {
+	e, compute := testEngine(t)
+	compute.mutateOnCheck = true
+	created, err := e.Submit(sampleProgram())
+	if err != nil { t.Fatal(err) }
+	runner := Runner{Store:e.Store,Worker:e,Lease:time.Minute}
+	for i:=0;i<8;i++ {
+		advanced,err:=runner.RunOne(context.Background(),created.ID)
+		if err!=nil {t.Fatal(err)}
+		if !advanced {break}
+	}
+	run,err:=e.Get(created.ID)
+	if err!=nil||run.Status!=Failed||compute.drafts!=0 {
+		t.Fatalf("verification accepted modified source: run=%+v err=%v",run,err)
 	}
 }
