@@ -101,3 +101,16 @@ func TestUnlinkedIntegrationCannotAcquireAWorkerLease(t *testing.T) {
 		t.Fatal("unlinked cooperative member acquired an execution lease")
 	}
 }
+
+func TestExpiredWorkflowCannotClaimAnotherStep(t *testing.T) {
+	s := testStore(t)
+	w := sample()
+	w.ID = "engineering-expired"
+	w.Deadline = time.Now().Add(-time.Minute)
+	if err := s.Create(w); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.ClaimReady(w.ID, time.Minute); err == nil {
+		t.Fatal("expired workflow acquired a worker lease")
+	}
+}
