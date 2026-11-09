@@ -81,6 +81,12 @@ func (r *ModelRouter) ContinueWorkflowStages(ctx context.Context,project,objecti
  return r.routes[purpose].ContinueWorkflowStages(ctx,project,objective,observations,remaining)
 }
 
+// AllowsAutomaticContinuation is an owner-visible admission check. It avoids
+// persisting plans that are guaranteed to fail at the first model continuation.
+func (r *ModelRouter) AllowsAutomaticContinuation(shareEvidence bool)bool{
+ return r!=nil&&r.routes["continuation"]!=nil&&(!shareEvidence||r.routes["evidence"]!=nil)
+}
+
 func (r *ModelRouter) SupportsEvidence()bool{
  return r!=nil&&r.routes["evidence"]!=nil
 }
