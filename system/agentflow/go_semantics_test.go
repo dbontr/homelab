@@ -31,3 +31,28 @@ func run() { unknown.Execute() }\`)
   if _,err:=analyzeGoSource(name,"package sample");err==nil{t.Fatalf("protected path accepted: %s",name)}
  }
 }
+
+func TestGoSemanticPackageResolvesCrossFileDefinitions(t *testing.T){
+ code:=map[string]string{
+  "core/types.go":`package core
+type Element struct { Value int }
+func increment(e Element) Element { e.Value++; return e }`,
+  "core/runner.go":`package core
+func run() Element {
+ return increment(Element{Value: 7})
+}`,
+ }
+ result,err:=analyzeGoPackage("core/runner.go",code)
+ if err!=nil{t.Fatal(err)}
+ if result.Partial{t.Fatalf("cross-file type checking failed: %+v",result)}
+ found:=false
+ for _,symbol:=range result.Symbols{
+  if symbol.Name=="increment"&&symbol.DefinitionFile=="types.go"&&symbol.DefinitionLine==3{
+   found=true
+  }
+ }
+ if !found{t.Fatalf("cross-file symbol definition missing: %+v",result)}
+ code["core/outsider.go"]="package other"
+ result,err=analyzeGoPackage("core/runner.go",code)
+ if err!=nil||!result.Partial{t.Fatal("incomplete Go package reported as complete")}
+}
