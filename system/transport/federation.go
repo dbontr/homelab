@@ -79,8 +79,10 @@ func streamReply(stream []byte,id json.RawMessage)([]byte,error){
   reply=append([]byte(nil),candidate...)
   return nil
  }
- for _,line:=range lines{
+ for index,line:=range lines{
   if line==""{
+   // The final split field is not an SSE message delimiter.
+   if index==len(lines)-1{break}
    if err:=finish();err!=nil{return nil,err}
    continue
   }
