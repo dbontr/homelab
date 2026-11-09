@@ -8,6 +8,7 @@ import (
  "os/signal"
  "strings"
  "syscall"
+ "time"
 
  "github.com/dbontr/homelab-new/system/agentflow"
 )
@@ -35,6 +36,10 @@ func main(){
  if len(projects)==0||len(projects)>32{log.Fatal("invalid engineering project scope")}
  token,err:=credential(required("HOMELAB_COMPUTE_TOKEN_FILE"));if err!=nil{log.Fatal(err)}
  compute,err:=agentflow.NewComputeClient(required("HOMELAB_COMPUTE_URL"),token);if err!=nil{log.Fatal(err)}
+ probeCtx,stopProbe:=context.WithTimeout(context.Background(),10*time.Second)
+ err=compute.VerifyProjectCredential(probeCtx)
+ stopProbe()
+ if err!=nil{log.Fatal(err)}
  store,err:=agentflow.Open(required("HOMELAB_ENGINEERING_DIR"));if err!=nil{log.Fatal(err)}
  var author agentflow.Author
  if endpoint:=os.Getenv("HOMELAB_ENGINEERING_MODEL_URL");endpoint!=""{
