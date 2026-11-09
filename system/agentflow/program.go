@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 )
 
 var repositoryName = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100}$`)
@@ -134,7 +135,7 @@ func Compile(p Program) (Workflow, error) {
 	if !validID(p.ID) {
 		return w, errors.New("invalid run ID")
 	}
-	w = Workflow{ID: p.ID, Project: p.Project}
+	w = Workflow{ID: p.ID, Project: p.Project, CreatedAt: time.Now().UTC(), Deadline: time.Now().UTC().Add(time.Duration(p.DurationMinutes)*time.Minute)}
 	add := func(id, kind string, depends []string, input any) {
 		w.Steps = append(w.Steps, Step{ID: id, Kind: kind, DependsOn: depends, Input: encodeStep(input), MaxAttempts: 1})
 	}
@@ -195,6 +196,8 @@ type StepSummary struct {
 	Result   json.RawMessage `json:"result,omitempty"`
 }
 type RunSummary struct {
+	Deadline time.Time `json:"deadline,omitempty"`
+	Cleanup CleanupRecord `json:"cleanup,omitempty"`
 	ID        string         `json:"id"`
 	Project   string         `json:"project"`
 	Revision  uint64         `json:"revision"`
@@ -205,7 +208,7 @@ type RunSummary struct {
 }
 
 func Summarize(w Workflow) RunSummary {
-	out := RunSummary{ID: w.ID, Project: w.Project, Revision: w.Revision, Cancelled: w.Cancelled, Status: Pending}
+	out := RunSummary{ID: w.ID, Project: w.Project, Revision: w.Revision, Cancelled: w.Cancelled, Status: Pending, Deadline: w.Deadline, Cleanup: w.Cleanup}
 	out.Agent = publicAgentProgress(w.Agent)
 	allComplete := true
 	for _, step := range w.Steps {
