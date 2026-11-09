@@ -25,10 +25,13 @@ Each stage has a stable ID, dependency IDs, and one approved read action:
 - `research_search` — scoped search of project-linked research passages;
   includes source locators from the controller
 - `engineering_runs` — matching engineering run summaries
-- `learning_summary`, `health_goals`, `recipe_search`,
-  `media_requests` — opt-in personal application reads
+- `learning_summary`, `learning_sessions`, `learning_reviews`,
+  `health_goals`, `health_records`, `health_training_sets`,
+  `health_food_proposals`, `recipe_search`, `recipe_meals`,
+  and `media_requests` — opt-in personal application reads
 
-The last four operations require `personal_read: true`. The program cannot
+Every personal application operation, including `project_tasks`, requires `personal_read: true`.
+`project_context`, `research_search`, and `engineering_runs` remain project-scoped and read-only. The program cannot
 name arbitrary MCP tools, issue shell commands, call privileged executor
 operations, make purchases, submit engineering changes, or publish Git
 revisions. Project existence is checked against the Compute controller
