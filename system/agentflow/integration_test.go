@@ -6,6 +6,8 @@ import (
  "fmt"
  "net/http"
  "net/http/httptest"
+ "os"
+ "path/filepath"
  "strings"
  "testing"
 )
@@ -71,5 +73,31 @@ func TestComputeCredentialMustBeProjectScoped(t *testing.T) {
  administrator=true
  if err:=client.VerifyProjectCredential(context.Background());err==nil{
   t.Fatal("administrator credential accepted for unattended engineering")
+ }
+}
+
+func TestComputeCredentialRotationAndFileProtection(t *testing.T) {
+ file:=filepath.Join(t.TempDir(),"credential")
+ first:=strings.Repeat("a",40)
+ second:=strings.Repeat("b",40)
+ if err:=os.WriteFile(file,[]byte(first),0600);err!=nil{t.Fatal(err)}
+ var observed []string
+ server:=httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter,r *http.Request) {
+  observed=append(observed,r.Header.Get("Authorization"))
+  w.Header().Set("Content-Type","application/json")
+  _,_=w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"isError":false,"structuredContent":{"result":[]}}}`))
+ }))
+ defer server.Close()
+ client,err:=NewComputeClientFromFile(server.URL+"/mcp",file)
+ if err!=nil{t.Fatal(err)}
+ if _,err:=client.Call(context.Background(),"workspace_list",map[string]any{"project_id":"demo"});err!=nil{t.Fatal(err)}
+ if err:=os.WriteFile(file,[]byte(second),0600);err!=nil{t.Fatal(err)}
+ if _,err:=client.Call(context.Background(),"workspace_list",map[string]any{"project_id":"demo"});err!=nil{t.Fatal(err)}
+ if len(observed)!=2||observed[0]!="Bearer "+first||observed[1]!="Bearer "+second {
+  t.Fatalf("compute credential was not reloaded")
+ }
+ if err:=os.Chmod(file,0644);err!=nil{t.Fatal(err)}
+ if _,err:=client.Call(context.Background(),"workspace_list",map[string]any{"project_id":"demo"});err==nil {
+  t.Fatal("world-readable service credential accepted")
  }
 }
