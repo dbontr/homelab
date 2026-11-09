@@ -79,6 +79,7 @@ func (e *Engine) SubmitTeam(req TeamRequest)(TeamSummary,error){
   return TeamSummary{},errors.New("cooperative project is not authorized")
  }
  if _,ok:=e.Author.(DecisionAuthor);!ok{return TeamSummary{},errors.New("autonomous model unavailable")}
+ if req.Base.Review {if _,ok:=e.Author.(ReviewAuthor);!ok{return TeamSummary{},errors.New("review provider unavailable")}}
  if err:=validTeam(req);err!=nil{return TeamSummary{},err}
  token,err:=randomToken();if err!=nil{return TeamSummary{},err}
  id:="team-"+token[:16]
