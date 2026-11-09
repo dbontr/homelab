@@ -49,6 +49,7 @@ type AgentAction struct {
 
 type AgentEvent struct {
 	Action      string `json:"action"`
+	Reason      string `json:"reason,omitempty"`
 	Target      string `json:"target,omitempty"`
 	Observation string `json:"observation"`
 }
@@ -281,7 +282,7 @@ func (e *Engine) runAgentTurn(ctx context.Context, claim Claim, w Workflow) (jso
 				}
 			}
 			if missing {
-				state.Events = append(state.Events, AgentEvent{Action: "finish", Observation: "Completion requires at least one approved edit and all owner checks after the last edit"})
+				state.Events = append(state.Events, AgentEvent{Action: "finish", Reason: decision.Reason, Observation: "Completion requires at least one approved edit and all owner checks after the last edit"})
 				state.Turns++
 				if err := e.Store.CheckpointAgent(claim, state); err != nil {
 					return nil, err
@@ -296,7 +297,7 @@ func (e *Engine) runAgentTurn(ctx context.Context, claim Claim, w Workflow) (jso
 			}
 			// Patch context conflicts are expected when a source file changes;
 			// they are evidence for replanning, not permission to force an edit.
-			state.Events = append(state.Events, AgentEvent{Action: "patch", Target: decision.Path, Observation: "Patch context rejected: " + err.Error()})
+			state.Events = append(state.Events, AgentEvent{Action: "patch", Reason: decision.Reason, Target: decision.Path, Observation: "Patch context rejected: " + err.Error()})
 			state.Turns++
 			if err := e.Store.CheckpointAgent(claim, state); err != nil {
 				return nil, err
@@ -327,7 +328,7 @@ func (e *Engine) runAgentTurn(ctx context.Context, claim Claim, w Workflow) (jso
 	if len(observation) > 16000 {
 		observation = observation[:16000]
 	}
-	state.Events = append(state.Events, AgentEvent{Action: action.Action, Target: target, Observation: observation})
+	state.Events = append(state.Events, AgentEvent{Action: action.Action, Reason: action.Reason, Target: target, Observation: observation})
 	state.Turns++
 	state.Pending = nil
 	if action.Action == "finish" {
