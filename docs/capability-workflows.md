@@ -1,5 +1,12 @@
 # Cross-capability workflows
 
+## Owner-configured recurring automation
+
+A persistent scheduler runs read-only capability workflows at owner-configured intervals of 60–10,080 minutes. Schedules are explicit programs with an immutable project, stage dependency graph and personal-read flag. Model replanning, arbitrary commands and **all personal/privileged writes are forbidden in automatic schedules**; write-capable workflows remain separately submitted by the owner. State lives next to the durable workflow engine in a private, revision-fenced automation record, not a second project database. Each due occurrence produces a deterministic workflow ID. A process restart or ambiguous persist operation cannot duplicate the occurrence, and pause/resume is guarded by the expected automation revision. Missed periods are not flooded into a backlog; the next interval begins after a confirmed enqueue. A disconnected project backend leaves the due record outstanding rather than claiming a completed run.
+
+The API offers `GET/POST /v1/automations`, `GET /v1/automations/{id}`, and `POST /v1/automations/{id}/enabled`. MCP offers `automation_create`, `automation_list`, `automation_get` and `automation_set_enabled`. The owner can inspect the last workflow ID and its confirmed result. The scheduler currently produces **durable, inspectable results**; it does not pretend to deliver push notifications or send private data to an external agent without a separate consented provider.
+
+
 Homelab maintains a single project identity across separately owned records. The
 platform obtains project context, repository membership, and shared-library links
 from the Compute controller; it does not create a second project database. The

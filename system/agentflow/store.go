@@ -51,6 +51,8 @@ type CleanupRecord struct {
 
 type Workflow struct {
 	CapabilityPlan bool `json:"capability_plan,omitempty"`
+	AutomationID string `json:"automation_id,omitempty"`
+	AutomationDue time.Time `json:"automation_due,omitempty"`
 	AutoReplan bool `json:"auto_replan,omitempty"`
 	ShareProjectEvidence bool `json:"share_project_evidence,omitempty"`
 	Replans int `json:"replans,omitempty"`
@@ -267,6 +269,12 @@ func (s *Store) Create(w Workflow) error {
 		return err
 	}
 	defer unlock()
+	return s.createLocked(w)
+}
+
+// createLocked shares admission and persistence with scheduled work.
+// Callers hold the cross-process lock and validate workflow content.
+func (s *Store) createLocked(w Workflow) error {
 	if _, err := os.Stat(s.filename(w.ID)); err == nil {
 		return os.ErrExist
 	} else if !errors.Is(err, os.ErrNotExist) {
