@@ -148,7 +148,7 @@ func (a AgentAction) validate(brief AgentBrief) error {
 			if a.Repository == linked.Repository { found = true; break }
 		}
 		if !found { return errors.New("repository is not pinned to this engineering run") }
-		if a.Action != "list" && a.Action != "search" && a.Action != "map" && a.Action != "symbols" && a.Action != "references" && a.Action != "dependency_graph" && a.Action != "lsp" && a.Action != "read" {
+		if a.Action != "list" && a.Action != "search" && a.Action != "map" && a.Action != "symbols" && a.Action != "references" && a.Action != "dependency_graph" && a.Action != "lsp" && a.Action != "test_impact" && a.Action != "read" {
 			return errors.New("linked repository access is read-only")
 		}
 	}
@@ -173,6 +173,8 @@ func (a AgentAction) validate(brief AgentBrief) error {
 		if strings.TrimSpace(a.Query) == "" || strings.ContainsAny(a.Query, "\x00\r\n") {
 			return errors.New("invalid repository search query")
 		}
+	case "test_impact":
+		if !validSourcePath(a.Path)||sensitiveSourcePath(a.Path)||sourceLanguage(a.Path)=="" {return errors.New("invalid test impact source")}
 	case "dependency_graph":
 		if !validCodeScope(a.Path) {return errors.New("invalid source graph scope")}
 	case "lsp":
@@ -478,6 +480,8 @@ func (e *Engine) executeAgentAction(ctx context.Context, w Workflow, brief Agent
 			return "", errors.New("repository search failed")
 		}
 		return boundObservation(result, 8000), nil
+	case "test_impact":
+		return e.repositoryTestImpact(ctx,w,scope,action.Path)
 	case "dependency_graph":
 		return e.repositoryGraph(ctx,w,scope,action.Path)
 	case "lsp":

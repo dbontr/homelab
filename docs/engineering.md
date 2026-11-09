@@ -191,6 +191,10 @@ The approval state is durably marked before the controller's
 reconciliation instead of blind replay. Existing project knowledge policies
 and repository grants remain authoritative.
 
+## Conservative test-impact analysis
+
+The read-only `test_impact` engineering action accepts a single validated source path in the pinned primary or linked repository. It inspects the existing bounded repository map and declared imports, suggests test files in the same directory or source packages dependent on that directory, and explicitly marks incomplete source maps. This is heuristic test selection: a reported candidate is not proof of relevance, and missing candidates do not imply that a test suite can be skipped. The action cannot execute checks or expand the owner-approved test command list.
+
 ## Source navigation and diagnostics
 
 The `dependency_graph` action returns a bounded graph of declared imports
