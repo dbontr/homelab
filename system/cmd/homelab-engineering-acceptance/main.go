@@ -172,6 +172,51 @@ func provisionedWorkspace(summary agentflow.RunSummary) string {
 	return ""
 }
 
+// stopWorkspace requests deletion and verifies the resulting terminal state.
+// A queued stop request is not evidence that the worker has stopped.
+func stopWorkspace(ctx context.Context, compute agentflow.ToolCaller, project, id string) error {
+	if _, err := compute.Call(ctx, "workspace_destroy", map[string]any{"project_id": project, "workspace_id": id}); err != nil {
+		return fmt.Errorf("workspace stop request rejected: %w", err)
+	}
+	for {
+		response, err := compute.Call(ctx, "workspace_list", map[string]any{"project_id": project})
+		if err != nil {
+			return fmt.Errorf("workspace status unavailable: %w", err)
+		}
+		records, ok := response["result"].([]any)
+		if !ok {
+			return errors.New("invalid workspace status listing")
+		}
+		present := false
+		for _, raw := range records {
+			entry, ok := raw.(map[string]any)
+			if !ok {
+				return errors.New("invalid workspace status entry")
+			}
+			if entry["id"] != id {
+				continue
+			}
+			present = true
+			switch entry["status"] {
+			case "stopped", "destroyed":
+				return nil
+			case "starting", "ready", "stopping":
+			default:
+				return fmt.Errorf("workspace stop returned unexpected state %q", entry["status"])
+			}
+			break
+		}
+		if !present {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("workspace stop not confirmed: %w", ctx.Err())
+		case <-time.After(2 * time.Second):
+		}
+	}
+}
+
 func run(ctx context.Context, c acceptanceConfig) (runErr error) {
 	if err := c.validate(); err != nil {
 		return err
@@ -272,22 +317,45 @@ func run(ctx context.Context, c acceptanceConfig) (runErr error) {
 	}
 	log.Printf("submitted isolated run %s", submitted.ID)
 	// RunAvailable and the local socket share the same engine and private state.
-	go engine.Serve(runCtx)
+	schedulerStopped := make(chan struct{})
+	go func() {
+		defer close(schedulerStopped)
+		engine.Serve(runCtx)
+	}()
 	var final agentflow.RunSummary
+	var publicationURL string
 	defer func() {
+		if runErr != nil {
+			if w, err := store.Get(submitted.ID); err == nil {
+				summary := agentflow.Summarize(w)
+				if summary.Status != agentflow.Succeeded && summary.Status != agentflow.Failed && summary.Status != agentflow.Cancelled {
+					if err := engine.Cancel(submitted.ID, summary.Revision); err != nil {
+						log.Printf("unable to fence interrupted run %s: %v", submitted.ID, err)
+					}
+				}
+			}
+		}
 		stopRun()
+		select {
+		case <-schedulerStopped:
+		case <-time.After(10 * time.Second):
+			runErr = errors.Join(runErr, errors.New("engineering scheduler did not stop before cleanup"))
+		}
 		if w, err := store.Get(submitted.ID); err == nil {
 			final = agentflow.Summarize(w)
 		}
 		ws := provisionedWorkspace(final)
 		if ws != "" {
 			cleanupCtx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
-			defer cancel()
-			if _, err := compute.Call(cleanupCtx, "workspace_destroy", map[string]any{"project_id": c.Project, "workspace_id": ws}); err != nil {
+			if err := stopWorkspace(cleanupCtx, compute, c.Project, ws); err != nil {
 				runErr = errors.Join(runErr, fmt.Errorf("workspace %s cleanup failed: %w", ws, err))
 			} else {
-				log.Printf("workspace %s stop requested; verify termination in the compute controller", ws)
+				log.Printf("workspace %s stopped", ws)
 			}
+			cancel()
+		}
+		if runErr == nil && publicationURL != "" {
+			log.Printf("accepted: reviewable draft PR %s", publicationURL)
 		}
 	}()
 	last := ""
@@ -310,7 +378,7 @@ func run(ctx context.Context, c acceptanceConfig) (runErr error) {
 			if err != nil {
 				return err
 			}
-			log.Printf("accepted: reviewable draft PR %s", link)
+			publicationURL = link
 			return nil
 		case agentflow.Failed, agentflow.Cancelled:
 			return fmt.Errorf("autonomous run %s ended with status %s", current.ID, current.Status)
