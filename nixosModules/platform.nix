@@ -200,6 +200,11 @@ in
         message = "Each external service must use only one credential authority.";
       }
       {
+        assertion = cfg.vault.endpoint == null || (cfg.vault.serverName != "" &&
+          cfg.vault.caFile != null && cfg.vault.certificateFile != null && cfg.vault.keyFile != null);
+        message = "Platform vault endpoint requires complete pinned TLS trust and service identity.";
+      }
+      {
         assertion = let
           aliases = [ cfg.capabilityModel.vaultAlias cfg.seerr.vaultAlias ]
             ++ map (route: route.vaultAlias) cfg.capabilityModel.routes
