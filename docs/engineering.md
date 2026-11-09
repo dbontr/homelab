@@ -110,10 +110,11 @@ Members prepare independently verified artifacts but do not publish their
 own pull requests. The coordinator constructs a deterministic artifact
 manifest from completed member workflows and checks each output against its
 member's allowed paths. Duplicate or unauthorized paths are reported as
-reconciliation conflicts. A group is ready for owner review only after every
-member has completed and its artifacts are conflict-free. The owner prepares
-any combined publication separately. There is no automatic cross-workspace
-merge or implicit conflict resolution. Teams are available through the engineering
+reconciliation conflicts. A group is ready for owner review only after every member has completed
+and its artifacts are conflict-free. A separate owner-authorized integration
+workflow imports the verified artifacts into a fresh checkout, runs the
+combined checks, and prepares a single reviewable draft. No member may merge
+or deploy changes, and conflicting artifacts are never resolved implicitly. Teams are available through the engineering
 daemon's `/teams` lifecycle interface, the authenticated platform API
 `/v1/engineering/teams`, and the `engineering_team_*` MCP tools.
 
