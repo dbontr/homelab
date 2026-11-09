@@ -3,12 +3,14 @@ package agentflow
 import (
 	"context"
 	"errors"
+ "sort"
 	"time"
 )
 
 // Independent engineering runs can advance concurrently because each run
 // owns an isolated workspace. Steps within a run remain dependency-ordered.
 const maxConcurrentEngineeringRuns = 4
+const maxConcurrentProjectRuns = 2
 
 type engineeringStepResult struct {
 	advanced bool
@@ -25,12 +27,16 @@ func (e *Engine) RunAvailable(ctx context.Context) (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	admission, err := e.teamAdmission()
+	if err != nil { return 0, err }
+	runs = interleaveProjects(runs)
+	perProject := make(map[string]int)
 	slots := make(chan struct{}, maxConcurrentEngineeringRuns)
 	results := make(chan engineeringStepResult, len(runs))
 	launched := 0
 dispatch:
 	for _, run := range runs {
-		if run.Status == Succeeded || run.Status == Failed || run.Status == Cancelled {
+		if run.Status == Succeeded || run.Status == Failed || run.Status == Cancelled || !admission[run.ID] && isMemberRun(run.ID, admission) || perProject[run.Project] >= maxConcurrentProjectRuns {
 			continue
 		}
 		if err := ctx.Err(); err != nil {
@@ -56,6 +62,7 @@ dispatch:
 		e.activeMu.Unlock()
 
 		launched++
+		perProject[run.Project]++
 		go func(runID string) {
 			runner := Runner{Store: e.Store, Worker: e, Lease: 30 * time.Minute}
 			advanced, err := runner.RunOne(runCtx, runID)
@@ -97,4 +104,58 @@ func (e *Engine) Serve(ctx context.Context) {
 		}
 		_, _ = e.RunAvailable(ctx)
 	}
+}
+
+func isMemberRun(id string, admitted map[string]bool) bool {
+ _,member:=admitted[id]
+ return member
+}
+
+// teamAdmission gates dependencies on confirmed completion, not task order.
+func (e *Engine) teamAdmission() (map[string]bool, error) {
+ admitted:=map[string]bool{}
+ ids,err:=e.Store.teamIDs()
+ if err!=nil{return nil,err}
+ for _,id:=range ids {
+  record,err:=e.Store.readTeam(id)
+  if err!=nil{return nil,err}
+  byKey:=map[string]string{}
+  for _,m:=range record.Members {byKey[m.Key]=m.RunID}
+  for _,m:=range record.Members {
+   ready:=true
+   for _,key:=range m.DependsOn {
+    previous,ok:=byKey[key]
+    if !ok { return nil,errors.New("team dependency target missing") }
+    run,err:=e.Get(previous)
+    if err!=nil{return nil,err}
+    if run.Status!=Succeeded {ready=false;break}
+   }
+   admitted[m.RunID]=ready
+  }
+ }
+ return admitted,nil
+}
+
+// interleaveProjects prevents a large project from monopolizing the scheduler.
+func interleaveProjects(runs []RunSummary) []RunSummary {
+ groups:=map[string][]RunSummary{}
+ names:=[]string{}
+ for _,run:=range runs{
+  if _,ok:=groups[run.Project];!ok{names=append(names,run.Project)}
+  groups[run.Project]=append(groups[run.Project],run)
+ }
+ sort.Strings(names)
+ ordered:=make([]RunSummary,0,len(runs))
+ for{
+  progress:=false
+  for _,name:=range names {
+   items:=groups[name]
+   if len(items)==0{continue}
+   ordered=append(ordered,items[0])
+   groups[name]=items[1:]
+   progress=true
+  }
+  if !progress {break}
+ }
+ return ordered
 }
