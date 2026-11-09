@@ -34,8 +34,7 @@ func main(){
   if project!=""{projects[project]=true}
  }
  if len(projects)==0||len(projects)>32{log.Fatal("invalid engineering project scope")}
- token,err:=credential(required("HOMELAB_COMPUTE_TOKEN_FILE"));if err!=nil{log.Fatal(err)}
- compute,err:=agentflow.NewComputeClient(required("HOMELAB_COMPUTE_URL"),token);if err!=nil{log.Fatal(err)}
+ compute,err:=agentflow.NewComputeClientFromFile(required("HOMELAB_COMPUTE_URL"),required("HOMELAB_COMPUTE_TOKEN_FILE"));if err!=nil{log.Fatal(err)}
  probeCtx,stopProbe:=context.WithTimeout(context.Background(),10*time.Second)
  err=compute.VerifyProjectCredential(probeCtx)
  stopProbe()
