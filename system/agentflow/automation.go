@@ -209,8 +209,11 @@ func (s *Store) FireAutomation(a Automation,w Workflow)(Workflow,error){
  }
  persisted,err:=s.read(w.ID)
  if errors.Is(err,os.ErrNotExist){
-  if err:=s.createLocked(w);err!=nil{return Workflow{},err}
-  persisted,err=s.read(w.ID)
+  persisted,err=s.readArchive(w.ID)
+  if errors.Is(err,os.ErrNotExist){
+   if err:=s.createLocked(w);err!=nil{return Workflow{},err}
+   persisted,err=s.read(w.ID)
+  }
  }
  if err!=nil{return Workflow{},err}
  if persisted.AutomationID!=a.ID||!persisted.AutomationDue.Equal(a.NextAt)||

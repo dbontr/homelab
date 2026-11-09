@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -151,11 +152,14 @@ func (s *Store) lock() (func(), error) {
 	return func() { _ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN); _ = f.Close(); s.mu.Unlock() }, nil
 }
 func (s *Store) read(id string) (Workflow, error) {
+	return s.readPath(s.filename(id),id)
+}
+func (s *Store) readPath(location,id string) (Workflow, error) {
 	var w Workflow
 	if !validID(id) {
 		return w, errors.New("invalid workflow ID")
 	}
-	f, err := os.Open(s.filename(id))
+	f, err := os.OpenFile(location,os.O_RDONLY|syscall.O_NOFOLLOW,0)
 	if err != nil {
 		return w, err
 	}
@@ -167,8 +171,13 @@ func (s *Store) read(id string) (Workflow, error) {
 	if !fi.Mode().IsRegular() || fi.Mode().Perm()&0077 != 0 || fi.Size() > 1<<20 {
 		return w, errors.New("unsafe workflow record")
 	}
-	if err := json.NewDecoder(f).Decode(&w); err != nil {
+	decoder := json.NewDecoder(f)
+	if err := decoder.Decode(&w); err != nil {
 		return w, err
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		return w, errors.New("workflow record contains trailing data")
 	}
 	if w.ID != id {
 		return w, errors.New("workflow record ID mismatch")
@@ -276,11 +285,14 @@ func (s *Store) Create(w Workflow) error {
 // createLocked shares admission and persistence with scheduled work.
 // Callers hold the cross-process lock and validate workflow content.
 func (s *Store) createLocked(w Workflow) error {
-	if _, err := os.Stat(s.filename(w.ID)); err == nil {
+	if _, err := os.Lstat(s.filename(w.ID)); err == nil {
 		return os.ErrExist
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
+	if _, err := s.readArchive(w.ID); err == nil {
+		return os.ErrExist
+	} else if !errors.Is(err,os.ErrNotExist){return err}
 	entries, err := os.ReadDir(s.dir)
 	if err != nil {
 		return err
@@ -318,7 +330,9 @@ func (s *Store) Get(id string) (Workflow, error) {
 		return Workflow{}, err
 	}
 	defer unlock()
-	return s.read(id)
+	w,err:=s.read(id)
+	if errors.Is(err,os.ErrNotExist){return s.readArchive(id)}
+	return w,err
 }
 
 // ClaimReady reserves one eligible step. A lease expires without implying

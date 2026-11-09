@@ -7,6 +7,7 @@ import (
     "encoding/json"
     "errors"
     "fmt"
+    "log"
     "net/http"
     "os"
     "regexp"
@@ -182,19 +183,32 @@ func (s *Server) capabilityWorkflow(ctx context.Context,id string)(CapabilityWor
     if s.workflows==nil{return CapabilityWorkflow{},errors.New("workflow store unavailable")}
     w,err:=s.workflows.Get(id)
     if err!=nil{return CapabilityWorkflow{},err}
+    if !w.CapabilityPlan{return CapabilityWorkflow{},os.ErrNotExist}
     return summarizeCapabilityWorkflow(w),nil
 }
 func (s *Server) capabilityWorkflows()([]CapabilityWorkflow,error) {
+    return s.capabilityWorkflowList(false)
+}
+func (s *Server) capabilityArchivedWorkflows()([]CapabilityWorkflow,error) {
+    return s.capabilityWorkflowList(true)
+}
+func (s *Server) capabilityWorkflowList(archived bool)([]CapabilityWorkflow,error) {
     if s.workflows==nil{return nil,errors.New("workflow store unavailable")}
-    ids,err:=s.workflows.List()
+    var ids []string
+    var err error
+    if archived {
+        ids,err=s.workflows.ListArchived(100)
+    } else {
+        ids,err=s.workflows.List()
+    }
     if err!=nil{return nil,err}
     result:=make([]CapabilityWorkflow,0,len(ids))
     for _,id:=range ids {
         w,err:=s.workflows.Get(id)
         if err!=nil{return nil,err}
+        if !w.CapabilityPlan{continue}
         summary:=summarizeCapabilityWorkflow(w)
-        // Listings never expose full personal observations or evidence bodies.
-        // Authenticated detail reads still return explicitly approved results.
+        // Only authenticated detail reads may return evidence or personal data.
         for i:=range summary.Steps{summary.Steps[i].Result=nil}
         result=append(result,summary)
     }
@@ -362,10 +376,17 @@ func (s *Server) StartWorkflowScheduler(ctx context.Context) {
     go func() {
         ticker:=time.NewTicker(10*time.Second)
         defer ticker.Stop()
+        nextArchive:=time.Time{}
         for {
             select {
             case <-ctx.Done():return
             case <-ticker.C:
+                if !time.Now().Before(nextArchive) {
+                    if _,err:=s.workflows.ArchiveTerminal(24*time.Hour,100);err!=nil {
+                        log.Printf("capability workflow archival failed: %v",err)
+                    }
+                    nextArchive=time.Now().Add(5*time.Minute)
+                }
                 period,cancel:=context.WithTimeout(ctx,8*time.Second)
                 _=s.fireDueAutomations(period)
                 cancel()
@@ -388,7 +409,16 @@ func (s *Server) StartWorkflowScheduler(ctx context.Context) {
 func (s *Server) capabilityWorkflowCollection(w http.ResponseWriter,r *http.Request) {
     if s.workflows==nil{writeError(w,503,"workflows unavailable");return}
     if r.Method==http.MethodGet {
-        flows,err:=s.capabilityWorkflows()
+        var flows []CapabilityWorkflow
+        var err error
+        switch r.URL.Query().Get("archived") {
+        case "","false":
+            flows,err=s.capabilityWorkflows()
+        case "true":
+            flows,err=s.capabilityArchivedWorkflows()
+        default:
+            writeError(w,400,"invalid archive selector");return
+        }
         if err!=nil{writeError(w,500,"workflow listing unavailable");return}
         writeJSON(w,200,map[string]any{"workflows":flows});return
     }
@@ -426,6 +456,8 @@ func (s *Server) capabilityWorkflowTool(ctx context.Context,name string,raw json
         return s.submitCapabilityWorkflow(ctx,program)
     case "workflow_list":
         return s.capabilityWorkflows()
+    case "workflow_archive_list":
+        return s.capabilityArchivedWorkflows()
     case "workflow_get":
         var input struct{ID string `json:"id"`}
         if err:=json.Unmarshal(raw,&input);err!=nil{return nil,err}
