@@ -28,6 +28,10 @@ type Automation struct {
  NextAt time.Time `json:"next_at"`
  LastAt time.Time `json:"last_at,omitempty"`
  LastWorkflowID string `json:"last_workflow_id,omitempty"`
+ NotifyOnChange bool `json:"notify_on_change,omitempty"`
+ LastObservedWorkflowID string `json:"last_observed_workflow_id,omitempty"`
+ ObservationDigest string `json:"observation_digest,omitempty"`
+ Alerts []AutomationAlert `json:"alerts,omitempty"`
  CreatedAt time.Time `json:"created_at"`
  UpdatedAt time.Time `json:"updated_at"`
 }
@@ -37,6 +41,20 @@ func validateAutomation(a Automation)error{
   len(a.Program)>32<<10||!json.Valid(a.Program)||
   a.EveryMinutes<60||a.EveryMinutes>10080 {
   return errors.New("invalid scheduled workflow")
+ }
+ if a.LastObservedWorkflowID!=""&&!validID(a.LastObservedWorkflowID) {
+  return errors.New("invalid automation observation identity")
+ }
+ if len(a.ObservationDigest)!=0&&len(a.ObservationDigest)!=64 {
+  return errors.New("invalid automation observation digest")
+ }
+ if len(a.Alerts)>32 {
+  return errors.New("automation alert capacity exceeded")
+ }
+ for _,alert:=range a.Alerts {
+  if !validID(alert.WorkflowID)||alert.ObservedAt.IsZero() {
+   return errors.New("invalid automation alert")
+  }
  }
  return nil
 }
@@ -137,6 +155,9 @@ func (s *Store) CreateAutomation(a Automation)(Automation,error){
  a.Revision=1
  a.LastAt=time.Time{}
  a.LastWorkflowID=""
+ a.LastObservedWorkflowID=""
+ a.ObservationDigest=""
+ a.Alerts=nil
  a.NextAt=a.CreatedAt.Add(time.Duration(a.EveryMinutes)*time.Minute)
  if err:=s.saveAutomationLocked(a);err!=nil{return Automation{},err}
  return a,nil
@@ -206,6 +227,10 @@ func (s *Store) FireAutomation(a Automation,w Workflow)(Workflow,error){
   !current.Enabled||current.NextAt.After(now)||!current.NextAt.Equal(a.NextAt)||
   !bytes.Equal(current.Program,a.Program) {
   return Workflow{},errors.New("automation scheduling revision conflict")
+ }
+ if current.NotifyOnChange&&current.LastWorkflowID!=""&&
+  current.LastObservedWorkflowID!=current.LastWorkflowID {
+  return Workflow{},errors.New("previous scheduled observation is not settled")
  }
  persisted,err:=s.read(w.ID)
  if errors.Is(err,os.ErrNotExist){
