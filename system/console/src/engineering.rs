@@ -155,7 +155,8 @@ pub fn EngineeringRuns() -> Element {
         }
         Card {
             title: "Publication boundary".to_owned(),
-            description: "Only draft changes may be prepared automatically. Merging and deployment require independent owner authorization.".to_owned()
+            description: "Only draft changes may be prepared automatically. Merging and deployment require independent owner authorization.".to_owned(),
+            p { class: "muted", "Review the verified source and checks before approving a draft." }
         }
         match runs.cloned() {
             None => rsx! { Loading {} },
