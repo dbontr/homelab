@@ -58,6 +58,7 @@ func configuredGitLabPAT() (string, error) {
 // accepts arbitrary API URLs from an MCP tool or forwards its PAT on redirects.
 type GitLab struct {
  Token string
+ TokenSource func()(string,error)
  API string
  Client *http.Client
 }
@@ -67,7 +68,18 @@ func NewGitLab(token string) *GitLab {
   Client:&http.Client{Timeout:35*time.Second}}
 }
 
-func (g *GitLab) configured() bool { return g != nil && g.Token != "" }
+func (g *GitLab) configured() bool { return g != nil && (g.Token != "" || g.TokenSource != nil) }
+
+func (g *GitLab) credential()(string,error){
+ if g==nil{return "",errors.New("GitLab is unavailable")}
+ if g.TokenSource!=nil{
+  token,err:=g.TokenSource()
+  if err!=nil||len(token)<20{return "",errors.New("GitLab vault credential unavailable")}
+  return token,nil
+ }
+ if g.Token==""{return "",errors.New("GitLab PAT is not configured")}
+ return g.Token,nil
+}
 
 func (g *GitLab) request(method, path string, query url.Values, body any, limit int64) (int, []byte, error) {
  if !g.configured(){ return 0,nil,errors.New("GitLab PAT is not configured") }
@@ -92,7 +104,9 @@ func (g *GitLab) request(method, path string, query url.Values, body any, limit 
  }
  req,err:=http.NewRequest(method,target.String(),payload)
  if err!=nil{return 0,nil,errors.New("invalid GitLab API request")}
- req.Header.Set("PRIVATE-TOKEN",g.Token)
+ token,err:=g.credential()
+ if err!=nil{return 0,nil,err}
+ req.Header.Set("PRIVATE-TOKEN",token)
  req.Header.Set("Accept","application/json")
  req.Header.Set("User-Agent","eminence-compute")
  if body!=nil{req.Header.Set("Content-Type","application/json")}
