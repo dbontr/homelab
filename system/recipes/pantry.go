@@ -11,6 +11,7 @@ import (
 // Pantry inventory is separate from the derived grocery checklist. Quantities
 // are never converted between units without a measured conversion.
 type PantryItem struct {
+	Key string `json:"key,omitempty"`
 	Name string `json:"name"`
 	Unit string `json:"unit,omitempty"`
 	Amount float64 `json:"amount"`
@@ -63,7 +64,8 @@ func validatePantryItem(item PantryItem)error{
 		len(item.Name)>160 || strings.ContainsAny(item.Name,"\x00\r\n") ||
 		len(item.Unit)>32 || strings.TrimSpace(item.Unit)!=item.Unit ||
 		strings.ContainsAny(item.Unit,"\x00\r\n") ||
-		!finitePositive(item.Amount) || item.Amount>1e8 {
+		!finitePositive(item.Amount) || item.Amount>1e8 ||
+		item.Key!="" && item.Key!=groceryKey(item.Name,item.Unit) {
 		return errors.New("pantry item must have a name, positive amount and exact unit")
 	}
 	if item.Expires!="" {
@@ -76,7 +78,10 @@ func validatePantryItem(item PantryItem)error{
 
 func pantryBoard(data snapshot)PantryBoard{
 	out:=PantryBoard{Revision:data.PantryRevision,Items:make([]PantryItem,0,len(data.Pantry))}
-	for _,item:=range data.Pantry{out.Items=append(out.Items,item)}
+	for _,item:=range data.Pantry{
+		item.Key=groceryKey(item.Name,item.Unit)
+		out.Items=append(out.Items,item)
+	}
 	sort.Slice(out.Items,func(i,j int)bool{
 		a,b:=out.Items[i],out.Items[j]
 		if strings.EqualFold(a.Name,b.Name){return a.Unit<b.Unit}
@@ -98,6 +103,7 @@ func (s *Store) SetPantry(item PantryItem,expectedRevision int)(PantryBoard,erro
 		return PantryBoard{},errors.New("pantry inventory capacity reached")
 	}
 	next:=duplicate(s.data)
+	item.Key=""
 	next.Pantry[key]=item
 	next.PantryRevision++
 	if err:=s.save(next);err!=nil{return PantryBoard{},err}
