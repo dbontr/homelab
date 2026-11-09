@@ -23,7 +23,7 @@ Cross-capability research and explicitly authorized personal-task workflows are 
 
 Compute, teaching and health implementations retain independent operating-system and database boundaries where necessary for reliability. Their separation must not require the user to choose between assistants, endpoints or inconsistent project identifiers.
 
-See [interface boundaries](docs/interface-boundaries.md) for service ownership, availability and credential isolation. The MCP and public API listeners are disabled by default and are not prerequisites for browser or background operation.
+See [interface boundaries](docs/interface-boundaries.md) for service ownership, availability and credential isolation. The [language policy](docs/language-policy.md) specifies Go, Rust, Nix and SQL responsibilities and the acceptance requirements for high-assurance migrations. The MCP and public API listeners are disabled by default and are not prerequisites for browser or background operation.
 
 ## Console
 
