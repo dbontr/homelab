@@ -360,8 +360,11 @@ func Expand(feed Feed,start,end time.Time)(Expansion,error){
   }
  }
  sort.Slice(out.Occurrences,func(i,j int)bool{
-  if out.Occurrences[i].Start==out.Occurrences[j].Start{return out.Occurrences[i].UID<out.Occurrences[j].UID}
-  return out.Occurrences[i].Start<out.Occurrences[j].Start
+  // RFC3339 strings with different offsets do not sort by UTC instant.
+  left,_:=time.Parse(time.RFC3339,out.Occurrences[i].Start)
+  right,_:=time.Parse(time.RFC3339,out.Occurrences[j].Start)
+  if left.Equal(right){return out.Occurrences[i].UID<out.Occurrences[j].UID}
+  return left.Before(right)
  })
  if len(seen)>maxCalendarOccurrences{
   out.Limitations=append(out.Limitations,"Calendar occurrences were limited to 1000 results")
