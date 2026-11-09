@@ -5,7 +5,10 @@ let
 in
 {
   options.services.homelabPlatform = {
-    enable = lib.mkEnableOption "the integrated personal computing API and MCP gateway";
+    enable = lib.mkEnableOption "the independent domain service runtime";
+    mcpInterfaceTokenFile = lib.mkOption { type = lib.types.nullOr lib.types.str; default = null; description = "Service-only token for the optional unified MCP listener."; };
+    apiInterfaceTokenFile = lib.mkOption { type = lib.types.nullOr lib.types.str; default = null; description = "Service-only token for the optional native API listener."; };
+    apiInterfaceWritePaths = lib.mkOption { type = lib.types.listOf lib.types.str; default = []; description = "Exact native API write resource prefixes admitted by the domain runtime."; };
     package = lib.mkOption {
       type = lib.types.package;
       default = package;
@@ -167,6 +170,14 @@ in
   config = lib.mkIf cfg.enable {
     assertions = [
       {
+        assertion = (cfg.apiInterfaceTokenFile != null || cfg.apiInterfaceWritePaths == []) &&
+          (cfg.apiInterfaceTokenFile == null || cfg.apiInterfaceTokenFile != cfg.tokenFile) &&
+          (cfg.mcpInterfaceTokenFile == null || cfg.mcpInterfaceTokenFile != cfg.tokenFile) &&
+          (cfg.mcpInterfaceTokenFile == null || cfg.apiInterfaceTokenFile == null ||
+            cfg.mcpInterfaceTokenFile != cfg.apiInterfaceTokenFile);
+        message = "Optional interfaces must have separate service identities and an explicit API write policy.";
+      }
+      {
         assertion = (cfg.capabilityModel.url == "") == (cfg.capabilityModel.name == "")
           && (cfg.capabilityModel.url != "" || (cfg.capabilityModel.tokenFile == null && cfg.capabilityModel.vaultAlias == ""));
         message = "Capability planning requires a model endpoint and name; credentials cannot be configured alone.";
@@ -272,6 +283,11 @@ in
         HOMELAB_API_TOKEN_FILE = "/run/credentials/homelab-platform.service/access_token";
         HOMELAB_PROMETHEUS_URL = cfg.monitoring.prometheusURL;
         HOMELAB_LOKI_URL = cfg.monitoring.lokiURL;
+      } // lib.optionalAttrs (cfg.mcpInterfaceTokenFile != null) {
+        HOMELAB_MCP_INTERFACE_TOKEN_FILE = "/run/credentials/homelab-platform.service/mcp-interface";
+      } // lib.optionalAttrs (cfg.apiInterfaceTokenFile != null) {
+        HOMELAB_API_INTERFACE_TOKEN_FILE = "/run/credentials/homelab-platform.service/api-interface";
+        HOMELAB_API_INTERFACE_WRITE_PATHS = lib.concatStringsSep "," cfg.apiInterfaceWritePaths;
       } // lib.optionalAttrs (cfg.capabilityModel.routes != []) {
         HOMELAB_CAPABILITY_MODEL_ROUTES_FILE = pkgs.writeText "homelab-model-routes.json" (builtins.toJSON {
           routes = lib.imap0 (index: route: {
@@ -349,6 +365,8 @@ in
         StateDirectoryMode = "0700";
         LoadCredential =
           [ "access_token:${cfg.tokenFile}" ]
+          ++ lib.optional (cfg.mcpInterfaceTokenFile != null) "mcp-interface:${cfg.mcpInterfaceTokenFile}"
+          ++ lib.optional (cfg.apiInterfaceTokenFile != null) "api-interface:${cfg.apiInterfaceTokenFile}"
           ++ lib.optional (cfg.calendarURLFile != null) "calendar_url:${cfg.calendarURLFile}"
           ++ lib.optional (cfg.consolePassphraseFile != null) "console_passphrase:${cfg.consolePassphraseFile}"
           ++ lib.optional (cfg.books.contactFile != null) "books_contact:${cfg.books.contactFile}"
