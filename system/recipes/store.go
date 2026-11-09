@@ -102,6 +102,7 @@ type NutritionPreview struct {
 
 type Document struct {
 	Version int      `json:"version"`
+	Pantry []PantryItem `json:"pantry,omitempty"`
     GroceryChecks map[string]bool `json:"grocery_checks,omitempty"`
 	Recipes []Recipe `json:"recipes"`
 	Meals   []Meal   `json:"meals"`
@@ -109,6 +110,8 @@ type Document struct {
 }
 
 type snapshot struct {
+	PantryRevision int `json:"pantry_revision,omitempty"`
+	Pantry map[string]PantryItem `json:"pantry,omitempty"`
     GroceryRevision int `json:"grocery_revision,omitempty"`
     GroceryChecks map[string]bool `json:"grocery_checks,omitempty"`
 	Version  int               `json:"version"`
@@ -142,7 +145,7 @@ func Open(path string) (*Store, error) {
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}
-	s := &Store{path: path, data: snapshot{Version: 1, Recipes: map[string]Recipe{}, Meals: map[string]Meal{}, History: map[string][]Recipe{}}}
+	s := &Store{path: path, data: snapshot{Version: 1, Recipes: map[string]Recipe{}, Meals: map[string]Meal{}, History: map[string][]Recipe{}, Pantry: map[string]PantryItem{}}}
 	body, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return s, nil
@@ -159,6 +162,13 @@ func Open(path string) (*Store, error) {
 	if s.data.Recipes == nil { s.data.Recipes = map[string]Recipe{} }
 	if s.data.Meals == nil { s.data.Meals = map[string]Meal{} }
  if s.data.GroceryChecks == nil { s.data.GroceryChecks = map[string]bool{} }
+ if s.data.Pantry == nil {s.data.Pantry=map[string]PantryItem{}}
+ if len(s.data.Pantry)>500 {return nil,errors.New("pantry inventory exceeds limit")}
+ for key,item:=range s.data.Pantry {
+  if key!=groceryKey(item.Name,item.Unit) || validatePantryItem(item)!=nil {
+   return nil,errors.New("invalid pantry inventory")
+  }
+ }
 	if s.data.History == nil { s.data.History = map[string][]Recipe{} }
 	for id, recipe := range s.data.Recipes {
 		if id != recipe.ID || !validID(id) { return nil, errors.New("recipe identifier mismatch") }
@@ -190,7 +200,8 @@ func Open(path string) (*Store, error) {
 }
 
 func duplicate(s snapshot) snapshot {
-	out := snapshot{Version: 1, Recipes: make(map[string]Recipe, len(s.Recipes)), Meals: make(map[string]Meal, len(s.Meals)), GroceryRevision:s.GroceryRevision, GroceryChecks:make(map[string]bool,len(s.GroceryChecks))}
+	out := snapshot{Version: 1, Recipes: make(map[string]Recipe, len(s.Recipes)), Meals: make(map[string]Meal, len(s.Meals)), GroceryRevision:s.GroceryRevision, GroceryChecks:make(map[string]bool,len(s.GroceryChecks)),PantryRevision:s.PantryRevision,Pantry:make(map[string]PantryItem,len(s.Pantry))}
+ for key,value:=range s.Pantry {out.Pantry[key]=value}
  for key,checked:=range s.GroceryChecks{out.GroceryChecks[key]=checked}
 	for key, value := range s.Recipes { out.Recipes[key] = value }
 	for key, value := range s.Meals { out.Meals[key] = value }
@@ -500,7 +511,9 @@ func (s *Store) Nutrition(id string, servings float64) (NutritionPreview, error)
 func (s *Store) Export() Document {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	out := Document{Version: 1, GroceryChecks:make(map[string]bool,len(s.data.GroceryChecks)), Recipes: make([]Recipe, 0, len(s.data.Recipes)), Meals: make([]Meal, 0, len(s.data.Meals)), History:make(map[string][]Recipe,len(s.data.History))}
+	out := Document{Version: 1, GroceryChecks:make(map[string]bool,len(s.data.GroceryChecks)), Recipes: make([]Recipe, 0, len(s.data.Recipes)), Meals: make([]Meal, 0, len(s.data.Meals)), History:make(map[string][]Recipe,len(s.data.History)),Pantry:make([]PantryItem,0,len(s.data.Pantry))}
+ for _,item:=range s.data.Pantry{out.Pantry=append(out.Pantry,item)}
+ sort.Slice(out.Pantry,func(i,j int)bool{return out.Pantry[i].Name<out.Pantry[j].Name})
 	for key,checked:=range s.data.GroceryChecks{out.GroceryChecks[key]=checked}
  for _, recipe := range s.data.Recipes { out.Recipes = append(out.Recipes, copyRecipe(recipe)) }
 	for _, meal := range s.data.Meals { out.Meals = append(out.Meals, meal) }
@@ -511,7 +524,7 @@ func (s *Store) Export() Document {
 }
 
 func (s *Store) Import(doc Document) (int, error) {
-	if doc.Version != 1 || len(doc.Recipes) > 5000 || len(doc.Meals) > 10000 {
+	if doc.Version != 1 || len(doc.Recipes) > 5000 || len(doc.Meals) > 10000 || len(doc.Pantry)>500 {
 		return 0, errors.New("unsupported or oversized recipe archive")
 	}
 	s.mu.Lock()
@@ -554,6 +567,16 @@ func (s *Store) Import(doc Document) (int, error) {
      if !available[key]{return 0,errors.New("grocery archive contains unknown items")}
      if checked{next.GroceryChecks[key]=true}
    }
+ }
+ if len(doc.Pantry)>0 {
+  for _,item:=range doc.Pantry{
+   if err:=validatePantryItem(item);err!=nil{return 0,err}
+   key:=groceryKey(item.Name,item.Unit)
+   if _,exists:=next.Pantry[key];exists{return 0,ErrConflict}
+   next.Pantry[key]=item
+  }
+  if len(next.Pantry)>500{return 0,errors.New("pantry capacity exceeded")}
+  next.PantryRevision++
  }
  if err := s.save(next); err != nil { return 0, err }
  return len(doc.Recipes), nil
