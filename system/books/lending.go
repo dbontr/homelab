@@ -35,13 +35,16 @@ type LendingResult struct {
 
 func safeLendingURL(value string)string{
  parsed,err:=url.Parse(value)
- if err!=nil||parsed.Scheme!="https"||parsed.User!=nil||parsed.Fragment!=""||
+ if err!=nil||(parsed.Scheme!="https"&&parsed.Scheme!="http")||parsed.User!=nil||parsed.Fragment!=""||
   parsed.Opaque!=""||parsed.Host==""{return ""}
  switch strings.ToLower(parsed.Hostname()){
  case "openlibrary.org","www.openlibrary.org","archive.org","www.archive.org":
  default:return ""
  }
  if parsed.Port()!=""||!strings.HasPrefix(parsed.Path,"/"){return ""}
+ // The legacy provider API can report http links. Upgrade only exact,
+ // allowlisted hosts; never follow its redirects or accept arbitrary hosts.
+ parsed.Scheme="https"
  return parsed.String()
 }
 
