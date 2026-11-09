@@ -136,5 +136,6 @@ func (db *Database) AllocateWorkspaceBatch(req BatchAllocationRequest) (BatchAll
 		return db.execLocked("INSERT INTO workspace_batch_requests(id,project,fingerprint,result,created) VALUES(?,?,?,?,?)",
 			req.BatchID,req.ProjectID,fingerprint,string(persisted),stamp())
 	})
-	return result,err
+	if err!=nil{return BatchAllocationResult{},err}
+	return result,nil
 }

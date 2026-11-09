@@ -3,6 +3,7 @@ package controller
 import (
 	"encoding/json"
 	"testing"
+	"time"
 )
 
 func batchWorkload(id string, priority int, cpu float64) BatchWorkload {
@@ -66,4 +67,49 @@ func TestWorkspaceBatchRejectsCrossProjectHardwareAndDuplicateIDs(t *testing.T) 
 	if _,err:=db.AllocateWorkspaceBatch(req);err==nil{t.Fatal("nonexistent accelerator reserved")}
 	rows,err:=db.Workspaces("demo")
 	if err!=nil || len(rows)!=0{t.Fatalf("failed batch affected workspace records: %v %v",rows,err)}
+}
+
+func TestWorkspaceBatchRESTHonorsProjectRolesAndUSBPolicy(t *testing.T) {
+	db,server,httpServer:=fixture(t)
+	project(t,httpServer)
+	if _,err:=db.RegisterNode("worker-one",plannerNode(4,8192,nil,"debian:bookworm-slim"));err!=nil{t.Fatal(err)}
+	key,issuer:=testOIDCIssuer(t,server)
+	token:=signedTestToken(t,key,issuer,"project-workspace","builder",time.Now().Add(time.Hour).Unix())
+	principal:="oidc:"+issuer+"#builder"
+	req:=BatchAllocationRequest{
+		BatchID:"batch-rest",ProjectID:"demo",
+		Workloads:[]BatchWorkload{batchWorkload("worker-task",5,1)},
+	}
+	path:="/api/projects/demo/workspaces/batch"
+	code,_:=call(t,httpServer,"POST",path,token,req)
+	if code!=403{t.Fatalf("ungranted caller allocated workspaces: %d",code)}
+	if _,err:=db.SetProjectGrant("demo",principal,"viewer","");err!=nil{t.Fatal(err)}
+	code,_=call(t,httpServer,"POST",path,token,req)
+	if code!=403{t.Fatalf("viewer allocated workspaces: %d",code)}
+	if _,err:=db.SetProjectGrant("demo",principal,"editor","viewer");err!=nil{t.Fatal(err)}
+	code,result:=call(t,httpServer,"POST",path,token,req)
+	if code!=200{t.Fatalf("editor allocation denied: %d %v",code,result)}
+	code,replayed:=call(t,httpServer,"POST",path,token,req)
+	if code!=200{t.Fatalf("replay denied: %d %v",code,replayed)}
+	encoded,_:=json.Marshal(result)
+	encodedReplay,_:=json.Marshal(replayed)
+	if string(encoded)!=string(encodedReplay){t.Fatal("REST replay created a different batch")}
+	usb:=BatchAllocationRequest{
+		BatchID:"batch-usb",ProjectID:"demo",
+		Workloads:[]BatchWorkload{{
+			ID:"usb-task",Priority:3,
+			Request:WorkspaceRequest{
+				USBPassthrough:true,USBNode:"worker-one",USBDeviceID:"usb-one",
+				Hardware:map[string]any{"usb":1},
+			},
+		}},
+	}
+	code,_=call(t,httpServer,"POST",path,token,usb)
+	if code!=403{t.Fatalf("editor used owner-only USB passthrough: %d",code)}
+	if server.authorizeTool(caller{Principal:principal},"workspace_batch_create",map[string]any{
+		"project_id":"demo",
+		"workloads":[]any{map[string]any{"id":"usb-task","request":map[string]any{
+			"usb_passthrough":true,"hardware":map[string]any{"usb":float64(1)},
+		}}},
+	}) {t.Fatal("MCP editor bypassed owner-only USB policy")}
 }
