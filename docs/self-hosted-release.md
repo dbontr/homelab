@@ -20,6 +20,18 @@ The Learning and Health service modules can consume binaries from the unified lo
 
 These options specify future host configuration only. They do not copy files, switch active generations, restart either service, or migrate private state. Before activation, the operator must verify the whole bundle with `scripts/verify-release.sh`, independently verify the manifest and source commit custody, confirm service-account traversal rights for the full release path, and preserve existing state directories and credential files. A release built from local source is not accepted until its service API, database compatibility and health checks pass on the target host.
 
+## Source-owned Compute OCI releases
+
+The Compute controller and Kubernetes workers are compiled from `system/compute` in this repository. The release operator can build both images from one clean, exact Git commit using the already-present local Dockerfiles:
+
+```sh
+bash scripts/build-compute-images.sh ghcr.io/operator/eminence /srv/releases/compute-images/<unique-id> --load
+```
+
+The default `--load` mode installs source-built images into the operator's local container runtime. It does not provide registry-pinned deployment references. Only the explicit `--push` mode publishes images using preconfigured, narrowly scoped registry credentials and records both registry-confirmed `@sha256:` identities in `IMAGE-RELEASE.json`; if either image fails, the deployable receipt is not published. The receipt does not contain credentials or Buildx metadata.
+
+The local Compute Helm chart disables both components by default and refuses to render an enabled controller or worker with an empty or mutable image reference. After independently verifying the source revision and registry artifact custody, configure `controller.enabled` / `worker.enabled` and their exact digest-qualified `image` fields, or set the matching `services.workspaceMcp.controllerImage` and `workerImage` NixOS options. Registry publish does not imply Kubernetes deployment, worker enrollment or source-repository retirement. The current Dockerfiles rely on external base images and package repositories; independent base-image and package provenance must be accepted before claiming fully reproducible builds. The existing controller database volume, paired worker credentials, namespaces and jobs must survive the separately approved live cutover.
+
 Compute toolchain environments can be built locally with:
 
 `bash system/compute/scripts/build-toolchain-image.sh <approved-image-reference> --load`
