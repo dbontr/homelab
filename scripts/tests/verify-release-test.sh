@@ -14,11 +14,12 @@ make_release() {
   for binary in \
     homelab-platform homelab-engineeringd homelab-approve homelab-securityd \
     homelab-executord homelab-release homelab-admin homelab-compute-controller \
-    homelab-compute-worker homelab-learning homelab-health; do
+    homelab-compute-worker homelab-learning homelab-health \
+    homelab-mcp homelab-api; do
     printf '#!/bin/sh\nprintf "version"\n' > "$release/bin/$binary"
     chmod 0700 "$release/bin/$binary"
   done
-  printf '<!doctype html><title>Eminence</title>\n' > "$release/console/index.html"
+  printf '<!doctype html><title>Homelab</title>\n' > "$release/console/index.html"
   printf 'asset\n' > "$release/console/assets/site.css"
   printf 'source_revision=%040d\nbuild_utc=2026-11-09T18:00:00Z\n' 0 > "$release/RELEASE"
   (
