@@ -67,7 +67,7 @@ func TestStageHandlerRejectsUnverifiedTLSAndUnauthorizedStage(t *testing.T){
  executor.cfg.Audit=nil
  request=httptest.NewRequest(http.MethodPost,"/v1/release/stage",strings.NewReader(body))
  request.Header.Set("Cf-Access-Jwt-Assertion","signed-owner")
- request.TLS=&tls.ConnectionState{VerifiedChains:[][]*x509.Certificate{{{}}},PeerCertificates:[]*x509.Certificate{{}}}
+ request.TLS=&tls.ConnectionState{VerifiedChains:[][]*x509.Certificate{{&x509.Certificate{}}},PeerCertificates:[]*x509.Certificate{{}}}
  response=httptest.NewRecorder()
  executor.RemoteHandler().ServeHTTP(response,request)
  if response.Code!=http.StatusServiceUnavailable||stage.calls!=1{
