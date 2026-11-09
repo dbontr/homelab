@@ -451,7 +451,7 @@ pub fn Workflows(csrf: String) -> Element {
                 if alerts.cloned().is_none() {
                     Loading {}
                 } else if let Some(Err(message)) = alerts.cloned() {
-                    Notice { message }
+                    Notice { message: message }
                 } else if visible_alerts.is_empty() {
                     Empty {
                         title: "No change alerts".to_owned(),
