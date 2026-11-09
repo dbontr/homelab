@@ -28,6 +28,7 @@ var permittedComputeTools=map[string]bool{
  "workspace_create":true,"workspace_list":true,"workspace_call":true,
  "workspace_operation":true,"github_checkout_repository":true,
  "github_publish_artifacts":true,"artifact_info":true,
+ "workspace_import_artifact":true,"workspace_destroy":true,
  "knowledge_context":true,"knowledge_search_contributions":true,"research_search":true,
  "library_documents":true,"library_resolve":true,
 }
