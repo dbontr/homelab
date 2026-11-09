@@ -4,9 +4,9 @@ Homelab exists to strengthen the owner's ability to reason, learn and produce co
 
 ## One system
 
-Homelab is one personal computing system. Its owner interacts with a single catalog of capabilities, operations and resources through a common Go API and MCP endpoint. Tasks, goals, projects, Git repositories, shared libraries, learning evidence, health records, computing resources and media may refer to each other using stable identifiers. A project is not defined by its Git repository. Project overview resources join controller-owned context, linked repositories, linked libraries, explicitly linked personal tasks and their goals, and engineering run summaries by exact project ID. Missing downstream services remain visibly unavailable; no global shadow database is constructed.
+Homelab is one personal computing system with independently operated domain services. Its owner interacts with a single catalog of capabilities, operations and resources through the Rust console, one optional MCP listener, or one optional native API listener. Tasks, goals, projects, Git repositories, shared libraries, learning evidence, health records, computing resources and media may refer to each other using stable identifiers. A project is not defined by its Git repository. Project overview resources join controller-owned context, linked repositories, linked libraries, explicitly linked personal tasks and their goals, and engineering run summaries by exact project ID. Missing downstream services remain visibly unavailable; no global shadow database is constructed.
 
-The `system/` tree is the application's source of truth. It contains a primary Go module and independently buildable implementation modules. Module boundaries exist for reliability, toolchain constraints and distinct state ownership; they must not become separate assistant identities, duplicate records or inconsistent interfaces. Go operations remain usable without an AI client. The Rust/Dioxus console invokes those same native operations through narrowly scoped owner-session routes.
+Domain state and work remain owned by the existing Go services in `system/` and its independently buildable specialist modules. The `services/`, `ui/`, `mcp/`, and `api/` sections define separate ownership and external lifecycle boundaries. Module boundaries exist for reliability, toolchain constraints and distinct state ownership; they must not become separate assistant identities, duplicate records or inconsistent interfaces. Go operations remain usable without an AI client. The Rust/Dioxus console invokes those same native operations through narrowly scoped owner-session routes.
 
 Nix provides the root flake, host configuration, deployment definitions, credential loading and component activation. Saturn runs routing, the K3s control plane and persistent lightweight applications. Jupiter, Venus, Mercury and Janus execute authorized compute work. Specialized processes may be upgraded separately, but the user-facing interface remains one system. One process is not required for one product.
 
@@ -14,7 +14,7 @@ Nix provides the root flake, host configuration, deployment definitions, credent
 
 The system implements personal planning, recurrence-aware calendar availability, advisory weekly allocation, task reports, compute and Git workspaces, research libraries, adaptive learning, health and nutrition, media requests, and infrastructure observation. Its custom Rust monitoring views consume a bounded Go adapter over Prometheus metrics and Loki journal data; established collectors retain responsibility for telemetry and historical storage. Quantitative finance is not active. Seerr owns movie and television requests; the assistant exposes those capabilities without duplicating Seerr's database.
 
-A single capability registry and consistent authorization rules govern tool discovery and execution. Operations use native Go interfaces. An MCP transport is an adapter rather than the business-logic owner. The platform must distinguish a successful operation from one merely queued, accepted or unobserved.
+A single capability registry and consistent authorization rules govern tool discovery and execution. Operations belong to domain services. The optional MCP listener and external API listener authenticate separately, forward only admitted operations, and can stop without stopping the service runtime. The platform must distinguish a successful operation from one merely queued, accepted or unobserved.
 
 ## Engineering execution
 
@@ -27,6 +27,10 @@ The declared inventory is in `hardware.nix`, validated by the Go `system/devices
 Choose implementation languages by responsibility: **Go** owns service APIs, persistence, controllers, integration adapters, scheduling and business rules; **Rust** owns Dioxus/WASM interfaces and performance-critical hardware, accelerator and device code where profiling or memory-safety requirements justify it; **Nix** owns builds, services, fleet configuration and reproducible deployment. SQL, HTML and CSS remain the appropriate database/query and browser presentation formats. Do not rewrite established Go services in Rust without a concrete technical benefit. SSH-mode equipment is not a NixOS deployment target and cannot receive managed compute leases. SSH connections use unprivileged user accounts and require separately authorized execution. Enrolled NixOS hosts are derived from the declarative node inventory, not hardcoded in the flake.
 
 The main assistant process never owns deployment or unrestricted cluster credentials. A separately trusted executor must authorize sensitive operations at the actual enforcement boundary. External credentials and media files remain outside Git.
+
+## Interface independence
+
+The Rust console uses same-origin owner-session routes through its independent UI ingress. It does not require the public API or MCP listener. The unified MCP forwards to the canonical internal tool dispatcher; native API access is read-only unless exact write resources are explicitly approved. Neither interface owns a domain database or schedules work. See [interface boundaries](interface-boundaries.md) for the current implementation and migration contract.
 
 ## Deployment
 
