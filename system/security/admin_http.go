@@ -99,6 +99,7 @@ func (a *AdminSessions) OwnerHandler() http.Handler {
 	})
 
  a.registerCredentialRotation(mux)
+ a.registerOAuthOwner(mux)
  mux.HandleFunc("GET /v1/credentials",func(w http.ResponseWriter,_ *http.Request){
   if a.vault==nil{http.Error(w,"credential vault unavailable",503);return}
   respondJSON(w,200,a.vault.List())
