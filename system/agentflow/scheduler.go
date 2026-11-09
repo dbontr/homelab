@@ -42,6 +42,7 @@ dispatch:
 		if err := ctx.Err(); err != nil { break }
 		stored,err:=e.Store.Get(run.ID)
 		if err!=nil{return 0,err}
+		if stored.IntegrationTeamID!="" && !admission[run.ID] {continue}
 		if !stored.Deadline.IsZero() && !time.Now().Before(stored.Deadline) {
 			_ = e.Cancel(run.ID,run.Revision)
 			continue
@@ -130,6 +131,7 @@ func (e *Engine) teamAdmission() (map[string]bool, error) {
  for _,id:=range ids {
   record,err:=e.Store.readTeam(id)
   if err!=nil{return nil,err}
+  if record.IntegrationRunID!=""{admitted[record.IntegrationRunID]=true}
   byKey:=map[string]string{}
   for _,m:=range record.Members {byKey[m.Key]=m.RunID}
   for _,m:=range record.Members {
