@@ -91,6 +91,8 @@ func(s *Server) Handler()http.Handler{
  mux.HandleFunc("GET /v1/engineering/teams/{id}",s.engineeringTeam)
  mux.HandleFunc("POST /v1/engineering/teams/{id}/cancel",s.engineeringTeam)
  mux.HandleFunc("POST /v1/engineering/teams/{id}/integrate",s.engineeringTeamIntegrate)
+ mux.HandleFunc("GET /v1/engineering/runs/{id}/knowledge/{proposal}",s.engineeringRunKnowledge)
+ mux.HandleFunc("POST /v1/engineering/runs/{id}/knowledge/{proposal}/approve",s.engineeringRunKnowledge)
  mux.HandleFunc("GET /v1/workspace/projects",s.uiProjects)
  mux.HandleFunc("GET /v1/workspace/projects/{project}/jobs",s.uiWorkspaceProjectView)
  mux.HandleFunc("GET /v1/workspace/projects/{project}/workspaces",s.uiWorkspaceProjectView)
@@ -345,6 +347,11 @@ func(s *Server)localTools()[]map[string]any{
    tool("engineering_team_get","Inspect one cooperating engineering group",map[string]any{"id":prop("string")},"id"),
    tool("engineering_team_cancel","Cancel unfinished members of a cooperating engineering group",map[string]any{"id":prop("string")},"id"),
    tool("engineering_team_integrate","Verify the combined agent artifacts and prepare one draft PR",map[string]any{"id":prop("string"),"base_branch":prop("string"),"expected_head":prop("string"),"title":prop("string"),"body":prop("string")},"id","base_branch","expected_head","title"))
+ }
+ if _,ok:=s.engineering.(agentflow.KnowledgeManager);ok{
+  tools=append(tools,
+   tool("engineering_run_knowledge_get","Inspect a source-backed knowledge proposal",map[string]any{"id":prop("string"),"proposal_id":prop("string")},"id","proposal_id"),
+   tool("engineering_run_knowledge_approve","Approve one completed-run knowledge proposal for canonical project storage",map[string]any{"id":prop("string"),"proposal_id":prop("string")},"id","proposal_id"))
  }
  if s.executorClient!=nil {
   tools=append(tools,
