@@ -83,7 +83,12 @@ func TestComputeCredentialRotationAndFileProtection(t *testing.T) {
  if err:=os.WriteFile(file,[]byte(first),0600);err!=nil{t.Fatal(err)}
  var observed []string
  elevated:=false
+ projectRole:="editor"
  server:=httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter,r *http.Request) {
+  if r.URL.Path=="/api/projects/demo/role"{
+   _=json.NewEncoder(w).Encode(map[string]any{"project_id":"demo","role":projectRole})
+   return
+  }
   if r.URL.Path=="/api/whoami"{
    _=json.NewEncoder(w).Encode(map[string]any{"principal":"oidc:engineering#worker","administrator":elevated})
    return
@@ -101,6 +106,11 @@ func TestComputeCredentialRotationAndFileProtection(t *testing.T) {
  if len(observed)!=2||observed[0]!="Bearer "+first||observed[1]!="Bearer "+second {
   t.Fatalf("compute credential was not reloaded")
  }
+ projectRole="viewer"
+ if _,err:=client.Call(context.Background(),"workspace_list",map[string]any{"project_id":"demo"});err==nil{
+  t.Fatal("rotated viewer grant accepted for unattended execution")
+ }
+ projectRole="editor"
  elevated=true
  if _,err:=client.Call(context.Background(),"workspace_list",map[string]any{"project_id":"demo"});err==nil{
   t.Fatal("rotated administrator credential accepted for unattended execution")
