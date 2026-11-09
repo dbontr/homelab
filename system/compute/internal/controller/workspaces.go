@@ -101,13 +101,25 @@ func (r WorkspaceRequest) validatedHardware() (map[string]int, error) {
 }
 
 func (db *Database) CreateWorkspace(req WorkspaceRequest) (map[string]any, error) {
+	var result map[string]any
+	err := db.transaction(func() error {
+		var err error
+		result, err = db.createWorkspaceLocked(req)
+		return err
+	})
+	return result, err
+}
+
+// createWorkspaceLocked owns workspace admission, device leases and start queue
+// creation. The caller must hold the controller's SQLite write transaction.
+func (db *Database) createWorkspaceLocked(req WorkspaceRequest) (map[string]any, error) {
 	req.defaults()
 	hardware, e := req.validatedHardware()
 	if e != nil {
 		return nil, e
 	}
 	var out map[string]any
-	err := db.transaction(func() error {
+	err := func() error {
 		if e := requireProject(db, req.ProjectID); e != nil {
 			return e
 		}
@@ -274,7 +286,7 @@ func (db *Database) CreateWorkspace(req WorkspaceRequest) (map[string]any, error
 			out["image_pool_id"] = req.ImagePoolID
 		}
 		return nil
-	})
+	}()
 	return out, err
 }
 func (db *Database) expireLocked(now float64) error {

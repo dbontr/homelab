@@ -146,6 +146,19 @@ func (s *Server) authorizeTool(who caller, name string, args map[string]any) boo
 	if name == "workspace_create" && (asBool(args["usb_passthrough"]) || asFloat(decodeAnyObject(args["hardware"])["usb"]) > 0) {
 		needed = 3
 	}
+	if name == "workspace_batch_create" {
+		workloads, ok := args["workloads"].([]any)
+		if !ok { return false }
+		for _, item := range workloads {
+			job, ok := item.(map[string]any)
+			if !ok { return false }
+			req, ok := job["request"].(map[string]any)
+			if !ok { return false }
+			if asBool(req["usb_passthrough"]) || asFloat(decodeAnyObject(req["hardware"])["usb"]) > 0 {
+				needed = 3
+			}
+		}
+	}
 	if name == "library_link" || name == "workspace_prune_volume" {
 		needed = 3
 	}
@@ -186,6 +199,26 @@ func (s *Server) authorizeREST(r *http.Request, p []string, who caller) bool {
 	}
 	if len(p) >= 3 && p[1] == "projects" {
 		project := p[2]
+		if len(p)==5 && p[3]=="workspaces" && p[4]=="batch" && r.Method==http.MethodPost {
+			if r.Body==nil { return false }
+			data,err:=io.ReadAll(io.LimitReader(r.Body,64<<10))
+			r.Body.Close()
+			if err!=nil || len(data)>=64<<10 { return false }
+			r.Body=io.NopCloser(bytes.NewReader(data))
+			var batch BatchAllocationRequest
+			if json.Unmarshal(data,&batch)!=nil || batch.ProjectID!="" && batch.ProjectID!=project {
+				return false
+			}
+			needed:=2
+			for _,job:=range batch.Workloads {
+				if job.Request.USBPassthrough || asFloat(decodeAnyObject(job.Request.Hardware)["usb"])>0 {
+					needed=3
+				}
+			}
+			allowed:=s.authorizedFor(project,who,needed)
+			s.DB.AuditAccess(who.Principal,project,"rest:POST:"+r.URL.Path,allowed)
+			return allowed
+		}
 		needed := 1
 		if r.Method != http.MethodGet {
 			needed = 2

@@ -80,6 +80,7 @@ var tools = []toolDefinition{
 	{"task_claim_finish", "Complete or release a task lease, validating result artifact ownership", []string{"project_id", "work_key", "lease_token", "generation", "status"}, []string{"artifact_ids"}},
 	{"resource_plan", "Rank eligible Docker workers and explain resource constraints without reserving anything", []string{"project_id"}, []string{"image", "cpu", "memory_mb", "duration_minutes", "environment", "image_pool_id", "hardware", "usb_passthrough", "usb_node", "usb_device_id", "node_id", "min_gpu_memory_mb", "architecture", "display", "display_width", "display_height"}},
 	{"resource_plan_batch", "Plan project compute workloads by priority and available worker capacity without reserving resources", []string{"project_id", "workloads"}, nil},
+	{"workspace_batch_create", "Atomically reserve a bounded batch of approved project workspaces; exact batch IDs are idempotent", []string{"project_id", "batch_id", "workloads"}, nil},
 	{"workspace_create", "Reserve resources and start a workspace", []string{"project_id"}, []string{"image", "cpu", "memory_mb", "duration_minutes", "environment", "image_pool_id", "hardware", "usb_passthrough", "usb_node", "usb_device_id", "node_id", "min_gpu_memory_mb", "architecture", "display", "display_width", "display_height"}},
 	{"workspace_list", "List project workspaces", []string{"project_id"}, nil},
 	{"workspace_call", "Queue a command or file operation", []string{"project_id", "workspace_id", "action", "payload"}, nil},
@@ -670,6 +671,10 @@ func (s *Server) callToolFor(who caller, name string, a map[string]any) (any, er
 		var req BatchPlanRequest
 		if err:=JSONRequest(a,&req);err!=nil{return nil,err}
 		return db.PlanWorkspaceBatch(req)
+	case "workspace_batch_create":
+		var req BatchAllocationRequest
+		if err := JSONRequest(a, &req); err != nil { return nil, err }
+		return db.AllocateWorkspaceBatch(req)
 	case "resource_plan":
 		var req WorkspaceRequest
 		if err := JSONRequest(a, &req); err != nil {

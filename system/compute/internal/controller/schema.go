@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY,project TEXT NOT NULL,node T
 CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status,created);
 CREATE TABLE IF NOT EXISTS pairings(code_hash TEXT PRIMARY KEY,expires REAL NOT NULL);
 CREATE TABLE IF NOT EXISTS workspaces(id TEXT PRIMARY KEY,project TEXT NOT NULL,node TEXT NOT NULL,image TEXT NOT NULL,cpu REAL NOT NULL,memory_mb INTEGER NOT NULL,status TEXT NOT NULL,expires REAL NOT NULL,created REAL NOT NULL,updated REAL NOT NULL,FOREIGN KEY(project) REFERENCES projects(id));
+CREATE TABLE IF NOT EXISTS workspace_batch_requests(id TEXT PRIMARY KEY,project TEXT NOT NULL,fingerprint TEXT NOT NULL,result TEXT NOT NULL,created REAL NOT NULL,FOREIGN KEY(project) REFERENCES projects(id));
 CREATE TABLE IF NOT EXISTS operations(id TEXT PRIMARY KEY,workspace TEXT NOT NULL,node TEXT NOT NULL,action TEXT NOT NULL,payload TEXT NOT NULL,status TEXT NOT NULL,token_hash TEXT,lease_until REAL,result TEXT,created REAL NOT NULL,updated REAL NOT NULL,FOREIGN KEY(workspace) REFERENCES workspaces(id));
 CREATE INDEX IF NOT EXISTS idx_operations_node ON operations(node,status,created);
 CREATE TABLE IF NOT EXISTS hardware_leases(workspace TEXT NOT NULL,node TEXT NOT NULL,device_id TEXT NOT NULL,kind TEXT NOT NULL,acquired REAL NOT NULL,released REAL,PRIMARY KEY(workspace,node,device_id),FOREIGN KEY(workspace) REFERENCES workspaces(id));
