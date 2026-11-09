@@ -13,6 +13,8 @@ import (
  "github.com/dbontr/homelab-new/system/store"
 )
 
+var errTaskBreakdownUnavailable=errors.New("task planning model unavailable")
+
 type TaskDecompositionPreview struct{
  ParentID string `json:"parent_id"`
  ExpectedRevision int `json:"expected_revision"`
@@ -28,7 +30,7 @@ func(s *Server)taskDecompositionPreview(ctx context.Context,parentID string,revi
   return proposal,errors.New("task title and duration disclosure requires explicit consent")
  }
  planner,ok:=s.capabilityPlanner.(agentflow.TaskBreakdownPlanner)
- if !ok{return proposal,errors.New("task planning model unavailable")}
+ if !ok{return proposal,errTaskBreakdownUnavailable}
  if revision<1{return proposal,store.ErrTaskRevision}
  var parent store.Task
  found:=false
@@ -84,7 +86,7 @@ func(s *Server)uiTaskDecompositionPreview(w http.ResponseWriter,r *http.Request)
  switch{
  case errors.Is(err,os.ErrNotExist):writeError(w,404,"parent task not found")
  case errors.Is(err,store.ErrTaskRevision):writeError(w,409,"parent task revision conflict")
- case s.capabilityPlanner==nil:writeError(w,503,"planning model not configured")
+ case errors.Is(err,errTaskBreakdownUnavailable):writeError(w,503,"task planning model unavailable")
  case err!=nil:writeError(w,422,"task decomposition proposal unavailable or invalid")
  default:writeJSON(w,http.StatusOK,result)
  }
