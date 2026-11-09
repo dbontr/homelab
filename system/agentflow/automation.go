@@ -29,6 +29,7 @@ type Automation struct {
  LastAt time.Time `json:"last_at,omitempty"`
  LastWorkflowID string `json:"last_workflow_id,omitempty"`
  NotifyOnChange bool `json:"notify_on_change,omitempty"`
+ NotifyOnEveryRun bool `json:"notify_on_every_run,omitempty"`
  LastObservedWorkflowID string `json:"last_observed_workflow_id,omitempty"`
  ObservationDigest string `json:"observation_digest,omitempty"`
  Alerts []AutomationAlert `json:"alerts,omitempty"`
@@ -39,7 +40,9 @@ type Automation struct {
 func validateAutomation(a Automation)error{
  if !validID(a.ID)||!validID(a.Project)||len(a.Program)<2||
   len(a.Program)>32<<10||!json.Valid(a.Program)||
-  a.EveryMinutes<60||a.EveryMinutes>10080 {
+  a.EveryMinutes<60||a.EveryMinutes>10080||
+  (a.NotifyOnChange&&a.NotifyOnEveryRun)||
+  (a.NotifyOnEveryRun&&a.EveryMinutes!=10080) {
   return errors.New("invalid scheduled workflow")
  }
  if a.LastObservedWorkflowID!=""&&!validID(a.LastObservedWorkflowID) {
@@ -228,7 +231,7 @@ func (s *Store) FireAutomation(a Automation,w Workflow)(Workflow,error){
   !bytes.Equal(current.Program,a.Program) {
   return Workflow{},errors.New("automation scheduling revision conflict")
  }
- if current.NotifyOnChange&&current.LastWorkflowID!=""&&
+ if (current.NotifyOnChange||current.NotifyOnEveryRun)&&current.LastWorkflowID!=""&&
   current.LastObservedWorkflowID!=current.LastWorkflowID {
   return Workflow{},errors.New("previous scheduled observation is not settled")
  }
