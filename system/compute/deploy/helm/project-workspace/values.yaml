@@ -15,6 +15,7 @@ controller:
   storageClass: ""
   nodeSelector: {}
   githubPATSecretName: ""
+  gitlabPATSecretName: ""
   access:
     issuer: ""
     audience: ""
