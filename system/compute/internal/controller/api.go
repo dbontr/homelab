@@ -218,6 +218,18 @@ func (s *Server) handleAdmin(w http.ResponseWriter, r *http.Request, p []string)
 			break
 		}
 	}
+	if len(p) == 5 && p[3] == "workspaces" && p[4] == "batch" {
+		if method != http.MethodPost { fail(w,405,"method not allowed"); return }
+		var req BatchAllocationRequest
+		if err := bodyJSON(r,&req); err != nil { fail(w,400,err.Error()); return }
+		if req.ProjectID != "" && req.ProjectID != project {
+			fail(w,400,"request project does not match scoped resource"); return
+		}
+		req.ProjectID = project
+		result,err := db.AllocateWorkspaceBatch(req)
+		send(w,result,err)
+		return
+	}
 	if len(p) >= 5 && p[3] == "workspaces" {
 		ws := p[4]
 		if len(p) == 5 && method == "GET" {
