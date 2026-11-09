@@ -2,7 +2,6 @@ package security
 
 import (
  "bytes"
- "crypto/x509"
  "errors"
  "net/http"
  "regexp"
@@ -104,6 +103,3 @@ func(a *AdminSessions)ServiceCredentialHandler()http.Handler{
  })
 }
 
-func serviceCredentialPeer(dns string)*x509.Certificate{
- return &x509.Certificate{DNSNames:[]string{dns}}
-}
