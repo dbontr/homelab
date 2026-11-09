@@ -38,6 +38,7 @@ type Step struct {
 	Attempts    int             `json:"attempts"`
 	Generation  uint64          `json:"generation"`
 	LeaseDigest string          `json:"lease_digest,omitempty"`
+	ExternalStarted bool `json:"external_started,omitempty"`
 	LeaseUntil  time.Time       `json:"lease_until,omitempty"`
 	LastError   string          `json:"last_error,omitempty"`
 	Result      json.RawMessage `json:"result,omitempty"`
