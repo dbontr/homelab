@@ -25,6 +25,11 @@ type KnowledgeProposal struct {
 	Status         string            `json:"status"`
 	ContributionID string            `json:"contribution_id,omitempty"`
 }
+type KnowledgeManager interface {
+ Knowledge(string,string)(KnowledgeProposal,error)
+ ApproveKnowledge(string,string)(KnowledgeProposal,error)
+}
+
 type KnowledgePreview struct {
 	ID     string `json:"id"`
 	Kind   string `json:"kind"`
