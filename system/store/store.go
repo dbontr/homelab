@@ -2,6 +2,7 @@ package store
 
 import (
  "crypto/rand"
+ "crypto/sha256"
  "encoding/hex"
  "encoding/json"
  "errors"
@@ -62,7 +63,7 @@ type Report struct {
  Goals []GoalProgress `json:"goals"`
  Note string `json:"note"`
 }
-type snapshot struct { Tasks map[string]Task `json:"tasks"`; Goals map[string]Goal `json:"goals"`; Rules map[string]Rule `json:"rules"`; BookRequests map[string]BookRequest `json:"book_requests,omitempty"` }
+type snapshot struct { Tasks map[string]Task `json:"tasks"`; Goals map[string]Goal `json:"goals"`; Rules map[string]Rule `json:"rules"`; BookRequests map[string]BookRequest `json:"book_requests,omitempty"`; AutomationReceipts map[string]taskAutomationReceipt `json:"automation_receipts,omitempty"` }
 type Store struct { mu sync.Mutex; path string; zone *time.Location; data snapshot }
 
 func Open(path, timeZone string) (*Store,error) {
@@ -70,7 +71,7 @@ func Open(path, timeZone string) (*Store,error) {
  if timeZone=="" {timeZone="America/Chicago"}
  zone,err:=time.LoadLocation(timeZone);if err!=nil{return nil,err}
  if err=os.MkdirAll(filepath.Dir(path),0700);err!=nil{return nil,err}
- s:=&Store{path:path,zone:zone,data:snapshot{Tasks:map[string]Task{},Goals:map[string]Goal{},Rules:map[string]Rule{},BookRequests:map[string]BookRequest{}}}
+ s:=&Store{path:path,zone:zone,data:snapshot{Tasks:map[string]Task{},Goals:map[string]Goal{},Rules:map[string]Rule{},BookRequests:map[string]BookRequest{},AutomationReceipts:map[string]taskAutomationReceipt{}}}
  raw,err:=os.ReadFile(path)
  if err!=nil&&!errors.Is(err,os.ErrNotExist){return nil,err}
  if err==nil {
@@ -79,14 +80,16 @@ func Open(path, timeZone string) (*Store,error) {
   if s.data.Goals==nil{s.data.Goals=map[string]Goal{}}
   if s.data.Rules==nil{s.data.Rules=map[string]Rule{}}
   if s.data.BookRequests==nil{s.data.BookRequests=map[string]BookRequest{}}
+  if s.data.AutomationReceipts==nil{s.data.AutomationReceipts=map[string]taskAutomationReceipt{}}
  }
  return s,nil
 }
 func clone(in snapshot) snapshot {
- out:=snapshot{Tasks:make(map[string]Task,len(in.Tasks)),Goals:make(map[string]Goal,len(in.Goals)),Rules:make(map[string]Rule,len(in.Rules)),BookRequests:make(map[string]BookRequest,len(in.BookRequests))}
+ out:=snapshot{Tasks:make(map[string]Task,len(in.Tasks)),Goals:make(map[string]Goal,len(in.Goals)),Rules:make(map[string]Rule,len(in.Rules)),BookRequests:make(map[string]BookRequest,len(in.BookRequests)),AutomationReceipts:make(map[string]taskAutomationReceipt,len(in.AutomationReceipts))}
  for k,v:=range in.Tasks{out.Tasks[k]=v}
  for k,v:=range in.Goals{out.Goals[k]=v}
  for k,v:=range in.Rules{out.Rules[k]=v}
+ for k,v:=range in.AutomationReceipts{out.AutomationReceipts[k]=v}
  for k,v:=range in.BookRequests{v.Authors=append([]string(nil),v.Authors...);out.BookRequests[k]=v}
  return out
 }
@@ -109,7 +112,16 @@ func validDue(d string)bool{
  if _,e:=time.Parse(time.RFC3339,d);e==nil{return true}
  _,e:=time.Parse("2006-01-02",d);return e==nil
 }
-func (s *Store) AddTask(in TaskInput)(Task,error){
+func (s *Store) AddTask(in TaskInput)(Task,error){return s.addTask(in,"")}
+
+// AddTaskOnce persists the task and its idempotency receipt atomically.
+func (s *Store) AddTaskOnce(receiptKey string,in TaskInput)(Task,error){
+ decoded,err:=hex.DecodeString(receiptKey)
+ if err!=nil||len(decoded)!=32{return Task{},errors.New("invalid idempotency key")}
+ return s.addTask(in,receiptKey)
+}
+
+func (s *Store) addTask(in TaskInput,receiptKey string)(Task,error){
  in.Title=strings.TrimSpace(in.Title)
  if in.Title==""||len(in.Title)>500{return Task{},errors.New("title must be 1-500 characters")}
  if in.Minutes<0||in.Minutes>1440{return Task{},errors.New("minutes must be 0-1440")}
@@ -124,6 +136,21 @@ func (s *Store) AddTask(in TaskInput)(Task,error){
  if in.Scheduled!="" && in.Minutes<1 {return Task{},errors.New("scheduled tasks require a positive duration")}
  if in.Energy!=""&&in.Energy!="low"&&in.Energy!="medium"&&in.Energy!="high"{return Task{},errors.New("invalid energy")}
  s.mu.Lock();defer s.mu.Unlock()
+ fingerprint:=""
+ if receiptKey!="" {
+  raw,_:=json.Marshal(in)
+  digest:=sha256.Sum256(raw)
+  fingerprint=hex.EncodeToString(digest[:])
+  if receipt,ok:=s.data.AutomationReceipts[receiptKey];ok {
+   if receipt.Fingerprint!=fingerprint{return Task{},errors.New("idempotent task payload conflict")}
+   prior,exists:=s.data.Tasks[receipt.TaskID]
+   if !exists{return Task{},errors.New("automation receipt refers to missing task")}
+   prior.Links=append([]string(nil),prior.Links...)
+   prior.DependsOn=append([]string(nil),prior.DependsOn...)
+   return prior,nil
+  }
+  if len(s.data.AutomationReceipts)>=10000{return Task{},errors.New("automation receipt retention limit reached")}
+ }
  if in.GoalID!=""{if _,ok:=s.data.Goals[in.GoalID];!ok{return Task{},errors.New("goal does not exist")}}
  if in.ParentID!=""{if _,ok:=s.data.Tasks[in.ParentID];!ok{return Task{},errors.New("parent task does not exist")}}
  if len(in.DependsOn)>32{return Task{},errors.New("too many prerequisites")}
@@ -136,6 +163,7 @@ func (s *Store) AddTask(in TaskInput)(Task,error){
  key,e:=id();if e!=nil{return Task{},e}
  t:=Task{ID:key,Title:in.Title,Notes:in.Notes,GoalID:in.GoalID,Links:append([]string(nil),in.Links...),ParentID:in.ParentID,DependsOn:append([]string(nil),in.DependsOn...),Due:in.Due,Scheduled:in.Scheduled,Recurrence:in.Recurrence,Revision:1,Minutes:in.Minutes,Energy:in.Energy,Location:in.Location,Priority:in.Priority,Status:"open",CreatedAt:time.Now().UTC()}
  next:=clone(s.data);next.Tasks[key]=t
+ if receiptKey!="" {next.AutomationReceipts[receiptKey]=taskAutomationReceipt{Fingerprint:fingerprint,TaskID:key}}
  return t,s.save(next)
 }
 func (s *Store) CompleteTask(key string)(Task,error){
