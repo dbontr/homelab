@@ -27,7 +27,6 @@ func TestWeeklyPlannerDailyBudgetsAndAPIValidation(t *testing.T) {
 		t.Fatalf("day-specific capacity not enforced: %+v", plan)
 	}
 	for _, invalid := range []string{
-		"day_minutes=0,0,0,0,0,0,0",
 		"day_minutes=0,60",
 		"day_minutes=0,20,0,0,0,0,0",
 		"day_minutes=0,60,abc,0,0,0,0",

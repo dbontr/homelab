@@ -42,7 +42,11 @@ func TestWeeklyPlanRespectsUnevenDailyCapacity(t *testing.T) {
 		plan.Slots[0].TaskID != task.ID || plan.Slots[0].Date != "2032-06-08" {
 		t.Fatalf("closed days were not respected: %+v", plan)
 	}
-	for _, invalid := range [][7]int{{0, 0, 0, 0, 0, 0, 0}, {-1, 60, 60, 60, 60, 60, 60},
+	closed, err := s.PlanWeekWithCapacities("2032-06-07", [7]int{}, 9, nil)
+	if err != nil || len(closed.Slots) != 0 || len(closed.Unplanned) != 1 {
+		t.Fatalf("zero-capacity week was not represented as unavailable: %+v %v", closed, err)
+	}
+	for _, invalid := range [][7]int{{-1, 60, 60, 60, 60, 60, 60},
 		{29, 60, 60, 60, 60, 60, 60}} {
 		if _, err := s.PlanWeekWithCapacities("2032-06-07", invalid, 9, nil); err == nil {
 			t.Fatalf("invalid capacities accepted: %v", invalid)

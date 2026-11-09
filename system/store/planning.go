@@ -79,9 +79,6 @@ func (s *Store) PlanWeekWithCapacities(day string, capacities [7]int, startHour 
 			maxCapacity = minutes
 		}
 	}
-	if maxCapacity == 0 {
-		return WeeklyPlan{}, errors.New("at least one day must have available capacity")
-	}
 	first, err := s.PlanningStart(day)
 	if err != nil {
 		return WeeklyPlan{}, err
