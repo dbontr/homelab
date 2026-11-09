@@ -1,8 +1,6 @@
 package transport
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"path/filepath"
 	"strings"
@@ -46,17 +44,13 @@ func TestPantryHTTPRequiresAuthorizationAndRevision(t *testing.T){
 	}
 	if len(r.Meals())!=0{t.Fatal("recommendation mutated meal records")}
 	visible:=request(h,"GET","/v1/pantry","",token)
-	var board struct{Items []struct{ Name string `json:"name"`;Unit string `json:"unit"`}}
-	_ = json.Unmarshal(visible.Body.Bytes(),&board)
-	// Key identifiers are content-addressed and are derived by the client.
-	key:=pantryKeyForTest("Rice","g")
+	var board struct{Items []struct{Key string `json:"key"`;Name string `json:"name"`}}
+	if err:=json.Unmarshal(visible.Body.Bytes(),&board);err!=nil{t.Fatal(err)}
+	if len(board.Items)!=1 || board.Items[0].Key==""{t.Fatal("pantry key absent from owner view")}
+	key:=board.Items[0].Key
 	removed:=request(h,"DELETE","/v1/pantry/items/"+key,`{"expected_revision":1}`,token)
 	if removed.Code!=200||!strings.Contains(removed.Body.String(),`"items":[]`){
 		t.Fatalf("pantry removal failed: %d %s",removed.Code,removed.Body.String())
 	}
 }
 
-func pantryKeyForTest(name,unit string)string{
-	digest:=sha256.Sum256([]byte(strings.ToLower(strings.TrimSpace(name))+"\x00"+strings.ToLower(strings.TrimSpace(unit))))
-	return hex.EncodeToString(digest[:])
-}
