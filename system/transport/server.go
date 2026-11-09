@@ -128,6 +128,10 @@ func(s *Server) Handler()http.Handler{
  mux.HandleFunc("GET /v1/health/food-proposals",s.uiFoodProposals)
  mux.HandleFunc("POST /v1/health/food-proposals/{id}/confirm",s.uiFoodConfirm)
  mux.HandleFunc("POST /v1/recipes/{id}/nutrition-proposal",s.uiRecipeNutritionProposal)
+ mux.HandleFunc("GET /v1/pantry",s.pantryCollection)
+ mux.HandleFunc("PUT /v1/pantry",s.pantryCollection)
+ mux.HandleFunc("DELETE /v1/pantry/items/{key}",s.pantryItem)
+ mux.HandleFunc("POST /v1/recipes/recommend",s.pantryRecommendations)
  mux.HandleFunc("GET /v1/recipes",s.recipeCollection)
  mux.HandleFunc("POST /v1/recipes",s.recipeCollection)
  mux.HandleFunc("GET /v1/recipes/health-goals",s.uiHealthGoals)
@@ -442,7 +446,11 @@ func(s *Server)localTools()[]map[string]any{
   tool("recipe_meal_schedule","Schedule a recipe for a date",map[string]any{"meal":prop("object")},"meal"),
   tool("recipe_meal_remove","Remove a scheduled meal",map[string]any{"id":prop("string")},"id"),
   tool("recipe_groceries","Consolidate meal-plan ingredients by name and unit",map[string]any{"start":prop("string"),"end":prop("string")}),
-  tool("recipe_nutrition_preview","Preview reported or estimated recipe nutrients without logging consumption",map[string]any{"id":prop("string"),"servings":prop("number")},"id","servings"))}
+  tool("recipe_nutrition_preview","Preview reported or estimated recipe nutrients without logging consumption",map[string]any{"id":prop("string"),"servings":prop("number")},"id","servings"),
+  tool("recipe_pantry_list","List recorded pantry inventory and revision without inferring unrecorded stock",map[string]any{}),
+  tool("recipe_pantry_set","Store a pantry quantity with revision-checked updates",map[string]any{"item":prop("object"),"expected_revision":prop("integer")},"item","expected_revision"),
+  tool("recipe_pantry_remove","Remove a pantry entry using an exact revision",map[string]any{"key":prop("string"),"expected_revision":prop("integer")},"key","expected_revision"),
+  tool("recipe_recommend","Rank recipes by recorded supplies and explicit nutritional targets without logging meals",map[string]any{"servings":prop("number"),"targets":map[string]any{"type":"array","items":prop("object")},"limit":prop("integer")}))}
  if s.bookCatalog!=nil {tools=append(tools,
   tool("book_search","Discover published books through the official Open Library catalog",map[string]any{"query":prop("string")},"query"))}
  tools=append(tools,
