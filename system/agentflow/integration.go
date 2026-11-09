@@ -98,7 +98,7 @@ func (e *Engine) integrationStep(ctx context.Context, claim Claim, workflow Work
 			if !ok || exit != 0 {
 				return nil, errors.New("combined source failed an owner-approved check")
 			}
-			results = append(results, map[string]any{"command": command, "exit_code": 0})
+			results = append(results, map[string]any{"command": command, "exit_code": 0, "diagnostic":classifyCheck(command,0,str(result["stdout"]),str(result["stderr"]))})
 		}
 		for name, expected := range verified {
 			read, err := e.workspaceAction(ctx, workflow, "read_file", map[string]any{
