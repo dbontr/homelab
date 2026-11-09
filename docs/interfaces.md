@@ -9,6 +9,7 @@ The unified MCP discovery operation preserves the canonical local tool set when 
 - GET /healthz: process readiness without sensitive details
 - GET /v1/tasks and POST /v1/tasks: list and create tasks
 - POST /v1/tasks/{id}/complete: idempotently mark a task complete
+- POST /v1/tasks/{id}/decompose: atomically create 2–32 actionable subtasks from `{"expected_revision":1,"steps":[{"title":"...","minutes":30,"depends_on_steps":[0]}]}`; every dependency index must refer to an earlier step. The operation updates the parent revision, inherits its goal, project links, deadline and prerequisite context, and creates all subtasks or none.
 - GET /v1/goals and POST /v1/goals: list and create long-term goals
 - GET /v1/rules and PUT /v1/rules/{key}: list and save personal constraints or preferences
 - GET /v1/recommendations: filter by available time, energy and location; quick mode favors small tasks
@@ -43,7 +44,7 @@ MCP tool calls are not a privileged deployment pipeline. Upstream mutations use 
 
 ## Personal operating rules
 
-Tasks may declare a parent and prerequisites through `parent_id` and `depends_on`. Recommendations exclude tasks with incomplete recorded prerequisites. Both interfaces use the same task data and rules. The baseline minimum is three completed tasks per day. Any completed task can count; quick errands are intentionally eligible. Goal progress and the significance of a particular accomplishment remain separate measures. Natural-language rules are stored as preferences or constraints, but only explicitly implemented structured constraints are mechanically enforced.
+Tasks may declare a parent and prerequisites through `parent_id` and `depends_on`. The `task_decompose` MCP operation shares the native decomposition transaction. A decomposed parent is a non-actionable container: the agenda, suggestions and weekly planner select its subtasks, and parent completion is rejected while any recorded subtask remains open. Existing ordinary parent relationships are unaffected. Recommendations exclude tasks with incomplete recorded prerequisites. Both interfaces use the same task data and rules. The baseline minimum is three completed tasks per day. Any completed task can count; quick errands are intentionally eligible. Goal progress and the significance of a particular accomplishment remain separate measures. Natural-language rules are stored as preferences or constraints, but only explicitly implemented structured constraints are mechanically enforced.
 
 Reports measure recorded completions. A missing record does not establish inactivity.
 
