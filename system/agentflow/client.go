@@ -98,3 +98,16 @@ func (c *Client) IntegrateTeam(id string, request TeamIntegrationRequest)(TeamSu
  err:=c.request(http.MethodPost,"/teams/"+url.PathEscape(id)+"/integrate",request,&team)
  return team,err
 }
+
+func(c *Client)Knowledge(runID,proposalID string)(KnowledgeProposal,error){
+ var result KnowledgeProposal
+ if !validID(runID)||!validID(proposalID){return result,errors.New("invalid knowledge identity")}
+ err:=c.request(http.MethodGet,"/runs/"+url.PathEscape(runID)+"/knowledge/"+url.PathEscape(proposalID),nil,&result)
+ return result,err
+}
+func(c *Client)ApproveKnowledge(runID,proposalID string)(KnowledgeProposal,error){
+ var result KnowledgeProposal
+ if !validID(runID)||!validID(proposalID){return result,errors.New("invalid knowledge identity")}
+ err:=c.request(http.MethodPost,"/runs/"+url.PathEscape(runID)+"/knowledge/"+url.PathEscape(proposalID)+"/approve",map[string]any{},&result)
+ return result,err
+}
