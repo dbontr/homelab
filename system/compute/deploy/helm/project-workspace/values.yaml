@@ -24,6 +24,10 @@ controller:
     existingClaimName: ""
     authorName: ""
     authorEmail: ""
+  embedding:
+    url: ""
+    model: ""
+    tokenSecretName: ""
   backupInterval: ""
   offsite:
     repository: ""

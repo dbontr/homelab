@@ -13,6 +13,11 @@ let
       databaseSize = cfg.databaseSize;
       storageClass = cfg.storageClass;
       backupInterval = cfg.backupInterval;
+      embedding = {
+        url = cfg.embedding.url;
+        model = cfg.embedding.model;
+        tokenSecretName = cfg.embedding.tokenSecretName;
+      };
       offsite = {
         repository = cfg.offsite.repository;
         passwordSecretName = cfg.offsite.passwordSecretName;
@@ -224,6 +229,11 @@ in {
         description = "Secret with the authorized Cloudflare Access owner email.";
       };
     };
+    embedding = {
+      url = lib.mkOption { type = lib.types.str; default = ""; description = "HTTPS or loopback embeddings-compatible endpoint."; };
+      model = lib.mkOption { type = lib.types.str; default = ""; description = "Configured embedding model identifier."; };
+      tokenSecretName = lib.mkOption { type = lib.types.str; default = ""; description = "Preprovisioned controller-only Secret with token key."; };
+    };
     backupInterval = lib.mkOption {
       type = lib.types.str;
       default = "";
@@ -272,6 +282,11 @@ in {
 
   config = lib.mkIf cfg.enable {
     assertions = [
+      {
+        assertion = (cfg.embedding.url == "") == (cfg.embedding.model == "")
+          && (cfg.embedding.url != "" || cfg.embedding.tokenSecretName == "");
+        message = "Embedding configuration requires a provider endpoint and model; credentials cannot be configured alone.";
+      }
       {
         assertion = imageIsPinned cfg.controllerImage;
         message = "Workspace requires a digest-pinned controller image.";
