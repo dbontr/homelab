@@ -24,7 +24,7 @@ These options specify future host configuration only. They do not copy files, sw
 
 ## Source-owned Compute OCI releases
 
-The Compute controller and Kubernetes workers are compiled from `system/compute` in this repository. The release operator can build both images from one clean, exact Git commit using the already-present local Dockerfiles:
+The Compute controller and Kubernetes workers are compiled from `services/compute` in this repository. The release operator can build both images from one clean, exact Git commit using the already-present local Dockerfiles:
 
 ```sh
 bash scripts/build-compute-images.sh ghcr.io/operator/eminence /srv/releases/compute-images/<unique-id> --load
@@ -36,7 +36,7 @@ The local Compute Helm chart disables both components by default and refuses to 
 
 Compute toolchain environments can be built locally with:
 
-`bash system/compute/scripts/build-toolchain-image.sh <approved-image-reference> --load`
+`bash services/compute/scripts/build-toolchain-image.sh <approved-image-reference> --load`
 
 Use `--push` only when an operator has configured an approved registry, narrow package-write credential and verified image digest. Rootless BuildKit Kubernetes jobs are separately opt-in in the compute implementation. Publishing an image does not enroll it into a worker or activate a Kubernetes release.
 
