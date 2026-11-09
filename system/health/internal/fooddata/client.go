@@ -44,7 +44,7 @@ func (c *Client)request(ctx context.Context,uri string)(json.RawMessage,error){
  req.Header.Set("Accept","application/json")
  req.Header.Set("User-Agent","personal-health-mcp/0.1 (https://github.com/dbontr/homelab-new/system/health)")
  resp,err:=c.http.Do(req)
- if err!=nil{return nil,err}
+ if err!=nil{return nil,errors.New("food data provider unavailable")}
  defer resp.Body.Close()
  if resp.StatusCode==http.StatusNotFound{return nil,errors.New("food item was not found")}
  if resp.StatusCode!=http.StatusOK{return nil,fmt.Errorf("food data provider returned HTTP %d",resp.StatusCode)}
