@@ -4,7 +4,7 @@
 
 The repository contains a unified personal computing system. A module is an implementation boundary, not a separate product. The codebase must have one canonical model for projects, tasks, capabilities, permissions and resource references. Every native API and MCP operation invokes the same underlying Go logic.
 
-- `system/`: Go source, native APIs, MCP, persistent operations and internal computation, learning and health implementations.
+- `services/core/`: Go application runtime, native resource handlers and persistence; `services/compute/`, `services/learning/` and `services/health/`: specialist services; `mcp/` and `api/`: optional external interfaces.
 - `infrastructure/`: NixOS hosts, network policy, storage, K3s, media software and diagnostics. The `homelab/default.nix` entrypoint composes the host configuration.
 - `hardware.nix`: declarative node and device registry with explicit management modes. Runtime credentials and connection secrets are never included.
 - `packages/`, `nixosModules/`: reproducible packages and NixOS activation.
@@ -28,6 +28,6 @@ A project may include several repositories, shared libraries, learning goals, ex
 
 ## Verification
 
-Run `go test ./...`, `go test -race ./...`, and `go vet ./...` in `system/` and test its nested Go modules with their declared toolchains. Evaluate every enrolled NixOS host configuration from the repository root. Verify MCP discovery, authorized and unauthorized calls, native APIs, media requests, remote compute, hardware restrictions and service rollback.
+Run `go test ./...`, `go test -race ./...`, and `go vet ./...` in `services/core/` and test the independent specialist modules with their declared toolchains. Evaluate every enrolled NixOS host configuration from the repository root. Verify MCP discovery, authorized and unauthorized calls, native APIs, media requests, remote compute, hardware restrictions and service rollback.
 
 Keep structural boundaries only when they serve a real technical constraint. User-visible unity is determined by consistent behavior and ownership, not by the number of source files or running processes.
