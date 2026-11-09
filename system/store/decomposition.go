@@ -69,7 +69,7 @@ func (s *Store) DecomposeTask(parentID string,expectedRevision int,steps []TaskS
  defer s.mu.Unlock()
  parent,ok:=s.data.Tasks[parentID]
  if !ok{return TaskDecomposition{},os.ErrNotExist}
- if parent.Status!="open"||parent.Revision!=expectedRevision{
+ if parent.Status!="open"||parent.Decomposed||parent.Revision!=expectedRevision{
   return TaskDecomposition{},ErrTaskRevision
  }
  if err:=ValidateTaskDecompositionSteps(parent,steps);err!=nil{return TaskDecomposition{},err}
