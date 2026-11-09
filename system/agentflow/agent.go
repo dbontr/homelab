@@ -348,15 +348,15 @@ func (e *Engine) runAgentTurn(ctx context.Context, claim Claim, w Workflow) (jso
 	}
 	action := state.Pending.Action
 	target := action.Path
-	if action.Repository != "" && action.Repository != brief.Repository {
-		target = action.Repository + ":" + target
-	}
 	if target == "" {
 		if action.Action == "check" {
 			target = action.Command
 		} else if action.Action == "search" || action.Action == "references" {
 			target = action.Query
 		}
+	}
+	if action.Repository != "" && action.Repository != brief.Repository {
+		target = action.Repository + ":" + target
 	}
 	if len(target) > 160 {
 		target = target[:160]
