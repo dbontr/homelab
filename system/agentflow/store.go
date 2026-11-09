@@ -148,6 +148,15 @@ func (s *Store) Create(w Workflow)error{
  if err:=Validate(w);err!=nil{return err}
  unlock,err:=s.lock();if err!=nil{return err};defer unlock()
  if _,err:=os.Stat(s.filename(w.ID));err==nil{return os.ErrExist}else if !errors.Is(err,os.ErrNotExist){return err}
+ entries,err:=os.ReadDir(s.dir)
+ if err!=nil{return err}
+ count:=0
+ for _,entry:=range entries{
+  name:=entry.Name()
+  if entry.IsDir()||filepath.Ext(name)!=".json"{continue}
+  if validID(name[:len(name)-5]){count++}
+ }
+ if count>=1000{return errors.New("engineering run retention capacity reached")}
  for i:=range w.Steps{
   w.Steps[i].Status=Pending
   w.Steps[i].Attempts=0
