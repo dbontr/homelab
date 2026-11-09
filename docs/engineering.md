@@ -124,6 +124,10 @@ or deploy changes, and conflicting artifacts are never resolved implicitly. Team
 daemon's `/teams` lifecycle interface, the authenticated platform API
 `/v1/engineering/teams`, and the `engineering_team_*` MCP tools.
 
+## Source-aware test impact
+
+The engineering agent may request `test_impact` for an approved source path. It traces bounded Go package imports, Rust crate/module references, ordinary C-family includes, Python module imports, and VHDL library references. Go changes additionally run the local AST and type-check analyzer, with limited diagnostics shown alongside candidate tests. Missing or truncated source maps, unresolved Go type information, and unrecognized import paths are reported conservatively. These results identify possible tests, not complete compiler or integration coverage, and no test is marked as executed merely because it was suggested.
+
 ## Code manipulation and review
 
 The autonomous model may preview an exact-context patch without writing it.
