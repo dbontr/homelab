@@ -2,6 +2,8 @@ package agentflow
 
 import (
  "context"
+ "crypto/sha256"
+ "encoding/hex"
  "encoding/json"
  "errors"
  "fmt"
@@ -13,6 +15,7 @@ import (
 type fakeCompute struct{
  calls []string
  operations map[string]map[string]any
+ files map[string]string
  count int
  failCheck bool
  drafts int
@@ -33,8 +36,16 @@ func(f *fakeCompute)Call(_ context.Context,name string,args map[string]any)(map[
   action:=str(args["action"])
   result:=map[string]any{}
   switch action{
-  case "read_file":result["content"]="package sample"
-  case "write_file":result["bytes"]=4
+  case "read_file":
+   filename:=str(obj(args["payload"])["path"])
+   if body,ok:=f.files[filename];ok{result["content"]=body}else{result["content"]="package sample"}
+  case "write_file":
+   payload:=obj(args["payload"])
+   if f.files==nil{f.files=map[string]string{}}
+   filename,body:=str(payload["path"]),str(payload["content"])
+   f.files[filename]=body
+   digest:=sha256.Sum256([]byte(body))
+   result["sha256"]=hex.EncodeToString(digest[:])
   case "command":
    code:=float64(0);if f.failCheck{code=1}
    result["exit_code"]=code
