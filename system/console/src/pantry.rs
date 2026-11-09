@@ -87,6 +87,10 @@ fn parse_nutrient_targets(text: &str) -> Result<Vec<NutrientTarget>, String> {
     Ok(targets)
 }
 
+fn percentage(value: f64) -> String {
+    format!("{:.0}%", value * 100.0)
+}
+
 #[component]
 pub fn Pantry(csrf: String) -> Element {
     let csrf = use_signal(|| csrf);
@@ -317,11 +321,11 @@ pub fn Pantry(csrf: String) -> Element {
                                     div {
                                         strong { "{candidate.title}" }
                                         p { class: "small muted",
-                                            "Ingredient coverage: {candidate.ingredient_coverage * 100.0:.0}%"
+                                            "Ingredient coverage: {percentage(candidate.ingredient_coverage)}"
                                         }
                                         if candidate.known_targets > 0 {
                                             p { class: "small muted",
-                                                "Recorded nutrient target fit: {candidate.nutrient_fit * 100.0:.0}% ({candidate.known_targets} known targets)"
+                                                "Recorded nutrient target fit: {percentage(candidate.nutrient_fit)} ({candidate.known_targets} known targets)"
                                             }
                                         }
                                         if !candidate.nutrition_method.is_empty() {
