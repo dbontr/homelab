@@ -17,7 +17,7 @@ Runs are compiled into these dependency-ordered operations:
 7. Export the verified files as immutable project artifacts.
 8. Prepare a revision-guarded **draft pull request**. A run cannot merge it or activate a release.
 
-The program's `allowed_paths` restricts model-generated output. `context_paths` restricts which existing files are presented to the model. Neither grants access to credentials, host files, the release controller or privileged cluster commands. Source-code and test-output inputs are untrusted and can contain adversarial instructions. The authoring client accepts only a bounded JSON file map and rejects paths outside the allowlist.
+The engineering service authenticates with a project-scoped compute credential, not the compute controller administrator token. The controller requires an editor grant on the selected project before accepting a draft publication, and the repository must be linked to that project. The daemon checks its credential identity at startup and rechecks each operation when credentials are loaded from a protected file; rotating to an administrator credential is rejected.\n\nThe program's `allowed_paths` restricts model-generated output. `context_paths` restricts which existing files are presented to the model. Neither grants access to credentials, host files, the release controller or privileged cluster commands. Source-code and test-output inputs are untrusted and can contain adversarial instructions. The authoring client accepts only a bounded JSON file map and rejects paths outside the allowlist.
 
 Execution uses the compute controller's authenticated MCP service, but the engineering daemon has its own narrowly scoped client with a fixed operation allowlist. The gateway uses a Unix-domain-socket client to submit, inspect and cancel runs; it never receives compute or model credentials. The engineering daemon maintains private durable state, lease-token digests, fenced generations and controlled cancellation. An ambiguous external result is not assumed to have failed; the runner does not repeat an external step beyond its single allowed attempt. The compute workspace expires according to its allocated duration, and operation history remains available for inspection.
 
@@ -44,3 +44,9 @@ Source presence is not evidence of a tested runtime. Before enabling the daemon,
 A completed run establishes only that its requested checks returned success and the draft publication was confirmed. It does not establish full functional correctness, test coverage or production readiness. The owner must review the draft before merge; releases continue through the independent operator-authorized release process.
 
 Compute credentials must be project-scoped, and GitHub permissions must not be broader than the repositories permitted to the engineering service. Automated execution, source edits and draft publication can have material cost and security effects. A development environment should permit outbound network access only as explicitly required by the job.
+
+## Local state ceiling
+
+The local workflow store admits at most 1,000 run records. This prevents unbounded linear scans and response growth while the service has no archival workflow. Before this ceiling is reached, implement explicit owner-authorized terminal-run archival with revision checks and auditable retention policy. Do not delete active or uncertain runs automatically.
+
+The isolated Go package and engineering daemon can be built and tested without a live fleet. Running the test suite with race detection validates local state and simulated backend contracts, not the compatibility of the installed controller, Kubernetes workers, GitHub credentials, or console. Runtime acceptance must establish those separately.
