@@ -76,7 +76,8 @@ pub fn USDANutrition(
     on_saved: EventHandler<()>,
 ) -> Element {
     let csrf = use_signal(|| csrf);
-    let mut selections = use_signal(|| vec![Selection::default(); ingredients.len()]);
+    let ingredient_count = ingredients.len();
+    let mut selections = use_signal(move || vec![Selection::default(); ingredient_count]);
     let mut preview = use_signal(|| Option::<Estimate>::None);
     let mut busy = use_signal(|| false);
     let mut error = use_signal(String::new);
