@@ -49,6 +49,7 @@ func TestSemanticResearchProjectScopeAndImmutableEvidence(t *testing.T){
  if _,err:=db.SemanticResearch("demo","encoder-1",a,10);err==nil{t.Fatal("tampered source text surfaced in semantic search")}
  if err:=db.exec("UPDATE research_passages SET body=? WHERE id=?","The first vector is about harmonic analysis.",first);err!=nil{t.Fatal(err)}
  if _,err:=db.IngestResearchPassages("semantic",id,"replace",1,[]ResearchPassageInput{{Ordinal:1,Text:"New scientific knowledge"}});err!=nil{t.Fatal(err)}
+ if _,err:=db.PutResearchEmbedding("semantic",first,"encoder-new",one,a);err==nil{t.Fatal("superseded source accepted new embedding")}
  previous,err:=db.SemanticResearch("demo","encoder-1",a,10)
  if err!=nil||len(previous)!=0{t.Fatalf("superseded embeddings surfaced: %+v %v",previous,err)}
 }

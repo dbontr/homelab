@@ -47,11 +47,12 @@ func (db *Database) PutResearchEmbedding(library,passage,model,digest string,vec
  if err!=nil||len(raw)>32<<10{return nil,errors.New("embedding exceeds storage limit")}
  result:=map[string]any{"passage_id":passage,"library":library,"model":model,"dimension":len(vector),"body_sha256":digest}
  err=db.transaction(func()error{
-  row,err:=db.lockedOne(`SELECT p.body_sha256,p.epoch,s.library
+  row,err:=db.lockedOne(`SELECT p.body_sha256,p.epoch,s.library,s.epoch AS current_epoch
     FROM research_passages p JOIN research_sources s ON s.id=p.source
     WHERE p.id=? AND s.library=?`,passage,library)
   if err!=nil{return err}
   if row==nil||asString(row["body_sha256"])!=digest{return errors.New("source passage checksum mismatch")}
+  if asInt(row["current_epoch"])!=asInt(row["epoch"]){return errors.New("source passage was superseded")}
   previous,err:=db.lockedOne("SELECT vector,body_sha256 FROM research_embeddings WHERE passage=? AND model=?",passage,model)
   if err!=nil{return err}
   if previous!=nil{

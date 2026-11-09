@@ -204,6 +204,11 @@ func (t toolDefinition) schema() map[string]any {
 		if key == "software_ids" || key == "packages" || key == "artifact_ids" || key == "tags" || key == "passage_ids" || key == "questions" {
 			prop["items"] = map[string]any{"type": "string"}
 		}
+		if key=="embedding"{
+            prop["items"]=map[string]any{"type":"number"}
+            prop["minItems"]=8
+            prop["maxItems"]=1536
+        }
 		if key == "passages" {
 			prop["items"] = map[string]any{
 				"type": "object", "additionalProperties": false,
