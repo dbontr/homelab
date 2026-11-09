@@ -107,9 +107,13 @@ resource-limited workspaces. Their durable workflow states are associated
 under a single team record, and cancellation can fence unfinished members.
 
 Members prepare independently verified artifacts but do not publish their
-own pull requests. The owner must reconcile the artifacts and prepare a
-combined publication separately. There is no automatic cross-workspace merge
-or implicit conflict resolution. Teams are available through the engineering
+own pull requests. The coordinator constructs a deterministic artifact
+manifest from completed member workflows and checks each output against its
+member's allowed paths. Duplicate or unauthorized paths are reported as
+reconciliation conflicts. A group is ready for owner review only after every
+member has completed and its artifacts are conflict-free. The owner prepares
+any combined publication separately. There is no automatic cross-workspace
+merge or implicit conflict resolution. Teams are available through the engineering
 daemon's `/teams` lifecycle interface, the authenticated platform API
 `/v1/engineering/teams`, and the `engineering_team_*` MCP tools.
 
