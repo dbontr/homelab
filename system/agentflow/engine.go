@@ -301,6 +301,8 @@ func (e *Engine) Dispatch(ctx context.Context, claim Claim) (json.RawMessage, er
 		}
 	case "agent":
 		return e.runAgentTurn(ctx, claim, w)
+	case "integration_import", "integration_verify", "integration_publish", "integration_cleanup":
+		out, err = e.integrationStep(ctx, claim, w, args)
 	case "inspect":
 		repo := str(args["repository"])
 		list, _ := args["paths"].([]any)
