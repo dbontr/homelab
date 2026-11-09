@@ -39,7 +39,7 @@ if [[ ! "$revision" =~ ^[a-f0-9]{40}$ ||
   exit 1
 fi
 printf 'Verifying locally pinned source at %s\n' "$revision"
-"$root/scripts/verify-offline.sh" --all
+bash "$root/scripts/verify-offline.sh" --all
 
 stage=$(mktemp -d "$parent/.homelab-release.XXXXXXXX")
 cleanup() { [[ -z "$stage" ]] || rm -rf -- "$stage"; }
@@ -87,7 +87,7 @@ rm -rf -- "$stage/console-bundle"
   printf 'build_utc=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> RELEASE
 )
 
-"$root/scripts/verify-release.sh" "$stage"
+bash "$root/scripts/verify-release.sh" "$stage"
 mv -- "$stage" "$destination"
 stage=""
 printf 'Staged source-built release: %s\n' "$destination"
