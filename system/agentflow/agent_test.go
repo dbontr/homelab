@@ -502,6 +502,18 @@ func TestSensitiveSourcePathsAreNotAvailableToModel(t *testing.T) {
 	if err := (AgentAction{Action: "read", Path: ".env"}).validate(brief); err == nil {
 		t.Fatal("model could read a credential file")
 	}
+	protectedBrief := AgentBrief{AllowedPaths: []string{".env"}}
+	if err := (AgentAction{Action: "patch", Path: ".env", ExpectedSHA256: shaHex("secret"), Hunks: []PatchHunk{{Find: "secret", Replace: "altered"}}}).validate(protectedBrief); err == nil {
+		t.Fatal("model could patch a credential file")
+	}
+	if err := (AgentAction{Action: "create", Path: ".env", Content: "SECRET=test"}).validate(protectedBrief); err == nil {
+		t.Fatal("model could create a credential file")
+	}
+	p := autonomousProgram()
+	p.AllowedPaths = []string{".env"}
+	if err := p.validate(); err == nil {
+		t.Fatal("program permitted autonomous editing of a credential path")
+	}
 }
 
 func TestAgentSearchArgumentsAreQuotedAndRepositoryScoped(t *testing.T) {

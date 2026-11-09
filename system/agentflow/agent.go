@@ -150,7 +150,7 @@ func (a AgentAction) validate(brief AgentBrief) error {
 				break
 			}
 		}
-		if !approved || !validSourcePath(a.Path) {
+		if !approved || !validSourcePath(a.Path) || sensitiveSourcePath(a.Path) {
 			return errors.New("edit path is outside approved scope")
 		}
 		if a.Action == "patch" {

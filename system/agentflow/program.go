@@ -70,7 +70,7 @@ func (p Program) validate() error {
 		}
 	}
 	for _, s := range p.AllowedPaths {
-		if !validSourcePath(s) {
+		if !validSourcePath(s) || (p.Autonomous && sensitiveSourcePath(s)) {
 			return errors.New("invalid editable path")
 		}
 	}
