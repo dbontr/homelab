@@ -199,6 +199,7 @@ func(s *Server) Handler()http.Handler{
  mux.HandleFunc("PUT /v1/compute/profiles/{id}",s.profileRoutes)
  mux.HandleFunc("POST /v1/compute/profiles/{id}/plan",s.profilePlanRoute)
  mux.HandleFunc("GET /v1/books/search",s.bookRoutes)
+ mux.HandleFunc("GET /v1/books/lending",s.bookRoutes)
  mux.HandleFunc("GET /v1/books/requests",s.bookRoutes)
  mux.HandleFunc("POST /v1/books/requests",s.bookRoutes)
  mux.HandleFunc("PUT /v1/books/requests/{id}",s.bookRoutes)
