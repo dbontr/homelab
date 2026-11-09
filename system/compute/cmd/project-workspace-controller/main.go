@@ -179,12 +179,32 @@ func command(args []string) error {
 		if e != nil {
 			return e
 		}
+		if endpoint:=os.Getenv("PWM_EMBEDDINGS_URL");endpoint!=""{
+            model:=os.Getenv("PWM_EMBEDDINGS_MODEL")
+            accessToken:=""
+            if file:=os.Getenv("PWM_EMBEDDINGS_TOKEN_FILE");file!=""{
+                info,err:=os.Stat(file)
+                if err!=nil{return err}
+                if !info.Mode().IsRegular()||info.Mode().Perm()&0077!=0{
+                    return errors.New("embedding token file must be private")
+                }
+                raw,err:=os.ReadFile(file)
+                if err!=nil{return err}
+                accessToken=strings.TrimSpace(string(raw))
+            }
+            embedder,err:=controller.NewEmbeddingProvider(endpoint,model,accessToken)
+            if err!=nil{return err}
+            service.Embedder=embedder
+        }else if os.Getenv("PWM_EMBEDDINGS_MODEL")!=""||os.Getenv("PWM_EMBEDDINGS_TOKEN_FILE")!=""{
+            return errors.New("embedding model and token require a configured endpoint")
+        }
 		if !strings.HasPrefix(*addr, "127.0.0.1:") && !strings.HasPrefix(*addr, "localhost:") && os.Getenv("PWM_ALLOW_REMOTE_LISTEN") != "1" {
 			return errors.New("remote bind requires PWM_ALLOW_REMOTE_LISTEN=1 and TLS authentication at the ingress")
 		}
 		server := &http.Server{Addr: *addr, Handler: service, ReadHeaderTimeout: 5 * time.Second, MaxHeaderBytes: 1 << 16, IdleTimeout: 120 * time.Second}
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
+        service.StartResearchEmbeddingWorker(ctx)
 		var offsite sync.WaitGroup
 		if intervalText := os.Getenv("PWM_RESTIC_BACKUP_INTERVAL"); args[0] == "controller" && intervalText != "" {
 			interval, err := time.ParseDuration(intervalText)

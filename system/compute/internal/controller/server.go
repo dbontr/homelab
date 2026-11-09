@@ -20,6 +20,7 @@ var dashboard embed.FS
 
 type Server struct {
 	DB               *Database
+	Embedder         *EmbeddingProvider
 	AdminToken       string
 	OIDC             *OIDCVerifier
 	AccessVerifier   *OIDCVerifier

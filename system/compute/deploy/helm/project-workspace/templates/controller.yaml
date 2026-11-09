@@ -76,8 +76,15 @@ spec:
         fsGroup: 65534
         seccompProfile:
           type: RuntimeDefault
-      {{- if .Values.controller.backupInterval }}
+      {{- if ne (empty .Values.controller.embedding.url) (empty .Values.controller.embedding.model) }}
+{{- fail "embedding requires both model and provider endpoint" }}
+{{- end }}
+{{- if and .Values.controller.embedding.tokenSecretName (not .Values.controller.embedding.url) }}
+{{- fail "embedding token Secret requires an embedding endpoint" }}
+{{- end }}
+{{- if or .Values.controller.backupInterval .Values.controller.embedding.tokenSecretName }}
       initContainers:
+        {{- if .Values.controller.backupInterval }}
         - name: restic-password
           image: busybox:1.36
           command:
@@ -147,6 +154,35 @@ spec:
             - name: scratch
               mountPath: /output
         {{- end }}
+        {{- end }}
+        {{- if .Values.controller.embedding.tokenSecretName }}
+        - name: embedding-token
+          image: busybox:1.36
+          command:
+            - sh
+            - -ec
+            - |
+              umask 077
+              cat /input/token > /output/token
+              test -s /output/token
+              chmod 0600 /output/token
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            runAsGroup: 65534
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: embedding-token-input
+              mountPath: /input
+              readOnly: true
+            - name: embedding-token
+              mountPath: /output
+        {{- end }}
       {{- end }}
       containers:
         - name: controller
@@ -173,6 +209,16 @@ spec:
               value: {{ .Values.controller.allowedOrigins | quote }}
             - name: PWM_ENV_REGISTRY
               value: {{ .Values.controller.environmentRegistry | quote }}
+            {{- if .Values.controller.embedding.url }}
+            - name: PWM_EMBEDDINGS_URL
+              value: {{ .Values.controller.embedding.url | quote }}
+            - name: PWM_EMBEDDINGS_MODEL
+              value: {{ .Values.controller.embedding.model | quote }}
+            {{- end }}
+            {{- if .Values.controller.embedding.tokenSecretName }}
+            - name: PWM_EMBEDDINGS_TOKEN_FILE
+              value: /run/embeddings/token
+            {{- end }}
             - name: PWM_ADMIN_TOKEN
               valueFrom:
                 secretKeyRef:
@@ -224,6 +270,11 @@ spec:
                 name: {{ .Values.controller.offsite.backendSecretName }}
           {{- end }}
           volumeMounts:
+            {{- if .Values.controller.embedding.tokenSecretName }}
+            - name: embedding-token
+              mountPath: /run/embeddings
+              readOnly: true
+            {{- end }}
             {{- if .Values.controller.backupInterval }}
             - name: restic-password
               mountPath: /run/restic
@@ -268,6 +319,19 @@ spec:
             initialDelaySeconds: 10
             periodSeconds: 20
       volumes:
+        {{- if .Values.controller.embedding.tokenSecretName }}
+        - name: embedding-token-input
+          secret:
+            secretName: {{ .Values.controller.embedding.tokenSecretName }}
+            defaultMode: 292
+            items:
+              - key: token
+                path: token
+        - name: embedding-token
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Mi
+        {{- end }}
         {{- if .Values.controller.backupInterval }}
         - name: restic-password-input
           secret:

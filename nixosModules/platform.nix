@@ -29,6 +29,11 @@ in
       default = null;
       description = "Protected contact email file used to identify on-demand Open Library search requests.";
     };
+    capabilityModel = {
+      url = lib.mkOption { type = lib.types.str; default = ""; description = "Approved HTTPS or loopback model endpoint for read-only workflow planning."; };
+      name = lib.mkOption { type = lib.types.str; default = ""; description = "Exact model name."; };
+      tokenFile = lib.mkOption { type = lib.types.nullOr lib.types.str; default = null; description = "Owner-private provider token file."; };
+    };
     monitoring = {
       prometheusURL = lib.mkOption {
         type = lib.types.str;
@@ -137,6 +142,11 @@ in
   config = lib.mkIf cfg.enable {
     assertions = [
       {
+        assertion = (cfg.capabilityModel.url == "") == (cfg.capabilityModel.name == "")
+          && (cfg.capabilityModel.url != "" || cfg.capabilityModel.tokenFile == null);
+        message = "Capability planning requires a model endpoint and name; credentials cannot be configured alone.";
+      }
+      {
         assertion = (cfg.seerr.url == "") == (cfg.seerr.apiKeyFile == null);
         message = "Seerr requires both its origin URL and protected API key file.";
       }
@@ -198,6 +208,11 @@ in
         HOMELAB_API_TOKEN_FILE = "/run/credentials/homelab-platform.service/access_token";
         HOMELAB_PROMETHEUS_URL = cfg.monitoring.prometheusURL;
         HOMELAB_LOKI_URL = cfg.monitoring.lokiURL;
+      } // lib.optionalAttrs (cfg.capabilityModel.url != "") {
+        HOMELAB_CAPABILITY_MODEL_URL = cfg.capabilityModel.url;
+        HOMELAB_CAPABILITY_MODEL_NAME = cfg.capabilityModel.name;
+      } // lib.optionalAttrs (cfg.capabilityModel.tokenFile != null) {
+        HOMELAB_CAPABILITY_MODEL_TOKEN_FILE = "/run/credentials/homelab-platform.service/capability-model-token";
       } // lib.optionalAttrs (cfg.securityClientSocket != null) {
         HOMELAB_SECURITY_SOCKET = cfg.securityClientSocket;
       } // lib.optionalAttrs (cfg.securityLoginURL != null) {
@@ -247,6 +262,7 @@ in
           ++ lib.optional (cfg.consolePassphraseFile != null) "console_passphrase:${cfg.consolePassphraseFile}"
           ++ lib.optional (cfg.books.contactFile != null) "books_contact:${cfg.books.contactFile}"
           ++ lib.optional (cfg.seerr.apiKeyFile != null) "seerr_api_key:${cfg.seerr.apiKeyFile}"
+          ++ lib.optional (cfg.capabilityModel.tokenFile != null) "capability-model-token:${cfg.capabilityModel.tokenFile}"
           ++ lib.concatMap (name:
             lib.optional (cfg.integrations.${name}.tokenFile != null)
               "${name}_token:${cfg.integrations.${name}.tokenFile}"

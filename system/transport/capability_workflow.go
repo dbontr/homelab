@@ -14,6 +14,7 @@ import (
     "time"
 
     "github.com/dbontr/homelab-new/system/agentflow"
+    "github.com/dbontr/homelab-new/system/store"
 )
 
 var workflowStepID=regexp.MustCompile("^[a-z][a-z0-9_-]{0,79}$")
@@ -29,6 +30,8 @@ type CapabilityProgram struct {
     Project string `json:"project"`
     Objective string `json:"objective"`
     PersonalRead bool `json:"personal_read,omitempty"`
+    AutoReplan bool `json:"auto_replan,omitempty"`
+    ShareProjectEvidence bool `json:"share_project_evidence,omitempty"`
     Steps []CapabilityStage `json:"steps"`
 }
 type CapabilityStepResult struct {
@@ -46,6 +49,8 @@ type CapabilityWorkflow struct {
     Objective string `json:"objective"`
     Revision uint64 `json:"revision"`
     Status string `json:"status"`
+    Replans int `json:"replans,omitempty"`
+    PlanError string `json:"plan_error,omitempty"`
     CreatedAt time.Time `json:"created_at"`
     Deadline time.Time `json:"deadline"`
     Steps []CapabilityStepResult `json:"steps"`
@@ -53,7 +58,7 @@ type CapabilityWorkflow struct {
 
 func requiresPersonalRead(kind string) bool {
     switch kind {
-    case "project_tasks","learning_summary","learning_sessions","learning_reviews","health_goals","health_records","health_training_sets","health_food_proposals","recipe_search","recipe_meals","media_requests": return true
+    case "project_tasks","learning_summary","learning_sessions","learning_reviews","health_goals","health_records","health_training_sets","health_food_proposals","recipe_search","recipe_meals","recipe_groceries","recipe_nutrition","task_review","media_requests": return true
     }
     return false
 }
@@ -69,7 +74,15 @@ func validCapabilityStage(stage CapabilityStage, allowPersonal bool) error {
     switch stage.Action {
     case "project_context","project_tasks","engineering_runs","learning_summary","learning_sessions","learning_reviews","health_goals","health_records","health_training_sets","health_food_proposals","recipe_meals","media_requests":
         if stage.Query!=""||stage.Limit!=0{return errors.New("unexpected capability parameters")}
-    case "research_search":
+    case "study_pack_preview":
+        if stage.Query!=""||stage.Limit>10{return errors.New("invalid study pack stage")}
+    case "task_review":
+        if stage.Query!=""{return errors.New("unexpected task review query")}
+    case "recipe_groceries":
+        if stage.Limit>14||stage.Query!=""&&!validCapabilityDay(stage.Query){return errors.New("invalid grocery interval")}
+    case "recipe_nutrition":
+        if strings.TrimSpace(stage.Query)==""||strings.Contains(stage.Query,"/"){return errors.New("invalid recipe reference")}
+    case "research_search","research_semantic_query":
         if strings.TrimSpace(stage.Query)=="" {return errors.New("research search requires a query")}
     case "recipe_search":
         if strings.TrimSpace(stage.Query)=="" {return errors.New("recipe search requires a query")}
@@ -78,10 +91,16 @@ func validCapabilityStage(stage CapabilityStage, allowPersonal bool) error {
     }
     return nil
 }
+func validCapabilityDay(day string)bool{
+ if len(day)!=10{return false}
+ _,err:=time.Parse("2006-01-02",day)
+ return err==nil
+}
 func summarizeCapabilityWorkflow(w agentflow.Workflow) CapabilityWorkflow {
     summary:=CapabilityWorkflow{
         ID:w.ID,Project:w.Project,Objective:w.Objective,Revision:w.Revision,
-        CreatedAt:w.CreatedAt,Deadline:w.Deadline,Steps:make([]CapabilityStepResult,0,len(w.Steps)),
+        CreatedAt:w.CreatedAt,Deadline:w.Deadline,Replans:w.Replans,PlanError:w.PlanError,
+        Steps:make([]CapabilityStepResult,0,len(w.Steps)),
     }
     success:=true
     failed:=false
@@ -99,6 +118,8 @@ func summarizeCapabilityWorkflow(w agentflow.Workflow) CapabilityWorkflow {
     switch {
     case w.Cancelled: summary.Status="cancelled"
     case failed: summary.Status="failed"
+    case w.PlanError!="": summary.Status="planning_failed"
+    case success&&w.AutoReplan&&!w.PlanComplete&&w.Replans<2&&time.Now().Before(w.Deadline):summary.Status="planning"
     case success: summary.Status="succeeded"
     case !w.Deadline.IsZero() && !time.Now().Before(w.Deadline):summary.Status="expired"
     case running:summary.Status="running"
@@ -112,6 +133,8 @@ func (s *Server) SetCapabilityPlanner(planner *agentflow.ModelAuthor){s.capabili
 
 func (s *Server) submitCapabilityWorkflow(ctx context.Context,program CapabilityProgram)(CapabilityWorkflow,error) {
     if s.workflows==nil{return CapabilityWorkflow{},errors.New("workflow store unavailable")}
+    if program.AutoReplan&&s.capabilityPlanner==nil{return CapabilityWorkflow{},errors.New("automatic planning requires an approved model")}
+    if program.ShareProjectEvidence&&!program.AutoReplan{return CapabilityWorkflow{},errors.New("model evidence sharing requires automatic planning")}
     if !consoleProjectID.MatchString(program.Project)||strings.TrimSpace(program.Objective)==""||
         len(program.Objective)>2000||len(program.Steps)==0||len(program.Steps)>12 {
         return CapabilityWorkflow{},errors.New("invalid workflow objective or scope")
@@ -122,7 +145,8 @@ func (s *Server) submitCapabilityWorkflow(ctx context.Context,program Capability
     if _,err:=rand.Read(token[:]);err!=nil{return CapabilityWorkflow{},err}
     w:=agentflow.Workflow{
         ID:hex.EncodeToString(token[:]),Project:program.Project,Objective:strings.TrimSpace(program.Objective),
-        PersonalRead:program.PersonalRead,Deadline:time.Now().Add(30*time.Minute),
+        PersonalRead:program.PersonalRead,CapabilityPlan:true,AutoReplan:program.AutoReplan,
+        ShareProjectEvidence:program.ShareProjectEvidence,Deadline:time.Now().Add(30*time.Minute),
         Steps:make([]agentflow.Step,0,len(program.Steps)),
     }
     for _,stage:=range program.Steps {
@@ -178,6 +202,46 @@ func (s *Server) executeCapabilityRead(ctx context.Context,w agentflow.Workflow,
         overview,err:=s.projectOverview(ctx,w.Project)
         if err!=nil{return nil,err}
         return map[string]any{"tasks":overview.Tasks,"goals":overview.Goals,"links":overview.Links},nil
+    case "task_review":
+        overview,err:=s.projectOverview(ctx,w.Project)
+        if err!=nil{return nil,err}
+        days:=input.Limit
+        if days==0{days=7}
+        review,err:=s.db.ReviewTasks(time.Now(),days)
+        if err!=nil{return nil,err}
+        allowed:=map[string]bool{}
+        for _,task:=range overview.Tasks{allowed[task.ID]=true}
+        filtered:=make([]store.TaskReviewEntry,0,len(review.Entries))
+        for _,entry:=range review.Entries{if allowed[entry.TaskID]{filtered=append(filtered,entry)}}
+        review.Entries=filtered
+        return review,nil
+    case "study_pack_preview":
+        prerequisites:=map[string]bool{}
+        for _,candidate:=range w.Steps{
+            if candidate.ID==step.StepID{for _,id:=range candidate.DependsOn{prerequisites[id]=true}}
+        }
+        passageIDs:=[]string{}
+        for _,candidate:=range w.Steps{
+            if !prerequisites[candidate.ID]||candidate.Kind!="research_search"||candidate.Status!=agentflow.Succeeded{continue}
+            var matches []map[string]any
+            if err:=json.Unmarshal(candidate.Result,&matches);err!=nil{return nil,errors.New("research evidence is invalid")}
+            for _,match:=range matches{
+                if len(passageIDs)>=10{break}
+                id,_:=match["id"].(string)
+                if id!=""{passageIDs=append(passageIDs,id)}
+            }
+        }
+        if len(passageIDs)==0{return nil,errors.New("study pack requires confirmed research results")}
+        if input.Limit>0&&len(passageIDs)>input.Limit{passageIDs=passageIDs[:input.Limit]}
+        return s.capabilityBackendRead(ctx,"workspace","study_pack_prepare",map[string]any{
+            "project_id":w.Project,"title":"Research evidence","objective":w.Objective,"passage_ids":passageIDs,
+        })
+    case "research_semantic_query":
+        limit:=input.Limit
+        if limit==0{limit=8}
+        return s.capabilityBackendRead(ctx,"workspace","research_semantic_query",map[string]any{
+            "project_id":w.Project,"query":input.Query,"limit":limit,
+        })
     case "research_search":
         limit:=input.Limit
         if limit==0{limit=8}
@@ -211,6 +275,20 @@ func (s *Server) executeCapabilityRead(ctx context.Context,w agentflow.Workflow,
     case "recipe_meals":
         if s.recipes==nil{return nil,errResourceUnavailable}
         return s.recipes.Meals(),nil
+    case "recipe_groceries":
+        if s.recipes==nil{return nil,errResourceUnavailable}
+        day:=input.Query
+        if day==""{day=time.Now().UTC().Format("2006-01-02")}
+        start,err:=time.Parse("2006-01-02",day)
+        if err!=nil{return nil,err}
+        days:=input.Limit
+        if days==0{days=7}
+        return s.recipes.Board(day,start.AddDate(0,0,days).Format("2006-01-02"))
+    case "recipe_nutrition":
+        if s.recipes==nil{return nil,errResourceUnavailable}
+        portions:=input.Limit
+        if portions==0{portions=1}
+        return s.recipes.Nutrition(input.Query,float64(portions))
     case "media_requests":
         if s.media==nil{return nil,errResourceUnavailable}
         return s.media.Requests(ctx)
@@ -253,7 +331,7 @@ func (s *Server) advanceCapabilityWorkflow(ctx context.Context,id string,maxStep
     for n:=0;n<maxSteps;n++ {
         advanced,err:=runner.RunOne(ctx,id)
         if err!=nil{return err}
-        if !advanced{return nil}
+        if !advanced{return s.advanceCapabilityReplan(ctx,id)}
     }
     return nil
 }
@@ -275,7 +353,7 @@ func (s *Server) StartWorkflowScheduler(ctx context.Context) {
                     if ctx.Err()!=nil{return}
                     current,err:=s.capabilityWorkflow(ctx,id)
                     if err!=nil||current.Status=="succeeded"||current.Status=="failed"||
-                        current.Status=="cancelled"||current.Status=="expired"{continue}
+                        current.Status=="cancelled"||current.Status=="expired"||current.Status=="planning_failed"{continue}
                     budget,cancel:=context.WithTimeout(ctx,8*time.Second)
                     _=s.advanceCapabilityWorkflow(budget,id,1)
                     cancel()

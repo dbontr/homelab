@@ -38,6 +38,9 @@ func vectorNorm(values []float64)(float64,error){
 // and checksum. Replacement with a different vector is rejected; a changed
 // passage must use an independent passage ID and a new index epoch.
 func (db *Database) PutResearchEmbedding(library,passage,model,digest string,vector []float64)(map[string]any,error){
+ return db.putResearchEmbedding(library,passage,model,digest,vector,false)
+}
+func (db *Database) putResearchEmbedding(library,passage,model,digest string,vector []float64,requireConsent bool)(map[string]any,error){
  if !validID.MatchString(library)||!contributionArtifactID.MatchString(passage)||
    !embeddingModelID.MatchString(model)||!shaPattern.MatchString(digest){
   return nil,errors.New("invalid embedding provenance")
@@ -47,11 +50,18 @@ func (db *Database) PutResearchEmbedding(library,passage,model,digest string,vec
  if err!=nil||len(raw)>32<<10{return nil,errors.New("embedding exceeds storage limit")}
  result:=map[string]any{"passage_id":passage,"library":library,"model":model,"dimension":len(vector),"body_sha256":digest}
  err=db.transaction(func()error{
-  row,err:=db.lockedOne(`SELECT p.body_sha256,p.epoch,s.library,s.epoch AS current_epoch
+  row,err:=db.lockedOne(`SELECT p.body_sha256,p.body,p.epoch,s.library,s.epoch AS current_epoch
     FROM research_passages p JOIN research_sources s ON s.id=p.source
     WHERE p.id=? AND s.library=?`,passage,library)
   if err!=nil{return err}
-  if row==nil||asString(row["body_sha256"])!=digest{return errors.New("source passage checksum mismatch")}
+  if row==nil||asString(row["body_sha256"])!=digest||checksum([]byte(asString(row["body"])))!=digest{
+   return errors.New("source passage checksum mismatch")
+  }
+  if requireConsent{
+   policy,err:=db.lockedOne("SELECT enabled FROM research_embedding_policies WHERE library=? AND model=?",library,model)
+   if err!=nil{return err}
+   if policy==nil||asInt(policy["enabled"])!=1{return errors.New("embedding permission revoked")}
+  }
   if asInt(row["current_epoch"])!=asInt(row["epoch"]){return errors.New("source passage was superseded")}
   previous,err:=db.lockedOne("SELECT vector,body_sha256 FROM research_embeddings WHERE passage=? AND model=?",passage,model)
   if err!=nil{return err}
@@ -71,6 +81,10 @@ func (db *Database) PutResearchEmbedding(library,passage,model,digest string,vec
 // the source's active index epoch. The caller supplies the query vector from
 // the exact same encoder model. This method never invents embeddings.
 func (db *Database) SemanticResearch(project,model string,query []float64,limit int)([]map[string]any,error){
+ return db.semanticResearch(project,model,query,limit,false)
+}
+
+func (db *Database) semanticResearch(project,model string,query []float64,limit int,consentedOnly bool)([]map[string]any,error){
  if !validID.MatchString(project)||!embeddingModelID.MatchString(model)||limit<1||limit>100{
   return nil,errors.New("invalid semantic research scope")
  }
@@ -85,7 +99,9 @@ func (db *Database) SemanticResearch(project,model string,query []float64,limit 
     JOIN research_sources s ON s.id=p.source AND s.epoch=p.epoch
     JOIN project_libraries l ON l.library=s.library
     WHERE l.project=? AND e.model=? AND e.dimension=? AND e.body_sha256=p.body_sha256
-    ORDER BY p.id LIMIT ?`,project,model,len(query),maxSemanticCandidates+1)
+    AND (?=0 OR EXISTS(SELECT 1 FROM research_embedding_policies permission
+        WHERE permission.library=s.library AND permission.model=e.model AND permission.enabled=1))
+    ORDER BY p.id LIMIT ?`,project,model,len(query),boolInt(consentedOnly),maxSemanticCandidates+1)
  if err!=nil{return nil,err}
  if len(rows)>maxSemanticCandidates{return nil,errors.New("semantic index exceeds bounded scan capacity")}
  result:=make([]map[string]any,0,len(rows))

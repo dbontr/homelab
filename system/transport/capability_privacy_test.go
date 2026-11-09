@@ -15,3 +15,20 @@ func TestCapabilityReadsKeepPersonalConsentSeparateFromResearch(t *testing.T){
   if err:=validCapabilityStage(stage,false);err!=nil{t.Errorf("%s wrongly needs personal access: %v",action,err)}
  }
 }
+
+func TestWorkflowRecipeAndStudyPackValidation(t *testing.T){
+ for _,action:=range []string{"task_review","recipe_groceries","recipe_nutrition"}{
+  stage:=CapabilityStage{ID:"personal",Action:action}
+  if action=="recipe_nutrition"{stage.Query="valid-id"}
+  if err:=validCapabilityStage(stage,false);err==nil{t.Fatalf("%s bypassed personal consent",action)}
+  if err:=validCapabilityStage(stage,true);err!=nil{t.Fatalf("%s rejected authorized read: %v",action,err)}
+ }
+ for _,stage:=range []CapabilityStage{
+  {ID:"invalid",Action:"recipe_groceries",Query:"tomorrow"},
+  {ID:"invalid",Action:"recipe_groceries",Limit:20},
+  {ID:"invalid",Action:"study_pack_preview",Query:"unverified passage"},
+ } {
+  if err:=validCapabilityStage(stage,true);err==nil{t.Fatalf("invalid stage accepted: %+v",stage)}
+ }
+ if err:=validCapabilityStage(CapabilityStage{ID:"cited",Action:"study_pack_preview"},false);err!=nil{t.Fatal(err)}
+}

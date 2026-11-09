@@ -22,13 +22,15 @@ Each stage has a stable ID, dependency IDs, and one approved read action:
 
 - `project_context` — authoritative project knowledge context
 - `project_tasks` — explicitly linked tasks and their goals
-- `research_search` — scoped search of project-linked research passages;
+- `research_search` and `research_semantic_query` — keyword or consented model-generated semantic search of project-linked research passages;
   includes source locators from the controller
 - `engineering_runs` — matching engineering run summaries
 - `learning_summary`, `learning_sessions`, `learning_reviews`,
   `health_goals`, `health_records`, `health_training_sets`,
   `health_food_proposals`, `recipe_search`, `recipe_meals`,
+  `recipe_groceries`, `recipe_nutrition`, `task_review`,
   and `media_requests` — opt-in personal application reads
+- `study_pack_preview` — compose an unsaved, cited study pack from successful prerequisite `research_search` results
 
 Every personal application operation, including `project_tasks`, requires `personal_read: true`.
 `project_context`, `research_search`, and `engineering_runs` remain project-scoped and read-only. The program cannot
@@ -50,6 +52,8 @@ A program might look like:
   ]
 }
 ```
+
+For workflows submitted with `auto_replan: true`, the scheduler can ask the configured model for up to two bounded continuation rounds after all preceding stages succeed. Every additional stage must depend on confirmed evidence, pass the original action and privacy policy, and fit the 12-stage total limit. Revision-fenced persistence prevents stale model decisions from changing a cancelled or modified workflow. Model failures are recorded as `planning_failed` rather than presented as successful completion. The `share_project_evidence` opt-in enables short source-linked research excerpts in model context; personal task, health, learning, recipe, and media result bodies are never forwarded.
 
 The scheduler advances dependency-ready steps without further input. It shares
 the existing Go lease-token, generation-fencing, optimistic-revision,
@@ -77,6 +81,10 @@ A personal task may link an engineering run using `homelab:engineering_run:<run-
 ## Planning and semantic retrieval
 
 The model proposal endpoint `POST /v1/workflows/plan` and MCP `workflow_plan` accept a project, objective, and explicit personal-read scope. An independently configured HTTPS or loopback model proposes up to 12 read stages. The platform validates identity, actions, dependencies, limits, and privacy scopes without executing the plan. The owner must explicitly submit the plan through the existing workflow API. The model never receives administrator credentials or arbitrary project content.
+
+Source deployment accepts `services.homelabPlatform.capabilityModel.{url,name,tokenFile}` for the bounded planner. Compute Kubernetes deployment accepts `services.workspaceMcp.embedding.{url,model,tokenSecretName}`; the Helm chart copies a preprovisioned token Secret into a private memory volume before starting the unprivileged controller. These options default to disabled. A configured model endpoint does not grant permission to share research content: library policy remains independently required.
+
+The Compute controller can use a configured `/v1/embeddings` provider for automatic indexing. The owner must explicitly enable each shared library with `research_embedding_policy_set` before any passage text is transmitted. Policies are revision-guarded and can be revoked even when the provider is offline. The controller indexes a bounded batch of new passages periodically, validates response dimensions and model identity, checks immutable passage hashes, and fences consent and source revisions at the database write. The native `/api/projects/{project}/research/semantic?q=...` endpoint and MCP `research_semantic_query` embed the caller-provided query text, then search project-visible passages. Provider credentials are loaded only from a private file; no embedding result grants additional library access.
 
 Research indexes may attach immutable dense vectors to indexed passages through the root-authorized `research_embedding_put` tool. The same encoder model must generate both document and query vectors. `research_semantic_search` compares query vectors only with currently active passages in project-linked libraries and returns source citations with cosine similarity. Search is bounded to 2,000 candidate embeddings. The system does not infer embeddings automatically, and stale or mismatched source epochs are excluded.
 
