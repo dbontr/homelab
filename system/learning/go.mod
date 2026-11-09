@@ -1,4 +1,4 @@
-module github.com/dbontr/Adaptive-Teaching-MCP
+module github.com/dbontr/homelab-new/system/learning
 
 go 1.25.0
 

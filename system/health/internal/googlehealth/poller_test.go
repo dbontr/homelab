@@ -9,7 +9,7 @@ import(
  "testing"
  "time"
 
- "github.com/dbontr/personal-health-mcp/internal/health"
+ "github.com/dbontr/homelab-new/system/health/internal/health"
 )
 func TestBuildTimeFiltersByRecordKind(t *testing.T){
  at,_:=time.Parse(time.RFC3339,"2026-11-05T12:00:00Z")

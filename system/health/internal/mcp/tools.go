@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dbontr/personal-health-mcp/internal/recipesage"
+	"github.com/dbontr/homelab-new/system/health/internal/recipesage"
 )
 
 type Tool struct {

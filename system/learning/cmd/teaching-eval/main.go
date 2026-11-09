@@ -9,7 +9,7 @@ import (
 	"os/signal"
 	"strings"
 
-	"github.com/dbontr/Adaptive-Teaching-MCP/internal/teacheval"
+	"github.com/dbontr/homelab-new/system/learning/internal/teacheval"
 )
 
 func main() {

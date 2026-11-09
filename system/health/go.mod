@@ -1,4 +1,4 @@
-module github.com/dbontr/personal-health-mcp
+module github.com/dbontr/homelab-new/system/health
 
 go 1.23.0
 

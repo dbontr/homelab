@@ -256,7 +256,7 @@ func (s *Server) handleMCP(w http.ResponseWriter, r *http.Request, who caller) {
 	response := map[string]any{"jsonrpc": "2.0", "id": json.RawMessage(msg.ID)}
 	switch msg.Method {
 	case "initialize":
-		response["result"] = map[string]any{"protocolVersion": "2025-06-18", "capabilities": map[string]any{"tools": map[string]any{"listChanged": false}}, "serverInfo": map[string]any{"name": "workspace-mcp", "version": "0.6.0"}, "instructions": "Operations are asynchronous. Wait for worker-confirmed completion before claiming success."}
+		response["result"] = map[string]any{"protocolVersion": "2025-06-18", "capabilities": map[string]any{"tools": map[string]any{"listChanged": false}}, "serverInfo": map[string]any{"name": "homelab-compute", "version": "0.6.0"}, "instructions": "Operations are asynchronous. Wait for worker-confirmed completion before claiming success."}
 	case "ping":
 		response["result"] = map[string]any{}
 	case "tools/list":
@@ -1082,6 +1082,9 @@ func (s *Server) callToolFor(who caller, name string, a map[string]any) (any, er
 	case "github_checkout_repository":
 		return s.CheckoutArchive(project, workspace, repository, get("ref"))
 	case "github_publish_artifacts":
+		if !db.RepositoryLinked(project, repository) {
+			return nil, errors.New("publication requires a repository linked to the authorized project")
+		}
 		base := get("base_branch")
 		expected := get("expected_head")
 		changes, ok := a["changes"].(map[string]any)

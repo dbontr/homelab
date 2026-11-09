@@ -15,7 +15,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/dbontr/project-workspace-mcp/internal/controller"
+	"github.com/dbontr/homelab-new/system/compute/internal/controller"
 )
 
 func location() (string, string) {

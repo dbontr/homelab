@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dbontr/Adaptive-Teaching-MCP/internal/verification"
+	"github.com/dbontr/homelab-new/system/learning/internal/verification"
 )
 
 // Fixture is authorized reference material, not an assertion supplied by a learner.

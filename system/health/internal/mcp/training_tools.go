@@ -6,7 +6,7 @@ import(
  "errors"
  "math"
 
- "github.com/dbontr/personal-health-mcp/internal/health"
+ "github.com/dbontr/homelab-new/system/health/internal/health"
 )
 func(s *Server)registerTrainingTools(){
  txt:=func(d string)map[string]any{return field("string",d)}

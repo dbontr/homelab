@@ -11,6 +11,7 @@ import (
     "strings"
     "time"
 
+    "github.com/dbontr/homelab-new/system/agentflow"
     "github.com/dbontr/homelab-new/system/books"
     "github.com/dbontr/homelab-new/system/devices"
     "github.com/dbontr/homelab-new/system/media"
@@ -49,6 +50,11 @@ func main(){
         v,enabled,e:=configuredBackend(b.name,b.upper);if e!=nil{log.Fatal(e)};if enabled{backends=append(backends,v)}
     }
     server,e:=transport.New(db,token,backends);if e!=nil{log.Fatal(e)}
+    if socket:=os.Getenv("HOMELAB_ENGINEERING_SOCKET");socket!=""{
+        client,err:=agentflow.NewClient(socket)
+        if err!=nil{log.Fatal(err)}
+        server.SetEngineering(client)
+    }
     prom,loki:=os.Getenv("HOMELAB_PROMETHEUS_URL"),os.Getenv("HOMELAB_LOKI_URL")
     if prom!=""||loki!=""{
         monitoring,err:=observability.New(prom,loki)

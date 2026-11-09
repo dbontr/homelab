@@ -93,7 +93,7 @@ var rootTools = map[string]bool{
 	"github_set_branch_auto_delete": true, "github_cleanup_merged_branch": true,
 	"github_create_pull_request": true, "github_update_pull_request": true,
 	"github_mark_pull_request_ready": true, "github_merge_pull_request": true,
-	"github_publish_artifacts": true, "github_project_attach": true,
+	"github_project_attach": true,
 	"github_project_add_draft": true, "github_project_add_item": true,
 	"github_project_set_status": true,
 }

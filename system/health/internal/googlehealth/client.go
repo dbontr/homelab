@@ -16,7 +16,7 @@ import (
  "sync"
  "time"
 
- "github.com/dbontr/personal-health-mcp/internal/health"
+ "github.com/dbontr/homelab-new/system/health/internal/health"
 )
 
 const defaultBase="https://health.googleapis.com/v4"

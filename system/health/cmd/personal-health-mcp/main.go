@@ -9,11 +9,11 @@ import (
  "time"
  "syscall"
 
- "github.com/dbontr/personal-health-mcp/internal/health"
- "github.com/dbontr/personal-health-mcp/internal/googlehealth"
- "github.com/dbontr/personal-health-mcp/internal/fooddata"
- "github.com/dbontr/personal-health-mcp/internal/mcp"
- "github.com/dbontr/personal-health-mcp/internal/recipesage"
+ "github.com/dbontr/homelab-new/system/health/internal/health"
+ "github.com/dbontr/homelab-new/system/health/internal/googlehealth"
+ "github.com/dbontr/homelab-new/system/health/internal/fooddata"
+ "github.com/dbontr/homelab-new/system/health/internal/mcp"
+ "github.com/dbontr/homelab-new/system/health/internal/recipesage"
 )
 func main() {
  path:=os.Getenv("PERSONAL_HEALTH_DB_PATH")

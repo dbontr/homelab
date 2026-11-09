@@ -7,7 +7,7 @@ import(
  "math"
  "time"
 
- "github.com/dbontr/personal-health-mcp/internal/health"
+ "github.com/dbontr/homelab-new/system/health/internal/health"
 )
 func(s *Server)registerSeriesTools(){
  txt:=func(desc string)map[string]any{return field("string",desc)}

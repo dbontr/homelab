@@ -17,7 +17,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/dbontr/project-workspace-mcp/internal/worker"
+	"github.com/dbontr/homelab-new/system/compute/internal/worker"
 )
 
 func main() {

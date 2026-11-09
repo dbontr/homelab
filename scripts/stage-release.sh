@@ -36,15 +36,16 @@ build_go() {
 }
 
 build_go system ./cmd/homelab-platform homelab-platform
+build_go system ./cmd/homelab-engineeringd homelab-engineeringd
 build_go system ./cmd/homelab-approve homelab-approve
 build_go system ./cmd/homelab-securityd homelab-securityd
 build_go system ./cmd/homelab-executord homelab-executord
 build_go system ./cmd/homelab-release homelab-release
 build_go system ./cmd/homelab-admin homelab-admin
-build_go system/compute ./cmd/project-workspace-controller project-workspace-controller
-build_go system/compute ./cmd/project-workspace-worker project-workspace-worker
-build_go system/learning ./cmd/adaptive-teaching adaptive-teaching
-build_go system/health ./cmd/personal-health-mcp personal-health-mcp
+build_go system/compute ./cmd/project-workspace-controller homelab-compute-controller
+build_go system/compute ./cmd/project-workspace-worker homelab-compute-worker
+build_go system/learning ./cmd/adaptive-teaching homelab-learning
+build_go system/health ./cmd/personal-health-mcp homelab-health
 
 (
   cd "$root/system/console"

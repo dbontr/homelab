@@ -98,6 +98,11 @@ in
       default = null;
       description = "Protected Unix socket of the independent fleet release coordinator; no TLS credentials enter the gateway.";
     };
+    engineeringSocket = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "Restricted engineering daemon socket; compute and model credentials remain outside the gateway.";
+    };
     executorSocket = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
       default = null;
@@ -151,6 +156,10 @@ in
         message = "Fleet operations require the independent owner security service and exact coordinator socket without a Workspace root credential.";
       }
       {
+        assertion = cfg.engineeringSocket == null || cfg.engineeringSocket == "/run/homelab-engineeringd/engineering.sock";
+        message = "Engineering requires the exact local execution socket.";
+      }
+      {
         assertion = cfg.executorSocket == null ||
           (cfg.securityClientSocket != null && cfg.integrations.workspace.tokenFile == null);
         message = "Independent executor requires separate security authorization and no Workspace root bearer credential in the gateway.";
@@ -195,6 +204,8 @@ in
         HOMELAB_SECURITY_LOGIN_URL = cfg.securityLoginURL;
       } // lib.optionalAttrs (cfg.executorSocket != null) {
         HOMELAB_EXECUTOR_SOCKET = cfg.executorSocket;
+      } // lib.optionalAttrs (cfg.engineeringSocket != null) {
+        HOMELAB_ENGINEERING_SOCKET = cfg.engineeringSocket;
       } // lib.optionalAttrs (cfg.fleetSocket != null) {
         HOMELAB_FLEET_SOCKET = cfg.fleetSocket;
       } // lib.optionalAttrs (cfg.books.contactFile != null) {
@@ -222,7 +233,8 @@ in
       serviceConfig = {
         Type = "simple";
         DynamicUser = true;
-        SupplementaryGroups = lib.optional (cfg.securityClientSocket != null) "homelab-security-client"
+        SupplementaryGroups = lib.optional (cfg.engineeringSocket != null) "homelab-engineering-client"
+          ++ lib.optional (cfg.securityClientSocket != null) "homelab-security-client"
           ++ lib.optional (cfg.executorSocket != null) "homelab-executor-client"
           ++ lib.optional (cfg.fleetSocket != null) "homelab-fleet-client";
         StateDirectory = "homelab-platform";

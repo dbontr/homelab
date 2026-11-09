@@ -127,14 +127,14 @@ pub fn Overview() -> Element {
 
 #[component]
 pub fn Projects() -> Element {
-    let mut data = use_resource(|| async { api::get::<Value>("/v1/workspace/projects").await });
+    let mut data = use_resource(|| async { api::get::<Value>("/v1/engineering/projects").await });
     let mut filter = use_signal(String::new);
     let mut selected = use_signal(||None::<String>);
     let mut jobs = use_resource(||{
         let project=selected();
         async move{
             match project{
-                Some(id)=>api::get::<Value>(&format!("/v1/workspace/projects/{id}/jobs")).await,
+                Some(id)=>api::get::<Value>(&format!("/v1/engineering/projects/{id}/jobs")).await,
                 None=>Ok(Value::Null),
             }
         }
@@ -143,7 +143,7 @@ pub fn Projects() -> Element {
         let project=selected();
         async move{
             match project{
-                Some(id)=>api::get::<Value>(&format!("/v1/workspace/projects/{id}/workspaces")).await,
+                Some(id)=>api::get::<Value>(&format!("/v1/engineering/projects/{id}/workspaces")).await,
                 None=>Ok(Value::Null),
             }
         }
@@ -226,7 +226,7 @@ pub fn Projects() -> Element {
                         rsx!{
                             if items.is_empty(){Empty{
                                 title:"No jobs reported".to_owned(),
-                                description:"Only jobs returned by Workspace appear here.".to_owned()
+                                description:"Only jobs confirmed by compute appear here.".to_owned()
                             }}
                             else{
                                 div{class:"table-clip",
@@ -251,7 +251,7 @@ pub fn Projects() -> Element {
             }
             Card {
                 title: "Isolated workspaces".to_owned(),
-                description:"Workspace state comes from the distributed controller; this view never invokes a command.".to_owned(),
+                description:"Workspaces are reported by compute; this view does not execute commands.".to_owned(),
                 match workspaces.cloned(){
                     None=>rsx!{Loading{}},
                     Some(Err(e))=>rsx!{Notice{message:e}},
@@ -260,7 +260,7 @@ pub fn Projects() -> Element {
                         rsx!{
                             if items.is_empty(){Empty{
                                 title:"No workspaces reported".to_owned(),
-                                description:"Start and manage compute workspaces through the approved Workspace MCP.".to_owned()
+                                description:"Create and manage isolated environments through Engineering.".to_owned()
                             }}
                             else{
                                 div{class:"table-clip",
@@ -296,7 +296,7 @@ pub fn Compute() -> Element {
     let mut nodes = use_resource(|| async { api::get::<Vec<Node>>("/v1/nodes").await });
     let mut devices = use_resource(|| async { api::get::<Vec<Device>>("/v1/devices").await });
     let mut profiles = use_resource(|| async { api::get::<Vec<Profile>>("/v1/compute/profiles").await });
-    let mut workers = use_resource(|| async { api::get::<Value>("/v1/workspace/nodes").await });
+    let mut workers = use_resource(|| async { api::get::<Value>("/v1/engineering/nodes").await });
     rsx! {
         Heading { title: "Compute".to_owned(),
             description: "Node enrollment, attached hardware, and reusable build environments.".to_owned(),
@@ -367,7 +367,7 @@ fn WorkerTable(records: Option<Result<Value, String>>) -> Element {
     let error = records.as_ref().and_then(|result| result.as_ref().err()).cloned();
     let loading = records.is_none();
     rsx! {
-        Card { title: "Workspace workers".to_owned(), description: "Reported by the compute service, not inferred from inventory.".to_owned(),
+        Card { title: "Compute workers".to_owned(), description: "Reported by the compute service, not inferred from inventory.".to_owned(),
             if let Some(error) = error {
                 Notice { message: error }
             } else if loading {
@@ -468,7 +468,7 @@ pub fn Software() -> Element {
     let value = data.cloned().and_then(Result::ok).unwrap_or(Value::Null);
     rsx! {
         Heading { title: "Software library".to_owned(),
-            description: "Images, packages, and reviewed program requests from Workspace.".to_owned(),
+            description: "Images, packages, and reviewed program requests from the compute catalog.".to_owned(),
             button { class: "btn btn-outline", onclick: move |_| data.restart(),
                 Icon {name:"refresh".to_owned()} "Refresh"
             }

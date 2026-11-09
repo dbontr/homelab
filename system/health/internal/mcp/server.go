@@ -14,10 +14,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/dbontr/personal-health-mcp/internal/recipesage"
- "github.com/dbontr/personal-health-mcp/internal/health"
- "github.com/dbontr/personal-health-mcp/internal/googlehealth"
- "github.com/dbontr/personal-health-mcp/internal/fooddata"
+	"github.com/dbontr/homelab-new/system/health/internal/recipesage"
+ "github.com/dbontr/homelab-new/system/health/internal/health"
+ "github.com/dbontr/homelab-new/system/health/internal/googlehealth"
+ "github.com/dbontr/homelab-new/system/health/internal/fooddata"
 )
 
 const protocolVersion = "2025-06-18"

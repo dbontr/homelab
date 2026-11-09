@@ -5,8 +5,8 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
-	"github.com/dbontr/Adaptive-Teaching-MCP/internal/store"
-	"github.com/dbontr/Adaptive-Teaching-MCP/internal/verification"
+	"github.com/dbontr/homelab-new/system/learning/internal/store"
+	"github.com/dbontr/homelab-new/system/learning/internal/verification"
 	"path/filepath"
 	"testing"
 )

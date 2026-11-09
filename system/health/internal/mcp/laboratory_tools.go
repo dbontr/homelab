@@ -8,7 +8,7 @@ import(
  "math"
  "time"
 
- "github.com/dbontr/personal-health-mcp/internal/health"
+ "github.com/dbontr/homelab-new/system/health/internal/health"
 )
 type LabAnalyte struct{
  Metric string `json:"metric"`

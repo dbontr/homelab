@@ -8,7 +8,7 @@ import (
  "sort"
  "time"
 
- "github.com/dbontr/personal-health-mcp/internal/health"
+ "github.com/dbontr/homelab-new/system/health/internal/health"
 )
 func (s *Server) registerAnalyticTools() {
  txt:=func(desc string)map[string]any{return field("string",desc)}

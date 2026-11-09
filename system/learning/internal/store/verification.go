@@ -8,7 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/dbontr/Adaptive-Teaching-MCP/internal/verification"
+	"github.com/dbontr/homelab-new/system/learning/internal/verification"
 	"strings"
 	"time"
 )

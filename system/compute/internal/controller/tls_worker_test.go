@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/dbontr/project-workspace-mcp/internal/worker"
+	"github.com/dbontr/homelab-new/system/compute/internal/worker"
 )
 
 // The two controller instances use different TLS listeners and independently

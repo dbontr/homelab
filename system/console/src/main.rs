@@ -9,6 +9,7 @@ mod calendar;
 mod planner;
 mod books;
 mod activity;
+mod engineering;
 
 use dioxus::prelude::*;
 use components::Icon;
@@ -19,6 +20,7 @@ static CSS: Asset = asset!("/assets/main.css");
 enum Page {
     Overview,
     Projects,
+    EngineeringRuns,
     Compute,
     Software,
     Monitoring,
@@ -39,6 +41,7 @@ impl Page {
         match self {
             Self::Overview => "Overview",
             Self::Projects => "Projects",
+            Self::EngineeringRuns => "Engineering runs",
             Self::Compute => "Compute",
             Self::Software => "Software library",
             Self::Monitoring => "Monitoring",
@@ -56,9 +59,10 @@ impl Page {
     }
 }
 
-const WORKSPACE: &[(Page, &str, &str)] = &[
+const ENGINEERING: &[(Page, &str, &str)] = &[
     (Page::Overview, "Overview", "overview"),
     (Page::Projects, "Projects", "projects"),
+    (Page::EngineeringRuns, "Engineering runs", "tasks"),
     (Page::Compute, "Compute", "compute"),
     (Page::Software, "Software library", "software"),
 ];
@@ -174,10 +178,10 @@ fn App() -> Element {
                                 span { class: "brand-caption", "Personal computing" }
                             }
                         }
-                        nav { aria_label: "Workspace",
+                        nav { aria_label: "Engineering",
                             div { class: "nav-group",
-                                div { class: "nav-label", "Workspace" }
-                                for &(destination,label,icon) in WORKSPACE {
+                                div { class: "nav-label", "Engineering" }
+                                for &(destination,label,icon) in ENGINEERING {
                                     button {
                                         key: "{label}",
                                         class: "nav-item",
@@ -278,6 +282,7 @@ fn App() -> Element {
                             match page() {
                                 Page::Overview => rsx! { views::Overview {} },
                                 Page::Projects => rsx! { views::Projects {} },
+                                Page::EngineeringRuns => rsx! { engineering::EngineeringRuns {} },
                                 Page::Compute => rsx! { views::Compute {} },
                                 Page::Software => rsx! { views::Software {} },
                                 Page::Monitoring => rsx! { monitoring::Monitoring {} },

@@ -4,7 +4,7 @@ import(
  "context"
  "encoding/json"
 
- "github.com/dbontr/personal-health-mcp/internal/health"
+ "github.com/dbontr/homelab-new/system/health/internal/health"
 )
 func(s *Server)registerNutrientCatalog(){
  s.add("health_nutrient_catalog","List supported canonical nutrient identifiers and suggested units. No dietary targets or intake requirements are inferred.",true,false,nil,map[string]any{},

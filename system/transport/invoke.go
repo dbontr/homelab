@@ -12,6 +12,13 @@ import (
 )
 
 func (s *Server) invoke(ctx context.Context,name string,args json.RawMessage,id json.RawMessage) map[string]any {
+ if strings.HasPrefix(name,"compute__"){
+  name="workspace__"+strings.TrimPrefix(name,"compute__")
+ }
+ if name=="workspace__github_merge_pull_request"||name=="workspace__github_mark_pull_request_ready"||
+  name=="workspace__github_repository_api"||name=="workspace__github_cleanup_merged_branch"{
+  return toolError("repository promotion requires independent owner review")
+ }
  normalized,_,err:=canonicaljson.Object(args)
  if err!=nil{return toolError(err.Error())}
  args=normalized
