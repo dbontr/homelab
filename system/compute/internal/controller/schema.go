@@ -68,6 +68,8 @@ CREATE TABLE IF NOT EXISTS research_claims(id TEXT PRIMARY KEY,project TEXT NOT 
 CREATE INDEX IF NOT EXISTS idx_research_claims_project ON research_claims(project,updated);
 CREATE TABLE IF NOT EXISTS research_claim_evidence(claim TEXT NOT NULL,passage TEXT NOT NULL,relation TEXT NOT NULL,body_sha256 TEXT NOT NULL,created REAL NOT NULL,PRIMARY KEY(claim,passage),FOREIGN KEY(claim) REFERENCES research_claims(id));
 CREATE INDEX IF NOT EXISTS idx_claim_evidence_claim ON research_claim_evidence(claim,created);
+CREATE TABLE IF NOT EXISTS research_text_policies(library TEXT PRIMARY KEY,enabled INTEGER NOT NULL,revision INTEGER NOT NULL,updated REAL NOT NULL,FOREIGN KEY(library) REFERENCES libraries(id));
+CREATE TABLE IF NOT EXISTS research_text_failures(library TEXT NOT NULL,name TEXT NOT NULL,digest TEXT NOT NULL,policy_revision INTEGER NOT NULL,reason TEXT NOT NULL,updated REAL NOT NULL,PRIMARY KEY(library,name,digest),FOREIGN KEY(library) REFERENCES libraries(id));
 CREATE TABLE IF NOT EXISTS research_embedding_policies(library TEXT PRIMARY KEY,model TEXT NOT NULL,enabled INTEGER NOT NULL,revision INTEGER NOT NULL,updated REAL NOT NULL,FOREIGN KEY(library) REFERENCES libraries(id));
 CREATE TABLE IF NOT EXISTS project_contributions(id TEXT PRIMARY KEY,project TEXT NOT NULL,kind TEXT NOT NULL,title TEXT NOT NULL,body TEXT NOT NULL,body_sha256 TEXT NOT NULL,repository TEXT NOT NULL,revision TEXT NOT NULL,artifact_id TEXT NOT NULL,principal TEXT NOT NULL,created REAL NOT NULL,FOREIGN KEY(project) REFERENCES projects(id));
 CREATE INDEX IF NOT EXISTS idx_project_contributions ON project_contributions(project,kind,created);

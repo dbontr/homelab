@@ -121,6 +121,16 @@ func validatePassage(p ResearchPassageInput) error {
 // IngestResearchPassages commits one bounded batch into the active index
 // epoch. Replacing creates a new epoch without deleting prior evidence.
 func (db *Database) IngestResearchPassages(library, source, mode string, expectedRevision int, passages []ResearchPassageInput) (map[string]any, error) {
+ return db.ingestPassages(library,source,mode,expectedRevision,passages,false)
+}
+
+// Automatic extraction rechecks local-library consent in the same transaction
+// that commits passages. Revocation cannot race with an indexing write.
+func (db *Database) ingestConsentedText(library,source string,passages []ResearchPassageInput)(map[string]any,error){
+ return db.ingestPassages(library,source,"append",0,passages,true)
+}
+
+func (db *Database) ingestPassages(library, source, mode string, expectedRevision int, passages []ResearchPassageInput, requireTextConsent bool) (map[string]any, error) {
 	if !validID.MatchString(library) || !contributionArtifactID.MatchString(source) ||
 		(mode != "append" && mode != "replace") || expectedRevision < 0 ||
 		len(passages) < 1 || len(passages) > 64 {
@@ -138,6 +148,11 @@ func (db *Database) IngestResearchPassages(library, source, mode string, expecte
 	}
 	var result map[string]any
 	err := db.transaction(func() error {
+        if requireTextConsent {
+            permission,err:=db.lockedOne("SELECT enabled FROM research_text_policies WHERE library=?",library)
+            if err!=nil{return err}
+            if permission==nil||asInt(permission["enabled"])!=1{return errors.New("automatic text indexing permission revoked")}
+        }
 		original, err := db.lockedOne(`SELECT epoch,index_revision FROM research_sources
 			WHERE id=? AND library=?`, source, library)
 		if err != nil {
