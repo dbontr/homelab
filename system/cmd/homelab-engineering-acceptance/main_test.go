@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -99,5 +101,58 @@ func TestProtectedModelCredential(t *testing.T) {
 	}
 	if _, err := tokenFromFile(p); err == nil {
 		t.Fatal("world-readable model token accepted")
+	}
+}
+type fakeWorkspaceControl struct {
+	states []string
+	stopRequests int
+	lists int
+}
+func (f *fakeWorkspaceControl) Call(_ context.Context, name string, args map[string]any) (map[string]any, error) {
+	if args["project_id"] != "research" {
+		return nil, errors.New("wrong project")
+	}
+	switch name {
+	case "workspace_destroy":
+		if args["workspace_id"] != "aabbccdd" {
+			return nil, errors.New("wrong workspace")
+		}
+		f.stopRequests++
+		return map[string]any{"status": "stopping"}, nil
+	case "workspace_list":
+		f.lists++
+		if len(f.states) == 0 {
+			return map[string]any{"result": []any{}}, nil
+		}
+		state := f.states[0]
+		if len(f.states) > 1 {
+			f.states = f.states[1:]
+		}
+		return map[string]any{"result": []any{map[string]any{"id": "aabbccdd", "status": state}}}, nil
+	default:
+		return nil, errors.New("unexpected compute operation")
+	}
+}
+func TestWorkspaceStopRequiresConfirmedTerminalStatus(t *testing.T) {
+	f := &fakeWorkspaceControl{states: []string{"stopping", "stopped"}}
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
+	if err := stopWorkspace(ctx, f, "research", "aabbccdd"); err != nil {
+		t.Fatal(err)
+	}
+	if f.stopRequests != 1 || f.lists != 2 {
+		t.Fatalf("workspace stop was not confirmed: %+v", f)
+	}
+}
+func TestWorkspaceStopFailsOnUncertainCleanup(t *testing.T) {
+	f := &fakeWorkspaceControl{states: []string{"ready"}}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := stopWorkspace(ctx, f, "research", "aabbccdd"); err == nil {
+		t.Fatal("unconfirmed workspace termination accepted")
+	}
+	f = &fakeWorkspaceControl{states: []string{"failed"}}
+	if err := stopWorkspace(context.Background(), f, "research", "aabbccdd"); err == nil {
+		t.Fatal("failed workspace state accepted")
 	}
 }
