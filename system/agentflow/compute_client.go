@@ -78,9 +78,13 @@ func(c *ComputeClient)currentToken()(string,error){
 }
 func(c *ComputeClient)Call(ctx context.Context,tool string,arguments map[string]any)(map[string]any,error){
  if c==nil||c.http==nil||!permittedComputeTools[tool]{return nil,errors.New("compute operation is not authorized")}
- // A rotated credential must not silently promote the unattended service.
+ // Every request using a reloadable service credential must retain the
+ // non-administrator identity and exact project editor grant.
  if c.credentialFile!=""{
   if err:=c.VerifyProjectCredential(ctx);err!=nil{return nil,err}
+  project,ok:=arguments["project_id"].(string)
+  if !ok||!validID(project){return nil,errors.New("compute operation requires a scoped project")}
+  if err:=c.VerifyProjectEditor(ctx,project);err!=nil{return nil,err}
  }
  body,err:=json.Marshal(map[string]any{
   "jsonrpc":"2.0","id":1,"method":"tools/call",
