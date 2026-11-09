@@ -30,6 +30,7 @@ struct WorkflowDraft {
     personal_read: bool,
     every_hours: String,
     notify_on_change: bool,
+    notify_on_every_run: bool,
 }
 
 impl Default for WorkflowDraft {
@@ -42,6 +43,7 @@ impl Default for WorkflowDraft {
             personal_read: false,
             every_hours: "24".to_owned(),
             notify_on_change: false,
+            notify_on_every_run: false,
         }
     }
 }
@@ -77,11 +79,11 @@ impl WorkflowDraft {
         let needs_query = matches!(self.action.as_str(),
             "research_search" | "research_semantic_query" | "recipe_search");
         let personal = matches!(self.action.as_str(),
-            "learning_summary" | "health_goals" | "recipe_search" | "project_tasks");
+            "learning_summary" | "health_goals" | "recipe_search" | "project_tasks" | "weekly_report");
         let allowed = matches!(self.action.as_str(),
             "project_context" | "project_tasks" | "engineering_runs" |
             "research_search" | "research_semantic_query" | "research_claims" |
-            "learning_summary" | "health_goals" | "recipe_search");
+            "learning_summary" | "health_goals" | "recipe_search" | "weekly_report");
         if !allowed {
             return Err("The selected action is not approved for this workflow.".to_owned());
         }
@@ -111,11 +113,16 @@ impl WorkflowDraft {
         if !(1..=168).contains(&hours) {
             return Err("The interval must be between 1 hour and 7 days.".to_owned());
         }
+        if self.notify_on_every_run && (self.action!="weekly_report" ||
+            hours!=168 || !self.personal_read || self.notify_on_change) {
+            return Err("Report completion alerts require one weekly personal report and no change alerts.".to_owned());
+        }
         Ok(json!({
             "program":self.program()?,
             "every_minutes":hours * 60,
             "enabled":true,
             "notify_on_change":self.notify_on_change,
+            "notify_on_every_run":self.notify_on_every_run,
         }))
     }
 }
@@ -245,6 +252,9 @@ pub fn Workflows(csrf: String) -> Element {
                         onchange: move |event| {
                             let mut input = draft();
                             input.action = event.value();
+                            if input.action != "weekly_report" {
+                                input.notify_on_every_run = false;
+                            }
                             input.query.clear();
                             draft.set(input);
                         },
@@ -257,6 +267,7 @@ pub fn Workflows(csrf: String) -> Element {
                         option { value: "learning_summary", "Learning summary" }
                         option { value: "health_goals", "Health goals" }
                         option { value: "recipe_search", "Recipe search" }
+                        option { value: "weekly_report", "Previous week's task report" }
                     }
                 }
                 if matches!(draft().action.as_str(),
@@ -308,10 +319,31 @@ pub fn Workflows(csrf: String) -> Element {
                         onchange: move |event| {
                             let mut input = draft();
                             input.notify_on_change = event.value() == "yes";
+                            if input.notify_on_change { input.notify_on_every_run = false; }
                             draft.set(input);
                         },
                         option { value: "no", "Store runs without change alerts" }
                         option { value: "yes", "Alert on verified changes after baseline" }
+                    }
+                }
+                if draft().action == "weekly_report" {
+                    label { class: "form-row",
+                        span { class: "label", "Notify after each successful weekly report" }
+                        select {
+                            class: "field",
+                            value: if draft().notify_on_every_run { "yes" } else { "no" },
+                            onchange: move |event| {
+                                let mut input = draft();
+                                input.notify_on_every_run = event.value() == "yes";
+                                if input.notify_on_every_run { input.notify_on_change = false; }
+                                draft.set(input);
+                            },
+                            option { value: "no", "Store each report without completion alerts" }
+                            option { value: "yes", "Notify after each successful weekly report" }
+                        }
+                    }
+                    p { class: "small muted",
+                        "Requires personal-data consent and a 168-hour interval. An alert contains only a reference to a verified report; it does not send personal task details externally."
                     }
                 }
                 div { class: "action-row",
@@ -551,6 +583,9 @@ pub fn Workflows(csrf: String) -> Element {
                                             }
                                             if item.get("notify_on_change").and_then(Value::as_bool).unwrap_or(false) {
                                                 p { class: "muted", "Change alerts enabled" }
+                                            }
+                                            if item.get("notify_on_every_run").and_then(Value::as_bool).unwrap_or(false) {
+                                                p { class: "muted", "Weekly completion alerts enabled" }
                                             }
                                         }
                                         Badge { text: if enabled { "Enabled".to_owned() } else { "Paused".to_owned() } }
@@ -797,4 +832,33 @@ mod tests {
         form.every_hours = "168".to_owned();
         assert!(form.schedule().is_ok());
     }
+    #[test]
+    fn weekly_report_requires_personal_consent_and_exclusive_completion_alerts() {
+        let mut form = WorkflowDraft::default();
+        form.project = "research".to_owned();
+        form.objective = "Review confirmed work".to_owned();
+        form.action = "weekly_report".to_owned();
+        form.every_hours = "168".to_owned();
+        assert!(form.schedule().is_err());
+
+        form.personal_read = true;
+        form.notify_on_every_run = true;
+        let schedule = form.schedule().expect("approved weekly report");
+        assert_eq!(schedule["program"]["steps"][0]["action"], "weekly_report");
+        assert_eq!(schedule["every_minutes"], 10080);
+        assert_eq!(schedule["notify_on_every_run"], true);
+        assert_eq!(schedule["notify_on_change"], false);
+
+        form.notify_on_change = true;
+        assert!(form.schedule().is_err());
+        form.notify_on_change = false;
+        form.every_hours = "24".to_owned();
+        assert!(form.schedule().is_err());
+        form.every_hours = "168".to_owned();
+        form.action = "research_claims".to_owned();
+        assert!(form.schedule().is_err());
+        form.notify_on_every_run = false;
+        assert!(form.schedule().is_ok());
+    }
+
 }
