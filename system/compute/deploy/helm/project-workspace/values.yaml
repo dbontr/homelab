@@ -1,8 +1,8 @@
 systemNamespace: pwm-system
 
 controller:
-  enabled: true
-  image: ghcr.io/dbontr/project-workspace-controller:main
+  enabled: false
+  image: ""
   imagePullPolicy: Always
   imagePullSecrets: []
   secretName: pwm-controller-credentials
@@ -44,7 +44,7 @@ controller:
 
 worker:
   enabled: false
-  image: ghcr.io/dbontr/project-workspace-worker:main
+  image: ""
   imagePullPolicy: Always
   imagePullSecrets: []
   nodeSelector: {}
