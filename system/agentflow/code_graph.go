@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"path"
 	"sort"
 	"strings"
 )
@@ -135,8 +134,3 @@ func (e *Engine) goLanguageServer(ctx context.Context, workflow Workflow, brief 
 	return output, nil
 }
 
-// graphNodePath is the sole source-relative path representation used in
-// navigation output, independent of worker machine path conventions.
-func graphNodePath(repository, filename string) string {
-	return path.Join(repoRoot(repository), filename)
-}
