@@ -1,5 +1,6 @@
 use dioxus::prelude::*;
 use reqwest::Method;
+use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::api::{self, Task};
@@ -36,6 +37,29 @@ impl From<&Task> for Editor {
     }
 }
 
+#[derive(Clone, Debug, Deserialize, serde::Serialize, PartialEq)]
+struct DecompositionStep {
+    title: String,
+    minutes: i32,
+    #[serde(default)]
+    depends_on_steps: Vec<usize>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+struct DecompositionPreview {
+    parent_id: String,
+    expected_revision: i32,
+    steps: Vec<DecompositionStep>,
+    total_minutes: i32,
+    requires_owner_submission: bool,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct DecompositionResult {
+    parent: Task,
+    steps: Vec<Task>,
+}
+
 #[component]
 pub fn Tasks(csrf: String) -> Element {
     let csrf = use_signal(|| csrf);
@@ -49,6 +73,9 @@ pub fn Tasks(csrf: String) -> Element {
     let mut error = use_signal(String::new);
     let mut message = use_signal(String::new);
     let mut conflict_preview = use_signal(||None::<Value>);
+    let mut decomposition_parent = use_signal(||None::<Task>);
+    let mut decomposition_preview = use_signal(||None::<DecompositionPreview>);
+    let mut disclosure_consent = use_signal(||false);
 
     let items = records.cloned().and_then(Result::ok).unwrap_or_default();
     let today = agenda.cloned().and_then(Result::ok).unwrap_or_default();
@@ -131,7 +158,7 @@ pub fn Tasks(csrf: String) -> Element {
                     div { class: "task-items",
                         for task in visible {
                             div { class: "task-item", key: "{task.id}",
-                                if task.status == "open" {
+                                if task.status == "open" && !task.decomposed {
                                     button {
                                         class: "task-check", aria_label: format!("Complete {}", task.title),
                                         title: "Complete task", disabled: busy(),
@@ -153,6 +180,8 @@ pub fn Tasks(csrf: String) -> Element {
                                         },
                                         "○"
                                     }
+                                } else if task.status == "open" {
+                                    span { class: "badge", "Parent" }
                                 } else {
                                     span { class: "task-done", aria_label: "Completed", "✓" }
                                 }
@@ -163,6 +192,23 @@ pub fn Tasks(csrf: String) -> Element {
                                         if !task.scheduled.is_empty() { span { "Planned {task.scheduled}" } }
                                         if task.minutes > 0 { span { "{task.minutes} min" } }
                                         if !task.recurrence.is_empty() { Badge { text: task.recurrence.clone() } }
+                                        if !task.parent_id.is_empty() { Badge { text: "Subtask".to_owned() } }
+                                    }
+                                }
+                                if task.status == "open" && !task.decomposed {
+                                    button {
+                                        class: "btn btn-ghost btn-sm",
+                                        onclick: {
+                                            let selected = task.clone();
+                                            move |_| {
+                                                decomposition_parent.set(Some(selected.clone()));
+                                                decomposition_preview.set(None);
+                                                disclosure_consent.set(false);
+                                                editing.set(None);
+                                                error.set(String::new());
+                                            }
+                                        },
+                                        "Break down"
                                     }
                                 }
                                 if task.status == "open" {
