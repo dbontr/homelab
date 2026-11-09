@@ -239,8 +239,12 @@ func exclusionSet(event Event, loc *time.Location)(map[string]bool,error){
  return excludes,nil
 }
 
-func asOccurrence(event Event,instant time.Time,length time.Duration)Occurrence{
- end:=instant.Add(length)
+func occurrenceEnd(event Event,at time.Time,length time.Duration,calendarDays int)time.Time{
+ if len(event.Start)==8&&calendarDays>0{return at.AddDate(0,0,calendarDays)}
+ return at.Add(length)
+}
+func asOccurrence(event Event,instant time.Time,length time.Duration,calendarDays int)Occurrence{
+ end:=occurrenceEnd(event,instant,length,calendarDays)
  return Occurrence{
   UID:event.UID,Summary:event.Summary,Location:event.Location,
   Start:instant.Format(time.RFC3339),End:end.Format(time.RFC3339),
@@ -265,17 +269,17 @@ func Expand(feed Feed,start,end time.Time)(Expansion,error){
   if overrides[event.UID]==nil{overrides[event.UID]=map[string]bool{}}
   overrides[event.UID][original.UTC().Format(time.RFC3339Nano)]=true
  }
- appendOccurrence:=func(event Event,at time.Time,length time.Duration){
-  if event.Status=="CANCELLED"||!at.Before(end)||!at.Add(length).After(start){return}
+ appendOccurrence:=func(event Event,at time.Time,length time.Duration,calendarDays int){
+  if event.Status=="CANCELLED"||!at.Before(end)||!occurrenceEnd(event,at,length,calendarDays).After(start){return}
   key:=event.UID+"|"+at.UTC().Format(time.RFC3339Nano)
   if seen[key]{return}
   seen[key]=true
   if len(out.Occurrences)<maxCalendarOccurrences{
-   out.Occurrences=append(out.Occurrences,asOccurrence(event,at,length))
+   out.Occurrences=append(out.Occurrences,asOccurrence(event,at,length,calendarDays))
   }
  }
  for _,event:=range feed.Events{
-  if event.Status=="CANCELLED"&&event.RecurrenceID==""{continue}
+  if event.Status=="CANCELLED"{continue}
   first,err:=ParseInstant(event.Start,event.TimeZone,start.Location())
   if err!=nil{out.Limitations=append(out.Limitations,"Calendar event has an unsupported start time");continue}
   last,err:=ParseInstant(event.End,event.TimeZone,start.Location())
@@ -288,8 +292,20 @@ func Expand(feed Feed,start,end time.Time)(Expansion,error){
    out.Limitations=append(out.Limitations,"Calendar event has an unsupported duration");continue
   }
   duration:=last.Sub(first)
+  calendarDays:=0
+  if len(event.Start)==8 {
+   if event.End!=""&&len(event.End)!=8{
+    out.Limitations=append(out.Limitations,"All-day event uses an unsupported end date");continue
+   }
+   startDate:=time.Date(first.Year(),first.Month(),first.Day(),12,0,0,0,time.UTC)
+   endDate:=time.Date(last.Year(),last.Month(),last.Day(),12,0,0,0,time.UTC)
+   calendarDays=int(endDate.Sub(startDate)/(24*time.Hour))
+   if calendarDays<1{
+    out.Limitations=append(out.Limitations,"All-day event duration is invalid");continue
+   }
+  }
   if event.RecurrenceID!=""{
-   appendOccurrence(event,first,duration)
+   appendOccurrence(event,first,duration,calendarDays)
    continue
   }
   excluded,err:=exclusionSet(event,start.Location())
@@ -297,7 +313,7 @@ func Expand(feed Feed,start,end time.Time)(Expansion,error){
   emit:=func(at time.Time){
    key:=at.UTC().Format(time.RFC3339Nano)
    if excluded[key]||overrides[event.UID][key]{return}
-   appendOccurrence(event,at,duration)
+   appendOccurrence(event,at,duration,calendarDays)
   }
   if event.Recurrence==""{
    emit(first)
