@@ -497,3 +497,7 @@ main.content { max-width: 94rem; margin: 0 auto; padding: 2rem; }
 .engineering-knowledge-item { border: 1px solid var(--border); border-radius: var(--radius); padding: .65rem; }
 .engineering-knowledge-item summary { display: flex; justify-content: space-between; gap: .75rem; cursor: pointer; }
 .engineering-knowledge-item .mono { overflow-wrap: anywhere; }
+.engineering-source-previews { display: grid; gap: .5rem; }
+.engineering-diff { border: 1px solid var(--border); border-radius: var(--radius); padding: .6rem; min-width: 0; }
+.engineering-diff summary { font-family: ui-monospace,SFMono-Regular,Consolas,monospace; cursor: pointer; overflow-wrap: anywhere; }
+.engineering-diff pre { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--muted); padding: .75rem; border-radius: calc(var(--radius)*.7); max-height: 32rem; overflow-y: auto; }
