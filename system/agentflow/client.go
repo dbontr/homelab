@@ -91,3 +91,10 @@ func (c *Client) CancelTeam(id string)error{
  var team TeamSummary
  return c.request(http.MethodPost,"/teams/"+url.PathEscape(id)+"/cancel",map[string]any{},&team)
 }
+
+func (c *Client) IntegrateTeam(id string, request TeamIntegrationRequest)(TeamSummary,error){
+ var team TeamSummary
+ if !validID(id){return team,errors.New("invalid engineering team")}
+ err:=c.request(http.MethodPost,"/teams/"+url.PathEscape(id)+"/integrate",request,&team)
+ return team,err
+}
