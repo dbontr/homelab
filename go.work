@@ -2,7 +2,7 @@ go 1.27.3
 
 use (
   .
-  ./system
+  ./services/core
   ./services/compute
   ./services/learning
   ./services/health
