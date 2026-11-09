@@ -134,7 +134,7 @@ func summarizeCapabilityWorkflow(w agentflow.Workflow) CapabilityWorkflow {
 }
 
 func (s *Server) SetWorkflows(store *agentflow.Store) {s.workflows=store}
-func (s *Server) SetCapabilityPlanner(planner *agentflow.ModelAuthor){s.capabilityPlanner=planner}
+func (s *Server) SetCapabilityPlanner(planner agentflow.CapabilityPlanner){s.capabilityPlanner=planner}
 
 func (s *Server) submitCapabilityWorkflow(ctx context.Context,program CapabilityProgram)(CapabilityWorkflow,error) {
     if s.workflows==nil{return CapabilityWorkflow{},errors.New("workflow store unavailable")}
