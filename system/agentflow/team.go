@@ -4,6 +4,8 @@ import (
  "encoding/json"
  "errors"
  "fmt"
+ "context"
+ "time"
  "os"
  "path/filepath"
  "sort"
@@ -15,23 +17,33 @@ type TeamTask struct {
  Role string `json:"role"`
  Objective string `json:"objective"`
  AllowedPaths []string `json:"allowed_paths"`
+ DependsOn []string `json:"depends_on,omitempty"`
 }
 type TeamRequest struct {
  Base Program `json:"base"`
  Tasks []TeamTask `json:"tasks"`
+ AutoPlan bool `json:"auto_plan,omitempty"`
 }
 type TeamMember struct {
  Key string `json:"key"`
  Role string `json:"role"`
  RunID string `json:"run_id"`
  AllowedPaths []string `json:"allowed_paths"`
+ DependsOn []string `json:"depends_on,omitempty"`
 }
 type TeamRecord struct {
  ID string `json:"id"`
  Project string `json:"project"`
  Repository string `json:"repository"`
  Revision string `json:"revision"`
+ BaseBranch string `json:"base_branch"`
+ ImagePoolID string `json:"image_pool_id"`
+ CPU float64 `json:"cpu"`
+ MemoryMB int `json:"memory_mb"`
+ DurationMinutes int `json:"duration_minutes"`
+ Checks []string `json:"checks"`
  Members []TeamMember `json:"members"`
+ IntegrationRunID string `json:"integration_run_id,omitempty"`
 }
 type TeamRun struct {
  Key string `json:"key"`
@@ -53,12 +65,14 @@ type TeamSummary struct {
  Artifacts []TeamArtifact `json:"artifacts,omitempty"`
  Conflicts []string `json:"conflicts,omitempty"`
  ReadyForReview bool `json:"ready_for_review"`
+ Integration *RunSummary `json:"integration,omitempty"`
 }
 type TeamManager interface {
  SubmitTeam(TeamRequest)(TeamSummary,error)
  GetTeam(string)(TeamSummary,error)
  ListTeams()([]TeamSummary,error)
  CancelTeam(string)error
+ IntegrateTeam(string, TeamIntegrationRequest)(TeamSummary,error)
 }
 
 func validTeam(req TeamRequest)error{
@@ -67,6 +81,8 @@ func validTeam(req TeamRequest)error{
    req.Base.Revision!=req.Base.ExpectedHead {return errors.New("invalid cooperative project scope")}
  seen:=map[string]bool{}
  paths:=map[string]bool{}
+ ownerScope:=map[string]bool{}
+ for _,p:=range req.Base.AllowedPaths{if !validSourcePath(p)||sensitiveSourcePath(p){return errors.New("invalid team owner scope")};ownerScope[p]=true}
  for _,task:=range req.Tasks{
   if !validID(task.Key)||len(task.Key)>20||seen[task.Key]||!validID(task.Role)||len(task.Role)>24||
    strings.TrimSpace(task.Objective)==""||len(task.Objective)>4096||
@@ -75,12 +91,13 @@ func validTeam(req TeamRequest)error{
   }
   seen[task.Key]=true
   for _,p:=range task.AllowedPaths{
-   if !validSourcePath(p)||sensitiveSourcePath(p)||paths[p]{
+   if !validSourcePath(p)||sensitiveSourcePath(p)||paths[p]||(len(ownerScope)>0&&!ownerScope[p]){
     return errors.New("cooperative agents require disjoint source paths")
    }
    paths[p]=true
   }
  }
+ if err:=validateTaskDependencies(req.Tasks);err!=nil{return err}
  return nil
 }
 func (e *Engine) SubmitTeam(req TeamRequest)(TeamSummary,error){
@@ -88,11 +105,20 @@ func (e *Engine) SubmitTeam(req TeamRequest)(TeamSummary,error){
   return TeamSummary{},errors.New("cooperative project is not authorized")
  }
  if _,ok:=e.Author.(DecisionAuthor);!ok{return TeamSummary{},errors.New("autonomous model unavailable")}
+ if req.AutoPlan {
+  if len(req.Tasks)!=0{return TeamSummary{},errors.New("automatic planning cannot override supplied task assignments")}
+  planner,ok:=e.Author.(TeamPlanningAuthor);if !ok{return TeamSummary{},errors.New("team planning provider unavailable")}
+  ctx,cancel:=context.WithTimeout(context.Background(),45*time.Second)
+  tasks,err:=planner.Decompose(ctx,req.Base);cancel()
+  if err!=nil{return TeamSummary{},err}
+  req.Tasks=tasks
+ }
  if req.Base.Review {if _,ok:=e.Author.(ReviewAuthor);!ok{return TeamSummary{},errors.New("review provider unavailable")}}
  if err:=validTeam(req);err!=nil{return TeamSummary{},err}
  token,err:=randomToken();if err!=nil{return TeamSummary{},err}
  id:="team-"+token[:16]
- team:=TeamRecord{ID:id,Project:req.Base.Project,Repository:req.Base.Repository,Revision:req.Base.Revision}
+ team:=TeamRecord{ID:id,Project:req.Base.Project,Repository:req.Base.Repository,Revision:req.Base.Revision,
+   BaseBranch:req.Base.BaseBranch,ImagePoolID:req.Base.ImagePoolID,CPU:req.Base.CPU,MemoryMB:req.Base.MemoryMB,DurationMinutes:req.Base.DurationMinutes,Checks:append([]string(nil),req.Base.Checks...)}
  children:=make([]Workflow,0,len(req.Tasks))
  for _,task:=range req.Tasks{
   p:=req.Base
@@ -106,7 +132,7 @@ func (e *Engine) SubmitTeam(req TeamRequest)(TeamSummary,error){
   w,err:=Compile(p)
   if err!=nil{return TeamSummary{},fmt.Errorf("invalid member %s: %w",task.Key,err)}
   children=append(children,w)
-  team.Members=append(team.Members,TeamMember{Key:task.Key,Role:task.Role,RunID:w.ID,AllowedPaths:append([]string(nil),task.AllowedPaths...)})
+  team.Members=append(team.Members,TeamMember{Key:task.Key,Role:task.Role,RunID:w.ID,AllowedPaths:append([]string(nil),task.AllowedPaths...),DependsOn:append([]string(nil),task.DependsOn...)})
  }
  if err:=e.Store.createTeamBatch(team,children);err!=nil{return TeamSummary{},err}
  return e.GetTeam(id)
