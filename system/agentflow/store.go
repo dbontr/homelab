@@ -151,11 +151,14 @@ func (s *Store) lock() (func(), error) {
 	return func() { _ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN); _ = f.Close(); s.mu.Unlock() }, nil
 }
 func (s *Store) read(id string) (Workflow, error) {
+	return s.readPath(s.filename(id),id)
+}
+func (s *Store) readPath(location,id string) (Workflow, error) {
 	var w Workflow
 	if !validID(id) {
 		return w, errors.New("invalid workflow ID")
 	}
-	f, err := os.OpenFile(s.filename(id),os.O_RDONLY|syscall.O_NOFOLLOW,0)
+	f, err := os.OpenFile(location,os.O_RDONLY|syscall.O_NOFOLLOW,0)
 	if err != nil {
 		return w, err
 	}
