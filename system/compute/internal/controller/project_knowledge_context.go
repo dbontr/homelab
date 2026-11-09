@@ -23,6 +23,10 @@ func (s *Server) ProjectKnowledgeContext(project string) (map[string]any, error)
 	if err != nil {
 		return nil, err
 	}
+	libraries, err := s.DB.ProjectLibraries(project)
+	if err != nil {
+		return nil, err
+	}
 	result := map[string]any{
 		"project":          info,
 		"authority":        asString(policy["mode"]),
@@ -31,6 +35,7 @@ func (s *Server) ProjectKnowledgeContext(project string) (map[string]any, error)
 		"latest_handoff":   nil,
 		"recent_decisions": []map[string]any{},
 		"repositories":     repositories,
+		"libraries":        libraries,
 		"note_keys":        map[string]string{"Project.md": "Project.md", "Context.md": "Context.md"},
 	}
 	if result["authority"] == "none" {
@@ -38,8 +43,6 @@ func (s *Server) ProjectKnowledgeContext(project string) (map[string]any, error)
 	}
 	if result["authority"] == "local" {
 		context, err := s.DB.ProjectContext(project)
-		if err != nil { return nil, err }
-		libraries, err := s.DB.ProjectLibraries(project)
 		if err != nil { return nil, err }
 		context["authority"] = "local"
 		context["libraries"] = libraries
