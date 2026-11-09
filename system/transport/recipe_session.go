@@ -16,9 +16,16 @@ func (s *Server) sessionOwnerWriteAllowed(r *http.Request) bool {
 	switch {
 	case r.Method == http.MethodPost && (path == "/v1/recipes" || path == "/v1/recipes/import" || path == "/v1/recipes/parse" || path == "/v1/recipes/import-url" || path == "/v1/recipes/bundle" || path == "/v1/recipes/recipesage/preview" || path == "/v1/recipes/recipesage/import" || path == "/v1/recipes/images" || path == "/v1/meals" || path == "/v1/books/requests" || path == "/v1/tasks" || path == "/v1/tasks/capture" || path == "/v1/goals"):
         allowed = true
+    case r.Method == http.MethodPost && (path=="/v1/workflows" ||
+        path=="/v1/workflows/plan" || path=="/v1/automations"):
+        allowed=true
+    case r.Method == http.MethodPost && strings.HasPrefix(path, "/v1/workflows/"):
+        parts:=strings.Split(path,"/")
+        allowed=len(parts)==5 && parts[3]!="" && parts[4]=="cancel"
     case r.Method == http.MethodPost && strings.HasPrefix(path, "/v1/automations/"):
         parts := strings.Split(path, "/")
-        allowed = len(parts)==7 && parts[4]=="alerts" && parts[6]=="ack"
+        allowed = parts[3]!="" && (len(parts)==5 && parts[4]=="enabled" ||
+            len(parts)==7 && parts[4]=="alerts" && parts[5]!="" && parts[6]=="ack")
     case r.Method == http.MethodPost && (path=="/v1/research/learning/preview" || path=="/v1/research/learning/import"):
         allowed=true
     case r.Method == http.MethodPut && path == "/v1/pantry":
