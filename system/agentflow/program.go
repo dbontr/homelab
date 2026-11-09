@@ -177,7 +177,9 @@ func Compile(p Program) (Workflow, error) {
 			next = "review"
 		}
 		add("export", "export", []string{next}, map[string]any{})
-	add("publish", "publish", []string{"export"}, map[string]any{"repository": p.Repository, "base_branch": p.BaseBranch, "expected_head": p.ExpectedHead, "title": p.Title, "body": p.Description})
+	if !p.PrepareOnly {
+		add("publish", "publish", []string{"export"}, map[string]any{"repository": p.Repository, "base_branch": p.BaseBranch, "expected_head": p.ExpectedHead, "title": p.Title, "body": p.Description})
+	}
 	if err := Validate(w); err != nil {
 		return Workflow{}, fmt.Errorf("invalid compiled workflow: %w", err)
 	}
