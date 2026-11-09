@@ -93,4 +93,11 @@ func TestUnlinkedIntegrationCannotAcquireAWorkerLease(t *testing.T) {
 	if _, err := s.ClaimReady(w.ID, time.Minute); err == nil {
 		t.Fatal("unlinked integration workflow acquired an execution lease")
 	}
+	member:=Workflow{ID:"run-unlinked-member",Project:"research",TeamID:"team-unknown",
+		Steps:[]Step{{ID:"provision",Kind:"provision",MaxAttempts:1,
+			Input:json.RawMessage(`{"image_pool_id":"debian-bookworm-slim"}`)}}}
+	if err:=s.Create(member);err!=nil{t.Fatal(err)}
+	if _,err:=s.ClaimReady(member.ID,time.Minute);err==nil{
+		t.Fatal("unlinked cooperative member acquired an execution lease")
+	}
 }
