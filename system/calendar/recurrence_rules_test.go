@@ -108,13 +108,16 @@ func TestYearlySetPositionsApplyToWholeYearAcrossLeapYear(t *testing.T){
   "DTSTART:20270101T130000Z\r\nDTEND:20270101T140000Z\r\n"+
   "RRULE:FREQ=YEARLY;BYMONTH=2;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1;COUNT=3\r\n"+
   "END:VEVENT\r\nEND:VCALENDAR\r\n"
- out:=calendarRange(t,raw,"2027-01-01T00:00:00Z","2030-01-01T00:00:00Z")
- if len(out.Limitations)!=0 || len(out.Occurrences)!=3{
-  t.Fatalf("yearly positional recurrence failed: %+v",out)
- }
  for i,want:=range []string{"2027-02-26","2028-02-29","2029-02-28"}{
-  if !strings.HasPrefix(out.Occurrences[i].Start,want){
-   t.Fatalf("yearly position %d: got %s, want %s",i,out.Occurrences[i].Start,want)
+  year:=2027+i
+  from:=time.Date(year,time.January,1,0,0,0,0,time.UTC).Format(time.RFC3339)
+  through:=time.Date(year,time.December,31,0,0,0,0,time.UTC).Format(time.RFC3339)
+  out:=calendarRange(t,raw,from,through)
+  if len(out.Limitations)!=0 || len(out.Occurrences)!=1{
+   t.Fatalf("yearly positional recurrence failed for %d: %+v",year,out)
+  }
+  if !strings.HasPrefix(out.Occurrences[0].Start,want){
+   t.Fatalf("yearly position %d: got %s, want %s",i,out.Occurrences[0].Start,want)
   }
  }
 }
