@@ -468,8 +468,19 @@ func (e *Engine) executeAgentAction(ctx context.Context, w Workflow, brief Agent
 		}
 		return fmt.Sprintf("sha256=%s\n%s", shaHex(contents), contents), nil
 	case "preview":
-		return fmt.Sprintf("source_sha256=%s proposed_sha256=%s changed_bytes=%d (no write performed)", pending.BeforeSHA256, pending.AfterSHA256, len(pending.Contents)), nil
-	case "patch", "create", "format":
+		current, err := e.workspaceAction(ctx, w, "read_file", map[string]any{"path": path.Join(root, action.Path)})
+		if err != nil { return "", err }
+		if shaHex(str(current["content"])) != pending.BeforeSHA256 {
+			return "", errors.New("source changed after patch preview was prepared")
+		}
+		return previewSourceChange(str(current["content"]), pending.Contents), nil
+	case "format":
+		if pending.BeforeSHA256 == pending.AfterSHA256 {
+			return "Source already matches Go formatting", nil
+		}
+		if err := e.executeAgentWrite(ctx, w, brief, state); err != nil { return "", err }
+		return "Formatted source confirmed at the target digest", nil
+	case "patch", "create":
 		if err := e.executeAgentWrite(ctx, w, brief, state); err != nil {
 			return "", err
 		}
