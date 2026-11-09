@@ -83,12 +83,17 @@ func (g *GitHub) SnapshotReader(repo, ref string) (string, io.ReadCloser, error)
 // archive from either GitHub or an operator-mounted local bare repository.
 func (s *Server) SourceSnapshotReader(repository, ref string) (string, io.ReadCloser, error) {
 	name, local := localRepoName(repository)
-	if !local {
-		if strings.HasPrefix(repository, "local:") {
-			return "", nil, errors.New("invalid local Git repository")
-		}
-		return s.GitHub.SnapshotReader(repository, ref)
-	}
+ if gitlabName,ok:=gitLabRepoName(repository);ok{
+  _=gitlabName
+  if s.GitLab==nil{return "",nil,errors.New("GitLab is not configured")}
+  return s.GitLab.SnapshotReader(repository,ref)
+ }
+ if !local {
+  if strings.HasPrefix(repository,"local:")||strings.HasPrefix(repository,"gitlab:"){
+   return "",nil,errors.New("invalid repository locator")
+  }
+  return s.GitHub.SnapshotReader(repository,ref)
+ }
 	if s.LocalGit == nil {
 		return "", nil, errors.New("local Git storage is not configured")
 	}
