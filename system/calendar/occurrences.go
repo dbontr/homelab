@@ -55,6 +55,8 @@ type recurrenceRule struct {
  weekdays map[time.Weekday]bool
  months map[time.Month]bool
  monthDays map[int]bool
+ ordinalDays map[time.Weekday]map[int]bool
+ bySetPos []int
 }
 
 var weekdayNames=map[string]time.Weekday{
@@ -94,10 +96,32 @@ func parseRule(raw,zone string,fallback *time.Location)(recurrenceRule,error){
    r.weekStart=day
   case "BYDAY":
    r.weekdays=map[time.Weekday]bool{}
-   for _,name:=range strings.Split(fields[1],","){
+   r.ordinalDays=map[time.Weekday]map[int]bool{}
+   for _,part:=range strings.Split(fields[1],","){
+    if len(part)<2{return r,errors.New("invalid recurrence weekday")}
+    name:=part[len(part)-2:]
     day,ok:=weekdayNames[name]
-    if !ok{return r,errors.New("ordinal recurrence weekdays are unsupported")}
-    r.weekdays[day]=true
+    if !ok{return r,errors.New("invalid recurrence weekday")}
+    if len(part)==2 {
+     r.weekdays[day]=true
+     continue
+    }
+    ordinal,err:=strconv.Atoi(part[:len(part)-2])
+    if err!=nil||ordinal==0||ordinal < -53||ordinal>53{
+     return r,errors.New("invalid ordinal recurrence weekday")
+    }
+    if r.ordinalDays[day]==nil{r.ordinalDays[day]=map[int]bool{}}
+    r.ordinalDays[day][ordinal]=true
+   }
+  case "BYSETPOS":
+   if len(r.bySetPos)!=0{return r,errors.New("repeated recurrence position filter")}
+   for _,value:=range strings.Split(fields[1],","){
+    position,err:=strconv.Atoi(value)
+    if err!=nil||position==0||position < -366||position>366{
+     return r,errors.New("invalid recurrence position")
+    }
+    r.bySetPos=append(r.bySetPos,position)
+    if len(r.bySetPos)>32{return r,errors.New("too many recurrence positions")}
    }
   case "BYMONTH":
    r.months=map[time.Month]bool{}
@@ -119,6 +143,22 @@ func parseRule(raw,zone string,fallback *time.Location)(recurrenceRule,error){
  }
  if r.freq==""{return r,errors.New("recurrence frequency required")}
  if r.count>0&&r.untilDefined{return r,errors.New("COUNT and UNTIL cannot appear together")}
+ if len(r.ordinalDays)>0 {
+  if r.freq!="MONTHLY"&&!(r.freq=="YEARLY"&&len(r.months)>0){
+   return r,errors.New("ordinal weekdays require a monthly rule or yearly rule with BYMONTH")
+  }
+  for _,positions:=range r.ordinalDays {
+   for ordinal:=range positions { if ordinal < -5||ordinal>5{
+    return r,errors.New("ordinal weekday exceeds one calendar month")
+   }}
+  }
+ }
+ if len(r.bySetPos)>0 && r.freq!="MONTHLY"{
+  return r,errors.New("positional recurrence currently requires FREQ=MONTHLY")
+ }
+ if len(r.bySetPos)>0 && len(r.weekdays)==0&&len(r.ordinalDays)==0&&len(r.monthDays)==0{
+  return r,errors.New("positional recurrence requires a day filter")
+ }
  return r,nil
 }
 
@@ -128,7 +168,18 @@ func weekdayOffset(day,weekStart time.Weekday)int{
 
 func matchesRule(rule recurrenceRule,origin,day time.Time,dayIndex int)bool{
  if len(rule.months)>0&&!rule.months[day.Month()]{return false}
- if len(rule.weekdays)>0&&!rule.weekdays[day.Weekday()]{return false}
+ if len(rule.weekdays)>0||len(rule.ordinalDays)>0 {
+  if !rule.weekdays[day.Weekday()] {
+   ordinalMatches:=false
+   if positions:=rule.ordinalDays[day.Weekday()];len(positions)>0{
+    monthLast:=time.Date(day.Year(),day.Month()+1,0,0,0,0,0,day.Location()).Day()
+    positive:=(day.Day()-1)/7+1
+    negative:=-((monthLast-day.Day())/7+1)
+    ordinalMatches=positions[positive]||positions[negative]
+   }
+   if !ordinalMatches{return false}
+  }
+ }
  monthDays:=rule.monthDays
  if len(monthDays)>0{
   last:=time.Date(day.Year(),day.Month()+1,0,0,0,0,0,day.Location()).Day()
@@ -145,13 +196,37 @@ func matchesRule(rule recurrenceRule,origin,day time.Time,dayIndex int)bool{
  case "MONTHLY":
   months:=(day.Year()-origin.Year())*12+int(day.Month()-origin.Month())
   if months%rule.interval!=0{return false}
-  if len(monthDays)==0&&len(rule.weekdays)==0{return day.Day()==origin.Day()}
+  if len(monthDays)==0&&len(rule.weekdays)==0&&len(rule.ordinalDays)==0{return day.Day()==origin.Day()}
   return true
  case "YEARLY":
   if (day.Year()-origin.Year())%rule.interval!=0{return false}
   if len(rule.months)==0&&day.Month()!=origin.Month(){return false}
-  if len(monthDays)==0&&len(rule.weekdays)==0{return day.Day()==origin.Day()}
+  if len(monthDays)==0&&len(rule.weekdays)==0&&len(rule.ordinalDays)==0{return day.Day()==origin.Day()}
   return true
+ }
+ return false
+}
+
+// monthSetPos selects dates after all BYDAY and BYMONTHDAY filters.
+// A monthly rule applies position indices to each complete calendar month.
+func monthSetPos(rule recurrenceRule, origin, day time.Time)(bool){
+ if len(rule.bySetPos)==0{return true}
+ first:=time.Date(day.Year(),day.Month(),1,0,0,0,0,day.Location())
+ last:=time.Date(day.Year(),day.Month()+1,0,0,0,0,0,day.Location()).Day()
+ candidates:=make([]int,0,last)
+ startDay:=time.Date(origin.Year(),origin.Month(),origin.Day(),12,0,0,0,time.UTC)
+ for i:=1;i<=last;i++{
+  at:=time.Date(day.Year(),day.Month(),i,origin.Hour(),origin.Minute(),origin.Second(),0,origin.Location())
+  ordinal:=time.Date(at.Year(),at.Month(),at.Day(),12,0,0,0,time.UTC)
+  dayIndex:=int(ordinal.Sub(startDay)/(24*time.Hour))
+  if dayIndex<0{continue}
+  if matchesRule(rule,origin,at,dayIndex){candidates=append(candidates,i)}
+ }
+ _=first
+ for _,position:=range rule.bySetPos{
+  index:=position-1
+  if position<0{index=len(candidates)+position}
+  if index>=0&&index<len(candidates)&&candidates[index]==day.Day(){return true}
  }
  return false
 }
@@ -206,6 +281,11 @@ func Expand(feed Feed,start,end time.Time)(Expansion,error){
   first,err:=ParseInstant(event.Start,event.TimeZone,start.Location())
   if err!=nil{out.Limitations=append(out.Limitations,"Calendar event has an unsupported start time");continue}
   last,err:=ParseInstant(event.End,event.TimeZone,start.Location())
+  if event.End==""&&len(event.Start)==8&&event.RecurrenceID=="" {
+   // RFC 5545 date-valued VEVENT without DTEND occupies one local day.
+   last=first.AddDate(0,0,1)
+   err=nil
+  }
   if err!=nil||!last.After(first){
    out.Limitations=append(out.Limitations,"Calendar event has an unsupported duration");continue
   }
@@ -234,7 +314,7 @@ func Expand(feed Feed,start,end time.Time)(Expansion,error){
     candidate:=time.Date(day.Year(),day.Month(),day.Day(),first.Hour(),first.Minute(),first.Second(),first.Nanosecond(),first.Location())
     if candidate.After(end){complete=true;break}
     if rule.untilDefined&&candidate.After(rule.until){complete=true;break}
-    if matchesRule(rule,first,candidate,i){
+    if matchesRule(rule,first,candidate,i) && monthSetPos(rule,first,candidate){
      generated++
      emit(candidate)
      if rule.count>0&&generated>=rule.count{complete=true;break}
