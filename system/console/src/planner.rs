@@ -46,6 +46,8 @@ pub struct ReviewEntry {
     pub title: String,
     pub category: String,
     #[serde(default)]
+    pub open_since: String,
+    #[serde(default)]
     pub due: String,
     #[serde(default)]
     pub dependency_count: i32,
@@ -77,6 +79,17 @@ pub struct DelegationReport {
     pub delegations: Vec<Delegation>,
     #[serde(default)]
     pub limitations: Vec<String>,
+}
+
+fn review_category_label(category: &str) -> &str {
+    match category {
+        "overdue" => "Overdue",
+        "upcoming" => "Upcoming",
+        "blocked" => "Blocked",
+        "needs_estimate" => "Needs estimate",
+        "review" => "Age review",
+        other => other,
+    }
 }
 
 fn short_time(time: &str) -> String {
@@ -206,9 +219,9 @@ pub fn Planner() -> Element {
         }
         section { class: "card",
             div { class: "card-header",
-                h2 { class: "card-title", "Deadline and prerequisite review" }
+                h2 { class: "card-title", "Deadline and task review" }
                 p { class: "card-description",
-                    "Classified only from recorded dates, dependencies and estimates. An absence of activity is not evidence of neglect."
+                    "Review uses recorded dates, prerequisites and estimates. Undated, unscheduled tasks open for 14 days are highlighted for review, not presumed neglected."
                 }
             }
             div { class: "card-body",
@@ -217,17 +230,20 @@ pub fn Planner() -> Element {
                     Some(Err(message)) => rsx! { Notice { message } },
                     Some(Ok(result)) => rsx! {
                         if result.entries.is_empty() {
-                            p { class: "small muted", "No overdue or upcoming deadlines, blocked tasks or missing estimates were found." }
+                            p { class: "small muted", "No approaching deadlines, blocked tasks, missing estimates or aged undated tasks were found." }
                         } else {
                             div { class: "planner-unplanned",
                                 for entry in result.entries {
                                     article { class: "planner-review-entry",
                                         div { class: "inline-row",
-                                            span { class: "badge", "{entry.category}" }
+                                            span { class: "badge", "{review_category_label(&entry.category)}" }
                                             strong { "{entry.title}" }
                                         }
                                         if !entry.due.is_empty() {
                                             span { class: "small muted", "Due: {entry.due}" }
+                                        }
+                                        if !entry.open_since.is_empty() {
+                                            span { class: "small muted", "Open since: {entry.open_since}" }
                                         }
                                         if entry.dependency_count>0 {
                                             span { class: "small muted",
