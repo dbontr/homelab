@@ -54,7 +54,7 @@ func(a *AdminSessions)SetServiceCredentialGrants(grants []ServiceCredentialGrant
 
 func verifiedServicePeer(request *http.Request)(string,bool){
  if request.TLS==nil||len(request.TLS.VerifiedChains)==0||
-  len(request.TLS.PeerCertificates)!=1{return "",false}
+  len(request.TLS.PeerCertificates)==0{return "",false}
  peer:=request.TLS.PeerCertificates[0]
  if peer==nil||len(peer.DNSNames)!=1{return "",false}
  dns:=peer.DNSNames[0]
