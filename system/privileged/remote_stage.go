@@ -2,6 +2,9 @@ package privileged
 
 import (
  "context"
+ "crypto/rand"
+ "crypto/sha256"
+ "encoding/hex"
  "encoding/json"
  "io"
  "net/http"
@@ -47,8 +50,31 @@ func(e *Executor)registerReleaseStage(mux *http.ServeMux){
    }{Reason:decision.Reason,ConfirmationID:decision.ConfirmationID})
    return
   }
+  // Release staging executes Nix builds with host authority. Refuse the
+  // operation unless the independent executor can durably audit the attempt.
+  if e.cfg.Audit==nil {
+   http.Error(w,"privileged audit storage unavailable",http.StatusServiceUnavailable);return
+  }
+  var entropy [16]byte
+  if _,err:=rand.Read(entropy[:]);err!=nil{
+   http.Error(w,"audit identity unavailable",http.StatusServiceUnavailable);return
+  }
+  auditID:=hex.EncodeToString(entropy[:])
+  digest:=sha256.Sum256(args)
+  argumentDigest:=hex.EncodeToString(digest[:])
+  const operation="infrastructure__release_stage"
+  if err:=e.cfg.Audit.Record(auditID,operation,input.Host,argumentDigest,"started");err!=nil{
+   http.Error(w,"cannot record privileged operation",http.StatusServiceUnavailable);return
+  }
   manifest,err:=stager.Stage(ctx,input.Revision)
-  if err!=nil||manifest.Host!=input.Host||manifest.Revision!=input.Revision||!releaseJournalID(manifest.ID){
+  valid:=err==nil&&manifest.Host==input.Host&&manifest.Revision==input.Revision&&releaseJournalID(manifest.ID)
+  outcome:="failed"
+  if valid{outcome="succeeded"}
+  if err:=e.cfg.Audit.Record(auditID,operation,input.Host,argumentDigest,outcome);err!=nil{
+   // The started entry is intentionally retained: completion is unknown.
+   http.Error(w,"privileged outcome is uncertain",http.StatusServiceUnavailable);return
+  }
+  if !valid {
    http.Error(w,"stage failed or returned invalid manifest",http.StatusServiceUnavailable);return
   }
   w.Header().Set("Content-Type","application/json")
