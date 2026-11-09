@@ -231,6 +231,8 @@ reviewable GitHub draft diff. It displays bounded agent activity and check
 diagnostics. Knowledge proposals require the owner to inspect their contents
 and provenance before approving contribution to project knowledge.
 
+The project-scoped acceptance command and credential prerequisites are documented in [Isolated engineering acceptance](engineering-acceptance.md). The CLI operates without deploying or activating an engineering daemon.
+
 ## Verification and operational constraints
 
 Source presence is not evidence of a tested runtime. Before enabling the daemon, build the Go service, run the behavioral and negative-authorization tests, exercise a linked test repository through the actual compute worker, verify artifacts and Git publication, and confirm project/credential isolation.
