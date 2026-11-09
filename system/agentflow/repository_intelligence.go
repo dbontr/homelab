@@ -80,6 +80,23 @@ func sourceLanguage(filename string) string {
 	}
 }
 
+func goReceiverType(expr ast.Expr) string {
+	switch receiver := expr.(type) {
+	case *ast.Ident:
+		return receiver.Name
+	case *ast.StarExpr:
+		return goReceiverType(receiver.X)
+	case *ast.IndexExpr:
+		return goReceiverType(receiver.X)
+	case *ast.IndexListExpr:
+		return goReceiverType(receiver.X)
+	case *ast.SelectorExpr:
+		return receiver.Sel.Name
+	default:
+		return ""
+	}
+}
+
 // outlineSource extracts top-level declarations and imports. Go source uses
 // the standard AST; other languages use bounded textual outlines rather than
 // claiming the precision of a compiler's symbol resolver.
@@ -125,11 +142,14 @@ func outlineSource(filename, contents string) (CodeOutline, error) {
 		for _, decl := range file.Decls {
 			switch d := decl.(type) {
 			case *ast.FuncDecl:
-				kind := "function"
-				if d.Recv != nil {
+				kind, name := "function", d.Name.Name
+				if d.Recv != nil && len(d.Recv.List) > 0 {
 					kind = "method"
+					if receiver := goReceiverType(d.Recv.List[0].Type); receiver != "" {
+						name = receiver + "." + name
+					}
 				}
-				addSymbol(d.Name.Name, kind, fset.Position(d.Pos()).Line)
+				addSymbol(name, kind, fset.Position(d.Pos()).Line)
 			case *ast.GenDecl:
 				for _, spec := range d.Specs {
 					switch item := spec.(type) {
@@ -221,7 +241,7 @@ func (e *Engine) repositoryMap(ctx context.Context, w Workflow, brief AgentBrief
 		target = "./" + scope
 	}
 	command := "cd " + shellQuote(root) + " && find " + shellQuote(target) +
-		" -maxdepth 10 \\( -name .git -o -name .ssh -o -name .aws -o -name .gnupg -o -name node_modules -o -name vendor -o -name target -o -name dist -o -name build \\) -prune -o -type f \\( " +
+		" -maxdepth 10 \\( -name '.?*' -o -name node_modules -o -name vendor -o -name target -o -name dist -o -name build \\) -prune -o -type f \\( " +
 		"-name '*.go' -o -name '*.rs' -o -name '*.py' -o -name '*.ts' -o -name '*.tsx' -o -name '*.js' -o -name '*.jsx' -o -name '*.java' -o -name '*.c' -o -name '*.cc' -o -name '*.cpp' -o -name '*.h' -o -name '*.hpp' -o -name '*.vhd' -o -name '*.vhdl' " +
 		"\\) -print | LC_ALL=C sort | head -n 33"
 	result, err := e.workspaceAction(ctx, w, "command", map[string]any{"command": command})
