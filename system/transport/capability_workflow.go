@@ -139,6 +139,12 @@ func (s *Server) SetCapabilityPlanner(planner agentflow.CapabilityPlanner){s.cap
 func (s *Server) submitCapabilityWorkflow(ctx context.Context,program CapabilityProgram)(CapabilityWorkflow,error) {
     if s.workflows==nil{return CapabilityWorkflow{},errors.New("workflow store unavailable")}
     if program.AutoReplan&&s.capabilityPlanner==nil{return CapabilityWorkflow{},errors.New("automatic planning requires an approved model")}
+    if program.AutoReplan {
+        if coverage,ok:=s.capabilityPlanner.(interface{AllowsAutomaticContinuation(bool)bool});ok&&
+            !coverage.AllowsAutomaticContinuation(program.ShareProjectEvidence){
+            return CapabilityWorkflow{},errors.New("required model continuation and evidence roles are not configured")
+        }
+    }
     if program.ShareProjectEvidence&&!program.AutoReplan{return CapabilityWorkflow{},errors.New("model evidence sharing requires automatic planning")}
     if !consoleProjectID.MatchString(program.Project)||strings.TrimSpace(program.Objective)==""||
         len(program.Objective)>2000||len(program.Steps)==0||len(program.Steps)>12 {
