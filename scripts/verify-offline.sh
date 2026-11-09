@@ -24,6 +24,11 @@ verify_go() {
   )
 }
 
+if ! command -v go >/dev/null 2>&1; then
+  printf "%s\n" "Go is required for the selected verification mode." >&2
+  exit 1
+fi
+
 verify_go system
 
 if [ "$mode" = --core-only ]; then
@@ -45,6 +50,24 @@ fi
   cargo test --offline
   cargo check --offline --target wasm32-unknown-unknown
 )
+
+if ! command -v helm >/dev/null 2>&1; then
+  printf "%s\n" "Helm is required to verify Compute controller templates." >&2
+  exit 1
+fi
+chart="$root/system/compute/deploy/helm/project-workspace"
+helm lint "$chart"
+render=$(helm template homelab-acceptance "$chart" \
+  --set controller.embedding.url=http://127.0.0.1:9001/v1/embeddings \
+  --set controller.embedding.model=acceptance \
+  --set controller.embedding.tokenSecretName=acceptance-embedding-secret)
+printf "%s\n" "$render" | grep -q "name: PWM_EMBEDDINGS_TOKEN_FILE"
+printf "%s\n" "$render" | grep -q "mountPath: /run/embeddings"
+if helm template homelab-acceptance "$chart" \
+  --set controller.embedding.tokenSecretName=acceptance-embedding-secret >/dev/null 2>&1; then
+  printf "%s\n" "Embedding credentials were accepted without a provider endpoint." >&2
+  exit 1
+fi
 
 if ! command -v nix >/dev/null 2>&1; then
   printf '%s\n' 'Nix is required for offline fleet evaluation.' >&2
