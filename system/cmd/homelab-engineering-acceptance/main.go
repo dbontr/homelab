@@ -172,6 +172,29 @@ func provisionedWorkspace(summary agentflow.RunSummary) string {
 	return ""
 }
 
+// verifyLinkedRepository ensures checkout and draft publication are restricted
+// to an explicitly linked source repository before any compute allocation.
+func verifyLinkedRepository(ctx context.Context, compute agentflow.ToolCaller, project, repository string) error {
+	response, err := compute.Call(ctx, "repository_memberships", map[string]any{"project_id": project})
+	if err != nil {
+		return fmt.Errorf("repository membership unavailable: %w", err)
+	}
+	records, ok := response["result"].([]any)
+	if !ok {
+		return errors.New("invalid repository membership response")
+	}
+	for _, raw := range records {
+		entry, ok := raw.(map[string]any)
+		if !ok {
+			return errors.New("invalid repository membership record")
+		}
+		if entry["repository"] == repository && entry["role"] == "source" {
+			return nil
+		}
+	}
+	return errors.New("repository is not linked as a project source")
+}
+
 // stopWorkspace requests deletion and verifies the resulting terminal state.
 // A queued stop request is not evidence that the worker has stopped.
 func stopWorkspace(ctx context.Context, compute agentflow.ToolCaller, project, id string) error {
@@ -240,6 +263,9 @@ func run(ctx context.Context, c acceptanceConfig) (runErr error) {
 	}
 	if _, err := compute.Call(ctx, "workspace_list", map[string]any{"project_id": c.Project}); err != nil {
 		return fmt.Errorf("project is not readable by the service principal: %w", err)
+	}
+	if err := verifyLinkedRepository(ctx, compute, c.Project, c.Repository); err != nil {
+		return err
 	}
 	token, err := tokenFromFile(c.ModelTokenFile)
 	if err != nil {
