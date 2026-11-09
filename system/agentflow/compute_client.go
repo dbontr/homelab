@@ -75,6 +75,10 @@ func(c *ComputeClient)currentToken()(string,error){
 }
 func(c *ComputeClient)Call(ctx context.Context,tool string,arguments map[string]any)(map[string]any,error){
  if c==nil||c.http==nil||!permittedComputeTools[tool]{return nil,errors.New("compute operation is not authorized")}
+ // A rotated credential must not silently promote the unattended service.
+ if c.credentialFile!=""{
+  if err:=c.VerifyProjectCredential(ctx);err!=nil{return nil,err}
+ }
  body,err:=json.Marshal(map[string]any{
   "jsonrpc":"2.0","id":1,"method":"tools/call",
   "params":map[string]any{"name":tool,"arguments":arguments},
