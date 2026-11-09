@@ -42,7 +42,7 @@ dispatch:
 		if err := ctx.Err(); err != nil { break }
 		stored,err:=e.Store.Get(run.ID)
 		if err!=nil{return 0,err}
-		if stored.IntegrationTeamID!="" && !admission[run.ID] {continue}
+		if (stored.TeamID!="" || stored.IntegrationTeamID!="") && !isMemberRun(run.ID,admission) {continue}
 		if !stored.Deadline.IsZero() && !time.Now().Before(stored.Deadline) {
 			_ = e.Cancel(run.ID,run.Revision)
 			continue
