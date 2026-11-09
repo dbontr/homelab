@@ -125,7 +125,7 @@ func ownerRequest(ctx context.Context, method, path string, input any) ([]byte, 
 	transport := &http.Transport{DisableKeepAlives: true, DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 		return (&net.Dialer{Timeout: 3 * time.Second}).DialContext(ctx, "unix", ownerSocket)
 	}}
-	client := &http.Client{Transport: transport, Timeout: 5 * time.Second}
+	client := &http.Client{Transport: transport, Timeout: 35 * time.Second}
 	var body io.Reader
 	if input != nil {
 		data, err := json.Marshal(input)
@@ -179,7 +179,9 @@ func run(args []string) error {
 		defer func() { for i := range key { key[i] = 0 } }()
 		return createProtectedFile(*destination, key)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	timeout := 15 * time.Second
+	if args[0] == "oauth-refresh" { timeout = 40 * time.Second }
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	var path, method string
 	var input any
