@@ -247,6 +247,7 @@ func(s *Server)tasks(w http.ResponseWriter,r *http.Request){
 func(s *Server)complete(w http.ResponseWriter,r *http.Request){
  t,e:=s.db.CompleteTask(r.PathValue("id"))
  if errors.Is(e,os.ErrNotExist){writeError(w,404,"task not found");return}
+ if errors.Is(e,store.ErrTaskChildrenIncomplete){writeError(w,409,"complete recorded subtasks before the parent");return}
  if e!=nil{writeError(w,500,"task completion failed");return}
  writeJSON(w,200,t)
 }
