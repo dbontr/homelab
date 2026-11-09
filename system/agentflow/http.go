@@ -95,6 +95,13 @@ func NewHTTPHandler(service Manager)http.Handler{
    sendJSON(w,200,record)
   })
  }
+ if diffs,ok:=service.(DiffManager);ok{
+  mux.HandleFunc("GET /runs/{id}/diffs",func(w http.ResponseWriter,r *http.Request){
+   out,err:=diffs.SourceDiffs(r.PathValue("id"))
+   if err!=nil{sendJSON(w,404,map[string]string{"error":"source previews unavailable"});return}
+   sendJSON(w,200,out)
+  })
+ }
  return mux
 }
 // ServeUnix exposes only lifecycle operations on a group-restricted local
