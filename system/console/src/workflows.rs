@@ -59,7 +59,7 @@ impl WorkflowDraft {
         let objective = self.objective.trim();
         if project.is_empty() || project.len() > 80 ||
             !matches!(project.chars().next(), Some('a'..='z')) ||
-            !project.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == \'-\') {
+            !project.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-') {
             return Err("Enter an existing project ID using lowercase letters, digits or hyphens.".to_owned());
         }
         if objective.is_empty() || objective.len() > 2000 {
