@@ -20,6 +20,9 @@ import (
 type WorkspacePolicy struct {
  Endpoint string
  TokenFile string
+ // TokenSource reads a provider token only after the independently authorized
+ // operation has an audit-start entry.
+ TokenSource func()(string,error) `json:"-"`
  Projects []string
  Workers []string
  Images []string
@@ -43,10 +46,15 @@ func(p *WorkspacePolicy)validate()error{
   !(u.Scheme=="https"||(u.Scheme=="http"&&(u.Hostname()=="127.0.0.1"||u.Hostname()=="::1"||u.Hostname()=="localhost"))){
   return errors.New("Workspace endpoint must be an exact HTTPS or loopback MCP URL")
  }
- if !filepath.IsAbs(p.TokenFile){return errors.New("Workspace credential requires an absolute protected file")}
- info,err:=os.Lstat(p.TokenFile)
- if err!=nil||!info.Mode().IsRegular()||info.Mode().Perm()&0077!=0{
-  return errors.New("Workspace credential file must be a protected regular file")
+ if (p.TokenFile=="")==(p.TokenSource==nil){
+  return errors.New("Workspace must have exactly one protected credential authority")
+ }
+ if p.TokenFile!=""{
+  if !filepath.IsAbs(p.TokenFile){return errors.New("Workspace credential requires an absolute protected file")}
+  info,err:=os.Lstat(p.TokenFile)
+  if err!=nil||!info.Mode().IsRegular()||info.Mode().Perm()&0077!=0{
+   return errors.New("Workspace credential file must be a protected regular file")
+  }
  }
  all:=[][]string{p.Projects,p.Workers,p.Images,p.Software,p.Packages}
  enabled:=false
@@ -126,11 +134,23 @@ func(p *WorkspacePolicy)operationArgs(operation string,fields map[string]any)(st
 func(p *WorkspacePolicy)Call(ctx context.Context,operation string,fields map[string]any)error{
  name,arguments,err:=p.operationArgs(operation,fields)
  if err!=nil{return err}
- secret,err:=os.ReadFile(p.TokenFile)
- if err!=nil||len(secret)>8192{return errors.New("Workspace authorization credential unavailable")}
- token:=strings.TrimSpace(string(secret))
- for i:=range secret{secret[i]=0}
- if len(token)<32{return errors.New("Workspace credential is invalid")}
+ if (p.TokenFile=="")==(p.TokenSource==nil){
+  return errors.New("Workspace credential authority is ambiguous")
+ }
+ token:=""
+ if p.TokenSource!=nil{
+  token,err=p.TokenSource()
+  if err!=nil{return errors.New("Workspace vault credential unavailable")}
+ }else{
+  var secret []byte
+  secret,err=os.ReadFile(p.TokenFile)
+  if err!=nil||len(secret)>8192{return errors.New("Workspace authorization credential unavailable")}
+  token=strings.TrimSuffix(string(secret),"\n")
+  for i:=range secret{secret[i]=0}
+ }
+ if len(token)<32||strings.ContainsAny(token,"\x00\r\n\t "){
+  return errors.New("Workspace credential is invalid")
+ }
  payload,err:=json.Marshal(map[string]any{
   "jsonrpc":"2.0","id":1,"method":"tools/call",
   "params":map[string]any{"name":name,"arguments":arguments},
