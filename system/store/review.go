@@ -51,17 +51,10 @@ func (s *Store) ReviewTasks(now time.Time,horizonDays int)(TaskReview,error){
    if !completed[dep]{entry.DependencyCount++}
   }
   if task.Due!=""{
-   var deadline time.Time
-   var err error
-   if len(task.Due)==10{
-    deadline,err=time.ParseInLocation("2006-01-02",task.Due,s.zone)
-    deadline=deadline.AddDate(0,0,1)
-   }else{
-    deadline,err=time.Parse(time.RFC3339,task.Due)
-   }
+   deadline,err:=taskDeadline(task.Due,s.zone)
    if err==nil{
     switch{
-    case deadline.Before(now):
+    case !deadline.After(now):
      entry.Category="overdue"
     case deadline.Before(now.AddDate(0,0,horizonDays)):
      entry.Category="upcoming"
