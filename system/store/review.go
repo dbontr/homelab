@@ -15,6 +15,7 @@ type TaskReviewEntry struct {
  Priority int `json:"priority"`
  DependencyCount int `json:"dependency_count"`
  CreatedAt time.Time `json:"created_at"`
+ OpenSince string `json:"open_since,omitempty"`
 }
 type TaskReview struct {
  At time.Time `json:"at"`
@@ -22,6 +23,8 @@ type TaskReview struct {
  Entries []TaskReviewEntry `json:"entries"`
  Note string `json:"note"`
 }
+
+const taskReviewAgeDays = 14
 
 func (s *Store) ReviewTasks(now time.Time,horizonDays int)(TaskReview,error){
  if horizonDays<1||horizonDays>30{
@@ -31,7 +34,7 @@ func (s *Store) ReviewTasks(now time.Time,horizonDays int)(TaskReview,error){
  now=now.In(s.zone)
  result:=TaskReview{
   At:now, HorizonDays:horizonDays,Entries:[]TaskReviewEntry{},
-  Note:"Classification uses recorded due dates and prerequisites only. Missing task activity is unknown.",
+  Note:"Deadline, dependency and age signals use recorded task fields. Age since creation does not establish inactivity or neglect.",
  }
  tasks:=s.Tasks("")
  completed:=map[string]bool{}
@@ -39,7 +42,7 @@ func (s *Store) ReviewTasks(now time.Time,horizonDays int)(TaskReview,error){
   if task.Status=="completed"{completed[task.ID]=true}
  }
  for _,task:=range tasks{
-  if task.Status!="open"{continue}
+  if task.Status!="open"||task.Decomposed{continue}
   entry:=TaskReviewEntry{
    TaskID:task.ID,Title:task.Title,Due:task.Due,Minutes:task.Minutes,
    Priority:task.Priority,CreatedAt:task.CreatedAt,
@@ -60,7 +63,7 @@ func (s *Store) ReviewTasks(now time.Time,horizonDays int)(TaskReview,error){
     switch{
     case deadline.Before(now):
      entry.Category="overdue"
-    case deadline.Before(now.Add(time.Duration(horizonDays)*24*time.Hour)):
+    case deadline.Before(now.AddDate(0,0,horizonDays)):
      entry.Category="upcoming"
     }
    }
@@ -71,9 +74,15 @@ func (s *Store) ReviewTasks(now time.Time,horizonDays int)(TaskReview,error){
   if entry.Category==""&&task.Minutes==0{
    entry.Category="needs_estimate"
   }
+  if entry.Category==""&&task.Due==""&&task.Scheduled==""&&
+   !task.CreatedAt.IsZero()&&
+   !task.CreatedAt.In(s.zone).After(now.AddDate(0,0,-taskReviewAgeDays)){
+   entry.Category="review"
+   entry.OpenSince=task.CreatedAt.In(s.zone).Format("2006-01-02")
+  }
   if entry.Category!="" {result.Entries=append(result.Entries,entry)}
  }
- order:=map[string]int{"overdue":0,"upcoming":1,"blocked":2,"needs_estimate":3}
+ order:=map[string]int{"overdue":0,"upcoming":1,"blocked":2,"needs_estimate":3,"review":4}
  sort.SliceStable(result.Entries,func(i,j int)bool{
   a,b:=result.Entries[i],result.Entries[j]
   if order[a.Category]!=order[b.Category]{return order[a.Category]<order[b.Category]}
