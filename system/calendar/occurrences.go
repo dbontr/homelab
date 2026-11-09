@@ -211,7 +211,6 @@ func matchesRule(rule recurrenceRule,origin,day time.Time,dayIndex int)bool{
 // A monthly rule applies position indices to each complete calendar month.
 func monthSetPos(rule recurrenceRule, origin, day time.Time)(bool){
  if len(rule.bySetPos)==0{return true}
- first:=time.Date(day.Year(),day.Month(),1,0,0,0,0,day.Location())
  last:=time.Date(day.Year(),day.Month()+1,0,0,0,0,0,day.Location()).Day()
  candidates:=make([]int,0,last)
  startDay:=time.Date(origin.Year(),origin.Month(),origin.Day(),12,0,0,0,time.UTC)
@@ -222,7 +221,6 @@ func monthSetPos(rule recurrenceRule, origin, day time.Time)(bool){
   if dayIndex<0{continue}
   if matchesRule(rule,origin,at,dayIndex){candidates=append(candidates,i)}
  }
- _=first
  for _,position:=range rule.bySetPos{
   index:=position-1
   if position<0{index=len(candidates)+position}
@@ -281,7 +279,7 @@ func Expand(feed Feed,start,end time.Time)(Expansion,error){
   first,err:=ParseInstant(event.Start,event.TimeZone,start.Location())
   if err!=nil{out.Limitations=append(out.Limitations,"Calendar event has an unsupported start time");continue}
   last,err:=ParseInstant(event.End,event.TimeZone,start.Location())
-  if event.End==""&&len(event.Start)==8&&event.RecurrenceID=="" {
+  if event.End==""&&len(event.Start)==8 {
    // RFC 5545 date-valued VEVENT without DTEND occupies one local day.
    last=first.AddDate(0,0,1)
    err=nil
