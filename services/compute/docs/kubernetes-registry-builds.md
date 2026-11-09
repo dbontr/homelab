@@ -31,7 +31,7 @@ rustc --version
 cargo --version
 rustup target list --installed
 dx --version
-cd system && go test ./... && go vet ./...
+cd services/core && go test ./... && go vet ./...
 cd ../ui/console && cargo check --target wasm32-unknown-unknown
 ```
 

@@ -6,9 +6,9 @@ Homelab consists of one collection of independently operated services and three 
 
 | Directory | Responsibility |
 | --- | --- |
-| `services/` | Private inter-service transport contracts and the target ownership boundary for long-running services |
-| `system/` | Existing Go domain implementations, security, persistence, scheduling, internal native resource handlers and the single tool catalog |
-| `system/compute/`, `system/learning/`, `system/health/` | Independent service modules and data/failure domains |
+| `services/` | Long-running domain services and private inter-service transport contracts |
+| `services/core/` | Go application runtime, personal data persistence, scheduling, security, native resource handlers and the canonical capability catalog |
+| `services/compute/`, `services/learning/`, `services/health/` | Independent service modules and data/failure domains |
 | `ui/` | Rust/Dioxus client assets and the independent same-origin UI ingress |
 | `mcp/` | Optional single MCP listener; discovery and tool calls delegate to the service runtime |
 | `api/` | Optional native HTTP listener; read-only unless exact write resources are configured |
@@ -35,7 +35,7 @@ A service backend address is fixed at process startup and must be a numeric loop
 | Domain service runtime | Its clients receive an explicit unavailable response; no interface becomes the new domain writer |
 | Monitoring services | Existing work continues but its telemetry views become unavailable |
 
-The current Go domain runtime still owns the internal MCP dispatcher and native route implementations. The independent listeners isolate external lifecycles and credentials, not yet every package dependency. Domain handlers can be moved into their respective service modules by preserving their internal contracts and changing one call site at a time. Such moves must retain compatibility with persisted records and existing owner-session behavior.
+The Go core runtime in `services/core/` owns the internal MCP dispatcher and native route implementations. The independent listeners isolate external lifecycles and credentials, not yet every package dependency. Domain handlers can be moved into their respective service modules by preserving their internal contracts and changing one call site at a time. Such moves must retain compatibility with persisted records and existing owner-session behavior.
 
 ## Source verification
 

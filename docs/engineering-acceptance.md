@@ -35,7 +35,7 @@ Do not pass tokens in chat messages, command arguments, logs, or Git commits.
 From the root of an authorized source checkout:
 
 ```sh
-cd system
+cd services/core
 export HOMELAB_COMPUTE_URL="https://compute.example.invalid/mcp"
 export HOMELAB_COMPUTE_TOKEN_FILE="/path/to/private/oidc-project-editor-token"
 export HOMELAB_ENGINEERING_MODEL_URL="https://model.example.invalid/v1/chat/completions"

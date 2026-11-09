@@ -45,7 +45,7 @@ stage=$(mktemp -d "$parent/.compute-images.XXXXXXXX")
 cleanup() { [[ -z "$stage" ]] || rm -rf -- "$stage"; }
 trap cleanup EXIT
 
-context="$root/system/compute"
+context="$root/services/compute"
 controller_tag="$prefix/controller:$revision"
 worker_tag="$prefix/worker:$revision"
 

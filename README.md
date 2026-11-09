@@ -8,7 +8,7 @@ The system is maintained in one repository but runs as independently operable se
 
 - `skills/` contains portable Development, Writing, Teaching and Ideas skills for consistent assistant behavior and project workflows.
 
-- `services/` defines shared private interface contracts and the domain-service ownership boundary. Existing Go service implementations remain in `system/`, including specialist Compute, Learning and Health modules; this source migration does not move their persisted state.
+- `services/` contains the domain service implementations and private contracts. `services/core/` contains the application runtime; `services/compute/`, `services/learning/`, and `services/health/` are independently buildable modules. Each service retains its own persistent state.
 - `ui/` contains the Rust/Dioxus console and its independent browser interface.
 - `mcp/` contains the independently startable, single aggregated MCP listener.
 - `api/` contains the independently startable, optionally writable native HTTP API listener.
@@ -33,16 +33,16 @@ The Rust/Dioxus browser client is in [`ui/console`](ui/console). It uses shadcn/
 
 Compute profiles are stored with immutable revisions, resource requirements and operator-approved software identifiers; profile resource planning is advisory and never schedules a job. SSH-mode equipment uses ordinary-user inspection probes without remote agents. The native tool-call API and MCP dispatch share the same application authorization layer. Credential encryption and independent executor grants exist as library contracts but have no live account or cluster-authority configuration.
 
-The core Go module is in `system/`; specialist executables and packages are in its compute, learning and health implementation directories. The Go workspace at the repository root composes those modules. Build the core using the Go toolchain from `system/`:
+The primary Go module is in `services/core/`. Compute, Learning and Health are independent Go modules under `services/`, composed by the repository Go workspace. Build the primary runtime with:
 
 ```sh
-cd system
+cd services/core
 go test ./...
 go vet ./...
 go build ./cmd/homelab-platform
 ```
 
-The self-hosted `scripts/stage-release.sh` builds the integrated Go services, including the independent engineering daemon, and a Dioxus web bundle into a new, checksummed release directory without changing running services. The internal Kubernetes compute implementation includes a rootless registry image builder and a locally callable `system/compute/scripts/build-toolchain-image.sh` for Go/Rust/WASM toolchain images. NixOS operators can evaluate enrolled hosts and build the `homelab-platform` package from the root flake. Source development never activates a generation. Runtime credentials, personal state and media bytes are not stored in Git.
+The self-hosted `scripts/stage-release.sh` builds the integrated Go services, including the independent engineering daemon, and a Dioxus web bundle into a new, checksummed release directory without changing running services. The internal Kubernetes compute implementation includes a rootless registry image builder and a locally callable `services/compute/scripts/build-toolchain-image.sh` for Go/Rust/WASM toolchain images. NixOS operators can evaluate enrolled hosts and build the `homelab-platform` package from the root flake. Source development never activates a generation. Runtime credentials, personal state and media bytes are not stored in Git.
 
 ## Operating boundaries
 

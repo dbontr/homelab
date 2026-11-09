@@ -29,7 +29,7 @@ if ! command -v go >/dev/null 2>&1; then
   exit 1
 fi
 
-verify_go system
+verify_go services/core
 printf 'Checking optional HTTP interfaces\n'
 (
   cd "$root"
@@ -44,9 +44,9 @@ if [ "$mode" = --core-only ]; then
   exit 0
 fi
 
-verify_go system/compute
-verify_go system/learning
-verify_go system/health
+verify_go services/compute
+verify_go services/learning
+verify_go services/health
 
 if ! command -v cargo >/dev/null 2>&1; then
   printf '%s\n' 'Rust Cargo is required to verify the console source.' >&2
@@ -63,7 +63,7 @@ if ! command -v helm >/dev/null 2>&1; then
   printf "%s\n" "Helm is required to verify Compute controller templates." >&2
   exit 1
 fi
-chart="$root/system/compute/deploy/helm/project-workspace"
+chart="$root/services/compute/deploy/helm/project-workspace"
 helm lint "$chart"
 pinned_controller="ghcr.io/dbontr/eminence/controller@sha256:$(printf '%064d' 0)"
 pinned_worker="ghcr.io/dbontr/eminence/worker@sha256:$(printf '%064d' 0)"
