@@ -7,6 +7,8 @@ import (
  "encoding/json"
  "net/http"
  "net/http/httptest"
+ "os"
+ "path/filepath"
  "strings"
  "testing"
 
@@ -28,7 +30,10 @@ func TestStageHandlerRejectsUnverifiedTLSAndUnauthorizedStage(t *testing.T){
  revision:=strings.Repeat("b",40)
  auth:=&testStageAuth{}
  stage:=&testStageActuator{}
- executor:=&Executor{cfg:Config{Host:"jupiter",AllowRelease:true,Auth:auth,Releases:stage}}
+ auditPath:=filepath.Join(t.TempDir(),"audit.jsonl")
+ audit,err:=OpenAuditJournal(auditPath)
+ if err!=nil{t.Fatal(err)}
+ executor:=&Executor{cfg:Config{Host:"jupiter",AllowRelease:true,Auth:auth,Releases:stage,Audit:audit}}
  body:=`{"host":"jupiter","revision":"`+revision+`"}`
  request:=httptest.NewRequest(http.MethodPost,"/v1/release/stage",strings.NewReader(body))
  request.Header.Set("Cf-Access-Jwt-Assertion","signed-owner")
@@ -50,4 +55,22 @@ func TestStageHandlerRejectsUnverifiedTLSAndUnauthorizedStage(t *testing.T){
  if response.Code!=200||stage.calls!=1||auth.calls!=2{t.Fatal("approved stage failed",response.Code,response.Body.String())}
  var out struct{Allowed bool;Manifest release.Manifest}
  if err:=json.Unmarshal(response.Body.Bytes(),&out);err!=nil||!out.Allowed||out.Manifest.Revision!=revision{t.Fatal("bad manifest",out,err)}
+ journal,err:=os.ReadFile(auditPath)
+ if err!=nil{t.Fatal(err)}
+ if strings.Count(string(journal),"\n")!=2||
+  !strings.Contains(string(journal),`"outcome":"started"`)||
+  !strings.Contains(string(journal),`"outcome":"succeeded"`)||
+  strings.Contains(string(journal),revision){
+  t.Fatalf("remote stage must record bounded results, not raw source arguments: %s",journal)
+ }
+ // An administrative stage may not run when durable audit custody is absent.
+ executor.cfg.Audit=nil
+ request=httptest.NewRequest(http.MethodPost,"/v1/release/stage",strings.NewReader(body))
+ request.Header.Set("Cf-Access-Jwt-Assertion","signed-owner")
+ request.TLS=&tls.ConnectionState{VerifiedChains:[][]*x509.Certificate{{{}}},PeerCertificates:[]*x509.Certificate{{}}}
+ response=httptest.NewRecorder()
+ executor.RemoteHandler().ServeHTTP(response,request)
+ if response.Code!=http.StatusServiceUnavailable||stage.calls!=1{
+  t.Fatalf("release staging bypassed audit storage: %d",response.Code)
+ }
 }
