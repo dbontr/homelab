@@ -233,6 +233,12 @@ func (s *Store) Cancel(id string,expectedRevision uint64)error{
  w,err:=s.read(id);if err!=nil{return err}
  if w.Revision!=expectedRevision{return errors.New("workflow revision conflict")}
  if w.Cancelled{return nil}
+ allSucceeded:=true
+ for _,step:=range w.Steps{
+  if step.Status==Failed{return errors.New("failed workflow cannot be cancelled")}
+  if step.Status!=Succeeded{allSucceeded=false}
+ }
+ if allSucceeded{return errors.New("completed workflow cannot be cancelled")}
  w.Cancelled=true
  for i:=range w.Steps{if w.Steps[i].Status==Pending||w.Steps[i].Status==Running{w.Steps[i].Status=Cancelled;w.Steps[i].LeaseUntil=time.Time{};w.Steps[i].LeaseDigest=""}}
  w.Revision++
