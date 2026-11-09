@@ -29,6 +29,8 @@ type CapabilityProgram struct {
     Project string `json:"project"`
     Objective string `json:"objective"`
     PersonalRead bool `json:"personal_read,omitempty"`
+    AutoReplan bool `json:"auto_replan,omitempty"`
+    ShareProjectEvidence bool `json:"share_project_evidence,omitempty"`
     Steps []CapabilityStage `json:"steps"`
 }
 type CapabilityStepResult struct {
@@ -46,6 +48,8 @@ type CapabilityWorkflow struct {
     Objective string `json:"objective"`
     Revision uint64 `json:"revision"`
     Status string `json:"status"`
+    Replans int `json:"replans,omitempty"`
+    PlanError string `json:"plan_error,omitempty"`
     CreatedAt time.Time `json:"created_at"`
     Deadline time.Time `json:"deadline"`
     Steps []CapabilityStepResult `json:"steps"`
@@ -81,7 +85,8 @@ func validCapabilityStage(stage CapabilityStage, allowPersonal bool) error {
 func summarizeCapabilityWorkflow(w agentflow.Workflow) CapabilityWorkflow {
     summary:=CapabilityWorkflow{
         ID:w.ID,Project:w.Project,Objective:w.Objective,Revision:w.Revision,
-        CreatedAt:w.CreatedAt,Deadline:w.Deadline,Steps:make([]CapabilityStepResult,0,len(w.Steps)),
+        CreatedAt:w.CreatedAt,Deadline:w.Deadline,Replans:w.Replans,PlanError:w.PlanError,
+        Steps:make([]CapabilityStepResult,0,len(w.Steps)),
     }
     success:=true
     failed:=false
@@ -99,6 +104,8 @@ func summarizeCapabilityWorkflow(w agentflow.Workflow) CapabilityWorkflow {
     switch {
     case w.Cancelled: summary.Status="cancelled"
     case failed: summary.Status="failed"
+    case w.PlanError!="": summary.Status="planning_failed"
+    case success&&w.AutoReplan&&!w.PlanComplete&&w.Replans<2&&time.Now().Before(w.Deadline):summary.Status="planning"
     case success: summary.Status="succeeded"
     case !w.Deadline.IsZero() && !time.Now().Before(w.Deadline):summary.Status="expired"
     case running:summary.Status="running"
@@ -112,6 +119,8 @@ func (s *Server) SetCapabilityPlanner(planner *agentflow.ModelAuthor){s.capabili
 
 func (s *Server) submitCapabilityWorkflow(ctx context.Context,program CapabilityProgram)(CapabilityWorkflow,error) {
     if s.workflows==nil{return CapabilityWorkflow{},errors.New("workflow store unavailable")}
+    if program.AutoReplan&&s.capabilityPlanner==nil{return CapabilityWorkflow{},errors.New("automatic planning requires an approved model")}
+    if program.ShareProjectEvidence&&!program.AutoReplan{return CapabilityWorkflow{},errors.New("model evidence sharing requires automatic planning")}
     if !consoleProjectID.MatchString(program.Project)||strings.TrimSpace(program.Objective)==""||
         len(program.Objective)>2000||len(program.Steps)==0||len(program.Steps)>12 {
         return CapabilityWorkflow{},errors.New("invalid workflow objective or scope")
@@ -122,7 +131,8 @@ func (s *Server) submitCapabilityWorkflow(ctx context.Context,program Capability
     if _,err:=rand.Read(token[:]);err!=nil{return CapabilityWorkflow{},err}
     w:=agentflow.Workflow{
         ID:hex.EncodeToString(token[:]),Project:program.Project,Objective:strings.TrimSpace(program.Objective),
-        PersonalRead:program.PersonalRead,Deadline:time.Now().Add(30*time.Minute),
+        PersonalRead:program.PersonalRead,CapabilityPlan:true,AutoReplan:program.AutoReplan,
+        ShareProjectEvidence:program.ShareProjectEvidence,Deadline:time.Now().Add(30*time.Minute),
         Steps:make([]agentflow.Step,0,len(program.Steps)),
     }
     for _,stage:=range program.Steps {
@@ -253,7 +263,7 @@ func (s *Server) advanceCapabilityWorkflow(ctx context.Context,id string,maxStep
     for n:=0;n<maxSteps;n++ {
         advanced,err:=runner.RunOne(ctx,id)
         if err!=nil{return err}
-        if !advanced{return nil}
+        if !advanced{return s.advanceCapabilityReplan(ctx,id)}
     }
     return nil
 }
@@ -275,7 +285,7 @@ func (s *Server) StartWorkflowScheduler(ctx context.Context) {
                     if ctx.Err()!=nil{return}
                     current,err:=s.capabilityWorkflow(ctx,id)
                     if err!=nil||current.Status=="succeeded"||current.Status=="failed"||
-                        current.Status=="cancelled"||current.Status=="expired"{continue}
+                        current.Status=="cancelled"||current.Status=="expired"||current.Status=="planning_failed"{continue}
                     budget,cancel:=context.WithTimeout(ctx,8*time.Second)
                     _=s.advanceCapabilityWorkflow(budget,id,1)
                     cancel()

@@ -51,6 +51,8 @@ A program might look like:
 }
 ```
 
+For workflows submitted with `auto_replan: true`, the scheduler can ask the configured model for up to two bounded continuation rounds after all preceding stages succeed. Every additional stage must depend on confirmed evidence, pass the original action and privacy policy, and fit the 12-stage total limit. Revision-fenced persistence prevents stale model decisions from changing a cancelled or modified workflow. Model failures are recorded as `planning_failed` rather than presented as successful completion. The `share_project_evidence` opt-in enables short source-linked research excerpts in model context; personal task, health, learning, recipe, and media result bodies are never forwarded.
+
 The scheduler advances dependency-ready steps without further input. It shares
 the existing Go lease-token, generation-fencing, optimistic-revision,
 cross-process-locking, and atomic-state mechanisms. Read operations can be

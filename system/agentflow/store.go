@@ -50,6 +50,12 @@ type CleanupRecord struct {
 }
 
 type Workflow struct {
+	CapabilityPlan bool `json:"capability_plan,omitempty"`
+	AutoReplan bool `json:"auto_replan,omitempty"`
+	ShareProjectEvidence bool `json:"share_project_evidence,omitempty"`
+	Replans int `json:"replans,omitempty"`
+	PlanComplete bool `json:"plan_complete,omitempty"`
+	PlanError string `json:"plan_error,omitempty"`
 	Objective string `json:"objective,omitempty"`
 	PersonalRead bool `json:"personal_read,omitempty"`
 	CreatedAt time.Time `json:"created_at,omitempty"`
@@ -204,7 +210,7 @@ func (s *Store) save(w Workflow) error {
 	return d.Sync()
 }
 func Validate(w Workflow) error {
-	if !validID(w.ID) || !validID(w.Project) || len(w.Steps) == 0 || len(w.Steps) > 128 || len(w.Objective) > 2000 {
+	if !validID(w.ID) || !validID(w.Project) || len(w.Steps) == 0 || len(w.Steps) > 128 || len(w.Objective) > 2000 || w.Replans < 0 || w.Replans > 2 || len(w.PlanError) > 512 {
 		return errors.New("invalid workflow identity, project or size")
 	}
 	found := map[string]Step{}
