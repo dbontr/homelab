@@ -560,8 +560,16 @@ func (e *Engine) Dispatch(ctx context.Context, claim Claim) (json.RawMessage, er
 		if reviewErr != nil { return nil, reviewErr }
 		if err := report.Validate(); err != nil { return nil, err }
 		out = map[string]any{"verdict": report.Verdict, "risk": report.Risk, "findings": report.Findings, "recommended_tests": report.RecommendedTests, "reviewed_paths": sortedPaths(paths)}
-		if report.Verdict != "approve" { return nil, errors.New("engineering review requires source revision") }
 	case "export":
+		// A review can complete with a revise verdict. Record its findings,
+		// then block publication without discarding the evidence.
+		for _, step := range w.Steps {
+			if step.ID != "review" { continue }
+			review, reviewErr := resultObject(w, "review")
+			if reviewErr != nil || str(review["verdict"]) != "approve" {
+				return nil, errors.New("review requires source revision before export")
+			}
+		}
 		var changes map[string]string
 		if w.Agent != nil {
 			if !w.Agent.Completed {
