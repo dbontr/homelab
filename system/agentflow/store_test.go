@@ -3,6 +3,7 @@ package agentflow
 import (
  "encoding/json"
  "errors"
+ "fmt"
  "os"
  "path/filepath"
  "testing"
@@ -87,4 +88,13 @@ func TestCompletedWorkflowCannotBeCancelled(t *testing.T){
  if err:=s.Cancel(w.ID,complete.Revision);err==nil{t.Fatal("completed workflow could be reclassified as cancelled")}
  unchanged,err:=s.Get(w.ID);if err!=nil{t.Fatal(err)}
  if unchanged.Cancelled||unchanged.Revision!=complete.Revision{t.Fatal("completed workflow history was modified")}
+}
+
+func TestRunCapacityIsEnforcedBeforeCreation(t *testing.T){
+ s:=testStore(t)
+ for i:=0;i<1000;i++{
+  name:=fmt.Sprintf("run-%04d.json",i)
+  if err:=os.WriteFile(filepath.Join(s.dir,name),[]byte("{}"),0600);err!=nil{t.Fatal(err)}
+ }
+ if err:=s.Create(sample());err==nil{t.Fatal("run retention limit was bypassed")}
 }
