@@ -90,6 +90,41 @@ func(a *AdminSessions)registerOAuthOwner(mux *http.ServeMux){
   log.Print("security audit oauth_enrollment initiated")
   respondJSON(w,200,authorization)
  })
+ mux.HandleFunc("POST /v1/oauth/{provider}/refresh",func(w http.ResponseWriter,r *http.Request){
+  if a.oauth==nil||a.vault==nil{
+   http.Error(w,"OAuth provider integration unavailable",503);return
+  }
+  var input struct{
+   Handle string `json:"handle"`
+   Password string `json:"password"`
+   TOTP string `json:"totp"`
+   Confirm bool `json:"confirm"`
+  }
+  if err:=readJSON(r,&input);err!=nil||!input.Confirm{
+   http.Error(w,"explicit refresh confirmation required",400);return
+  }
+  if len(input.Handle)!=32||strings.Trim(input.Handle,
+   "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")!=""{
+   http.Error(w,"invalid credential handle",400);return
+  }
+  providerName:=r.PathValue("provider")
+  a.oauth.mu.Lock()
+  provider,ok:=a.oauth.providers[providerName]
+  a.oauth.mu.Unlock()
+  if !ok{http.Error(w,"OAuth provider unavailable",404);return}
+  if err:=a.VerifyOwnerFactors(input.Password,input.TOTP);err!=nil{
+   log.Print("security audit oauth_refresh denied")
+   http.Error(w,"owner authentication denied",403);return
+  }
+  ctx,cancel:=context.WithTimeout(r.Context(),30*time.Second)
+  defer cancel()
+  if err:=RefreshOAuthCredential(ctx,provider,input.Handle,a.oauthClient,a.vault);err!=nil{
+   log.Print("security audit oauth_refresh failed")
+   http.Error(w,"credential refresh unavailable",503);return
+  }
+  log.Print("security audit oauth_credential refreshed")
+  respondJSON(w,200,map[string]bool{"refreshed":true})
+ })
 }
 
 // OAuthCallbackHandler serves the exact provider redirect only over an
