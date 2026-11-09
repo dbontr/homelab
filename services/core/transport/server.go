@@ -10,7 +10,6 @@ import (
  "mime"
  "net/http"
  "net/url"
- "os"
  "strconv"
  "strings"
  "time"
@@ -20,6 +19,7 @@ import (
  "github.com/dbontr/homelab-new/system/books"
  "github.com/dbontr/homelab-new/system/devices"
  "github.com/dbontr/homelab-new/system/media"
+ "github.com/dbontr/homelab-new/system/internal/personal"
  "github.com/dbontr/homelab-new/system/observability"
  "github.com/dbontr/homelab-new/system/profiles"
  "github.com/dbontr/homelab-new/system/recipes"
@@ -72,6 +72,7 @@ func(s *Server) SetCalendarURL(raw string)error{
 }
 func(s *Server) Handler()http.Handler{
  mux:=http.NewServeMux()
+ personal.Register(mux,s.db)
  mux.HandleFunc("GET /healthz",func(w http.ResponseWriter,_ *http.Request){writeJSON(w,200,map[string]string{"status":"ok"})})
  mux.HandleFunc("GET /ui/session",s.uiSession)
  mux.HandleFunc("POST /ui/session",s.uiSession)
@@ -177,21 +178,8 @@ func(s *Server) Handler()http.Handler{
  })
  mux.HandleFunc("POST /v1/tools/{name}/call",s.nativeToolCall)
  mux.HandleFunc("GET /v1/tasks/delegations",s.uiTaskDelegations)
- mux.HandleFunc("GET /v1/tasks",s.tasks)
- mux.HandleFunc("POST /v1/tasks",s.tasks)
- mux.HandleFunc("POST /v1/tasks/{id}/complete",s.complete)
- mux.HandleFunc("POST /v1/tasks/{id}/decompose",s.taskDecompose)
  mux.HandleFunc("POST /v1/tasks/{id}/decomposition-preview",s.uiTaskDecompositionPreview)
- mux.HandleFunc("POST /v1/tasks/capture",s.taskCapture)
- mux.HandleFunc("GET /v1/tasks/agenda",s.taskAgenda)
  mux.HandleFunc("GET /v1/tasks/conflicts",s.taskConflicts)
- mux.HandleFunc("PUT /v1/tasks/{id}",s.taskUpdate)
- mux.HandleFunc("GET /v1/goals",s.goals)
- mux.HandleFunc("POST /v1/goals",s.goals)
- mux.HandleFunc("GET /v1/rules",s.rules)
- mux.HandleFunc("PUT /v1/rules/{key}",s.rules)
- mux.HandleFunc("GET /v1/recommendations",s.recommendations)
- mux.HandleFunc("GET /v1/reports/weekly",s.weekly)
  mux.HandleFunc("GET /v1/planning/week",s.uiWeekPlan)
  mux.HandleFunc("GET /v1/planning/review",s.uiTaskReview)
  mux.HandleFunc("GET /v1/calendar",s.calendarEvents)
@@ -246,42 +234,6 @@ func decode(r *http.Request,v any)error{
  var extra any
  if e:=d.Decode(&extra);e!=io.EOF{return errors.New("request must contain one JSON object")}
  return nil
-}
-func(s *Server)tasks(w http.ResponseWriter,r *http.Request){
- if r.Method=="GET"{writeJSON(w,200,s.db.Tasks(r.URL.Query().Get("status")));return}
- var in store.TaskInput
- if e:=decode(r,&in);e!=nil{writeError(w,400,e.Error());return}
- t,e:=s.db.AddTask(in);if e!=nil{writeError(w,400,e.Error());return}
- writeJSON(w,201,t)
-}
-func(s *Server)complete(w http.ResponseWriter,r *http.Request){
- t,e:=s.db.CompleteTask(r.PathValue("id"))
- if errors.Is(e,os.ErrNotExist){writeError(w,404,"task not found");return}
- if errors.Is(e,store.ErrTaskChildrenIncomplete){writeError(w,409,"complete recorded subtasks before the parent");return}
- if e!=nil{writeError(w,500,"task completion failed");return}
- writeJSON(w,200,t)
-}
-func(s *Server)goals(w http.ResponseWriter,r *http.Request){
- if r.Method=="GET"{writeJSON(w,200,s.db.Goals());return}
- var in struct {Title string `json:"title"`; Notes string `json:"notes"`}
- if e:=decode(r,&in);e!=nil{writeError(w,400,e.Error());return}
- g,e:=s.db.AddGoal(in.Title,in.Notes);if e!=nil{writeError(w,400,e.Error());return}
- writeJSON(w,201,g)
-}
-func(s *Server)rules(w http.ResponseWriter,r *http.Request){
- if r.Method=="GET"{writeJSON(w,200,s.db.Rules());return}
- var in struct {Text string `json:"text"`; Kind string `json:"kind"`}
- if e:=decode(r,&in);e!=nil{writeError(w,400,e.Error());return}
- v,e:=s.db.SetRule(r.PathValue("key"),in.Text,in.Kind);if e!=nil{writeError(w,400,e.Error());return}
- writeJSON(w,200,v)
-}
-func(s *Server)recommendations(w http.ResponseWriter,r *http.Request){
- q:=r.URL.Query();minutes,_:=strconv.Atoi(q.Get("minutes"));limit,_:=strconv.Atoi(q.Get("limit"))
- writeJSON(w,200,s.db.Suggest(minutes,q.Get("energy"),q.Get("location"),q.Get("mode"),limit))
-}
-func(s *Server)weekly(w http.ResponseWriter,r *http.Request){
- v,e:=s.db.Report(r.URL.Query().Get("week_of"));if e!=nil{writeError(w,400,e.Error());return}
- writeJSON(w,200,v)
 }
 func(s *Server)calendarEvents(w http.ResponseWriter,r *http.Request){
  if s.calendarURL==""{writeError(w,503,"calendar is not configured");return}
