@@ -59,6 +59,7 @@ func (s *Store) Agenda(day string)([]Task,error){
  rows:=s.Tasks("open")
  selected:=make([]Task,0,len(rows))
  for _,task:=range rows {
+  if task.Decomposed{continue}
   due:=task.Due
   if len(due)>10{due=due[:10]}
   scheduled:=task.Scheduled

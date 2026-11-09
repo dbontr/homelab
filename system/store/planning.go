@@ -111,7 +111,7 @@ func (s *Store) PlanWeekWithCapacities(day string, capacities [7]int, startHour 
 		if task.Status == "completed" {
 			completed[task.ID] = true
 		}
-		if task.Status != "open" || task.Scheduled == "" || task.Minutes < 1 {
+		if task.Status != "open" || task.Decomposed || task.Scheduled == "" || task.Minutes < 1 {
 			continue
 		}
 		start, err := time.Parse(time.RFC3339, task.Scheduled)
@@ -134,7 +134,7 @@ func (s *Store) PlanWeekWithCapacities(day string, capacities [7]int, startHour 
 
 	remaining := make(map[string]Task)
 	for _, task := range tasks {
-		if task.Status != "open" || task.Scheduled != "" {
+		if task.Status != "open" || task.Decomposed || task.Scheduled != "" {
 			continue
 		}
 		switch {
