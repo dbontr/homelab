@@ -38,6 +38,9 @@ func vectorNorm(values []float64)(float64,error){
 // and checksum. Replacement with a different vector is rejected; a changed
 // passage must use an independent passage ID and a new index epoch.
 func (db *Database) PutResearchEmbedding(library,passage,model,digest string,vector []float64)(map[string]any,error){
+ return db.putResearchEmbedding(library,passage,model,digest,vector,false)
+}
+func (db *Database) putResearchEmbedding(library,passage,model,digest string,vector []float64,requireConsent bool)(map[string]any,error){
  if !validID.MatchString(library)||!contributionArtifactID.MatchString(passage)||
    !embeddingModelID.MatchString(model)||!shaPattern.MatchString(digest){
   return nil,errors.New("invalid embedding provenance")
@@ -47,11 +50,18 @@ func (db *Database) PutResearchEmbedding(library,passage,model,digest string,vec
  if err!=nil||len(raw)>32<<10{return nil,errors.New("embedding exceeds storage limit")}
  result:=map[string]any{"passage_id":passage,"library":library,"model":model,"dimension":len(vector),"body_sha256":digest}
  err=db.transaction(func()error{
-  row,err:=db.lockedOne(`SELECT p.body_sha256,p.epoch,s.library,s.epoch AS current_epoch
+  row,err:=db.lockedOne(`SELECT p.body_sha256,p.body,p.epoch,s.library,s.epoch AS current_epoch
     FROM research_passages p JOIN research_sources s ON s.id=p.source
     WHERE p.id=? AND s.library=?`,passage,library)
   if err!=nil{return err}
-  if row==nil||asString(row["body_sha256"])!=digest{return errors.New("source passage checksum mismatch")}
+  if row==nil||asString(row["body_sha256"])!=digest||checksum([]byte(asString(row["body"])))!=digest{
+   return errors.New("source passage checksum mismatch")
+  }
+  if requireConsent{
+   policy,err:=db.lockedOne("SELECT enabled FROM research_embedding_policies WHERE library=? AND model=?",library,model)
+   if err!=nil{return err}
+   if policy==nil||asInt(policy["enabled"])!=1{return errors.New("embedding permission revoked")}
+  }
   if asInt(row["current_epoch"])!=asInt(row["epoch"]){return errors.New("source passage was superseded")}
   previous,err:=db.lockedOne("SELECT vector,body_sha256 FROM research_embeddings WHERE passage=? AND model=?",passage,model)
   if err!=nil{return err}

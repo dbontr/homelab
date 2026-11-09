@@ -87,13 +87,7 @@ func (db *Database) pendingResearchEmbeddings(model string,limit int)([]pendingE
 // putConsentedEmbedding checks the permission inside the same database
 // transaction as the immutable vector write, fencing revocation.
 func (db *Database) putConsentedEmbedding(library,passage,model,digest string,vector []float64) error {
- permitted,err:=db.query(\`SELECT enabled FROM research_embedding_policies
-   WHERE library=? AND model=? AND enabled=1\`,library,model)
- if err!=nil{return err}
- if len(permitted)==0{return errors.New("embedding permission revoked")}
- // The shared write path checks source digest and active epoch. A policy
- // revision is checked again before the transaction in the write method.
- _,err=db.PutResearchEmbedding(library,passage,model,digest,vector)
+ _,err:=db.putResearchEmbedding(library,passage,model,digest,vector,true)
  return err
 }
 
