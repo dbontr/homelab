@@ -2,7 +2,7 @@
 
 Services own application state, business decisions, authentication, scheduled work, hardware operations, and long-running tasks. They do not depend on a browser, an MCP connection, or a public API listener.
 
-The primary application runtime is in `services/core/`. Compute, Learning and Health are independent Go modules in `services/compute/`, `services/learning/` and `services/health/`, with their own state and failure boundaries. Moonfin/Seerr, monitoring collectors, SQL-backed applications, and K3s remain independently operated infrastructure components; an interface outage must not stop them.
+The primary application runtime is in `services/core/`. Personal task, goal, rule and planning HTTP handlers are isolated in `services/core/internal/personal/`, while the core router retains authentication and the shared state store. Compute, Learning and Health are independent Go modules in `services/compute/`, `services/learning/` and `services/health/`, with their own state and failure boundaries. Moonfin/Seerr, monitoring collectors, SQL-backed applications, and K3s remain independently operated infrastructure components; an interface outage must not stop them.
 
 `services/bridge/` contains the restricted internal HTTP transport used by the optional MCP and public API entry points. It does not own application records or privileged operations. The service runtime remains the only owner of its writable state.
 
