@@ -279,6 +279,9 @@ func (e *Engine) Dispatch(ctx context.Context, claim Claim) (json.RawMessage, er
 	switch kind {
 	case "provision":
 		params := map[string]any{"project_id": w.Project, "image_pool_id": args["image_pool_id"], "cpu": args["cpu"], "memory_mb": args["memory_mb"], "duration_minutes": args["duration_minutes"]}
+		for _,name:=range []string{"hardware","min_gpu_memory_mb","architecture","node_id"} {
+			if value,ok:=args[name];ok&&value!=nil {params[name]=value}
+		}
 		out, err = e.Compute.Call(ctx, "workspace_create", params)
 		if err == nil && !validID(str(out["id"])) {
 			err = errors.New("compute returned invalid workspace ID")

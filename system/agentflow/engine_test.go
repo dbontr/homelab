@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -23,6 +24,7 @@ type fakeCompute struct {
 	mismatchDraft    bool
 	flatExport       bool
 	mismatchArtifact bool
+	lastProvision map[string]any
 	mutateOnCheck    bool
 	exported         map[string]string
 	drafts           int
@@ -33,6 +35,7 @@ func (f *fakeCompute) Call(_ context.Context, name string, args map[string]any) 
 	f.calls = append(f.calls, name)
 	switch name {
 	case "workspace_create":
+		f.lastProvision=args
 		return map[string]any{"id": "testworkspace", "status": "starting"}, nil
 	case "workspace_list":
 		return map[string]any{"result": []any{map[string]any{"id": "testworkspace", "status": "ready"}}}, nil
@@ -500,4 +503,57 @@ func TestVerificationRefusesUnexpectedSourceMutation(t *testing.T) {
 	if err!=nil||run.Status!=Failed||compute.drafts!=0 {
 		t.Fatalf("verification accepted modified source: run=%+v err=%v",run,err)
 	}
+}
+
+
+func TestEngineeringAcceleratorAdmissionAndProvenance(t *testing.T) {
+ p:=sampleProgram()
+ p.Hardware=map[string]int{"gpu":1,"npu":1}
+ p.MinGPUMemoryMB=8000
+ p.Architecture="amd64"
+ p.NodeID="gpu-worker"
+ p.LinkedRepositories=nil
+ compiled,err:=Compile(p)
+ if err!=nil{t.Fatal(err)}
+ if compiled.Inputs==nil||compiled.Inputs.Primary.Revision!=p.Revision||
+  len(compiled.Inputs.ProgramSHA256)!=64 || compiled.Inputs.Hardware["npu"]!=1{
+  t.Fatalf("missing program identity: %+v",compiled.Inputs)
+ }
+ expected:=shaHex(p.Changes["README.md"])
+ if compiled.Inputs.ChangeSHA256["README.md"]!=expected{t.Fatal("source contents absent from provenance fingerprint")}
+ var provision map[string]any
+ if err:=json.Unmarshal(compiled.Steps[0].Input,&provision);err!=nil{t.Fatal(err)}
+ if obj(provision["hardware"])["gpu"]!=float64(1) ||
+  provision["min_gpu_memory_mb"]!=float64(8000) ||provision["node_id"]!="gpu-worker"{
+  t.Fatalf("accelerator lease lost in compiled program: %+v",provision)
+ }
+ engine,compute:=testEngine(t)
+ created,err:=engine.Submit(p)
+ if err!=nil{t.Fatal(err)}
+ runner:=&Runner{Store:engine.Store,Worker:engine,Lease:time.Minute}
+ if _,err:=runner.RunOne(context.Background(),created.ID);err!=nil{t.Fatal(err)}
+ if obj(compute.lastProvision["hardware"])["npu"]!=float64(1) ||
+  compute.lastProvision["min_gpu_memory_mb"]!=float64(8000) {
+  t.Fatalf("compute controller did not receive hardware admission: %+v",compute.lastProvision)
+ }
+ summary,err:=engine.Get(created.ID)
+ if err!=nil||summary.Inputs==nil||summary.Inputs.ProgramSHA256==""{
+  t.Fatalf("run did not retain source identity: %+v %v",summary,err)
+ }
+}
+func TestEngineeringHardwareLimitsRejectNonFiniteAndUnapprovedDevices(t *testing.T) {
+ for _,mutate:=range []func(*Program){
+  func(p *Program){p.CPU=math.NaN()},
+  func(p *Program){p.CPU=math.Inf(1)},
+  func(p *Program){p.CPU=math.Inf(-1)},
+  func(p *Program){p.Hardware=map[string]int{"fpga":1}},
+  func(p *Program){p.Hardware=map[string]int{"gpu":3}},
+  func(p *Program){p.Hardware=map[string]int{"npu":-1}},
+  func(p *Program){p.Hardware=map[string]int{"npu":1};p.MinGPUMemoryMB=2048},
+  func(p *Program){p.Architecture="unsupported"},
+  func(p *Program){p.NodeID="../../other"},
+ } {
+  p:=sampleProgram();mutate(&p)
+  if _,err:=Compile(p);err==nil {t.Fatalf("unsafe engineering request accepted: %+v",p)}
+ }
 }

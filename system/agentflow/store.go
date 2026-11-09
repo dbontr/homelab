@@ -69,6 +69,7 @@ type Workflow struct {
 	TeamID string `json:"team_id,omitempty"`
 	ID        string        `json:"id"`
 	Project   string        `json:"project"`
+	Inputs *EngineeringInputs `json:"inputs,omitempty"`
 	Revision  uint64        `json:"revision"`
 	Cancelled bool          `json:"cancelled"`
 	Steps     []Step        `json:"steps"`
