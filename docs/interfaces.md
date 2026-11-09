@@ -29,7 +29,7 @@ The unified MCP discovery operation preserves the canonical local tool set when 
 - GET /v1/books/search?q=...: bounded owner-initiated Open Library catalog lookup when explicitly configured
 - GET/POST /v1/books/requests and PUT /v1/books/requests/{id}: private desired-book list and manual fulfillment/cancellation with revision control
 - GET /v1/activity?limit=...: recorded activity derived from canonical personal and recipe data
-- GET /v1/resources/{kind}/{id}: canonical record with stable resource reference and links, read from its owning store
+- GET /v1/resources/{kind}/{id}: canonical record with stable resource reference and links, read from its owning store. Goals expose related tasks, tasks expose parent/child and prerequisite/dependent relations, and recipes and planned meals link in both directions. These relations are derived at read time without copying or modifying private owner records. Learning session references support the full 128-character identity limit.
 - GET /v1/media/search: Seerr movie and television search, when configured
 - GET /v1/media/requests and POST /v1/media/requests: list and submit requests
 

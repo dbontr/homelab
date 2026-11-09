@@ -5,7 +5,6 @@ import (
     "encoding/json"
     "errors"
     "net/http"
-    "sort"
 
     "github.com/dbontr/homelab-new/system/agentflow"
     "github.com/dbontr/homelab-new/system/store"
@@ -92,13 +91,7 @@ func (s *Server) projectOverview(ctx context.Context, project string) (ProjectOv
         key:=link.Relation+"\x00"+link.Reference
         if !seen[key]{unique=append(unique,link);seen[key]=true}
     }
-    overview.Links=unique
-    sort.Slice(overview.Links,func(i,j int)bool {
-        if overview.Links[i].Relation!=overview.Links[j].Relation {
-            return overview.Links[i].Relation<overview.Links[j].Relation
-        }
-        return overview.Links[i].Reference<overview.Links[j].Reference
-    })
+    overview.Links=sortedResourceLinks(unique)
     return overview,nil
 }
 
