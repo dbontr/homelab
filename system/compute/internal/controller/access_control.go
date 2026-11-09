@@ -53,7 +53,7 @@ var readableTools = map[string]bool{
 	"list_projects": true, "project_published_library": true,
 	"pool_list_images": true, "pool_list_software": true, "pool_list_programs": true,
 	"read_project_note": true, "search_project_knowledge": true,
-	"research_claims": true, "research_claim_detail": true, "research_sources": true, "research_search": true, "research_semantic_search": true, "research_semantic_query": true, "research_embedding_policy_get": true, "research_read_passage": true, "research_topics": true, "research_browse_topic": true,
+	"research_hybrid_query": true, "research_claims": true, "research_claim_detail": true, "research_sources": true, "research_search": true, "research_semantic_search": true, "research_semantic_query": true, "research_embedding_policy_get": true, "research_read_passage": true, "research_topics": true, "research_browse_topic": true,
 	"study_pack_prepare": true,
 	"knowledge_context":  true, "knowledge_contributions": true, "knowledge_contribution": true, "knowledge_search_contributions": true,
 	"knowledge_policy":    true,

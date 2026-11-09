@@ -1,5 +1,9 @@
 # Research evidence and compute planning
 
+## Hybrid evidence retrieval
+
+`research_hybrid_query` and `GET /api/projects/{project}/research/hybrid?q=...` combine project-linked FTS5 search with semantic retrieval when the project has active embedding consent and a configured provider. A bounded reciprocal-rank-fusion score (rank constant 60) merges duplicate source passages without inventing source claims. If semantic retrieval is unavailable, the response explicitly reports `lexical_only` rather than falsely claiming semantic results. Both pathways rely on existing project-library authorization and immutable citation locators.
+
 ## Evidence graph
 
 The Compute controller owns project-level research claims and hypotheses. Each assertion has an immutable project identity, stated kind, revision and separately linked indexed passage evidence. Passage relations can be `supports`, `challenges` or `context`; they are not verdicts. An owner/editor may attach verified indexed evidence only from a library linked to that exact project. The source epoch, hash and current project-library authorization are rechecked when reading a claim. Replaced, tampered or unlinked passages become unavailable references rather than silently continuing as support. Mixed support and challenge produce `contested_evidence`, not an assertion that a claim is true or false.

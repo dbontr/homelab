@@ -100,6 +100,18 @@ func (s *Server) handleResearch(w http.ResponseWriter, r *http.Request, p []stri
 			send(w, v, err)
 			return true
 		}
+	case "hybrid":
+		if len(p)==5 {
+			limit:=20
+			if raw:=r.URL.Query().Get("limit");raw!="" {
+				n,err:=strconv.Atoi(raw)
+				if err!=nil{fail(w,400,"invalid research retrieval limit");return true}
+				limit=n
+			}
+			result,err:=s.HybridResearch(r.Context(),project,r.URL.Query().Get("q"),limit)
+			send(w,result,err)
+			return true
+		}
 	case "semantic":
 		if len(p)==5{
 			limit:=20
