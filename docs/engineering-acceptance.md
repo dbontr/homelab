@@ -17,8 +17,9 @@ changes infrastructure, or activates a release.
 - A repository linked to an existing compute project, with an approved
   `debian-bookworm-slim` image on an eligible worker.
 - A non-administrator OIDC bearer credential issued by the controller's
-  configured identity provider. The service principal needs the project's
-  `editor` grant. Do not use the controller owner or administrator token.
+  configured identity provider. The service principal must have exactly the
+  project's `editor` grant. The controller exposes only the authenticated
+  principal's own role through `GET /api/projects/{id}/role`. Do not use the controller owner or administrator token.
 - A compatible chat-completions model endpoint over HTTPS (or loopback HTTP)
   and a configured model name. If the provider requires authentication, place
   its bearer credential in a separate private regular file.
@@ -46,8 +47,8 @@ go run ./cmd/homelab-engineering-acceptance -revision "40-character-main-commit"
 go run ./cmd/homelab-engineering-acceptance -revision "40-character-main-commit" -execute
 ```
 
-Replace all placeholders before running. The first command performs only
-identity, project-readability, and model-format checks; it does not schedule a
+Replace all placeholders before running. The first command verifies the OIDC identity, exact project-editor role,
+linked source repository, and model decision format without scheduling a
 workspace. The second command authorizes one bounded run. The source commit
 must equal the repository's current `main` HEAD; if `main` changes, draft
 publication fails closed.
@@ -56,9 +57,10 @@ The acceptance runner reserves one CPU and 1024 MiB in the configured image
 for a time-limited workspace. It uses a private temporary directory for
 durable workflow state and a local Unix socket. Preserve that directory until
 any failed or interrupted run has been reconciled. The command requests
-workspace teardown when it exits. A workspace with an unconfirmed cleanup
-must be inspected and stopped through the compute controller; resource leases
-also have a finite expiry.
+workspace teardown when it exits and waits for a confirmed terminal state.
+An unconfirmed cleanup causes acceptance to fail; inspect and stop the
+workspace through the controller before reattempting. Resource leases also
+have a finite expiry.
 
 A successful result includes the draft pull-request URL and a confirmed base
 SHA. Inspect the draft's changed-file list before closing it without merging.
@@ -71,7 +73,8 @@ An acceptance run passes only when the non-administrator identity and model
 adapter pass preflight, the exact source revision is checked out, all owner
 checks pass after the final file edit, an immutable project artifact matches
 the tested source digest, and GitHub confirms a draft pull request against the
-pinned commit. The worker workspace must also receive a teardown request.
+pinned commit. The worker workspace must be confirmed stopped or absent from the controller's
+workspace listing.
 
 Failed model decisions, missing grants, stale commits, conflicting file
 digests, uncertain operations, or a denied cleanup are failures; they must not
