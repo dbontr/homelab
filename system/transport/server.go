@@ -483,11 +483,13 @@ func(s *Server)localTools()[]map[string]any{
   tool("media_request","Request a movie or television season through Seerr",map[string]any{"mediaType":prop("string"),"mediaId":prop("integer"),"seasons":map[string]any{"type":"array","items":prop("integer")},"is4k":prop("boolean")},"mediaType","mediaId"))}
  return tools
 }
+// Tool discovery uses one end-to-end deadline. Failed integrations do not
+// delay or suppress local tools, and results retain configured backend order.
 func(s *Server)toolList(r *http.Request)[]map[string]any{
  out:=s.localTools()
  if s.privilegeClient!=nil&&s.securityLoginURL!="" {
   for _,item:=range out {
-   if item["name"]=="security_session_open" {
+   if item["name"]=="security_session_open"{
     item["_meta"]=map[string]any{
      "ui":map[string]any{"resourceUri":"ui://homelab/security-login.html"},
      "openai/outputTemplate":"ui://homelab/security-login.html",
@@ -495,23 +497,71 @@ func(s *Server)toolList(r *http.Request)[]map[string]any{
    }
   }
  }
- for _,b:=range s.backend{
-  var remote any
-  ctx,cancel:=context.WithTimeout(r.Context(),4*time.Second)
-  e:=s.forward(ctx,b,rpcRequest{JSONRPC:"2.0",ID:json.RawMessage("1"),Method:"tools/list"},&remote)
-  cancel()
-  if e!=nil{continue}
-  response,ok:=remote.(map[string]any);if !ok{continue}
-  list,ok:=response["tools"].([]any);if !ok{continue}
-  for _,item:=range list{
-   t,ok:=item.(map[string]any);if !ok{continue}
-   name,ok:=t["name"].(string);if !ok||!validBackendToolName(name){continue}
-   if s.privilegeClient!=nil && approval.ScopeFor(b.Name+"__"+name)!=""{continue}
-   if b.Name=="workspace" && (name=="github_merge_pull_request" || name=="github_mark_pull_request_ready" || name=="github_repository_api" || name=="github_cleanup_merged_branch"){continue}
-   namespace:=b.Name
-   if namespace=="workspace"{namespace="compute"}
-   t["name"]=namespace+"__"+name
-   out=append(out,t)
+ if len(s.backend)==0{return out}
+ type discovery struct{
+  index int
+  tools []map[string]any
+ }
+ ctx,cancel:=context.WithTimeout(r.Context(),4*time.Second)
+ defer cancel()
+ results:=make(chan discovery,len(s.backend))
+ for index,backend:=range s.backend{
+  go func(index int,backend Backend){
+   response:=discovery{index:index}
+   defer func(){results<-response}()
+   var remote any
+   if err:=s.forward(ctx,backend,rpcRequest{
+    JSONRPC:"2.0",ID:json.RawMessage("1"),Method:"tools/list",
+   },&remote);err!=nil{return}
+   value,ok:=remote.(map[string]any)
+   if !ok{return}
+   list,ok:=value["tools"].([]any)
+   if !ok||len(list)>512{return}
+   for _,item:=range list{
+    advertised,ok:=item.(map[string]any)
+    if !ok{continue}
+    name,ok:=advertised["name"].(string)
+    if !ok||!validBackendToolName(name){continue}
+    if s.privilegeClient!=nil&&approval.ScopeFor(backend.Name+"__"+name)!=""{continue}
+    if backend.Name=="workspace"&&(
+     name=="github_merge_pull_request"||
+     name=="github_mark_pull_request_ready"||
+     name=="github_repository_api"||
+     name=="github_cleanup_merged_branch"){
+     continue
+    }
+    namespace:=backend.Name
+    if namespace=="workspace"{namespace="compute"}
+    // Each backend response owns its decoded objects; never mutate a
+    // shared registered schema while normalizing its exported identity.
+    named:=make(map[string]any,len(advertised))
+    for key,value:=range advertised{named[key]=value}
+    named["name"]=namespace+"__"+name
+    response.tools=append(response.tools,named)
+   }
+  }(index,backend)
+ }
+ ordered:=make([][]map[string]any,len(s.backend))
+ remaining:=len(s.backend)
+ for remaining>0{
+  select{
+  case discovered:=<-results:
+   ordered[discovered.index]=discovered.tools
+   remaining--
+  case <-ctx.Done():
+   remaining=0
+  }
+ }
+ seen:=map[string]bool{}
+ for _,item:=range out{
+  if name,ok:=item["name"].(string);ok{seen[name]=true}
+ }
+ for _,group:=range ordered{
+  for _,item:=range group{
+   name:=item["name"].(string)
+   if seen[name]{continue}
+   seen[name]=true
+   out=append(out,item)
   }
  }
  return out
