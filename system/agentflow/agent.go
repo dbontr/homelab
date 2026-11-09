@@ -26,6 +26,7 @@ type AgentBrief struct {
 	Checks       []string `json:"checks"`
 	ContextPaths []string `json:"context_paths,omitempty"`
 	LinkedRepositories []RepositoryPin `json:"linked_repositories,omitempty"`
+	IncludeKnowledge bool `json:"include_knowledge,omitempty"`
 }
 
 type PatchHunk struct {
@@ -162,6 +163,12 @@ func (a AgentAction) validate(brief AgentBrief) error {
 		if !codeIdentifier.MatchString(a.Query) || !validCodeScope(a.Path) {
 			return errors.New("invalid source reference query")
 		}
+	case "project_context":
+		if !brief.IncludeKnowledge { return errors.New("project knowledge not authorized for this run") }
+	case "knowledge_search", "research_search":
+		if !brief.IncludeKnowledge || strings.TrimSpace(a.Query) == "" || len(a.Query)>120 || strings.ContainsAny(a.Query,"\x00\r\n") { return errors.New("invalid or unauthorized knowledge search") }
+	case "library_documents", "library_resolve":
+		if !brief.IncludeKnowledge || !validID(a.Query) { return errors.New("unapproved library lookup") }
 	case "read":
 		if !validSourcePath(a.Path) || sensitiveSourcePath(a.Path) {
 			return errors.New("invalid or protected repository file path")
@@ -442,6 +449,8 @@ func (e *Engine) executeAgentAction(ctx context.Context, w Workflow, brief Agent
 		return e.repositorySymbols(ctx, w, scope, action.Path)
 	case "references":
 		return e.repositoryReferences(ctx, w, scope, action.Query, action.Path)
+	case "project_context", "knowledge_search", "research_search", "library_documents", "library_resolve":
+		return e.readKnowledge(ctx, w.Project, action)
 	case "read":
 		result, err := e.workspaceAction(ctx, w, "read_file", map[string]any{"path": path.Join(root, action.Path)})
 		if err != nil {

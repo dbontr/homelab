@@ -35,6 +35,7 @@ type Program struct {
 	Autonomous      bool              `json:"autonomous,omitempty"`
 	LinkedRepositories []RepositoryPin `json:"linked_repositories,omitempty"`
 	PrepareOnly bool `json:"prepare_only,omitempty"`
+	IncludeKnowledge bool `json:"include_knowledge,omitempty"`
 	Checks          []string          `json:"checks"`
 	ImagePoolID     string            `json:"image_pool_id"`
 	CPU             float64           `json:"cpu"`
@@ -147,7 +148,7 @@ func Compile(p Program) (Workflow, error) {
 		}
 		add("agent", "agent", checkoutDependencies, AgentBrief{
 			Objective: p.Objective, Repository: p.Repository, AllowedPaths: p.AllowedPaths,
-			Checks: p.Checks, ContextPaths: p.ContextPaths, LinkedRepositories: p.LinkedRepositories,
+			Checks: p.Checks, ContextPaths: p.ContextPaths, LinkedRepositories: p.LinkedRepositories, IncludeKnowledge: p.IncludeKnowledge,
 		})
 		w.Steps[len(w.Steps)-1].MaxAttempts = 5
 		add("verify", "verify", []string{"agent"}, map[string]any{"commands": p.Checks})
