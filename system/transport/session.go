@@ -57,6 +57,7 @@ func (s *Server) sessionReadAllowed(r *http.Request) bool {
 		"/v1/compute/profiles":true,
 		"/v1/software":true,
 		"/v1/books/search":true,
+        "/v1/books/lending":true,
         "/v1/books/requests":true,
         "/v1/media/search":true,
 		"/v1/media/requests":true,
