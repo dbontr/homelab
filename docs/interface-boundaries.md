@@ -8,7 +8,7 @@ Homelab consists of one collection of independently operated services and three 
 | --- | --- |
 | `services/` | Private inter-service transport contracts and the target ownership boundary for long-running services |
 | `system/` | Existing Go domain implementations, security, persistence, scheduling, internal native resource handlers and the single tool catalog |
-| `system/compute/`, `system/learning/`, `system/health/` | Independent service modules and data/failure domains |
+| `services/compute/`, `services/learning/`, `services/health/` | Independent service modules and data/failure domains |
 | `ui/` | Rust/Dioxus client assets and the independent same-origin UI ingress |
 | `mcp/` | Optional single MCP listener; discovery and tool calls delegate to the service runtime |
 | `api/` | Optional native HTTP listener; read-only unless exact write resources are configured |
