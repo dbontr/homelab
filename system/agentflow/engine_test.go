@@ -18,6 +18,9 @@ type fakeCompute struct{
  files map[string]string
  count int
  failCheck bool
+ mismatchWrite bool
+ mismatchRevision bool
+ mismatchDraft bool
  drafts int
 }
 func(f *fakeCompute)Call(_ context.Context,name string,args map[string]any)(map[string]any,error){
@@ -46,6 +49,7 @@ func(f *fakeCompute)Call(_ context.Context,name string,args map[string]any)(map[
    f.files[filename]=body
    digest:=sha256.Sum256([]byte(body))
    result["sha256"]=hex.EncodeToString(digest[:])
+   if f.mismatchWrite{result["sha256"]=strings.Repeat("0",64)}
   case "command":
    code:=float64(0);if f.failCheck{code=1}
    result["exit_code"]=code
@@ -56,14 +60,20 @@ func(f *fakeCompute)Call(_ context.Context,name string,args map[string]any)(map[
   return map[string]any{"operation_id":id},nil
  case "workspace_operation":
   id:=str(args["operation_id"])
-  if id=="checkout"{return map[string]any{"status":"succeeded","result":map[string]any{"repository":"example/repo","revision":strings.Repeat("a",40)}},nil}
+  if id=="checkout"{
+    revision:=strings.Repeat("a",40)
+    if f.mismatchRevision{revision=strings.Repeat("b",40)}
+    return map[string]any{"status":"succeeded","result":map[string]any{"repository":"example/repo","revision":revision}},nil
+  }
   result,ok:=f.operations[id];if !ok{return nil,errors.New("unknown operation")}
   return map[string]any{"status":"succeeded","result":result},nil
  case "github_publish_artifacts":
   f.drafts++
   changes,ok:=args["changes"].(map[string]string)
   if str(args["base_branch"])!="main"||!ok||len(changes)==0{return nil,errors.New("invalid publication")}
-  return map[string]any{"draft":true,"number":12,"base_sha":strings.Repeat("a",40),"url":"https://github.com/example/repo/pull/12"},nil
+  base:=strings.Repeat("a",40)
+  if f.mismatchDraft{base=strings.Repeat("c",40)}
+  return map[string]any{"draft":true,"number":12,"base_sha":base,"url":"https://github.com/example/repo/pull/12"},nil
  default:return nil,fmt.Errorf("unexpected compute tool %s",name)
  }
 }
@@ -196,4 +206,38 @@ func TestUnauthorizedRepairCannotReachDraftPublication(t *testing.T){
  if final.Status!=Failed||compute.drafts!=0{
   t.Fatalf("unauthorized repair reached publication: status=%s drafts=%d",final.Status,compute.drafts)
  }
+}
+
+func TestUnconfirmedSourceWriteCannotReachVerification(t *testing.T){
+ e,compute:=testEngine(t);compute.mismatchWrite=true
+ run,err:=e.Submit(sampleProgram());if err!=nil{t.Fatal(err)}
+ for i:=0;i<8;i++{
+  progressed,err:=(&Runner{Store:e.Store,Worker:e,Lease:time.Minute}).RunOne(context.Background(),run.ID)
+  if err!=nil{t.Fatal(err)}
+  if !progressed{break}
+ }
+ final,err:=e.Get(run.ID);if err!=nil{t.Fatal(err)}
+ if final.Status!=Failed||compute.drafts!=0{t.Fatal("source digest mismatch bypassed verification boundary")}
+}
+func TestUnconfirmedCheckoutRevisionPreventsPublication(t *testing.T){
+ e,compute:=testEngine(t);compute.mismatchRevision=true
+ run,err:=e.Submit(sampleProgram());if err!=nil{t.Fatal(err)}
+ for i:=0;i<8;i++{
+  progressed,err:=(&Runner{Store:e.Store,Worker:e,Lease:time.Minute}).RunOne(context.Background(),run.ID)
+  if err!=nil{t.Fatal(err)}
+  if !progressed{break}
+ }
+ final,err:=e.Get(run.ID);if err!=nil{t.Fatal(err)}
+ if final.Status!=Failed||compute.drafts!=0{t.Fatal("source revision mismatch bypassed verification boundary")}
+}
+func TestDraftPublicationRequiresExpectedRevisionProof(t *testing.T){
+ e,compute:=testEngine(t);compute.mismatchDraft=true
+ run,err:=e.Submit(sampleProgram());if err!=nil{t.Fatal(err)}
+ for i:=0;i<8;i++{
+  progressed,err:=(&Runner{Store:e.Store,Worker:e,Lease:time.Minute}).RunOne(context.Background(),run.ID)
+  if err!=nil{t.Fatal(err)}
+  if !progressed{break}
+ }
+ final,err:=e.Get(run.ID);if err!=nil{t.Fatal(err)}
+ if final.Status!=Failed||compute.drafts!=1{t.Fatal("wrong revision publication was reported as successful")}
 }
