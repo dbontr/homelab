@@ -186,7 +186,13 @@ func run(ctx context.Context, c acceptanceConfig) (runErr error) {
 	if err != nil {
 		return fmt.Errorf("non-administrator compute identity required: %w", err)
 	}
-	// Require a project-visible operation before any workspace allocation.
+	// Read access does not establish permission to create workspaces or drafts.
+	grantCtx, stopGrant := context.WithTimeout(ctx, 12*time.Second)
+	err = compute.VerifyProjectEditor(grantCtx, c.Project)
+	stopGrant()
+	if err != nil {
+		return fmt.Errorf("project editor grant required: %w", err)
+	}
 	if _, err := compute.Call(ctx, "workspace_list", map[string]any{"project_id": c.Project}); err != nil {
 		return fmt.Errorf("project is not readable by the service principal: %w", err)
 	}
