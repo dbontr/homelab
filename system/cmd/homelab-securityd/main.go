@@ -65,6 +65,18 @@ func main() {
   if err!=nil{log.Fatal("cannot open protected credential vault: ",err)}
   if err:=manager.SetVault(vault);err!=nil{log.Fatal(err)}
  }
+ if raw:=os.Getenv("HOMELAB_SECURITY_OAUTH_PROVIDERS");raw!=""{
+  if os.Getenv("HOMELAB_SECURITY_VAULT_KEY_FILE")==""{
+   log.Fatal("OAuth providers require the independent credential vault")
+  }
+  var providers []security.Provider
+  if err:=json.Unmarshal([]byte(raw),&providers);err!=nil||len(providers)==0{
+   log.Fatal("invalid configured OAuth provider registry")
+  }
+  broker,err:=security.NewOAuthBroker(providers)
+  if err!=nil{log.Fatal("invalid OAuth provider policy: ",err)}
+  if err:=manager.SetOAuthBroker(broker,nil);err!=nil{log.Fatal(err)}
+ }
  var verifier *security.AccessVerifier
  gatewayAudience:=os.Getenv("HOMELAB_SECURITY_ACCESS_GATEWAY_AUD")
  if gatewayAudience!="" {
@@ -91,6 +103,9 @@ func main() {
 	go func() {
 		failures <- manager.ServeSockets(ctx, filepath.Join(dir, "owner.sock"), filepath.Join(dir, "client.sock"), gid)
 	}()
+ if os.Getenv("HOMELAB_SECURITY_OAUTH_PROVIDERS")!=""{
+  go func(){failures<-manager.ServeOAuthCallback(ctx)}()
+ }
 	if origin := os.Getenv("HOMELAB_SECURITY_BROWSER_ORIGIN"); origin != "" {
 		if verifier==nil{log.Fatal("browser login requires independent Access identity verification")}
   browserAudience:=os.Getenv("HOMELAB_SECURITY_ACCESS_BROWSER_AUD")
