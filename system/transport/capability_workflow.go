@@ -25,6 +25,7 @@ type CapabilityStage struct {
     Action string `json:"action"`
     Query string `json:"query,omitempty"`
     Limit int `json:"limit,omitempty"`
+    ExpectedRevision int `json:"expected_revision,omitempty"`
 }
 type CapabilityProgram struct {
     Project string `json:"project"`
@@ -67,7 +68,7 @@ func requiresPersonalRead(kind string) bool {
 func validCapabilityStage(stage CapabilityStage, allowPersonal bool) error {
     if !workflowStepID.MatchString(stage.ID)||len(stage.DependsOn)>12||
        len(stage.Query)>120||strings.ContainsAny(stage.Query,"\x00\r\n")||
-       stage.Limit<0||stage.Limit>25 {
+       stage.Limit<0||stage.Limit>25||stage.ExpectedRevision!=0 {
         return errors.New("invalid workflow stage")
     }
     if requiresPersonalRead(stage.Action)&&!allowPersonal {
@@ -158,7 +159,8 @@ func (s *Server) submitCapabilityWorkflow(ctx context.Context,program Capability
         input,_:=json.Marshal(struct{
             Query string `json:"query,omitempty"`
             Limit int `json:"limit,omitempty"`
-        }{Query:stage.Query,Limit:stage.Limit})
+            ExpectedRevision int `json:"expected_revision,omitempty"`
+        }{Query:stage.Query,Limit:stage.Limit,ExpectedRevision:stage.ExpectedRevision})
         w.Steps=append(w.Steps,agentflow.Step{
             ID:stage.ID,DependsOn:append([]string(nil),stage.DependsOn...),
             Kind:stage.Action,Input:input,MaxAttempts:2,
@@ -196,10 +198,12 @@ func (s *Server) capabilityWorkflows()([]CapabilityWorkflow,error) {
 // A capability workflow only calls an enumerated read operation. The owner
 // cannot smuggle arbitrary MCP names, mutation arguments, or privileged grants.
 func (s *Server) executeCapabilityStep(ctx context.Context,w agentflow.Workflow,step agentflow.Claim)(any,error) {
-    var input struct{Query string `json:"query"`;Limit int `json:"limit"`}
+    var input struct{Query string `json:"query"`;Limit int `json:"limit"`;ExpectedRevision int `json:"expected_revision"`}
     if err:=json.Unmarshal(step.Input,&input);err!=nil{return nil,err}
-    if step.Kind=="task_create"{return s.executeAuthorizedTaskCreation(ctx,w,step,input.Query,input.Limit)}
-    if err:=validCapabilityStage(CapabilityStage{ID:step.StepID,Action:step.Kind,Query:input.Query,Limit:input.Limit},w.PersonalRead);err!=nil{return nil,err}
+    if step.Kind=="task_create"||step.Kind=="goal_create"||step.Kind=="task_complete"{
+        return s.executeAuthorizedPersonalAction(ctx,w,step,input.Query,input.Limit,input.ExpectedRevision)
+    }
+    if err:=validCapabilityStage(CapabilityStage{ID:step.StepID,Action:step.Kind,Query:input.Query,Limit:input.Limit,ExpectedRevision:input.ExpectedRevision},w.PersonalRead);err!=nil{return nil,err}
     switch step.Kind {
     case "project_context":
         return s.projectContext(ctx,w.Project)
