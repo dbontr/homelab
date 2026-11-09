@@ -39,8 +39,12 @@ dispatch:
 		if run.Status == Succeeded || run.Status == Failed || run.Status == Cancelled || !admission[run.ID] && isMemberRun(run.ID, admission) || perProject[run.Project] >= maxConcurrentProjectRuns {
 			continue
 		}
-		if err := ctx.Err(); err != nil {
-			break
+		if err := ctx.Err(); err != nil { break }
+		stored,err:=e.Store.Get(run.ID)
+		if err!=nil{return 0,err}
+		if !stored.Deadline.IsZero() && !time.Now().Before(stored.Deadline) {
+			_ = e.Cancel(run.ID,run.Revision)
+			continue
 		}
 		select {
 		case slots <- struct{}{}:
@@ -58,6 +62,12 @@ dispatch:
 			continue
 		}
 		runCtx, cancel := context.WithCancel(ctx)
+		if !stored.Deadline.IsZero() {
+			limited, stop := context.WithDeadline(runCtx, stored.Deadline)
+			previousCancel := cancel
+			cancel = func(){stop();previousCancel()}
+			runCtx = limited
+		}
 		e.active[run.ID] = cancel
 		e.activeMu.Unlock()
 
@@ -103,6 +113,7 @@ func (e *Engine) Serve(ctx context.Context) {
 		case <-ticker.C:
 		}
 		_, _ = e.RunAvailable(ctx)
+		_ = e.ReconcileWorkspaces(ctx)
 	}
 }
 
