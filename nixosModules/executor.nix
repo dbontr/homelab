@@ -208,6 +208,7 @@ in
         HOMELAB_EXECUTOR_SECURITY_SOCKET = "/run/homelab-securityd/client.sock";
         HOMELAB_EXECUTOR_SOURCE = cfg.sourceDirectory;
         HOMELAB_EXECUTOR_RELEASE_STATE = cfg.stateDirectory;
+        HOMELAB_EXECUTOR_AUDIT_FILE = "${cfg.stateDirectory}/executor-actions.jsonl";
         HOMELAB_EXECUTOR_NIX = "${pkgs.nix}/bin/nix";
         HOMELAB_EXECUTOR_NIX_ENV = "${pkgs.nix}/bin/nix-env";
         HOMELAB_EXECUTOR_GIT = "${pkgs.git}/bin/git";

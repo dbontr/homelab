@@ -5,6 +5,9 @@ package privileged
 
 import (
  "context"
+ "crypto/rand"
+ "crypto/sha256"
+ "encoding/hex"
  "encoding/json"
  "errors"
  "fmt"
@@ -44,6 +47,7 @@ type Config struct{
  Auth Authorizer
  Run Run
  Releases Actuator
+ Audit *AuditJournal
 }
 
 type Executor struct {
@@ -144,6 +148,18 @@ func(e *Executor) Execute(ctx context.Context,operation,target string,args json.
   log.Print("security audit privileged_operation denied")
   return decision,nil
  }
+ // An audit append is required before execution when the owner has enabled
+ // durable audit custody. Unavailable audit storage must not permit a write.
+ var auditID string
+ if e.cfg.Audit!=nil {
+  var entropy [16]byte
+  if _,err:=rand.Read(entropy[:]);err!=nil{return security.Authorization{Reason:"audit identity unavailable"},err}
+  auditID=hex.EncodeToString(entropy[:])
+  digest:=sha256.Sum256(canonical)
+  if err:=e.cfg.Audit.Record(auditID,operation,target,hex.EncodeToString(digest[:]),"started");err!=nil{
+   return security.Authorization{Reason:"audit recording unavailable"},err
+  }
+ }
  switch operation{
  case "infrastructure__service_start","infrastructure__service_stop","infrastructure__service_reload","infrastructure__service_restart":
   err=e.cfg.Run(ctx,e.cfg.Systemctl,verb,fields["service"].(string))
@@ -161,6 +177,14 @@ func(e *Executor) Execute(ctx context.Context,operation,target string,args json.
   command,argv,err=e.cfg.Kubernetes.command(operation,fields)
   if err==nil{err=e.cfg.Run(ctx,command,argv...)}
 
+ }
+ if e.cfg.Audit!=nil {
+  outcome:="succeeded"
+  if err!=nil{outcome="failed"}
+  digest:=sha256.Sum256(canonical)
+  if auditErr:=e.cfg.Audit.Record(auditID,operation,target,hex.EncodeToString(digest[:]),outcome);auditErr!=nil {
+   return security.Authorization{Reason:"privileged outcome is uncertain: audit unavailable"},errors.Join(err,auditErr)
+  }
  }
  if err!=nil{
   log.Print("security audit privileged_operation failed")

@@ -18,6 +18,10 @@ Provider OAuth authorization-code and device-authorization flows can connect acc
 
 Existing Cloudflare Access protects external ingress. It is not exposed as a general-purpose Cloudflare management tool in the primary MCP. Native Seerr and calendar credentials are read from systemd LoadCredential files. Private ICS sharing links are credentials and must never be committed to Git.
 
+## Privileged execution evidence
+
+The independent executor appends a private, fsynced JSON-lines record before every approved side effect and again after the handler reports its outcome. Entries include an operation ID, canonical argument digest, exact target, operation name, time, and execution state; raw arguments and credentials are never recorded. If the journal cannot record a start event, execution is denied. If a process fails after a started event, the unresolved record means the outcome is **unknown**, not necessarily failed or rolled back. The executor keeps journal custody outside the assistant process, and the release/operator must retain and rotate this file under its own security policy.
+
 ## Operational separation
 
 The primary assistant can request authorized application operations. The development and deployment pipeline is a separate principal and never inherits the primary MCP's token. Changes to network routing, firewall, machine identity, K3s admission, or host software need operator confirmation and independent service-level authorization.
