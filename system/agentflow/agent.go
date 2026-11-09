@@ -53,6 +53,9 @@ type AgentAction struct {
 	KnowledgeTitle string `json:"knowledge_title,omitempty"`
 	KnowledgeBody  string `json:"knowledge_body,omitempty"`
 	EvidencePaths  []string `json:"evidence_paths,omitempty"`
+	Line int `json:"line,omitempty"`
+	Column int `json:"column,omitempty"`
+	Operation string `json:"operation,omitempty"`
 }
 
 type AgentEvent struct {
@@ -134,7 +137,7 @@ func (a AgentAction) validate(brief AgentBrief) error {
 			if a.Repository == linked.Repository { found = true; break }
 		}
 		if !found { return errors.New("repository is not pinned to this engineering run") }
-		if a.Action != "list" && a.Action != "search" && a.Action != "map" && a.Action != "symbols" && a.Action != "references" && a.Action != "read" {
+		if a.Action != "list" && a.Action != "search" && a.Action != "map" && a.Action != "symbols" && a.Action != "references" && a.Action != "dependency_graph" && a.Action != "lsp" && a.Action != "read" {
 			return errors.New("linked repository access is read-only")
 		}
 	}
@@ -159,6 +162,11 @@ func (a AgentAction) validate(brief AgentBrief) error {
 		if strings.TrimSpace(a.Query) == "" || strings.ContainsAny(a.Query, "\x00\r\n") {
 			return errors.New("invalid repository search query")
 		}
+	case "dependency_graph":
+		if !validCodeScope(a.Path) {return errors.New("invalid source graph scope")}
+	case "lsp":
+		if !validSourcePath(a.Path)||sensitiveSourcePath(a.Path)||sourceLanguage(a.Path)!="go"||a.Line<1||a.Line>100000||a.Column<1||a.Column>500||
+			(a.Operation!="definition"&&a.Operation!="references"&&a.Operation!="hover"){return errors.New("invalid language-server navigation")}
 	case "map":
 		if !validCodeScope(a.Path) {
 			return errors.New("invalid source map scope")
@@ -459,6 +467,10 @@ func (e *Engine) executeAgentAction(ctx context.Context, w Workflow, brief Agent
 			return "", errors.New("repository search failed")
 		}
 		return boundObservation(result, 8000), nil
+	case "dependency_graph":
+		return e.repositoryGraph(ctx,w,scope,action.Path)
+	case "lsp":
+		return e.goLanguageServer(ctx,w,scope,action)
 	case "map":
 		return e.repositoryMap(ctx, w, scope, action.Path)
 	case "symbols":
