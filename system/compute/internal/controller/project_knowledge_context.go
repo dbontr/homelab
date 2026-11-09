@@ -95,6 +95,7 @@ func (s *Server) ProjectKnowledgeContext(project string) (map[string]any, error)
 			// A knowledge repository may be initialized before its canonical
 			// documents exist. Remote failures other than missing files fail closed.
 			if strings.Contains(err.Error(), "GitHub HTTP 404") ||
+                strings.Contains(err.Error(), "GitLab HTTP 404") ||
 				local && strings.Contains(err.Error(), "does not exist in") {
 				err = nil
 				continue
