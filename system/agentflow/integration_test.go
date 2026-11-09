@@ -132,3 +132,43 @@ func TestComputeClientAllowsProjectScopedWorkspaceCleanup(t *testing.T) {
 	if !allowed { t.Fatal("project-scoped cleanup was not forwarded") }
 	if _, err := client.Call(context.Background(), "github_merge_pull_request", map[string]any{}); err == nil { t.Fatal("privileged operation bypassed allowlist") }
 }
+
+func TestComputeProjectEditorIdentityBoundary(t *testing.T) {
+	grant := "viewer"
+	authenticated := true
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/projects/research/role" || r.Method != http.MethodGet {
+			http.NotFound(w, r)
+			return
+		}
+		if !authenticated {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		if r.Header.Get("Authorization") != "Bearer "+strings.Repeat("p", 40) {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"project_id": "research", "role": grant})
+	}))
+	defer server.Close()
+	client, err := NewComputeClient(server.URL+"/mcp", strings.Repeat("p", 40))
+	if err != nil { t.Fatal(err) }
+	for _, role := range []string{"viewer","owner",""} {
+		grant = role
+		if err := client.VerifyProjectEditor(context.Background(), "research"); err == nil {
+			t.Fatalf("role %q incorrectly allowed to run engineering", role)
+		}
+	}
+	grant = "editor"
+	if err := client.VerifyProjectEditor(context.Background(), "research"); err != nil {
+		t.Fatalf("editor grant rejected: %v", err)
+	}
+	if err := client.VerifyProjectEditor(context.Background(), "../research"); err == nil {
+		t.Fatal("invalid project reached the controller")
+	}
+	authenticated = false
+	if err := client.VerifyProjectEditor(context.Background(), "research"); err == nil {
+		t.Fatal("revoked project access accepted")
+	}
+}
