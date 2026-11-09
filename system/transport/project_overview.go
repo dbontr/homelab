@@ -61,6 +61,11 @@ func (s *Server) projectOverview(ctx context.Context, project string) (ProjectOv
         if !linked {continue}
         overview.Tasks=append(overview.Tasks,task)
         overview.Links=append(overview.Links,ResourceLink{Relation:"task",Reference:resourceRef("task",task.ID)})
+        for _,link:=range taskLinks(task) {
+            if link.Relation!="related"{continue}
+            kind,_,err:=parseResourceReference(link.Reference)
+            if err==nil && kind!="project" {overview.Links=append(overview.Links,link)}
+        }
         if task.GoalID!="" {goals[task.GoalID]=true}
     }
     for _,goal:=range s.db.Goals() {
@@ -72,10 +77,22 @@ func (s *Server) projectOverview(ctx context.Context, project string) (ProjectOv
         runs,err:=s.engineering.List()
         if err!=nil {overview.Unavailable=append(overview.Unavailable,"engineering")} else {
             for _,run:=range runs {
-                if run.Project==project {overview.EngineeringRuns=append(overview.EngineeringRuns,run)}
+                if run.Project==project {
+                    overview.EngineeringRuns=append(overview.EngineeringRuns,run)
+                    overview.Links=append(overview.Links,ResourceLink{Relation:"engineering_run",Reference:resourceRef("engineering_run",run.ID)})
+                }
             }
         }
     } else {overview.Unavailable=append(overview.Unavailable,"engineering")}
+    // Avoid duplicate relations from multiple linked tasks without dropping
+    // distinct owner-managed edges.
+    unique:=make([]ResourceLink,0,len(overview.Links))
+    seen:=map[string]bool{}
+    for _,link:=range overview.Links {
+        key:=link.Relation+"\x00"+link.Reference
+        if !seen[key]{unique=append(unique,link);seen[key]=true}
+    }
+    overview.Links=unique
     sort.Slice(overview.Links,func(i,j int)bool {
         if overview.Links[i].Relation!=overview.Links[j].Relation {
             return overview.Links[i].Relation<overview.Links[j].Relation

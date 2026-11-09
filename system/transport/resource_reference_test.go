@@ -17,7 +17,7 @@ func TestCanonicalResourceReferencesRejectSubstitution(t *testing.T){
  for _,input:=range cases{
   if _,_,err:=parseResourceReference(input);err==nil{t.Fatalf("invalid reference accepted: %q",input)}
  }
- for _,kind:=range []string{"task","goal","recipe","meal","book","project"}{
+ for _,kind:=range []string{"task","goal","recipe","meal","book","project","engineering_run","learning_session","health_plan"}{
   ref:=resourceRef(kind,"abc_123")
   got,id,err:=parseResourceReference(ref)
   if err!=nil||got!=kind||id!="abc_123"{t.Fatalf("round trip failed: %s %v",ref,err)}

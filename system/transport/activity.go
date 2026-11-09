@@ -38,7 +38,7 @@ func parseResourceReference(ref string)(string,string,error){
   return "","",errResourceInvalid
  }
  switch parts[1]{
- case "task","goal","recipe","meal","book","project":
+ case "task","goal","recipe","meal","book","project","engineering_run","learning_session","health_plan":
   return parts[1],parts[2],nil
  }
  return "","",errResourceInvalid
@@ -81,6 +81,21 @@ func(s *Server) resource(ctx context.Context,kind,id string)(Resource,error){
   overview,err:=s.projectOverview(ctx,id)
   if err!=nil{return Resource{},err}
   return withReference(kind,id,"compute",overview,overview.Links),nil
+ case "engineering_run":
+  if s.engineering==nil{return Resource{},errResourceUnavailable}
+  run,err:=s.engineering.Get(id)
+  if err!=nil{return Resource{},errResourceNotFound}
+  return withReference(kind,id,"engineering",run,[]ResourceLink{{Relation:"project",Reference:resourceRef("project",run.Project)}}),nil
+ case "learning_session":
+  if !s.hasBackend("learning"){return Resource{},errResourceUnavailable}
+  data,err:=s.capabilityBackendRead(ctx,"learning","get_learning_session",map[string]any{"session_id":id})
+  if err!=nil{return Resource{},errResourceUnavailable}
+  return withReference(kind,id,"learning",data,nil),nil
+ case "health_plan":
+  if !s.hasBackend("health"){return Resource{},errResourceUnavailable}
+  data,err:=s.capabilityBackendRead(ctx,"health","health_plan_get",map[string]any{"id":id})
+  if err!=nil{return Resource{},errResourceUnavailable}
+  return withReference(kind,id,"health",data,nil),nil
  case "task":
   for _,item:=range s.db.Tasks(""){
    if item.ID==id{return withReference(kind,id,"personal",item,taskLinks(item)),nil}
