@@ -103,6 +103,25 @@ struct GroceryBoard {
 
 #[derive(Clone, Debug, Default, PartialEq, Deserialize)]
 #[serde(default)]
+struct GroceryNeed {
+    key: String,
+    name: String,
+    unit: String,
+    required: f64,
+    available: f64,
+    to_buy: f64,
+    stock_status: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Deserialize)]
+#[serde(default)]
+struct GroceryNeedsBoard {
+    items: Vec<GroceryNeed>,
+    note: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Deserialize)]
+#[serde(default)]
 struct HealthGoal {
     value: f64,
     unit: String,
@@ -251,6 +270,7 @@ pub fn Recipes(csrf: String) -> Element {
     let mut recipes = use_resource(|| async { api::get::<Vec<Recipe>>("/v1/recipes").await });
     let mut meals = use_resource(|| async { api::get::<Vec<Meal>>("/v1/meals").await });
     let mut groceries = use_resource(|| async { api::get::<GroceryBoard>("/v1/groceries/board").await });
+    let mut grocery_needs = use_resource(|| async { api::get::<GroceryNeedsBoard>("/v1/groceries/needs").await });
     let mut health_goals = use_resource(|| async { api::get::<HashMap<String, HealthGoal>>("/v1/recipes/health-goals").await });
 
     let mut tab = use_signal(|| Tab::Library);
@@ -307,7 +327,7 @@ pub fn Recipes(csrf: String) -> Element {
             title: "Recipes".to_owned(),
             description: "Your recipe library, cooking plans and shopping list.".to_owned(),
             button { class: "btn btn-outline", onclick: move |_| {
-                recipes.restart(); meals.restart(); groceries.restart(); health_goals.restart();
+                recipes.restart(); meals.restart(); groceries.restart(); grocery_needs.restart(); health_goals.restart();
             }, "Refresh" }
             button { class: "btn btn-primary", onclick: move |_| {
                 draft.set(Recipe::blank());
@@ -327,7 +347,7 @@ pub fn Recipes(csrf: String) -> Element {
             button { class: "tab", role: "tab", aria_selected: if tab()==Tab::Plan {"true"} else {"false"},
                 onclick: move |_| tab.set(Tab::Plan), "Meal plan" }
             button { class: "tab", role: "tab", aria_selected: if tab()==Tab::Groceries {"true"} else {"false"},
-                onclick: move |_| tab.set(Tab::Groceries), "Groceries" }
+                onclick: move |_| {tab.set(Tab::Groceries); grocery_needs.restart();}, "Groceries" }
             button { class: "tab", role: "tab", aria_selected: if tab()==Tab::Pantry {"true"} else {"false"},
                 onclick: move |_| tab.set(Tab::Pantry), "Pantry" }
             button { class: "tab", role: "tab", aria_selected: if tab()==Tab::Transfer {"true"} else {"false"},
@@ -900,7 +920,7 @@ pub fn Recipes(csrf: String) -> Element {
                                                 busy.set(true); error.set(String::new());
                                                 spawn(async move {
                                                     match api::write::<Meal,_>(Method::POST,"/v1/meals",&csrf,&meal).await {
-                                                        Ok(_) => { meals.restart(); groceries.restart(); notice.set("Meal scheduled".to_owned()); }
+                                                        Ok(_) => { meals.restart(); groceries.restart(); grocery_needs.restart(); notice.set("Meal scheduled".to_owned()); }
                                                         Err(message) => error.set(message),
                                                     }
                                                     busy.set(false);
@@ -974,7 +994,7 @@ pub fn Recipes(csrf: String) -> Element {
                                                             let csrf = csrf(); busy.set(true);
                                                             spawn(async move {
                                                                 match api::remove(&path,&csrf,None).await {
-                                                                    Ok(()) => { meals.restart(); groceries.restart(); }
+                                                                    Ok(()) => { meals.restart(); groceries.restart(); grocery_needs.restart(); }
                                                                     Err(message) => error.set(message),
                                                                 }
                                                                 busy.set(false);
@@ -1025,7 +1045,7 @@ pub fn Recipes(csrf: String) -> Element {
                                                         match api::write::<GroceryBoard,_>(Method::PUT,&path,&token,
                                                             &serde_json::json!({"checked":checked,"expected_revision":grocery_revision})).await {
                                                             Ok(_) => groceries.restart(),
-                                                            Err(message) => {error.set(message);groceries.restart();},
+                                                            Err(message) => {error.set(message);groceries.restart(); grocery_needs.restart();},
                                                         }
                                                         busy.set(false);
                                                     });
@@ -1039,6 +1059,46 @@ pub fn Recipes(csrf: String) -> Element {
                                 }
                             }
                             p { class: "small muted", "Purchase status is saved privately and synchronized through the recipe store." }
+                        }
+                    }
+                }
+                section { class: "card",
+                    div { class: "card-header",
+                        h2 { class: "card-title", "Quantities to purchase" }
+                        p { class: "card-description",
+                            "The meal plan's total requirements minus recorded, unexpired pantry supplies. Shopping checklist status does not change inventory."
+                        }
+                    }
+                    div { class: "card-body",
+                        match grocery_needs.cloned() {
+                            None => rsx! { Loading {} },
+                            Some(Err(message)) => rsx! { Notice { message } },
+                            Some(Ok(board)) => rsx! {
+                                if board.items.is_empty() {
+                                    Empty {
+                                        title: "No scheduled ingredients".to_owned(),
+                                        description: "Plan a meal to calculate needed quantities.".to_owned()
+                                    }
+                                } else {
+                                    ul { class: "recipe-shopping",
+                                        for item in board.items {
+                                            li { key: "{item.key}",
+                                                span { "{item.name}" }
+                                                if item.to_buy > 0.0 {
+                                                    strong { "{quantity(item.to_buy)} {item.unit} to buy" }
+                                                } else {
+                                                    strong { "Covered by recorded pantry" }
+                                                }
+                                                span { class: "small muted",
+                                                    "Required {quantity(item.required)} {item.unit}; recorded {quantity(item.available)} {item.unit}"
+                                                }
+                                                span { class: "small muted", "Stock status: {item.stock_status}" }
+                                            }
+                                        }
+                                    }
+                                }
+                                p { class: "small muted", "{board.note}" }
+                            }
                         }
                     }
                 }
@@ -1105,7 +1165,7 @@ pub fn Recipes(csrf: String) -> Element {
                                                     bundle_file.set(None);
                                                     recipes.restart();
                                                     meals.restart();
-                                                    groceries.restart();
+                                                    groceries.restart(); grocery_needs.restart();
                                                     notice.set(format!("Imported {} recipes and their referenced images", imported.imported));
                                                 }
                                                 Err(message) => error.set(message),
@@ -1451,7 +1511,7 @@ pub fn Recipes(csrf: String) -> Element {
                                 let csrf = csrf(); busy.set(true); error.set(String::new());
                                 spawn(async move {
                                     match api::write::<serde_json::Value,_>(Method::POST,"/v1/recipes/import",&csrf,&document).await {
-                                        Ok(_) => { recipes.restart(); meals.restart(); groceries.restart(); notice.set("Archive imported".to_owned()); import_text.set(String::new()); },
+                                        Ok(_) => { recipes.restart(); meals.restart(); groceries.restart(); grocery_needs.restart(); notice.set("Archive imported".to_owned()); import_text.set(String::new()); },
                                         Err(message) => error.set(message),
                                     }
                                     busy.set(false);
