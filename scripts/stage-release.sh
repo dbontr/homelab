@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+umask 077
+export LC_ALL=C
+export GOWORK=off
+export GOTOOLCHAIN=local
+export GOPROXY=off
+export GOSUMDB=off
+export CARGO_NET_OFFLINE=true
+
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 destination=${1:?usage: stage-release.sh ABSOLUTE_OUTPUT_DIRECTORY}
 if [[ "$destination" != /* || "$destination" == "/" || "$destination" == */ ]]; then
@@ -11,7 +19,7 @@ if [[ -e "$destination" ]]; then
   printf 'Release destination already exists: %s\n' "$destination" >&2
   exit 2
 fi
-for tool in go dx sha256sum find sort mktemp; do
+for tool in git go dx sha256sum find sort mktemp; do
   command -v "$tool" >/dev/null || { printf 'Missing build tool: %s\n' "$tool" >&2; exit 1; }
 done
 
@@ -20,6 +28,18 @@ if [[ ! -d "$parent" ]]; then
   printf 'Release parent does not exist: %s\n' "$parent" >&2
   exit 2
 fi
+
+revision=$(git -C "$root" rev-parse --verify 'HEAD^{commit}' 2>/dev/null) || {
+  printf '%s\n' 'A trusted exact Git commit is required for the release' >&2
+  exit 1
+}
+if [[ ! "$revision" =~ ^[a-f0-9]{40}$ ||
+      -n "$(git -C "$root" status --porcelain --untracked-files=all)" ]]; then
+  printf '%s\n' 'Release source must be an exact clean Git revision' >&2
+  exit 1
+fi
+printf 'Verifying locally pinned source at %s\n' "$revision"
+"$root/scripts/verify-offline.sh" --all
 
 stage=$(mktemp -d "$parent/.homelab-release.XXXXXXXX")
 cleanup() { [[ -z "$stage" ]] || rm -rf -- "$stage"; }
@@ -31,7 +51,7 @@ build_go() {
   printf 'Building %s\n' "$name"
   (
     cd "$root/$directory"
-    GOWORK=off go build -trimpath -buildvcs=false -o "$stage/bin/$name" "$package"
+    go build -trimpath -buildvcs=false -o "$stage/bin/$name" "$package"
   )
 }
 
@@ -63,10 +83,11 @@ rm -rf -- "$stage/console-bundle"
   find bin console -type f -print0 |
     sort -z |
     xargs -0 -r sha256sum > SHA256SUMS
-  printf 'source_revision=%s\n' "$(git -C "$root" rev-parse HEAD 2>/dev/null || printf 'unknown')" > RELEASE
+  printf 'source_revision=%s\n' "$revision" > RELEASE
   printf 'build_utc=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> RELEASE
 )
 
+"$root/scripts/verify-release.sh" "$stage"
 mv -- "$stage" "$destination"
 stage=""
 printf 'Staged source-built release: %s\n' "$destination"
