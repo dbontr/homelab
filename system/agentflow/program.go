@@ -36,6 +36,7 @@ type Program struct {
 	LinkedRepositories []RepositoryPin `json:"linked_repositories,omitempty"`
 	PrepareOnly bool `json:"prepare_only,omitempty"`
 	IncludeKnowledge bool `json:"include_knowledge,omitempty"`
+	Review bool `json:"review,omitempty"`
 	Checks          []string          `json:"checks"`
 	ImagePoolID     string            `json:"image_pool_id"`
 	CPU             float64           `json:"cpu"`
@@ -152,7 +153,12 @@ func Compile(p Program) (Workflow, error) {
 		})
 		w.Steps[len(w.Steps)-1].MaxAttempts = 5
 		add("verify", "verify", []string{"agent"}, map[string]any{"commands": p.Checks})
-		add("export", "export", []string{"verify"}, map[string]any{})
+		next := "verify"
+		if p.Review {
+			add("review", "review", []string{"verify"}, map[string]any{"objective":p.Objective})
+			next = "review"
+		}
+		add("export", "export", []string{next}, map[string]any{})
 		if !p.PrepareOnly {
 			add("publish", "publish", []string{"export"}, map[string]any{"repository": p.Repository, "base_branch": p.BaseBranch, "expected_head": p.ExpectedHead, "title": p.Title, "body": p.Description})
 		}
@@ -165,7 +171,12 @@ func Compile(p Program) (Workflow, error) {
 	add("author", "author", []string{"inspect"}, map[string]any{"objective": p.Objective, "changes": p.Changes, "allowed_paths": p.AllowedPaths})
 	add("apply", "apply", []string{"author"}, map[string]any{})
 	add("verify", "verify", []string{"apply"}, map[string]any{"commands": p.Checks})
-	add("export", "export", []string{"verify"}, map[string]any{})
+	next := "verify"
+		if p.Review {
+			add("review", "review", []string{"verify"}, map[string]any{"objective":p.Objective})
+			next = "review"
+		}
+		add("export", "export", []string{next}, map[string]any{})
 	add("publish", "publish", []string{"export"}, map[string]any{"repository": p.Repository, "base_branch": p.BaseBranch, "expected_head": p.ExpectedHead, "title": p.Title, "body": p.Description})
 	if err := Validate(w); err != nil {
 		return Workflow{}, fmt.Errorf("invalid compiled workflow: %w", err)
