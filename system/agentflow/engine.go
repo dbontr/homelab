@@ -425,6 +425,10 @@ func (e *Engine) Dispatch(ctx context.Context, claim Claim) (json.RawMessage, er
 		if e2 != nil {
 			return nil, e2
 		}
+		verifiedDigests := make(map[string]string, len(original))
+		for name, content := range original {
+			verifiedDigests[name] = shaHex(content)
+		}
 		var authorArgs struct {
 			Objective    string   `json:"objective"`
 			AllowedPaths []string `json:"allowed_paths"`
@@ -470,7 +474,16 @@ func (e *Engine) Dispatch(ctx context.Context, claim Claim) (json.RawMessage, er
 				}
 			}
 			if failedCommand == "" {
-				out = map[string]any{"passed": true, "checks": reports, "attempts": pass}
+				for name, expected := range verifiedDigests {
+					readback, err := e.workspaceAction(ctx, w, "read_file", map[string]any{"path": path.Join(repoRoot(repo), name)})
+					if err != nil {
+						return nil, err
+					}
+					if shaHex(str(readback["content"])) != expected {
+						return nil, errors.New("source changed during verification")
+					}
+				}
+				out = map[string]any{"passed": true, "checks": reports, "attempts": pass, "file_sha256": verifiedDigests}
 				break
 			}
 			if pass == maxPasses {
@@ -515,6 +528,7 @@ func (e *Engine) Dispatch(ctx context.Context, claim Claim) (json.RawMessage, er
 				if err := e.writeVerifiedFile(ctx, w, path.Join(repoRoot(repo), name), repair[name]); err != nil {
 					return nil, err
 				}
+				verifiedDigests[name] = shaHex(repair[name])
 			}
 		}
 	case "export":
@@ -539,16 +553,31 @@ func (e *Engine) Dispatch(ctx context.Context, claim Claim) (json.RawMessage, er
 			return nil, e2
 		}
 		repo := str(checkout["repository"])
+		verification, e2 := resultObject(w, "verify")
+		if e2 != nil || verification["passed"] != true {
+			return nil, errors.New("source verification is not confirmed")
+		}
+		var verifiedDigests map[string]string
+		if w.Agent != nil {
+			verifiedDigests = w.Agent.Changed
+		} else {
+			verifiedDigests, e2 = stringMap(verification["file_sha256"])
+			if e2 != nil {
+				return nil, e2
+			}
+		}
 		artifacts := map[string]string{}
 		for _, name := range sortedPaths(changes) {
-			if w.Agent != nil {
-				read, err := e.workspaceAction(ctx, w, "read_file", map[string]any{"path": path.Join(repoRoot(repo), name)})
-				if err != nil {
-					return nil, err
-				}
-				if shaHex(str(read["content"])) != changes[name] {
-					return nil, errors.New("file changed after autonomous verification")
-				}
+			expected := verifiedDigests[name]
+			if !hexDigest(expected) {
+				return nil, errors.New("verified source digest missing")
+			}
+			read, err := e.workspaceAction(ctx, w, "read_file", map[string]any{"path": path.Join(repoRoot(repo), name)})
+			if err != nil {
+				return nil, err
+			}
+			if shaHex(str(read["content"])) != expected {
+				return nil, errors.New("source changed after verification")
 			}
 			result, e2 := e.workspaceAction(ctx, w, "export_file", map[string]any{"path": path.Join(repoRoot(repo), name)})
 			if e2 != nil {
@@ -563,10 +592,6 @@ func (e *Engine) Dispatch(ctx context.Context, claim Claim) (json.RawMessage, er
 			}
 			if !validID(id) {
 				return nil, errors.New("export did not return an artifact identity")
-			}
-			expected := changes[name]
-			if w.Agent == nil {
-				expected = shaHex(expected)
 			}
 			if digest := str(metadata["sha256"]); digest != "" && digest != expected {
 				return nil, errors.New("worker export digest does not match verified source")
