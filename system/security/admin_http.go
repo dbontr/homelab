@@ -234,7 +234,7 @@ func (a *AdminSessions) ServeSockets(ctx context.Context, ownerPath, clientPath 
 	}
 	defer client.Close()
 	defer os.Remove(clientPath)
-	ownerHTTP := &http.Server{Handler: a.OwnerHandler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 10 * time.Second}
+	ownerHTTP := &http.Server{Handler: a.OwnerHandler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 35 * time.Second}
 	clientHTTP := &http.Server{Handler: a.ClientHandler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 10 * time.Second}
 	var once sync.Once
 	finish := make(chan struct{})

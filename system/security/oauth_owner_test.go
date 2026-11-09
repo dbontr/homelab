@@ -165,3 +165,83 @@ func TestPKCEVerifierIsBoundToChallenge(t *testing.T){
   t.Fatal("consumed OAuth state was replayed")
  }
 }
+
+func TestOwnerOAuthRefreshRotatesSecretWithFreshFactors(t *testing.T){
+ manager,key,now:=testSessionManager(t)
+ vault,err:=OpenVault(filepath.Join(privateDir(t),"oauth-vault.json"),[]byte(strings.Repeat("v",32)))
+ if err!=nil{t.Fatal(err)}
+ if err:=manager.SetVault(vault);err!=nil{t.Fatal(err)}
+ provider:=Provider{
+  Name:"vendor",AuthorizeURL:"https://provider.example/authorize",
+  TokenURL:"https://provider.example/token",ClientID:"public-app",
+  RedirectURL:"http://127.0.0.1:8765/oauth/callback",
+ }
+ broker,err:=NewOAuthBroker([]Provider{provider})
+ if err!=nil{t.Fatal(err)}
+ exchanged:=0
+ client:=&http.Client{Transport:oauthTransport(func(r *http.Request)(*http.Response,error){
+  exchanged++
+  if r.Method!="POST"||r.URL.String()!=provider.TokenURL{
+   t.Fatalf("refresh sent credential to wrong host: %s",r.URL.String())
+  }
+  if err:=r.ParseForm();err!=nil{t.Fatal(err)}
+  if r.Form.Get("grant_type")!="refresh_token"||
+   r.Form.Get("refresh_token")!="initial-refresh"||
+   r.Form.Get("client_id")!=provider.ClientID{
+   t.Fatal("refresh failed to preserve original source scope")
+  }
+  return &http.Response{StatusCode:200,
+   Header:http.Header{"Content-Type":[]string{"application/json"}},
+   Body:io.NopCloser(strings.NewReader(
+    `{"access_token":"ROTATED-PRIVATE-ACCESS","token_type":"Bearer","expires_in":3600}`)),
+  },nil
+ })}
+ if err:=manager.SetOAuthBroker(broker,client);err!=nil{t.Fatal(err)}
+ handle,err:=vault.Store("vendor",[]byte(
+  `{"access_token":"initial-access","token_type":"Bearer","refresh_token":"initial-refresh"}`))
+ if err!=nil{t.Fatal(err)}
+ before,err:=vault.Version(handle.ID,"vendor")
+ if err!=nil{t.Fatal(err)}
+ perform:=func(confirm bool, password,code string)*httptest.ResponseRecorder{
+  payload,_:=json.Marshal(map[string]any{
+   "handle":handle.ID,"confirm":confirm,"password":password,"totp":code,
+  })
+  req:=httptest.NewRequest("POST","/v1/oauth/vendor/refresh",bytes.NewReader(payload))
+  req.Header.Set("Content-Type","application/json")
+  result:=httptest.NewRecorder()
+  manager.OwnerHandler().ServeHTTP(result,req)
+  return result
+ }
+ code:=TOTPCode(key,now.Unix()/30)
+ if response:=perform(false,testOwnerPassword,code);response.Code==200{
+  t.Fatal("unconfirmed token refresh was allowed")
+ }
+ if response:=perform(true,"incorrect",code);response.Code==200{
+  t.Fatal("unauthenticated token refresh was allowed")
+ }
+ response:=perform(true,testOwnerPassword,code)
+ if response.Code!=200||strings.Contains(response.Body.String(),"ROTATED-PRIVATE-ACCESS"){
+  t.Fatalf("confirmed refresh failed or leaked access token: %d %s",
+   response.Code,response.Body.String())
+ }
+ if exchanged!=1{t.Fatalf("wrong number of provider refresh exchanges: %d",exchanged)}
+ current,err:=vault.Version(handle.ID,"vendor")
+ if err!=nil||current==before{
+  t.Fatal("refresh did not change protected credential revision")
+ }
+ if err:=vault.WithCredentialVersion(handle.ID,"vendor",before,func(_ []byte)error{
+  t.Fatal("stale scoped credential remained usable after refresh")
+  return nil
+ });err==nil{t.Fatal("old scoped credential version remained valid")}
+ if err:=vault.WithCredentialVersion(handle.ID,"vendor",current,func(raw []byte)error{
+  if !bytes.Contains(raw,[]byte("ROTATED-PRIVATE-ACCESS"))||
+   !bytes.Contains(raw,[]byte("initial-refresh")){
+   t.Fatal("refresh failed to preserve token rotation and existing refresh grant")
+  }
+  return nil
+ });err!=nil{t.Fatal(err)}
+ if again:=perform(true,testOwnerPassword,code);again.Code==200{
+  t.Fatal("reused TOTP authorized second refresh")
+ }
+ if exchanged!=1{t.Fatal("replayed refresh reached upstream provider")}
+}
