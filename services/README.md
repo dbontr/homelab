@@ -6,4 +6,4 @@ The primary domain implementations are in `system/` while their deployment bound
 
 `services/bridge/` contains the restricted internal HTTP transport used by the optional MCP and public API entry points. It does not own application records or privileged operations. The service runtime remains the only owner of its writable state.
 
-The browser uses owner-session routes and CSRF checks. Neither the browser nor an interface gateway may receive a service's administrator credential. Public interfaces require separate client and upstream credentials; disable or stop those processes without removing the underlying services.
+The browser uses owner-session routes and CSRF checks. Neither the browser nor an interface gateway may receive a service's administrator credential. Public interfaces require separate client and route-scoped service credentials; disable or stop those processes without removing the underlying services.
