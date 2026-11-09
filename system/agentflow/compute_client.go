@@ -136,3 +136,41 @@ func (c *ComputeClient) VerifyProjectCredential(ctx context.Context) error {
  }
  return nil
 }
+
+// VerifyProjectEditor confirms the authenticated principal has the exact
+// editor grant needed for isolated source operations in this project.
+func (c *ComputeClient) VerifyProjectEditor(ctx context.Context, project string) error {
+	if c == nil || c.http == nil || !validID(project) {
+		return errors.New("invalid compute project")
+	}
+	endpoint := strings.TrimSuffix(c.Endpoint, "/mcp") + "/api/projects/" + url.PathEscape(project) + "/role"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return err
+	}
+	token, err := c.currentToken()
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	response, err := c.http.Do(req)
+	if err != nil {
+		return errors.New("compute project grant unavailable")
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return fmt.Errorf("compute project grant not verified (HTTP %d)", response.StatusCode)
+	}
+	raw, err := io.ReadAll(io.LimitReader(response.Body, 4097))
+	if err != nil || len(raw) > 4096 {
+		return errors.New("invalid project grant response")
+	}
+	var result struct {
+		ProjectID string `json:"project_id"`
+		Role string `json:"role"`
+	}
+	if err := json.Unmarshal(raw, &result); err != nil || result.ProjectID != project || result.Role != "editor" {
+		return errors.New("engineering requires an exact project editor grant")
+	}
+	return nil
+}
