@@ -186,11 +186,17 @@ func (db *Database) ProjectContext(project string) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
+	libraries, err := db.query(`SELECT l.id,l.title,l.kind,l.description FROM project_libraries pl
+		JOIN libraries l ON l.id=pl.library WHERE pl.project=?
+		ORDER BY l.title,l.id LIMIT 100`, project)
+	if err != nil {
+		return nil, err
+	}
 	return map[string]any{
 		"project": info, "authority": "controller-local",
 		"project_document": projectDoc, "context_document": contextDoc,
 		"latest_handoff": latestHandoff, "recent_decisions": decisions,
-		"repositories": repositories,
+		"repositories": repositories, "libraries": libraries,
 		"note_keys":    map[string]string{"Project.md": "project", "Context.md": "context"},
 	}, nil
 }
