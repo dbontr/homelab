@@ -105,3 +105,27 @@ func TestUnsupportedRecurrenceRemainsExplicit(t *testing.T) {
   }
  }
 }
+
+func TestRecurringAllDayEventSpansLocalCalendarDaysAcrossDST(t *testing.T){
+ raw:="BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:all-day-weekly\r\n"+
+ "DTSTART;TZID=America/Chicago;VALUE=DATE:20270314\r\n"+
+ "DTEND;TZID=America/Chicago;VALUE=DATE:20270315\r\n"+
+ "RRULE:FREQ=DAILY;COUNT=2\r\n"+
+ "SUMMARY:Leave\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+ out:=calendarRange(t,raw,"2027-03-13T00:00:00Z","2027-03-17T00:00:00Z")
+ if len(out.Occurrences)!=2{t.Fatalf("missing all-day recurrences: %+v",out)}
+ for _,instance:=range out.Occurrences{
+  first,err:=time.Parse(time.RFC3339,instance.Start)
+  if err!=nil{t.Fatal(err)}
+  last,err:=time.Parse(time.RFC3339,instance.End)
+  if err!=nil{t.Fatal(err)}
+  loc,err:=time.LoadLocation("America/Chicago")
+  if err!=nil{t.Fatal(err)}
+  first=first.In(loc)
+  last=last.In(loc)
+  if !instance.AllDay || first.Hour()!=0 || last.Hour()!=0 ||
+    last.YearDay()!=first.AddDate(0,0,1).YearDay(){
+    t.Fatalf("local all-day boundary shifted: %+v",instance)
+  }
+ }
+}
