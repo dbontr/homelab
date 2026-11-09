@@ -360,6 +360,9 @@ func (s *Server) StartWorkflowScheduler(ctx context.Context) {
             select {
             case <-ctx.Done():return
             case <-ticker.C:
+                period,cancel:=context.WithTimeout(ctx,8*time.Second)
+                _=s.fireDueAutomations(period)
+                cancel()
                 ids,err:=s.workflows.List()
                 if err!=nil{continue}
                 for _,id:=range ids {

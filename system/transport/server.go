@@ -96,6 +96,10 @@ func(s *Server) Handler()http.Handler{
  mux.HandleFunc("GET /v1/engineering/runs/{id}/diffs",s.engineeringRunDiffs)
  mux.HandleFunc("GET /v1/projects/{project}/overview",s.uiProjectOverview)
  mux.HandleFunc("POST /v1/workflows/plan",s.capabilityWorkflowPlan)
+ mux.HandleFunc("GET /v1/automations",s.automationCollection)
+ mux.HandleFunc("POST /v1/automations",s.automationCollection)
+ mux.HandleFunc("GET /v1/automations/{id}",s.automationItem)
+ mux.HandleFunc("POST /v1/automations/{id}/enabled",s.automationItem)
  mux.HandleFunc("GET /v1/workflows",s.capabilityWorkflowCollection)
  mux.HandleFunc("POST /v1/workflows",s.capabilityWorkflowCollection)
  mux.HandleFunc("GET /v1/workflows/{id}",s.capabilityWorkflowItem)
@@ -338,6 +342,10 @@ func(s *Server)localTools()[]map[string]any{
   tool("activity_recent","List confirmed personal activity from canonical records, without fabricating unobserved actions",map[string]any{"limit":prop("integer")}),
   tool("workflow_plan","Propose a model-generated dependency plan for owner review without execution",map[string]any{"project":prop("string"),"objective":prop("string"),"personal_read":prop("boolean")},"project","objective"),
   tool("workflow_submit","Submit a scoped workflow; task creation requires explicit personal_write consent",map[string]any{"project":prop("string"),"objective":prop("string"),"personal_read":prop("boolean"),"personal_write":prop("boolean"),"auto_replan":prop("boolean"),"share_project_evidence":prop("boolean"),"steps":map[string]any{"type":"array","items":prop("object")}},"project","objective","steps"),
+  tool("automation_create","Schedule a recurring explicitly authorized read-only project workflow; no silent writes or notifications",map[string]any{"program":prop("object"),"every_minutes":prop("integer"),"enabled":prop("boolean")},"program","every_minutes"),
+  tool("automation_list","List persisted owner-configured workflows and next occurrences",map[string]any{}),
+  tool("automation_get","Inspect one scheduled workflow and its last run identity",map[string]any{"id":prop("string")},"id"),
+  tool("automation_set_enabled","Revision-fence a recurring workflow pause or resume",map[string]any{"id":prop("string"),"revision":prop("integer"),"enabled":prop("boolean")},"id","revision","enabled"),
   tool("workflow_list","List owner-scoped workflow status",map[string]any{}),
   tool("workflow_get","Inspect confirmed stage results and status",map[string]any{"id":prop("string")},"id"),
   tool("workflow_cancel","Cancel a revision-matched workflow",map[string]any{"id":prop("string"),"revision":prop("integer")},"id","revision"),
@@ -484,6 +492,7 @@ func(s *Server)toolList(r *http.Request)[]map[string]any{
  return out
 }
 func(s *Server)localTool(ctx context.Context,name string,raw json.RawMessage)(any,error){
+ if strings.HasPrefix(name,"automation_"){return s.capabilityAutomationTool(ctx,name,raw)}
  if strings.HasPrefix(name,"workflow_"){return s.capabilityWorkflowTool(ctx,name,raw)}
  if strings.HasPrefix(name,"engineering_run_")||strings.HasPrefix(name,"engineering_team_"){return s.engineeringTool(ctx,name,raw)}
  if strings.HasPrefix(name,"monitoring_"){return s.monitoringTool(ctx,name,raw)}
