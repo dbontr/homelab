@@ -57,15 +57,13 @@ dispatch:
 
 		launched++
 		go func(runID string) {
-			defer func() {
-				e.activeMu.Lock()
-				delete(e.active, runID)
-				e.activeMu.Unlock()
-				cancel()
-				<-slots
-			}()
 			runner := Runner{Store: e.Store, Worker: e, Lease: 30 * time.Minute}
 			advanced, err := runner.RunOne(runCtx, runID)
+			e.activeMu.Lock()
+			delete(e.active, runID)
+			e.activeMu.Unlock()
+			cancel()
+			<-slots
 			results <- engineeringStepResult{advanced: advanced, err: err}
 		}(run.ID)
 	}
