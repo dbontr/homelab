@@ -47,6 +47,8 @@ The agent receives its objective, current plan, a bounded suffix of past observa
 
 Checkpoint updates are fenced by the active run, step, lease generation, and lease token. An interrupted write can be reconciled against the worker's current file digest without blindly repeating it; a write is confirmed only after a worker SHA-256 acknowledgment and source readback. An interrupted verification command is not replayed because its effects may be uncertain. Unapproved commands, out-of-scope edits, or attempts to access protected paths terminate the agent step.
 
+The engineering scheduler advances up to four independent runs concurrently. Each run remains sequential and dependency-ordered, with its own workspace, lease, and cancellation context. Project quotas and resource admission remain enforced by the compute controller; simultaneous publication attempts must still satisfy the pinned Git base revision.
+
 All approved checks are run again after the agent finishes. Before exporting, the service compares the current source digests with the files confirmed by the agent. Publication remains restricted to a pinned-base **draft** pull request; autonomous sessions cannot merge, deploy, manage infrastructure, or acquire an administrator credential. The decision model and compute worker are separate trust boundaries.
 
 ### Verified source and artifact identity
