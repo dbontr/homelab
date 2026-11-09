@@ -12,7 +12,7 @@ import (
 func TestAllowlistedServiceLifecycleUsesOnlyFixedSystemctlVerbs(t *testing.T){
  auth:=&fakeAuth{decision:security.Authorization{Allowed:true}}
  commands:=[]string{}
- exec,err:=New(Config{
+ exec,err:=New(Config{Audit:testExecutorAudit(t),
   Host:"jupiter",Systemctl:"/usr/bin/systemctl",
   AllowedServices:[]string{"homelab-platform.service"},
   Auth:auth,Releases:&fakeRelease{},
@@ -59,7 +59,7 @@ func TestExecutorNeverAllowsCriticalServices(t *testing.T){
   "sshd.service","systemd-networkd.service","homelab-securityd.service","homelab-executord.service",
   "nftables.service","wireguard.service","homelab-fleetd.service","prometheus.service",
  }{
-  _,err:=New(Config{
+  _,err:=New(Config{Audit:testExecutorAudit(t),
    Host:"saturn",Systemctl:"/usr/bin/systemctl",AllowedServices:[]string{service},
    Auth:&fakeAuth{},Releases:&fakeRelease{},
    Run:func(context.Context,string,...string)error{return nil},
