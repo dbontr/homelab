@@ -13,22 +13,7 @@ import (
  "github.com/dbontr/homelab-new/system/store"
 )
 
-var resourceIdentifier=regexp.MustCompile(`^[a-zA-Z0-9_-]{1,128}package transport
-
-import (
- "context"
- "net/http"
- "errors"
- "regexp"
- "sort"
- "strings"
- "strconv"
- "time"
-
- "github.com/dbontr/homelab-new/system/store"
-)
-
-)
+var resourceIdentifier = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,128}$`)
 
 type ResourceLink struct{
  Relation string `json:"relation"`
