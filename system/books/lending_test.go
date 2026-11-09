@@ -16,14 +16,16 @@ func(f lendingTransport)RoundTrip(request *http.Request)(*http.Response,error){r
 func TestLendingFiltersRemoteLinksAndDoesNotClaimAcquisition(t *testing.T){
  for _,url:=range []string{
   "javascript:alert(1)",
-  "http://openlibrary.org/borrow",
   "https://openlibrary.org.evil.example/borrow",
   "https://user:secret@openlibrary.org/borrow",
   "https://www.archive.org:444/private",
  }{
   if got:=safeLendingURL(url);got!=""{t.Fatalf("unsafe provider link accepted: %s",got)}
  }
- result,err:=decodeLendingResult("9780140328721",[]byte(`{"items":[
+ if got:=safeLendingURL("http://openlibrary.org/books/OL1234M/borrow");got!="https://openlibrary.org/books/OL1234M/borrow"{
+  t.Fatalf("official provider link was not upgraded to TLS: %s",got)
+ }
+  result,err:=decodeLendingResult("9780140328721",[]byte(`{"items":[
   {"match":"exact","status":"lendable","itemURL":"https://openlibrary.org/books/OL1234M/borrow","ol-edition-id":"OL1234M","ol-work-id":"OL88W"},
   {"match":"similar","status":"full access","itemURL":"https://www.archive.org/stream/edition"},
   {"match":"exact","status":"checked out","itemURL":"https://openlibrary.org/books/OL1234M/borrow"},
