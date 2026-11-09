@@ -165,6 +165,10 @@ var tools = []toolDefinition{
 	{"research_search", "Search indexed passages with source locators within the caller's permitted project", []string{"project_id", "query"}, []string{"limit"}},
 	{"research_embedding_put", "Store a checked encoder vector for a fixed, source-linked passage", []string{"library", "passage_id", "model", "body_sha256", "embedding"}, nil},
 	{"research_semantic_search", "Search project-visible passages by a validated vector from the same embedding model", []string{"project_id", "model", "embedding"}, []string{"limit"}},
+	{"research_embedding_policy_set", "Set revision-fenced permission for indexing a library with the configured embedding provider", []string{"library", "enabled", "expected_revision"}, nil},
+	{"research_embedding_policy_get", "Read a linked library's embedding policy", []string{"project_id", "library"}, nil},
+	{"research_semantic_query", "Search linked research using a text query sent to the library-authorized configured embedding provider", []string{"project_id", "query"}, []string{"limit"}},
+	{"research_embed_pending", "Index a bounded batch of owner-enabled research passages through the configured provider", nil, []string{"limit"}},
 	{"research_topics", "List topic labels and passage counts in the project's linked research libraries", []string{"project_id"}, nil},
 	{"research_browse_topic", "Retrieve source-linked passages for one project-visible research topic", []string{"project_id", "topic"}, []string{"limit"}},
 	{"research_read_passage", "Retrieve and verify a source-linked research passage at its immutable citation ID", []string{"project_id", "passage_id"}, nil},
@@ -815,6 +819,19 @@ func (s *Server) callToolFor(who caller, name string, a map[string]any) (any, er
 		var vector []float64
 		if err:=JSONRequest(a["embedding"],&vector);err!=nil{return nil,err}
 		return db.PutResearchEmbedding(get("library"),get("passage_id"),get("model"),get("body_sha256"),vector)
+	case "research_embedding_policy_set":
+		if s.Embedder==nil{return nil,errors.New("embedding provider is not configured")}
+		return db.SetEmbeddingPolicy(get("library"),s.Embedder.Model,asBool(a["enabled"]),asInt(a["expected_revision"]))
+	case "research_embedding_policy_get":
+		return db.ProjectEmbeddingPolicy(project,get("library"))
+	case "research_semantic_query":
+		limit:=asInt(a["limit"])
+		if limit==0{limit=20}
+		return s.SemanticResearchQuery(context.Background(),project,get("query"),limit)
+	case "research_embed_pending":
+		limit:=asInt(a["limit"])
+		if limit==0{limit=8}
+		return s.IndexPendingResearch(context.Background(),limit)
 	case "research_semantic_search":
 		var vector []float64
 		if err:=JSONRequest(a["embedding"],&vector);err!=nil{return nil,err}

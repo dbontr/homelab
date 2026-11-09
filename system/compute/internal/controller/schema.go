@@ -64,6 +64,7 @@ CREATE INDEX IF NOT EXISTS idx_research_passages_source ON research_passages(sou
 CREATE VIRTUAL TABLE IF NOT EXISTS research_passages_fts USING fts5(body, tokenize='unicode61');
 CREATE TABLE IF NOT EXISTS research_embeddings(passage TEXT NOT NULL,model TEXT NOT NULL,dimension INTEGER NOT NULL,vector TEXT NOT NULL,body_sha256 TEXT NOT NULL,epoch INTEGER NOT NULL,created REAL NOT NULL,PRIMARY KEY(passage,model),FOREIGN KEY(passage) REFERENCES research_passages(id));
 CREATE INDEX IF NOT EXISTS idx_research_embeddings_model ON research_embeddings(model,dimension);
+CREATE TABLE IF NOT EXISTS research_embedding_policies(library TEXT PRIMARY KEY,model TEXT NOT NULL,enabled INTEGER NOT NULL,revision INTEGER NOT NULL,updated REAL NOT NULL,FOREIGN KEY(library) REFERENCES libraries(id));
 CREATE TABLE IF NOT EXISTS project_contributions(id TEXT PRIMARY KEY,project TEXT NOT NULL,kind TEXT NOT NULL,title TEXT NOT NULL,body TEXT NOT NULL,body_sha256 TEXT NOT NULL,repository TEXT NOT NULL,revision TEXT NOT NULL,artifact_id TEXT NOT NULL,principal TEXT NOT NULL,created REAL NOT NULL,FOREIGN KEY(project) REFERENCES projects(id));
 CREATE INDEX IF NOT EXISTS idx_project_contributions ON project_contributions(project,kind,created);
 CREATE TABLE IF NOT EXISTS project_grants(project TEXT NOT NULL,principal TEXT NOT NULL,role TEXT NOT NULL,created REAL NOT NULL,PRIMARY KEY(project,principal),FOREIGN KEY(project) REFERENCES projects(id));

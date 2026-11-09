@@ -76,6 +76,18 @@ func (s *Server) handleResearch(w http.ResponseWriter, r *http.Request, p []stri
 			send(w, v, err)
 			return true
 		}
+	case "semantic":
+		if len(p)==5{
+			limit:=20
+			if raw:=r.URL.Query().Get("limit");raw!=""{
+				parsed,err:=strconv.Atoi(raw)
+				if err!=nil{fail(w,400,"invalid semantic search limit");return true}
+				limit=parsed
+			}
+			value,err:=s.SemanticResearchQuery(r.Context(),project,r.URL.Query().Get("q"),limit)
+			send(w,value,err)
+			return true
+		}
 	case "search":
 		if len(p) == 5 {
 			limit := 30
