@@ -29,7 +29,7 @@ if ! command -v go >/dev/null 2>&1; then
   exit 1
 fi
 
-verify_go system
+verify_go services/core
 printf 'Checking optional HTTP interfaces\n'
 (
   cd "$root"
