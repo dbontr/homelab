@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -105,6 +106,8 @@ type AdminSessions struct {
 	access *AccessVerifier
 	gatewayAudience string
 	vault *Vault
+	oauth *OAuthBroker
+	oauthClient *http.Client
 	verifier  PassphraseRecord
 	totpKey   []byte
 	stateFile string

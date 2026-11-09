@@ -81,6 +81,23 @@ in
         description = "Exact certificate DNS identities permitted to request operation authorization.";
       };
     };
+    oauth = {
+      enable = lib.mkEnableOption "owner-only PKCE public-client authorization through a fixed localhost callback";
+      providers = lib.mkOption {
+        default = [];
+        description = "Allowlisted public OAuth clients, endpoints, requested scopes, and one shared local callback; no provider secrets.";
+        type = lib.types.listOf (lib.types.submodule {
+          options = {
+            name = lib.mkOption { type = lib.types.str; };
+            authorizeURL = lib.mkOption { type = lib.types.str; };
+            tokenURL = lib.mkOption { type = lib.types.str; };
+            clientID = lib.mkOption { type = lib.types.str; };
+            redirectURL = lib.mkOption { type = lib.types.str; };
+            scopes = lib.mkOption { type = lib.types.listOf lib.types.str; default = []; };
+          };
+        });
+      };
+    };
     browser = {
       enable = lib.mkEnableOption "owner-only HTTPS browser login reached through an independently protected ingress";
       hostname = lib.mkOption {
@@ -120,6 +137,9 @@ in
       { assertion = cfg.policies != []; message = "Security daemon requires explicit operation and resource policy."; }
       { assertion = lib.all (p: p.operation != "" && p.targets != []) cfg.policies;
         message = "Security policies must name an operation and at least one target."; }
+      { assertion = !cfg.oauth.enable ||
+          (cfg.vaultKeyFile != null && cfg.oauth.providers != []);
+        message = "OAuth requires a protected credential vault key and an explicit public-client provider registry."; }
       { assertion = !cfg.browser.enable || (cfg.browser.audience != null && cfg.browser.audience != "");
         message = "Browser login requires its own configured Cloudflare Access audience."; }
       { assertion = (cfg.access.gatewayAudience == "" && cfg.access.issuer == "" &&
@@ -174,6 +194,8 @@ in
         HOMELAB_SECURITY_REMOTE_KEY = "/run/credentials/homelab-securityd.service/remote-key";
         HOMELAB_SECURITY_REMOTE_CLIENT_CA = "/run/credentials/homelab-securityd.service/remote-client-ca";
         HOMELAB_SECURITY_REMOTE_CLIENT_IDENTITIES = builtins.toJSON cfg.remote.allowedClientDNS;
+      } // lib.optionalAttrs cfg.oauth.enable {
+        HOMELAB_SECURITY_OAUTH_PROVIDERS = builtins.toJSON cfg.oauth.providers;
       } // lib.optionalAttrs cfg.browser.enable {
         HOMELAB_SECURITY_BROWSER_ORIGIN = "https://${cfg.browser.hostname}";
         HOMELAB_SECURITY_ACCESS_BROWSER_AUD = cfg.browser.audience;
@@ -214,7 +236,7 @@ in
         NoNewPrivileges = true;
         CapabilityBoundingSet = "";
         PrivateTmp = true;
-        PrivateNetwork = !cfg.remote.enable;
+        PrivateNetwork = !(cfg.remote.enable || cfg.oauth.enable);
         PrivateDevices = true;
         ProtectHome = true;
         ProtectSystem = "strict";
@@ -222,7 +244,7 @@ in
         ProtectKernelModules = true;
         ProtectControlGroups = true;
         ProtectClock = true;
-        RestrictAddressFamilies = [ "AF_UNIX" ] ++ lib.optionals cfg.remote.enable [ "AF_INET" "AF_INET6" ];
+        RestrictAddressFamilies = [ "AF_UNIX" ] ++ lib.optionals (cfg.remote.enable || cfg.oauth.enable) [ "AF_INET" "AF_INET6" ];
         RestrictNamespaces = true;
         RestrictSUIDSGID = true;
         LockPersonality = true;

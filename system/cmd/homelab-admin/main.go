@@ -158,7 +158,7 @@ func ownerRequest(ctx context.Context, method, path string, input any) ([]byte, 
 
 func run(args []string) error {
 	if len(args) == 0 {
-		return errors.New("expected enroll, vault-init, login, status, pending, confirm, close, credential-add, credential-rotate, credential-list or credential-delete")
+		return errors.New("expected enroll, vault-init, login, status, pending, confirm, close, credential-add, credential-rotate, credential-list, credential-delete, oauth-list or oauth-begin")
 	}
 	if args[0] == "enroll" {
 		return enroll(args[1:])
@@ -184,6 +184,20 @@ func run(args []string) error {
 	var path, method string
 	var input any
 	switch args[0] {
+	case "oauth-list":
+		if len(args)!=1{return errors.New("oauth-list accepts no arguments")}
+		method,path=http.MethodGet,"/v1/oauth/providers"
+	case "oauth-begin":
+		if len(args)!=2||len(args[1])<1||len(args[1])>64||
+			strings.ContainsAny(args[1],"/?#\\ \t\r\n\x00"){
+			return errors.New("oauth-begin requires one configured provider name")
+		}
+		password,err:=secretPrompt("Homelab administrative password:")
+		if err!=nil{return err}
+		code,err:=secretPrompt("New six-digit authenticator code:")
+		if err!=nil{return err}
+		method,path=http.MethodPost,"/v1/oauth/"+url.PathEscape(args[1])+"/begin"
+		input=map[string]string{"password":password,"totp":code}
 	case "credential-list":
 		if len(args) != 1 { return errors.New("credential-list accepts no arguments") }
 		method, path = http.MethodGet, "/v1/credentials"

@@ -33,7 +33,12 @@ func ExchangeOAuthCode(ctx context.Context,provider Provider,code,verifier strin
  if err!=nil{return CredentialHandle{},err}
  req.Header.Set("Content-Type","application/x-www-form-urlencoded")
  req.Header.Set("Accept","application/json")
- if client==nil{client=&http.Client{Timeout:15*time.Second}}
+ if client==nil{
+  client=&http.Client{
+   Timeout:15*time.Second,
+   Transport:&http.Transport{Proxy:nil,TLSHandshakeTimeout:5*time.Second},
+  }
+ }
  safeClient:=*client
  safeClient.CheckRedirect=func(*http.Request,[]*http.Request)error{return errors.New("token redirects are not permitted")}
  resp,err:=safeClient.Do(req)
