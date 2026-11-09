@@ -348,6 +348,9 @@ func (e *Engine) runAgentTurn(ctx context.Context, claim Claim, w Workflow) (jso
 	}
 	action := state.Pending.Action
 	target := action.Path
+	if action.Repository != "" && action.Repository != brief.Repository {
+		target = action.Repository + ":" + target
+	}
 	if target == "" {
 		if action.Action == "check" {
 			target = action.Command
