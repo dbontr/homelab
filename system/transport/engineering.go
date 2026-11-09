@@ -74,6 +74,20 @@ func (s *Server) engineeringTeamIntegrate(w http.ResponseWriter,r *http.Request)
  if err!=nil{writeError(w,409,"team integration unavailable");return}
  writeJSON(w,202,team)
 }
+func (s *Server) engineeringRunKnowledge(w http.ResponseWriter,r *http.Request){
+ manager,ok:=s.engineering.(agentflow.KnowledgeManager)
+ if !ok{writeError(w,503,"engineering knowledge unavailable");return}
+ runID,proposalID:=r.PathValue("id"),r.PathValue("proposal")
+ var record agentflow.KnowledgeProposal
+ var err error
+ if r.Method==http.MethodPost {
+  record,err=manager.ApproveKnowledge(runID,proposalID)
+ }else{
+  record,err=manager.Knowledge(runID,proposalID)
+ }
+ if err!=nil{writeError(w,409,"knowledge operation unavailable");return}
+ writeJSON(w,200,record)
+}
 func (s *Server) engineeringTool(_ context.Context,name string,raw json.RawMessage)(any,error){
  if s.engineering==nil{return nil,errors.New("engineering runs unavailable")}
  switch name{
@@ -114,6 +128,16 @@ func (s *Server) engineeringTool(_ context.Context,name string,raw json.RawMessa
   if err:=json.Unmarshal(raw,&req);err!=nil{return nil,err}
   if err:=teams.CancelTeam(req.ID);err!=nil{return nil,err}
   return teams.GetTeam(req.ID)
+ case "engineering_run_knowledge_get":
+  knowledge,ok:=s.engineering.(agentflow.KnowledgeManager);if !ok{return nil,errors.New("engineering knowledge unavailable")}
+  var req struct{ID string `json:"id"`;ProposalID string `json:"proposal_id"`}
+  if err:=json.Unmarshal(raw,&req);err!=nil{return nil,err}
+  return knowledge.Knowledge(req.ID,req.ProposalID)
+ case "engineering_run_knowledge_approve":
+  knowledge,ok:=s.engineering.(agentflow.KnowledgeManager);if !ok{return nil,errors.New("engineering knowledge unavailable")}
+  var req struct{ID string `json:"id"`;ProposalID string `json:"proposal_id"`}
+  if err:=json.Unmarshal(raw,&req);err!=nil{return nil,err}
+  return knowledge.ApproveKnowledge(req.ID,req.ProposalID)
  case "engineering_run_cancel":
   var request struct{ID string `json:"id"`;Revision uint64 `json:"revision"`}
   if err:=json.Unmarshal(raw,&request);err!=nil{return nil,err}
