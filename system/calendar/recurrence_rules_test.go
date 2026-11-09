@@ -87,9 +87,79 @@ func TestAllDayEventWithoutEndUsesOneLocalDay(t *testing.T) {
  }
 }
 
+func TestWeeklySetPositionsUseWeekStartAndCalendarWeeks(t *testing.T){
+ raw:="BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:weekly-last\r\n"+
+  "DTSTART:20270104T090000Z\r\nDTEND:20270104T100000Z\r\n"+
+  "RRULE:FREQ=WEEKLY;WKST=MO;BYDAY=MO,WE,FR;BYSETPOS=-1;COUNT=3\r\n"+
+  "END:VEVENT\r\nEND:VCALENDAR\r\n"
+ out:=calendarRange(t,raw,"2027-01-01T00:00:00Z","2027-02-01T00:00:00Z")
+ if len(out.Limitations)!=0 || len(out.Occurrences)!=3{
+  t.Fatalf("weekly positional recurrence failed: %+v",out)
+ }
+ for i,want:=range []string{"2027-01-08","2027-01-15","2027-01-22"}{
+  if !strings.HasPrefix(out.Occurrences[i].Start,want){
+   t.Fatalf("weekly position %d: got %s, want %s",i,out.Occurrences[i].Start,want)
+  }
+ }
+}
+
+func TestYearlySetPositionsApplyToWholeYearAcrossLeapYear(t *testing.T){
+ raw:="BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:yearly-last\r\n"+
+  "DTSTART:20270101T130000Z\r\nDTEND:20270101T140000Z\r\n"+
+  "RRULE:FREQ=YEARLY;BYMONTH=2;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1;COUNT=3\r\n"+
+  "END:VEVENT\r\nEND:VCALENDAR\r\n"
+ for i,want:=range []string{"2027-02-26","2028-02-29","2029-02-28"}{
+  year:=2027+i
+  from:=time.Date(year,time.January,1,0,0,0,0,time.UTC).Format(time.RFC3339)
+  through:=time.Date(year,time.December,31,0,0,0,0,time.UTC).Format(time.RFC3339)
+  out:=calendarRange(t,raw,from,through)
+  if len(out.Limitations)!=0 || len(out.Occurrences)!=1{
+   t.Fatalf("yearly positional recurrence failed for %d: %+v",year,out)
+  }
+  if !strings.HasPrefix(out.Occurrences[0].Start,want){
+   t.Fatalf("yearly position %d: got %s, want %s",i,out.Occurrences[0].Start,want)
+  }
+ }
+}
+
+func TestDailySetPositionsRetainWeekdayFiltering(t *testing.T){
+ raw:="BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:daily\r\n"+
+  "DTSTART:20270104T090000Z\r\nDTEND:20270104T100000Z\r\n"+
+  "RRULE:FREQ=DAILY;BYDAY=MO,WE,FR;BYSETPOS=1;COUNT=3\r\n"+
+  "END:VEVENT\r\nEND:VCALENDAR\r\n"
+ out:=calendarRange(t,raw,"2027-01-01T00:00:00Z","2027-02-01T00:00:00Z")
+ if len(out.Limitations)!=0 || len(out.Occurrences)!=3{
+  t.Fatalf("daily positional recurrence failed: %+v",out)
+ }
+ for i,want:=range []string{"2027-01-04","2027-01-06","2027-01-08"}{
+  if !strings.HasPrefix(out.Occurrences[i].Start,want){
+   t.Fatalf("daily position %d: got %s, want %s",i,out.Occurrences[i].Start,want)
+  }
+ }
+}
+
+func TestCalendarEndTimestampUsesItsOwnTimeZone(t *testing.T){
+ raw:="BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:cross-zone\r\n"+
+  "DTSTART;TZID=America/Chicago:20270308T090000\r\n"+
+  "DTEND;TZID=America/New_York:20270308T110000\r\n"+
+  "RRULE:FREQ=WEEKLY;BYDAY=MO;COUNT=2\r\n"+
+  "END:VEVENT\r\nEND:VCALENDAR\r\n"
+ out:=calendarRange(t,raw,"2027-03-01T00:00:00Z","2027-04-01T00:00:00Z")
+ if len(out.Limitations)!=0 || len(out.Occurrences)!=2{
+  t.Fatalf("separate DTEND zone failed: %+v",out)
+ }
+ for _,instance:=range out.Occurrences{
+  first,err:=time.Parse(time.RFC3339,instance.Start);if err!=nil{t.Fatal(err)}
+  last,err:=time.Parse(time.RFC3339,instance.End);if err!=nil{t.Fatal(err)}
+  if last.Sub(first)!=time.Hour{
+   t.Fatalf("cross-zone event duration = %v, expected one hour",last.Sub(first))
+  }
+ }
+}
+
 func TestUnsupportedRecurrenceRemainsExplicit(t *testing.T) {
  for _,rule:=range []string{
-  "FREQ=DAILY;BYSETPOS=-1;BYDAY=MO",
+  "FREQ=DAILY;BYSETPOS=-1",
   "FREQ=WEEKLY;BYDAY=1MO",
   "FREQ=MONTHLY;BYDAY=6MO",
   "FREQ=MONTHLY;BYDAY=MO;BYSETPOS=0",

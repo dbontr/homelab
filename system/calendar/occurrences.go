@@ -153,9 +153,6 @@ func parseRule(raw,zone string,fallback *time.Location)(recurrenceRule,error){
    }}
   }
  }
- if len(r.bySetPos)>0 && r.freq!="MONTHLY"{
-  return r,errors.New("positional recurrence currently requires FREQ=MONTHLY")
- }
  if len(r.bySetPos)>0 && len(r.weekdays)==0&&len(r.ordinalDays)==0&&len(r.monthDays)==0{
   return r,errors.New("positional recurrence requires a day filter")
  }
@@ -207,26 +204,54 @@ func matchesRule(rule recurrenceRule,origin,day time.Time,dayIndex int)bool{
  return false
 }
 
-// monthSetPos selects dates after all BYDAY and BYMONTHDAY filters.
-// A monthly rule applies position indices to each complete calendar month.
-func monthSetPos(rule recurrenceRule, origin, day time.Time)(bool){
- if len(rule.bySetPos)==0{return true}
- last:=time.Date(day.Year(),day.Month()+1,0,0,0,0,0,day.Location()).Day()
- candidates:=make([]int,0,last)
- startDay:=time.Date(origin.Year(),origin.Month(),origin.Day(),12,0,0,0,time.UTC)
- for i:=1;i<=last;i++{
-  at:=time.Date(day.Year(),day.Month(),i,origin.Hour(),origin.Minute(),origin.Second(),0,origin.Location())
-  ordinal:=time.Date(at.Year(),at.Month(),at.Day(),12,0,0,0,time.UTC)
-  dayIndex:=int(ordinal.Sub(startDay)/(24*time.Hour))
-  if dayIndex<0{continue}
-  if matchesRule(rule,origin,at,dayIndex){candidates=append(candidates,i)}
+// A position filter applies to the complete recurrence period, not the
+// caller's requested window. This is essential for negative BYSETPOS values.
+func positionPeriod(rule recurrenceRule, day time.Time)(time.Time,time.Time){
+ loc:=day.Location()
+ midnight:=func(y int,m time.Month,d int)time.Time{
+  return time.Date(y,m,d,0,0,0,0,loc)
  }
+ switch rule.freq{
+ case "DAILY":
+  start:=midnight(day.Year(),day.Month(),day.Day())
+  return start,start.AddDate(0,0,1)
+ case "WEEKLY":
+  start:=midnight(day.Year(),day.Month(),day.Day()).
+   AddDate(0,0,-weekdayOffset(day.Weekday(),rule.weekStart))
+  return start,start.AddDate(0,0,7)
+ case "MONTHLY":
+  start:=midnight(day.Year(),day.Month(),1)
+  return start,start.AddDate(0,1,0)
+ default:
+  start:=midnight(day.Year(),time.January,1)
+  return start,start.AddDate(1,0,0)
+ }
+}
+
+func recurrenceDayIndex(origin,day time.Time)int{
+ utcDate:=func(t time.Time)time.Time{
+  return time.Date(t.Year(),t.Month(),t.Day(),12,0,0,0,time.UTC)
+ }
+ return int(utcDate(day).Sub(utcDate(origin))/(24*time.Hour))
+}
+
+func selectedPeriodDates(rule recurrenceRule, origin, periodStart, periodEnd time.Time)map[string]bool{
+ originDay:=time.Date(origin.Year(),origin.Month(),origin.Day(),0,0,0,0,origin.Location())
+ candidates:=[]string{}
+ for day:=periodStart;day.Before(periodEnd);day=day.AddDate(0,0,1){
+  if day.Before(originDay){continue}
+  at:=time.Date(day.Year(),day.Month(),day.Day(),origin.Hour(),origin.Minute(),origin.Second(),origin.Nanosecond(),origin.Location())
+  if matchesRule(rule,origin,at,recurrenceDayIndex(origin,at)){
+   candidates=append(candidates,day.Format("2006-01-02"))
+  }
+ }
+ selected:=map[string]bool{}
  for _,position:=range rule.bySetPos{
   index:=position-1
   if position<0{index=len(candidates)+position}
-  if index>=0&&index<len(candidates)&&candidates[index]==day.Day(){return true}
+  if index>=0&&index<len(candidates){selected[candidates[index]]=true}
  }
- return false
+ return selected
 }
 
 func exceptionTimeZone(zones []string,index int,fallback string)string{
@@ -297,7 +322,9 @@ func Expand(feed Feed,start,end time.Time)(Expansion,error){
   if event.Status=="CANCELLED"{continue}
   first,err:=ParseInstant(event.Start,event.TimeZone,start.Location())
   if err!=nil{out.Limitations=append(out.Limitations,"Calendar event has an unsupported start time");continue}
-  last,err:=ParseInstant(event.End,event.TimeZone,start.Location())
+  endZone:=event.EndTimeZone
+  if endZone==""{endZone=event.TimeZone}
+  last,err:=ParseInstant(event.End,endZone,start.Location())
   if event.End==""&&len(event.Start)==8 {
    // RFC 5545 date-valued VEVENT without DTEND occupies one local day.
    last=first.AddDate(0,0,1)
@@ -339,11 +366,22 @@ func Expand(feed Feed,start,end time.Time)(Expansion,error){
    day:=originDay
    generated:=0
    complete:=false
+   var selectedDates map[string]bool
+   var selectedStart time.Time
    for i:=0;i<50000;i++{
     candidate:=time.Date(day.Year(),day.Month(),day.Day(),first.Hour(),first.Minute(),first.Second(),first.Nanosecond(),first.Location())
     if candidate.After(end){complete=true;break}
     if rule.untilDefined&&candidate.After(rule.until){complete=true;break}
-    if matchesRule(rule,first,candidate,i) && monthSetPos(rule,first,candidate){
+    selected:=true
+    if len(rule.bySetPos)>0{
+     periodStart,periodEnd:=positionPeriod(rule,candidate)
+     if selectedDates==nil||!periodStart.Equal(selectedStart){
+      selectedStart=periodStart
+      selectedDates=selectedPeriodDates(rule,first,periodStart,periodEnd)
+     }
+     selected=selectedDates[candidate.Format("2006-01-02")]
+    }
+    if selected && matchesRule(rule,first,candidate,i){
      generated++
      emit(candidate)
      if rule.count>0&&generated>=rule.count{complete=true;break}

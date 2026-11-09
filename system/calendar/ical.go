@@ -14,6 +14,7 @@ type Event struct {
  Summary string `json:"summary,omitempty"`
  Start string `json:"start,omitempty"`
  End string `json:"end,omitempty"`
+ EndTimeZone string `json:"end_time_zone,omitempty"`
  Location string `json:"location,omitempty"`
  Recurrence string `json:"recurrence,omitempty"`
  TimeZone string `json:"time_zone,omitempty"`
@@ -86,7 +87,7 @@ func Parse(raw string)(Feed,error){
   case "UID":current.UID=value
   case "SUMMARY":current.Summary=decodeText(value)
   case "DTSTART":current.Start=value;current.TimeZone=timeZone(attrs)
-  case "DTEND":current.End=value
+  case "DTEND":current.End=value;current.EndTimeZone=timeZone(attrs)
   case "LOCATION":current.Location=decodeText(value)
   case "RRULE":current.Recurrence=value;feed.RecurrencesUnexpanded=true
   case "EXDATE":
