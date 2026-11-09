@@ -148,3 +148,11 @@ Prior to service activation, verify every modified Go module, Rust/WASM build,
 Nix evaluation, controller-side project grants, restart recovery, negative
 authorization tests, and service endpoints. A successful read-only workflow
 is not evidence that the entire product is fully integrated or deployment-ready.
+
+## Research-to-learning evidence handoff
+
+A project owner can preview source-verified research passages with `research_learning_preview` or `POST /v1/research/learning/preview`. The preview returns the exact citation references, passage SHA-256 digests and a content-addressed pack digest; it does not modify learning or research records.
+
+An import requires `confirm: true` and `expected_sha256` equal to that preview digest. `research_learning_import` and `POST /v1/research/learning/import` retrieve the current, project-scoped passages again, verify the pack and body digests, then transfer bounded provenance-labelled plain text into the Learning service's canonical `ingest_source_text` operation. Changed or unverifiable evidence is rejected. The established learning store deduplicates identical source material and retains auditable source spans for later independent extraction.
+
+This explicit transfer **does not generate or approve propositions, evaluate responses, establish mastery, or alter assessment records**. The project research and learner mastery databases remain distinct. Browser owner sessions require the usual CSRF and allowed-Origin protections; MCP calls require ordinary bearer authorization.
