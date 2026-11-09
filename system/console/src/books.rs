@@ -38,6 +38,26 @@ pub struct BookRequest {
     pub revision: i32,
 }
 
+#[derive(Clone, Debug, Default, Deserialize, PartialEq)]
+#[serde(default)]
+struct LendingOption {
+    provider: String,
+    status: String,
+    r#match: String,
+    edition_id: String,
+    work_id: String,
+    provider_url: String,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, PartialEq)]
+#[serde(default)]
+struct LendingResult {
+    isbn: String,
+    source: String,
+    options: Vec<LendingOption>,
+    note: String,
+}
+
 fn encode(value: &str) -> String {
     value.as_bytes().iter().map(|byte| {
         if byte.is_ascii_alphanumeric() || matches!(*byte, b'-' | b'.' | b'_' | b'~') {
@@ -53,6 +73,8 @@ pub fn Books(csrf: String) -> Element {
     let mut phrase = use_signal(String::new);
     let mut submitted = use_signal(String::new);
     let mut request_format = use_signal(|| "ebook".to_owned());
+    let mut isbn = use_signal(String::new);
+    let mut submitted_isbn = use_signal(String::new);
     let mut notice = use_signal(String::new);
     let mut error = use_signal(String::new);
     let mut busy = use_signal(|| false);
@@ -66,6 +88,15 @@ pub fn Books(csrf: String) -> Element {
             api::get::<SearchResult>(&format!("/v1/books/search?q={}", encode(&query))).await
         }
     });
+    let mut lending = use_resource(move || {
+        let query = submitted_isbn();
+        async move {
+            if query.is_empty() {
+                return Ok(LendingResult::default());
+            }
+            api::get::<LendingResult>(&format!("/v1/books/lending?isbn={}", encode(&query))).await
+        }
+    });
     let mut wishes = use_resource(|| async {
         api::get::<Vec<BookRequest>>("/v1/books/requests").await
     });
@@ -75,7 +106,7 @@ pub fn Books(csrf: String) -> Element {
             title: "Books".to_owned(),
             description: "Find books and maintain a personal reading and acquisition wish list.".to_owned(),
             button { class: "btn btn-outline",
-                onclick: move |_| { results.restart(); wishes.restart(); },
+                onclick: move |_| { results.restart(); wishes.restart(); lending.restart(); },
                 Icon { name: "refresh".to_owned() }
                 "Refresh"
             }
@@ -175,6 +206,78 @@ pub fn Books(csrf: String) -> Element {
                                     }
                                 }
                             }
+                        }
+                    }
+                }
+            }
+        }
+        section { class: "card",
+            div { class: "card-header",
+                h2 { class: "card-title", "Licensed reading and borrowing" }
+                p { class: "card-description",
+                    "Check an exact ISBN for provider-managed reading or loan options. Your library account and borrowing decisions remain with the provider."
+                }
+            }
+            div { class: "card-body stack",
+                form {
+                    class: "book-search-controls",
+                    onsubmit: move |event| {
+                        event.prevent_default();
+                        submitted_isbn.set(isbn().trim().to_owned());
+                    },
+                    label { class: "form-row",
+                        "ISBN-10 or ISBN-13"
+                        input {
+                            class: "field",
+                            value: "{isbn}",
+                            placeholder: "9780140328721",
+                            required: true,
+                            oninput: move |event| isbn.set(event.value()),
+                        }
+                    }
+                    button { class: "btn btn-outline", type: "submit", "Check availability" }
+                }
+                match lending.cloned() {
+                    None => rsx! { Loading {} },
+                    Some(Err(message)) => rsx! { Notice { message } },
+                    Some(Ok(availability)) => rsx! {
+                        if !availability.isbn.is_empty() {
+                            p { class: "small muted",
+                                "Current provider results for ISBN {availability.isbn}."
+                            }
+                            if availability.options.is_empty() {
+                                Empty {
+                                    title: "No online reading match".to_owned(),
+                                    description: "This ISBN has no matching reading option reported by Open Library. Check the book's catalog record for other editions.".to_owned()
+                                }
+                            } else {
+                                div { class: "book-list",
+                                    for (index, option) in availability.options.iter().enumerate() {
+                                        article { class: "book-entry", key: "{index}",
+                                            div { class: "book-description",
+                                                strong { "{option.provider} · {option.status}" }
+                                                span { class: "small muted",
+                                                    "Edition match: {option.r#match}"
+                                                }
+                                                if !option.edition_id.is_empty() {
+                                                    span { class: "small muted",
+                                                        "Edition: {option.edition_id}"
+                                                    }
+                                                }
+                                                if !option.provider_url.is_empty() {
+                                                    a {
+                                                        href: "{option.provider_url}",
+                                                        target: "_blank",
+                                                        rel: "noopener noreferrer",
+                                                        "Open provider to read or borrow"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            p { class: "small muted", "{availability.note}" }
                         }
                     }
                 }
