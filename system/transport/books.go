@@ -60,6 +60,7 @@ func (s *Server) bookRoutes(w http.ResponseWriter,r *http.Request){
 func (s *Server) bookTool(ctx context.Context,name string,raw json.RawMessage)(any,error){
  var args struct {
   Query string `json:"query"`
+  ISBN string `json:"isbn"`
   Status string `json:"status"`
   ID string `json:"id"`
   ExpectedRevision int `json:"expected_revision"`
@@ -72,7 +73,7 @@ func (s *Server) bookTool(ctx context.Context,name string,raw json.RawMessage)(a
   return s.bookCatalog.Search(ctx,args.Query)
  case "book_lending":
   if s.bookCatalog==nil{return nil,errors.New("book lending discovery is not configured")}
-  return s.bookCatalog.FindReading(ctx,args.Query)
+  return s.bookCatalog.FindReading(ctx,args.ISBN)
  case "book_request_list":
   return s.db.ListBookRequests(args.Status),nil
  case "book_request_add":
