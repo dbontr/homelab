@@ -8,6 +8,7 @@ import (
  "net/http/httptest"
  "strings"
  "testing"
+ "github.com/dbontr/homelab-new/system/store"
 
  "github.com/dbontr/homelab-new/system/agentflow"
 )
@@ -58,4 +59,26 @@ func TestUntrustedModelPlanCannotExpandPrivileges(t *testing.T){
    if err==nil{t.Fatal("untrusted model gained privilege")}
   })
  }
+}
+
+func TestPlanOutputDoesNotDiscloseCredentialOrRunPrivateReads(t *testing.T){
+ server,_,_:=flowFixture(t)
+ model:=httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){
+  var request struct{Messages []struct{Content string `json:"content"`} `json:"messages"`}
+  if err:=json.NewDecoder(r.Body).Decode(&request);err!=nil{t.Fatal(err)}
+  for _,message:=range request.Messages{
+   if strings.Contains(message.Content,"private-health-secret"){t.Fatal("private data sent to model")}
+  }
+  output:=`{"steps":[{"id":"research","action":"research_search","query":"mechanics"}]}`
+  _=json.NewEncoder(w).Encode(map[string]any{"choices":[]any{map[string]any{"finish_reason":"stop","message":map[string]any{"content":output}}}})
+ }))
+ defer model.Close()
+ planner,err:=agentflow.NewModelAuthor(model.URL+"/v1/chat/completions","planner-test","")
+ if err!=nil{t.Fatal(err)}
+ server.SetCapabilityPlanner(planner)
+ _,err=server.db.AddTask(store.TaskInput{Title:"private-health-secret",Links:[]string{"homelab:project:study"}})
+ if err!=nil{t.Fatal(err)}
+ proposed,err:=server.proposeCapabilityWorkflow(context.Background(),CapabilityPlanInput{Project:"study",Objective:"Find mechanics research"})
+ if err!=nil{t.Fatal(err)}
+ if !proposed.RequiresOwnerSubmission||proposed.Program.PersonalRead{t.Fatal("model inferred personal read authorization")}
 }

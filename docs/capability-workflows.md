@@ -89,6 +89,8 @@ authorized dependency plan. It does not yet give a language model unattended
 authority to invent new capability operations or change personal records.
 It does not supersede project-owned learning, health, recipe, or media logic.
 
+The root `scripts/verify-offline.sh --all` checks Go tests, race tests, vet and all application commands, Rust formatting/tests/WASM compilation, Nix flake checks, enrolled NixOS derivation evaluation, and core Nix package builds. The script performs no activation or release promotion. Each source module requires its toolchain and dependencies to be cached for offline execution.
+
 Prior to service activation, verify every modified Go module, Rust/WASM build,
 Nix evaluation, controller-side project grants, restart recovery, negative
 authorization tests, and service endpoints. A successful read-only workflow
