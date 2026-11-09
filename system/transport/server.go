@@ -337,7 +337,7 @@ func(s *Server)localTools()[]map[string]any{
   tool("task_review","Inspect recorded deadlines, prerequisites and missing estimates without interpreting absent logs as neglect",map[string]any{"horizon_days":prop("integer")}),
   tool("activity_recent","List confirmed personal activity from canonical records, without fabricating unobserved actions",map[string]any{"limit":prop("integer")}),
   tool("workflow_plan","Propose a model-generated dependency plan for owner review without execution",map[string]any{"project":prop("string"),"objective":prop("string"),"personal_read":prop("boolean")},"project","objective"),
-  tool("workflow_submit","Submit an owner-scoped project workflow composed of approved read-only capability actions",map[string]any{"project":prop("string"),"objective":prop("string"),"personal_read":prop("boolean"),"steps":map[string]any{"type":"array","items":prop("object")}},"project","objective","steps"),
+  tool("workflow_submit","Submit a scoped workflow; task creation requires explicit personal_write consent",map[string]any{"project":prop("string"),"objective":prop("string"),"personal_read":prop("boolean"),"personal_write":prop("boolean"),"auto_replan":prop("boolean"),"share_project_evidence":prop("boolean"),"steps":map[string]any{"type":"array","items":prop("object")}},"project","objective","steps"),
   tool("workflow_list","List owner-scoped workflow status",map[string]any{}),
   tool("workflow_get","Inspect confirmed stage results and status",map[string]any{"id":prop("string")},"id"),
   tool("workflow_cancel","Cancel a revision-matched workflow",map[string]any{"id":prop("string"),"revision":prop("integer")},"id","revision"),

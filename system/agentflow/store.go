@@ -58,6 +58,7 @@ type Workflow struct {
 	PlanError string `json:"plan_error,omitempty"`
 	Objective string `json:"objective,omitempty"`
 	PersonalRead bool `json:"personal_read,omitempty"`
+	PersonalWrite bool `json:"personal_write,omitempty"`
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	Deadline time.Time `json:"deadline,omitempty"`
 	Cleanup CleanupRecord `json:"cleanup,omitempty"`

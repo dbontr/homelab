@@ -30,6 +30,7 @@ type CapabilityProgram struct {
     Project string `json:"project"`
     Objective string `json:"objective"`
     PersonalRead bool `json:"personal_read,omitempty"`
+    PersonalWrite bool `json:"personal_write,omitempty"`
     AutoReplan bool `json:"auto_replan,omitempty"`
     ShareProjectEvidence bool `json:"share_project_evidence,omitempty"`
     Steps []CapabilityStage `json:"steps"`
@@ -51,6 +52,7 @@ type CapabilityWorkflow struct {
     Status string `json:"status"`
     Replans int `json:"replans,omitempty"`
     PlanError string `json:"plan_error,omitempty"`
+    PersonalWrite bool `json:"personal_write,omitempty"`
     CreatedAt time.Time `json:"created_at"`
     Deadline time.Time `json:"deadline"`
     Steps []CapabilityStepResult `json:"steps"`
@@ -99,7 +101,7 @@ func validCapabilityDay(day string)bool{
 func summarizeCapabilityWorkflow(w agentflow.Workflow) CapabilityWorkflow {
     summary:=CapabilityWorkflow{
         ID:w.ID,Project:w.Project,Objective:w.Objective,Revision:w.Revision,
-        CreatedAt:w.CreatedAt,Deadline:w.Deadline,Replans:w.Replans,PlanError:w.PlanError,
+        CreatedAt:w.CreatedAt,Deadline:w.Deadline,Replans:w.Replans,PlanError:w.PlanError,PersonalWrite:w.PersonalWrite,
         Steps:make([]CapabilityStepResult,0,len(w.Steps)),
     }
     success:=true
@@ -145,12 +147,12 @@ func (s *Server) submitCapabilityWorkflow(ctx context.Context,program Capability
     if _,err:=rand.Read(token[:]);err!=nil{return CapabilityWorkflow{},err}
     w:=agentflow.Workflow{
         ID:hex.EncodeToString(token[:]),Project:program.Project,Objective:strings.TrimSpace(program.Objective),
-        PersonalRead:program.PersonalRead,CapabilityPlan:true,AutoReplan:program.AutoReplan,
+        PersonalRead:program.PersonalRead,PersonalWrite:program.PersonalWrite,CapabilityPlan:true,AutoReplan:program.AutoReplan,
         ShareProjectEvidence:program.ShareProjectEvidence,Deadline:time.Now().Add(30*time.Minute),
         Steps:make([]agentflow.Step,0,len(program.Steps)),
     }
     for _,stage:=range program.Steps {
-        if err:=validCapabilityStage(stage,program.PersonalRead);err!=nil{return CapabilityWorkflow{},err}
+        if err:=validSubmittedCapabilityStage(stage,program.PersonalRead,program.PersonalWrite);err!=nil{return CapabilityWorkflow{},err}
         input,_:=json.Marshal(struct{
             Query string `json:"query,omitempty"`
             Limit int `json:"limit,omitempty"`
@@ -191,9 +193,10 @@ func (s *Server) capabilityWorkflows()([]CapabilityWorkflow,error) {
 
 // A capability workflow only calls an enumerated read operation. The owner
 // cannot smuggle arbitrary MCP names, mutation arguments, or privileged grants.
-func (s *Server) executeCapabilityRead(ctx context.Context,w agentflow.Workflow,step agentflow.Claim)(any,error) {
+func (s *Server) executeCapabilityStep(ctx context.Context,w agentflow.Workflow,step agentflow.Claim)(any,error) {
     var input struct{Query string `json:"query"`;Limit int `json:"limit"`}
     if err:=json.Unmarshal(step.Input,&input);err!=nil{return nil,err}
+    if step.Kind=="task_create"{return s.executeAuthorizedTaskCreation(ctx,w,step,input.Query,input.Limit)}
     if err:=validCapabilityStage(CapabilityStage{ID:step.StepID,Action:step.Kind,Query:input.Query,Limit:input.Limit},w.PersonalRead);err!=nil{return nil,err}
     switch step.Kind {
     case "project_context":
@@ -317,7 +320,7 @@ func (d capabilityDispatcher) Dispatch(ctx context.Context,claim agentflow.Claim
     w,err:=d.server.workflows.Get(claim.WorkflowID)
     if err!=nil{return nil,err}
     if w.Cancelled{return nil,agentflow.ErrAgentRejected}
-    result,err:=d.server.executeCapabilityRead(ctx,w,claim)
+    result,err:=d.server.executeCapabilityStep(ctx,w,claim)
     if err!=nil{return nil,err}
     encoded,err:=json.Marshal(result)
     if err!=nil{return nil,err}
@@ -336,8 +339,8 @@ func (s *Server) advanceCapabilityWorkflow(ctx context.Context,id string,maxStep
     return nil
 }
 
-// Autonomous progression is restricted to the owner's persisted read-only plan.
-// Mutations and new model-generated actions require a separately authorized run.
+// Model-authored stages remain read-only. Exact owner-submitted personal task
+// creation requires separately recorded write consent at submission.
 func (s *Server) StartWorkflowScheduler(ctx context.Context) {
     if s.workflows==nil{return}
     go func() {
