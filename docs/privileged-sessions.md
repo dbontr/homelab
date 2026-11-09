@@ -92,7 +92,7 @@ The Compute controller accepts trusted deployment settings `PWM_VAULT_URL`, `PWM
 
 The Helm Compute controller supports `controller.vault.enabled` with an approved HTTPS endpoint, expected server name, CA certificate Secret, client identity Secret, and provider aliases. These Kubernetes Secrets contain only mTLS *bootstrap trust and client key material*; they do not contain GitHub or GitLab PATs. A configured provider vault alias cannot coexist with a separately mounted PAT for the same provider. Operators should ensure that client certificate identity is exclusive to this service and that the private security listener is never published through the public MCP route.
 
-Central authorization and central **storage** do not mean that every secret can have one physical copy. The vault's own encryption key, password verifier, TOTP seed, mTLS private keys, worker bootstrap credentials, backup recovery keys and other independent trust roots necessarily remain separately protected. Existing non-PAT software credentials still need dedicated authority mappings or migration; no automatic inventory reconciliation or Kubernetes Secret cleanup is implied by enabling the PAT clients. Credential delivery is a trusted-service operation, not a generic model-controlled secret read API.
+Central authorization and central **storage** do not mean that every secret can have one physical copy. The vault's own encryption key, password verifier, TOTP seed, mTLS private keys, worker bootstrap credentials, backup recovery keys and other independent trust roots necessarily remain separately protected. Other integrations require their own explicit credential-grant mappings, and configuring vault access does not reconcile Kubernetes Secrets or automatically remove legacy token files. Credential delivery is a trusted-service operation, not a generic model-controlled secret read API.
 
 ## Credential consumers and authority
 
@@ -105,6 +105,14 @@ Engineering uses `services.homelabEngineering.vault`, `computeVaultAlias`, and `
 Compute uses `services.workspaceMcp.vault` for GitHub, GitLab, or consented embeddings, with `githubAlias`, `gitlabAlias`, and `embeddingsAlias` independently granted. Its NixOS release renders only alias and certificate Secret names into the controller chart. The embedding client requests a credential only on an explicitly permitted text-embedding request. A credential failure never reroutes the text to a different provider.
 
 Every service still needs independently protected bootstrap material: the vault unlock key, mTLS client private key, TLS CA, service identity, local console verifier, and scoped worker credentials. Those should not be transferred through model input, application logs, or repository content. The root vault is not an unrestricted secret accessor, and no process may obtain another service's alias merely by changing a tool argument.
+
+## Executor credential use
+
+The independent `homelab-executord` holds an exact, operator-configured allowlist for Workspace projects, workers, images, software, and packages. `services.homelabExecutor.workspace` requires one credential authority: an owner-protected `rootTokenFile`, or a `vaultAlias` bound to the executor's remote-authorization client certificate. The alias mode requires `services.homelabExecutor.authorization.remote.enable`, which verifies owner decisions over pinned mutual TLS. The gateway never receives this credential.
+
+Before a Workspace operation, the executor validates the local host, operation, arguments, and resource allowlist. It asks the independent security service to authorize the exact canonical operation. The executor then writes a durable audit-start record. Only after these steps may the Workspace bridge resolve the current credential and invoke the fixed downstream tool. A revoked or rotated credential takes effect on the next request; an unreachable vault, absent credential, or ambiguous credential authority causes denial. An outcome audit record follows the downstream call.
+
+The executor does not provide a generic HTTP proxy, a general command runner, or credential-enumeration operations. The remote authorization mTLS identity must have an explicit service credential grant for the exact `vaultAlias`; the vault does not infer a credential from the requested Workspace operation. Credentials for bootstrap TLS identities, Nix activation and Kubernetes access remain protected independently.
 
 ## Kubernetes deployment operations
 

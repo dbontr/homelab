@@ -273,7 +273,7 @@ in
         HOMELAB_PROMETHEUS_URL = cfg.monitoring.prometheusURL;
         HOMELAB_LOKI_URL = cfg.monitoring.lokiURL;
       } // lib.optionalAttrs (cfg.capabilityModel.routes != []) {
-        HOMELAB_CAPABILITY_MODEL_ROUTES_FILE = pkgs.writeText "eminence-model-routes.json" (builtins.toJSON {
+        HOMELAB_CAPABILITY_MODEL_ROUTES_FILE = pkgs.writeText "homelab-model-routes.json" (builtins.toJSON {
           routes = lib.imap0 (index: route: {
             name = route.id;
             purpose = route.purpose;

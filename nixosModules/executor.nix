@@ -94,6 +94,11 @@ in
         default = null;
         description = "Protected controller root token loaded only into the privileged executor.";
       };
+      vaultAlias = lib.mkOption {
+        type = lib.types.str;
+        default = "";
+        description = "Owner-vault alias granted only to the independent executor TLS identity.";
+      };
       projects = lib.mkOption { type = lib.types.listOf lib.types.str; default = []; };
       workers = lib.mkOption { type = lib.types.listOf lib.types.str; default = []; };
       images = lib.mkOption { type = lib.types.listOf lib.types.str; default = []; };
@@ -159,11 +164,18 @@ in
       }
       {
         assertion = !cfg.workspace.enable ||
-          (cfg.workspace.endpoint != "" && cfg.workspace.rootTokenFile != null &&
+          (cfg.workspace.endpoint != "" &&
+           ((cfg.workspace.rootTokenFile != null) != (cfg.workspace.vaultAlias != "")) &&
+           (cfg.workspace.vaultAlias == "" || cfg.authorization.remote.enable) &&
            (cfg.workspace.projects != [] || cfg.workspace.workers != [] ||
             cfg.workspace.images != [] || cfg.workspace.software != [] ||
             cfg.workspace.packages != []));
-        message = "Workspace executor requires a fixed endpoint, protected controller credential and explicit resource allowlist.";
+        message = "Workspace executor requires one credential authority, independent authorization and explicit allowlisted resources.";
+      }
+      {
+        assertion = cfg.workspace.enable ||
+          (cfg.workspace.rootTokenFile == null && cfg.workspace.vaultAlias == "");
+        message = "Disabled Workspace executor may not carry privileged credentials.";
       }
       {
         assertion = !cfg.kubernetes.enable ||
@@ -228,7 +240,6 @@ in
         HOMELAB_EXECUTOR_REMOTE_CA = "/run/credentials/homelab-executord.service/remote-ca";
         HOMELAB_EXECUTOR_REMOTE_COORDINATOR = cfg.remote.coordinatorDNS;
       } // lib.optionalAttrs cfg.workspace.enable {
-        HOMELAB_EXECUTOR_WORKSPACE_TOKEN = "/run/credentials/homelab-executord.service/workspace-token";
         HOMELAB_EXECUTOR_WORKSPACE_POLICY_FILE = pkgs.writeText "homelab-workspace-policy.json" (builtins.toJSON {
           Endpoint = cfg.workspace.endpoint;
           Projects = cfg.workspace.projects;
@@ -237,6 +248,10 @@ in
           Software = cfg.workspace.software;
           Packages = cfg.workspace.packages;
         });
+      } // lib.optionalAttrs (cfg.workspace.enable && cfg.workspace.rootTokenFile != null) {
+        HOMELAB_EXECUTOR_WORKSPACE_TOKEN = "/run/credentials/homelab-executord.service/workspace-token";
+      } // lib.optionalAttrs (cfg.workspace.enable && cfg.workspace.vaultAlias != "") {
+        HOMELAB_EXECUTOR_WORKSPACE_VAULT_ALIAS = cfg.workspace.vaultAlias;
       } // lib.optionalAttrs cfg.kubernetes.enable {
         HOMELAB_EXECUTOR_KUBECTL = "${pkgs.kubectl}/bin/kubectl";
         HOMELAB_EXECUTOR_KUBECONFIG = "/run/credentials/homelab-executord.service/kubeconfig";
@@ -261,7 +276,7 @@ in
           "auth-ca:${cfg.authorization.remote.serverCAFile}"
         ] ++ lib.optionals cfg.kubernetes.enable [
           "kubeconfig:${cfg.kubernetes.kubeconfigFile}"
-        ] ++ lib.optionals cfg.workspace.enable [
+        ] ++ lib.optionals (cfg.workspace.enable && cfg.workspace.rootTokenFile != null) [
           "workspace-token:${cfg.workspace.rootTokenFile}"
         ] ++ lib.optionals cfg.remote.enable [
           "remote-cert:${cfg.remote.certificateFile}"
