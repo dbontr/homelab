@@ -103,8 +103,17 @@ func main() {
 	go func() {
 		failures <- manager.ServeSockets(ctx, filepath.Join(dir, "owner.sock"), filepath.Join(dir, "client.sock"), gid)
 	}()
- if os.Getenv("HOMELAB_SECURITY_OAUTH_PROVIDERS")!=""{
-  go func(){failures<-manager.ServeOAuthCallback(ctx)}()
+ if managerOAuth:=os.Getenv("HOMELAB_SECURITY_OAUTH_PROVIDERS");managerOAuth!=""{
+  // Device-code-only providers do not require a TCP callback listener.
+  // The callback is enabled only for an explicitly configured browser flow.
+  var providers []security.Provider
+  if err:=json.Unmarshal([]byte(managerOAuth),&providers);err!=nil{log.Fatal("invalid OAuth providers")}
+  for _,provider:=range providers{
+   if provider.RedirectURL!=""{
+    go func(){failures<-manager.ServeOAuthCallback(ctx)}()
+    break
+   }
+  }
  }
 	if origin := os.Getenv("HOMELAB_SECURITY_BROWSER_ORIGIN"); origin != "" {
 		if verifier==nil{log.Fatal("browser login requires independent Access identity verification")}
