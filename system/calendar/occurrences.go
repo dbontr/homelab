@@ -3,6 +3,7 @@ package calendar
 import (
  "errors"
  "fmt"
+ "regexp"
  "sort"
  "strconv"
  "strings"
@@ -270,7 +271,39 @@ func exclusionSet(event Event, loc *time.Location)(map[string]bool,error){
  return excludes,nil
 }
 
+var calendarDurationPattern=regexp.MustCompile(`^P(?:(\d+)W|(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?)$`)
+
+// RFC 5545 nominal days and weeks preserve local wall-clock time across DST.
+// Event durations must be positive, bounded, and unambiguous.
+func parseCalendarDuration(raw string)(int,time.Duration,error){
+ bad:=errors.New("invalid calendar event duration")
+ if len(raw)>32{return 0,0,bad}
+ parts:=calendarDurationPattern.FindStringSubmatch(raw)
+ if parts==nil{return 0,0,bad}
+ numbers:=[5]int{}
+ anyField:=false
+ for i:=1;i<len(parts);i++{
+  if parts[i]==""{continue}
+  anyField=true
+  n,err:=strconv.Atoi(parts[i])
+  if err!=nil||n<0||n>100000{return 0,0,bad}
+  numbers[i-1]=n
+ }
+ if !anyField||(strings.Contains(raw,"T")&&parts[3]==""&&parts[4]==""&&parts[5]==""){
+  return 0,0,bad
+ }
+ days:=numbers[0]*7+numbers[1]
+ seconds:=int64(numbers[2])*3600+int64(numbers[3])*60+int64(numbers[4])
+ if days>366||int64(days)*86400+seconds>366*86400||
+  (days==0&&seconds==0){return 0,0,bad}
+ return days,time.Duration(seconds)*time.Second,nil
+}
+
 func occurrenceEnd(event Event,at time.Time,length time.Duration,calendarDays int)time.Time{
+ if event.Duration!=""{
+  days,clock,_:=parseCalendarDuration(event.Duration)
+  return at.AddDate(0,0,days).Add(clock)
+ }
  if len(event.Start)==8&&calendarDays>0{return at.AddDate(0,0,calendarDays)}
  return at.Add(length)
 }
@@ -325,7 +358,19 @@ func Expand(feed Feed,start,end time.Time)(Expansion,error){
   endZone:=event.EndTimeZone
   if endZone==""{endZone=event.TimeZone}
   last,err:=ParseInstant(event.End,endZone,start.Location())
-  if event.End==""&&len(event.Start)==8 {
+  if event.Duration!=""{
+   if event.End!=""{
+    out.Limitations=append(out.Limitations,"Calendar event specifies both DTEND and DURATION")
+    continue
+   }
+   days,clock,durationErr:=parseCalendarDuration(event.Duration)
+   if durationErr!=nil||(len(event.Start)==8&&clock!=0){
+    out.Limitations=append(out.Limitations,"Calendar event has an unsupported duration")
+    continue
+   }
+   last=first.AddDate(0,0,days).Add(clock)
+   err=nil
+  }else if event.End==""&&len(event.Start)==8{
    // RFC 5545 date-valued VEVENT without DTEND occupies one local day.
    last=first.AddDate(0,0,1)
    err=nil
