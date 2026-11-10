@@ -14,6 +14,10 @@ pub struct ServiceCredentialGrant {
     pub alias: String,
     pub provider: String,
     pub handle: String,
+    #[serde(default)]
+    pub revision: Option<String>,
+    #[serde(default)]
+    pub expires_at: Option<String>,
 }
 
 fn valid_name(name: &str) -> bool {
@@ -28,6 +32,11 @@ fn valid_dns(name: &str) -> bool {
         && !name.bytes().any(|c| {
             matches!(c, b'/' | b'?' | b'#' | b':' | b'@' | b'\\' | b' ' | b'\n' | b'\r' | b'\t' | 0)
         })
+}
+
+fn valid_revision(value: &str) -> bool {
+    value.len() == 64 && value.bytes()
+        .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
 }
 
 fn valid_handle(handle: &str) -> bool {
@@ -51,8 +60,15 @@ impl VerifiedServiceIdentity {
     }
 }
 
+struct BoundGrant {
+    provider: String,
+    handle: String,
+    revision: String,
+    expires_at: Option<i64>,
+}
+
 pub(crate) struct ServiceCredentialPolicy {
-    entries: BTreeMap<(String, String), (String, String)>,
+    entries: BTreeMap<(String, String), BoundGrant>,
 }
 
 impl ServiceCredentialPolicy {
@@ -68,11 +84,28 @@ impl ServiceCredentialPolicy {
                 || !valid_name(&grant.alias)
                 || !valid_name(&grant.provider)
                 || !valid_handle(&grant.handle)
-                || vault.revision(&grant.handle, &grant.provider).is_err()
-                || entries
-                    .insert((grant.client_dns, grant.alias), (grant.provider, grant.handle))
-                    .is_some()
             {
+                return Err(Error::InvalidConfiguration);
+            }
+            let revision = vault.revision(&grant.handle, &grant.provider)
+                .map_err(|_| Error::InvalidConfiguration)?;
+            if grant.revision.as_deref().is_some_and(|expected| expected != revision)
+                || (grant.revision.is_some() && !valid_revision(&revision))
+            {
+                return Err(Error::InvalidConfiguration);
+            }
+            let expires_at = grant.expires_at.as_deref().map(|value| {
+                chrono::DateTime::parse_from_rfc3339(value)
+                    .map(|time| time.timestamp())
+                    .map_err(|_| Error::InvalidConfiguration)
+            }).transpose()?;
+            if expires_at.is_some_and(|deadline| deadline <= chrono::Utc::now().timestamp()) {
+                return Err(Error::InvalidConfiguration);
+            }
+            let bound = BoundGrant {
+                provider: grant.provider, handle: grant.handle, revision, expires_at,
+            };
+            if entries.insert((grant.client_dns, grant.alias), bound).is_some() {
                 return Err(Error::InvalidConfiguration);
             }
         }
@@ -89,11 +122,14 @@ impl ServiceCredentialPolicy {
         if !valid_name(alias) {
             return Err(Error::Unauthorized);
         }
-        let (provider, handle) = self
+        let grant = self
             .entries
             .get(&(peer.dns.clone(), alias.into()))
             .ok_or(Error::Unauthorized)?;
-        vault.with_secret(handle, provider, None, use_secret)
+        if grant.expires_at.is_some_and(|deadline| chrono::Utc::now().timestamp() >= deadline) {
+            return Err(Error::Unauthorized);
+        }
+        vault.with_secret(&grant.handle, &grant.provider, Some(&grant.revision), use_secret)
     }
 }
 
@@ -123,6 +159,8 @@ mod tests {
             alias: "provider_token".into(),
             provider: "research".into(),
             handle: handle.id.clone(),
+            revision: None,
+            expires_at: None,
         }], &vault).unwrap();
         let allowed = VerifiedServiceIdentity::from_authenticated_peer("worker.internal".into()).unwrap();
         let wrong = VerifiedServiceIdentity::from_authenticated_peer("other.internal".into()).unwrap();
@@ -144,6 +182,8 @@ mod tests {
                 alias: "provider_token".into(),
                 provider: "other".into(),
                 handle: handle.id.clone(),
+            revision: None,
+            expires_at: None,
             }], &vault),
             Err(Error::InvalidConfiguration)
         ));
