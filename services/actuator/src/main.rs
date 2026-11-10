@@ -1,17 +1,17 @@
 use std::collections::HashSet;
 use std::env;
 use std::fs;
-use std::io;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::process::{Command, Stdio};
 
 const POLICY_MAX_BYTES: usize = 64 * 1024;
-const SENSITIVE_SERVICES: [&str; 23] = [
+const SENSITIVE_SERVICES: [&str; 25] = [
     "network", "firewall", "router", "wireguard", "vpn", "dns",
     "nftables", "iptables", "nginx", "cloudflared", "pihole",
     "tailscale", "systemd", "docker", "k3s", "kube", "jellyfin",
     "moonfin", "ssh", "security", "executor", "fleet", "prometheus",
+    "loki", "alertmanager",
 ];
 
 #[derive(Debug)]
