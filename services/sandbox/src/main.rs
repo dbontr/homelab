@@ -1,4 +1,6 @@
 //! Revision-bound, network-isolated verification of approved workspaces.
+mod contained;
+
 use std::env;
 use std::fs;
 use std::os::unix::fs::MetadataExt;
@@ -131,6 +133,7 @@ fn main() {
     let args: Vec<String> = env::args().skip(1).collect();
     let result = match args.as_slice() {
         [verb, id, revision, action] if verb == "run" => execute(id, revision, action),
+        [verb, repository, revision, action] if verb == "run-contained" => contained::run(repository, revision, action),
         _ => Err("usage: homelab-engineering-sandbox run WORKSPACE_ID GIT_SHA ACTION"),
     };
     if let Err(message) = result {
