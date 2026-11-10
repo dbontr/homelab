@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use chrono::{DateTime, SecondsFormat, Utc};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::access::AccessVerifier;
@@ -20,7 +20,7 @@ const CONFIRMATION_SECONDS: i64 = 5 * 60;
 const CONFIRMED_SECONDS: i64 = 2 * 60;
 const MAX_PENDING: usize = 64;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct OperationPolicy {
     pub operation: String,
     pub targets: Vec<String>,
