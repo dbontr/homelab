@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
@@ -114,5 +115,45 @@ func TestExecutorClientRejectsAmbiguousSuccess(t *testing.T) {
 				t.Fatalf("unexpected client decision: %+v", result)
 			}
 		})
+	}
+}
+
+
+func TestWorkspaceAndKubernetesSubmissionsDoNotClaimCompletion(t *testing.T) {
+	var workspaceCalls, kubernetesCalls int
+	workspace, done := testWorkspacePolicy(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		workspaceCalls++
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"content":[]}}`))
+	}))
+	defer done()
+	executor, err := New(Config{
+		Host: "saturn", Systemctl: "/usr/bin/systemctl",
+		Kubernetes: &KubernetesPolicy{
+			Binary: "/usr/bin/kubectl",
+			Kubeconfig: "/run/credentials/homelab-executord.service/kubeconfig",
+			Namespaces: map[string][]string{"apps": {"worker"}},
+			MaxReplicas: 3,
+		},
+		Workspace: workspace, Auth: &fakeAuth{decision: security.Authorization{Allowed: true}},
+		Releases: &fakeRelease{}, Audit: testExecutorAudit(t),
+		Run: func(_ context.Context, command string, args ...string) error {
+			if command != "/usr/bin/kubectl" { t.Fatalf("unexpected executable %q", command) }
+			kubernetesCalls++
+			return nil
+		},
+	})
+	if err != nil { t.Fatal(err) }
+	for _, tc := range []struct { operation, arguments string }{
+		{"infrastructure__workspace_stop", `{"host":"saturn","project_id":"research","workspace_id":"ws1"}`},
+		{"cluster__deployment_scale", `{"host":"saturn","namespace":"apps","deployment":"worker","replicas":2}`},
+	} {
+		result, err := executor.Execute(context.Background(), tc.operation, "saturn", json.RawMessage(tc.arguments))
+		if err != nil || !result.Allowed || result.State != ExecutionAccepted || result.AuditID == "" {
+			t.Fatalf("submitted %s reported a final state: %+v, %v", tc.operation, result, err)
+		}
+	}
+	if workspaceCalls != 1 || kubernetesCalls != 1 {
+		t.Fatalf("unexpected submitted operations: workspace %d, Kubernetes %d", workspaceCalls, kubernetesCalls)
 	}
 }
