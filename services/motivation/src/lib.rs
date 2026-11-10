@@ -95,6 +95,8 @@ pub enum Strategy {
     Challenge,
     Accountability,
     Reflection,
+    OpportunityCost,
+    Commitment,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -117,12 +119,14 @@ pub struct SuggestRequest {
     pub question: String,
 }
 
-const STRATEGIES: [Strategy; 5] = [
+const STRATEGIES: [Strategy; 7] = [
     Strategy::Outcome,
     Strategy::Inquiry,
     Strategy::Challenge,
     Strategy::Accountability,
     Strategy::Reflection,
+    Strategy::OpportunityCost,
+    Strategy::Commitment,
 ];
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -533,6 +537,14 @@ fn format_message(p: &Profile, strategy: Strategy, question: &str) -> String {
         Strategy::Reflection => format!(
             "Your aim is: {}. Choose one concrete result you can establish today, then decide what evidence will count.",
             p.outcome
+        ),
+        Strategy::OpportunityCost => format!(
+            "Your chosen outcome is: {}. If you postpone today's next step, which opportunity would you forgo? Name the tradeoff without exaggerating it.",
+            p.outcome
+        ),
+        Strategy::Commitment => format!(
+            "You chose the identity: {}. Is that commitment still yours? If so, act on this next step: {}. Otherwise, deliberately revise the commitment.",
+            p.identity, p.next_step
         ),
     };
     let focus = if question.trim().is_empty() { String::new() }

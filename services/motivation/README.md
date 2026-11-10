@@ -22,8 +22,12 @@ Every /v1 route requires the dedicated service token. The service does not accep
 | GET | /v1/motivation/metrics | Read 28-day engagement aggregates |
 | POST | /v1/motivation/dismiss | Dismiss an unresolved intervention without rating it |
 | POST | /v1/motivation/pause | Immediately pause further interventions |
+| POST | /v1/motivation/focus | Begin a bounded, owner-initiated focus commitment |
+| POST | /v1/motivation/focus/end | End a focus commitment with completion or early-exit evidence |
 
 GET /healthz reveals readiness only.
+
+The service also stores bounded focus commitments independently of notifications. It captures the next step and desired outcome as chosen by the owner, allows immediate exit, and records elapsed time without claiming verified learning.
 
 The optional background scheduler creates inbox records only after the owner opts into both interventions and proactive scheduling. It respects quiet hours, cooldown, daily limits, an intervention-free weekday and the unresolved inbox item. It never pushes messages to third parties, edits study records or controls devices.
 

@@ -8,7 +8,7 @@ The owner defines a desired identity, an outcome worth pursuing, a next step, an
 
 ## Interventions
 
-Five strategies are available: outcome anchoring, inquiry, challenge, direct accountability and reflection. The owner can identify the present situation: session start, resistance, distraction, uncertainty or milestone. Initial choices are situation-specific. Subsequent strategy selection uses a bounded upper-confidence-bound heuristic that balances exploration with reported engagement, progress and well-being.
+Seven strategies are available: outcome anchoring, inquiry, challenge, direct accountability, reflection, opportunity-cost contrast and commitment reaffirmation. The owner can identify the present situation: session start, resistance, distraction, uncertainty or milestone. Initial choices are situation-specific. Subsequent strategy selection uses a bounded upper-confidence-bound heuristic that balances exploration with reported engagement, progress and well-being.
 
 The owner chooses guided or direct language. The system uses authentic owner-supplied questions, never invented achievements, fictitious research breakthroughs or moral judgments about missing logs.
 
