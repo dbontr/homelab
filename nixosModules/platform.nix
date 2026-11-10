@@ -176,6 +176,14 @@ in
         message = "The calendar sharing URL belongs to the independent calendar service when enabled.";
       }
       {
+        assertion = !calendarCfg.enable || (
+          calendarCfg.tokenFile != cfg.tokenFile &&
+          calendarCfg.tokenFile != cfg.mcpInterfaceTokenFile &&
+          calendarCfg.tokenFile != cfg.apiInterfaceTokenFile
+        );
+        message = "The calendar service must not reuse platform or external-interface credentials.";
+      }
+      {
         assertion = (cfg.apiInterfaceTokenFile != null || cfg.apiInterfaceWritePaths == []) &&
           (cfg.apiInterfaceTokenFile == null || cfg.apiInterfaceTokenFile != cfg.tokenFile) &&
           (cfg.mcpInterfaceTokenFile == null || cfg.mcpInterfaceTokenFile != cfg.tokenFile) &&
