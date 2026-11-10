@@ -486,8 +486,9 @@ async fn oauth_begin(
         return failure("invalid owner request", StatusCode::BAD_REQUEST);
     };
     let password = Zeroizing::new(factors.password);
+    let totp = Zeroizing::new(factors.totp);
     let owner = shared.with_authority(|auth| {
-        auth.verify_owner_factors(&password, &factors.totp)?;
+        auth.verify_owner_factors(&password, &totp)?;
         auth.local_session_id()
     });
     let Ok(session_id) = owner else {
@@ -512,8 +513,9 @@ async fn oauth_device_begin(
         return failure("invalid owner request", StatusCode::BAD_REQUEST);
     };
     let password = Zeroizing::new(factors.password);
+    let totp = Zeroizing::new(factors.totp);
     let owner = shared.with_authority(|auth| {
-        auth.verify_owner_factors(&password, &factors.totp)?;
+        auth.verify_owner_factors(&password, &totp)?;
         auth.local_session_id()
     });
     let Ok(session_id) = owner else {
@@ -586,8 +588,9 @@ async fn oauth_refresh(
         return failure("explicit refresh confirmation required", StatusCode::BAD_REQUEST);
     }
     let password = Zeroizing::new(input.password);
+    let totp = Zeroizing::new(input.totp);
     let owner = shared.with_authority(|auth| {
-        auth.verify_owner_factors(&password, &input.totp)?;
+        auth.verify_owner_factors(&password, &totp)?;
         auth.local_session_id()
     });
     let Ok(session) = owner else {
