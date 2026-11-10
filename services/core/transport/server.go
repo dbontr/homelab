@@ -150,6 +150,7 @@ func(s *Server) Handler()http.Handler{
  mux.HandleFunc("POST /v1/health/training-sets",s.uiHealthTrainingLog)
  mux.HandleFunc("GET /v1/health/training-progress",s.uiHealthTrainingProgress)
  mux.HandleFunc("POST /v1/health/records",s.uiHealthObservation)
+ mux.HandleFunc("POST /v1/health/reaction-test",s.uiReactionTest)
  mux.HandleFunc("GET /v1/health/goals",s.uiHealthGoals)
  mux.HandleFunc("GET /v1/health/food-proposals",s.uiFoodProposals)
  mux.HandleFunc("POST /v1/health/food-proposals/{id}/confirm",s.uiFoodConfirm)
