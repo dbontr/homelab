@@ -61,6 +61,9 @@
       packages.${defaultSystem}.homelab-executor = import ./packages/executor.nix {
         pkgs = nixpkgs.legacyPackages.${defaultSystem};
       };
+      packages.${defaultSystem}.homelab-actuator = import ./packages/actuator.nix {
+        pkgs = nixpkgs.legacyPackages.${defaultSystem};
+      };
 
       packages.${defaultSystem}.homelab-fleet = import ./packages/fleet.nix {
         pkgs = nixpkgs.legacyPackages.${defaultSystem};

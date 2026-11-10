@@ -29,7 +29,7 @@ The Go module identities are part of the current source and import contracts. Fi
 
 ## High-assurance Rust services
 
-The independent security authority and privileged executor are Rust migration targets. Their existing Go implementations under `services/core/security/` and `services/core/privileged/` remain authoritative until the Rust services pass the same acceptance requirements. A Rust program with an untested policy is not safer merely because it uses Rust.
+The independent security authority and privileged executor are Rust migration targets. A dependency-free Rust actuator provides an exact, second enforcement layer for systemd and Kubernetes mutations when the operator explicitly selects it. The current Go security daemon continues to own authentication, password and TOTP verification, session/confirmation state, credential custody, and independent authorization; it is never replaced by an unverified Rust implementation. Their existing Go implementations under `services/core/security/` and `services/core/privileged/` remain authoritative until the Rust services pass the same acceptance requirements. A Rust program with an untested policy is not safer merely because it uses Rust.
 
 A replacement must preserve all of the following before it can be selected for deployment:
 
