@@ -781,5 +781,5 @@ func (k *Kubernetes) ReconcileStaleJobs(ctx context.Context) error {
 			return err
 		}
 	}
-	return nil
+	return k.reconcileVerificationJobs(ctx)
 }
