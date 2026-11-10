@@ -7,6 +7,7 @@
 - [Go ReverseProxy](https://pkg.go.dev/net/http/httputil#ReverseProxy) — Go project. Used for: response-header policy in the optional MCP and API interfaces.
 - [Go HTTP Transport](https://pkg.go.dev/net/http#Transport) — Go project. Used for: private upstream connection timeouts and response-header size limits.
 - [Linux flock(2)](https://man7.org/linux/man-pages/man2/flock.2.html) — Linux man-pages project. Used for: nonblocking, process-lifetime advisory locks on state resources before opening service stores.
+- [Linux open(2)](https://man7.org/linux/man-pages/man2/open.2.html) — Linux man-pages project. Used for: O_NOFOLLOW descriptor-bound reads of protected interface and executor credential files.
 - [Go archive/zip Package](https://pkg.go.dev/archive/zip) — Go project. Used for: portable recipe bundle generation and bounded ZIP entry reading.
 - [Model Context Protocol Specification](https://modelcontextprotocol.io/specification/2025-06-18) — MCP project; 2025-06-18. Used for: stateless JSON-RPC transport, tool discovery, and tool calls.
 - [RFC 5545: Internet Calendaring and Scheduling Core Object Specification](https://www.rfc-editor.org/rfc/rfc5545) — IETF. Used for: the read-only iCalendar parser; recurrence support is partial.
