@@ -13,6 +13,7 @@ pub mod state;
 pub mod vault;
 pub mod transport;
 pub mod remote;
+pub mod oauth;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Error {

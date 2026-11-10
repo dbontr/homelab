@@ -6,6 +6,8 @@ license = "MIT"
 description = "Independent owner authentication and authorization kernel"
 
 [dependencies]
+reqwest = { version = "0.12.23", default-features = false, features = ["rustls-tls", "json"] }
+url = "2.5.4"
 hyper = { version = "1.7.0", features = ["server", "http1"] }
 tokio-rustls = "0.26.4"
 rustls-pemfile = "2.2.0"

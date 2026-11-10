@@ -33,24 +33,26 @@ const LOCAL_OWNER: &str = "local-operator";
 
 #[derive(Clone)]
 pub struct Shared {
+    pub(crate) oauth: Option<crate::oauth::SharedBroker>,
     authority: Arc<Mutex<Authority>>,
     csrf: Arc<Mutex<BTreeMap<String, Instant>>>,
     browser_origin: Option<String>,
 }
 
 impl Shared {
-    pub fn new(authority: Authority, browser_origin: Option<String>) -> Result<Self, Error> {
+    pub fn new(authority: Authority, browser_origin: Option<String>, oauth: Option<crate::oauth::SharedBroker>) -> Result<Self, Error> {
         if browser_origin.as_ref().is_some_and(|origin| !valid_origin(origin)) {
             return Err(Error::InvalidConfiguration);
         }
         Ok(Self {
+            oauth,
             authority: Arc::new(Mutex::new(authority)),
             csrf: Arc::new(Mutex::new(BTreeMap::new())),
             browser_origin,
         })
     }
 
-    fn with_authority<T>(&self, action: impl FnOnce(&mut Authority) -> T) -> T {
+    pub(crate) fn with_authority<T>(&self, action: impl FnOnce(&mut Authority) -> T) -> T {
         let mut authority = self.authority.lock().unwrap_or_else(|_| std::process::abort());
         action(&mut authority)
     }
@@ -107,7 +109,7 @@ fn owner_assertion(headers: &HeaderMap) -> Result<&str, Response> {
     assertion.ok_or_else(|| protected_status("verified owner identity required", StatusCode::FORBIDDEN))
 }
 
-fn json_input<T: serde::de::DeserializeOwned>(headers: &HeaderMap, raw: &[u8]) -> Result<T, Response> {
+pub(crate) fn json_input<T: serde::de::DeserializeOwned>(headers: &HeaderMap, raw: &[u8]) -> Result<T, Response> {
     if headers.get(header::CONTENT_TYPE).and_then(|value| value.to_str().ok())
         != Some("application/json") || raw.len() > MAX_JSON_BYTES
     {
@@ -302,7 +304,8 @@ async fn operation_client_authorize(State(shared): State<Shared>, headers: Heade
 }
 
 pub fn owner_router(shared: Shared) -> Router {
-    Router::new()
+    let owner = crate::oauth::register_owner_routes(Router::new());
+    owner
         .route("/v1/session", get(session_owner_get).post(session_owner_post).delete(session_owner_delete))
         .route("/v1/confirmations", get(confirmations_owner_get))
         .route("/v1/confirmations/{id}", post(confirmations_owner_post))
