@@ -1,3 +1,6 @@
+mod conditioning;
+pub use conditioning::{Checkin, CheckinInput, EngagementSummary};
+
 use fs2::FileExt;
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File, OpenOptions};
@@ -9,6 +12,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 const MAX_EVENTS: usize = 256;
 const MAX_BYTES: u64 = 2 * 1024 * 1024;
 const COOLDOWN_SECONDS: u64 = 25 * 60;
+const MAX_CHECKINS: usize = 512;
+pub(crate) fn default_cadence() -> u16 { 240 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -22,6 +27,10 @@ pub enum Intensity {
 pub struct Profile {
     pub revision: u64,
     pub enabled: bool,
+    #[serde(default)]
+    pub proactive_enabled: bool,
+    #[serde(default = "default_cadence")]
+    pub cadence_minutes: u16,
     pub goal_id: String,
     pub identity: String,
     pub outcome: String,
@@ -37,12 +46,15 @@ impl Default for Profile {
         Self {
             revision: 0,
             enabled: false,
+            proactive_enabled: false,
+            cadence_minutes: default_cadence(),
             goal_id: String::new(),
             identity: String::new(),
             outcome: String::new(),
             next_step: String::new(),
             intensity: Intensity::Guided,
             daily_limit: 4,
+            proactive_enabled: false, cadence_minutes: 240,
             quiet_start_utc_hour: 0,
             quiet_end_utc_hour: 0,
         }
@@ -54,6 +66,10 @@ impl Default for Profile {
 pub struct ProfileChange {
     pub expected_revision: u64,
     pub enabled: bool,
+    #[serde(default)]
+    pub proactive_enabled: bool,
+    #[serde(default = "default_cadence")]
+    pub cadence_minutes: u16,
     #[serde(default)]
     pub goal_id: String,
     pub identity: String,
@@ -118,6 +134,8 @@ pub struct Intervention {
 pub struct Record {
     pub profile: Profile,
     pub interventions: Vec<Intervention>,
+    #[serde(default)]
+    pub checkins: Vec<Checkin>,
     pub next_id: u64,
 }
 
@@ -126,6 +144,7 @@ impl Default for Record {
         Self {
             profile: Profile::default(),
             interventions: Vec::new(),
+            checkins: Vec::new(),
             next_id: 1,
         }
     }
@@ -254,6 +273,8 @@ impl Engine {
             revision: self.state.profile.revision.checked_add(1)
                 .ok_or(Error::Invalid("profile revision exhausted"))?,
             enabled: change.enabled,
+            proactive_enabled: change.proactive_enabled,
+            cadence_minutes: change.cadence_minutes,
             goal_id: change.goal_id.trim().to_owned(),
             identity: change.identity.trim().to_owned(),
             outcome: change.outcome.trim().to_owned(),
@@ -368,6 +389,7 @@ fn validate_profile(p: &Profile) -> Result<(), Error> {
         return Err(Error::Invalid("invalid goal reference"));
     }
     if p.daily_limit == 0 || p.daily_limit > 8 ||
+        p.cadence_minutes < 60 || p.cadence_minutes > 1440 ||
         p.quiet_start_utc_hour > 23 || p.quiet_end_utc_hour > 23 {
         return Err(Error::Invalid("invalid intervention limits"));
     }
@@ -380,6 +402,8 @@ fn validate_profile(p: &Profile) -> Result<(), Error> {
 fn validate_record(record: &Record) -> Result<(), Error> {
     validate_profile(&record.profile)?;
     if record.interventions.len() > MAX_EVENTS || record.next_id == 0 ||
+        record.checkins.len() > MAX_CHECKINS ||
+        !conditioning::valid_checkins(&record.checkins, record.next_id) ||
         record.interventions.iter().any(|e| e.id >= record.next_id ||
             e.message.chars().count() > 1600 ||
             e.feedback.as_ref().is_some_and(|f| f.engagement > 5 ||
@@ -469,6 +493,7 @@ mod tests {
             outcome: "Test a meaningful scientific conjecture".into(),
             next_step: "Derive the governing equation".into(),
             intensity: Intensity::Direct, daily_limit: 4,
+            proactive_enabled: false, cadence_minutes: 240,
             quiet_start_utc_hour: 0, quiet_end_utc_hour: 0,
         }).unwrap();
     }
@@ -481,6 +506,7 @@ mod tests {
             expected_revision: 0, enabled: true, goal_id: String::new(),
             identity: "x".into(), outcome: "x".into(), next_step: "x".into(),
             intensity: Intensity::Guided, daily_limit: 3,
+            proactive_enabled: false, cadence_minutes: 240,
             quiet_start_utc_hour: 0, quiet_end_utc_hour: 0,
         }), Err(Error::Conflict(_))));
         e.pause().unwrap();
@@ -519,6 +545,7 @@ mod tests {
             identity: "Mathematician".into(), outcome: "Prove a theorem".into(),
             next_step: "Investigate an open lemma".into(),
             intensity: Intensity::Guided, daily_limit: 4,
+            proactive_enabled: false, cadence_minutes: 240,
             quiet_start_utc_hour: 0, quiet_end_utc_hour: 0,
         }).unwrap();
         assert!(e.snapshot().interventions[0].cancelled);
