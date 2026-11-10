@@ -18,7 +18,7 @@ The staging script requires a clean, exact 40-character Git source revision and 
 
 Before publication, staging gives binary files read/execute permission and static files read permission for isolated service accounts, while removing write permission from the release tree. The release parent and all its ancestors must permit traversal by the intended service users and remain under operator-controlled write custody.
 
-A release consumer can inspect an artifact without deploying it using `bash scripts/verify-release.sh /srv/releases/homelab/<release-id>`. The checksum manifest detects corruption and undeclared files; it does not authenticate a malicious replacement of the entire manifest and payload. Trust the release only when its staging directory, original source commit, and custody are controlled by the independent operator. The verifier never grants activation authority or changes a running generation.
+A release consumer can inspect an artifact without deploying it using `bash scripts/verify-release.sh /srv/releases/homelab/<release-id>`. The checksum manifest detects corruption and undeclared files; it does not authenticate a malicious replacement of the entire manifest and payload. The staging-control tests use a disposable mock compiler and Git command to verify packaging, provenance validation, rejection and cleanup; they do not replace Go compilation or NixOS evaluation. Trust the release only when its staging directory, original source commit, and custody are controlled by the independent operator. The verifier never grants activation authority or changes a running generation.
 
 ## Source-owned Learning and Health binaries
 
