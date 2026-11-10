@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use std::env;
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
-use std::path::Path;
+use std::path::{Component, Path};
 use std::process::{Command, Stdio};
 
 const POLICY_MAX_BYTES: usize = 64 * 1024;
@@ -59,7 +59,12 @@ fn valid_kube_name(value: &str) -> bool {
 
 fn read_policy(path: &str) -> Result<String, &'static str> {
     let candidate = Path::new(path);
-    if !candidate.is_absolute() || !path.starts_with("/nix/store/") {
+    if !candidate.is_absolute()
+        || !path.starts_with("/nix/store/")
+        || candidate.components().any(|component| {
+            matches!(component, Component::ParentDir | Component::CurDir)
+        })
+    {
         return Err("policy must be an immutable Nix store file");
     }
     let meta = fs::symlink_metadata(candidate).map_err(|_| "policy file unavailable")?;
@@ -287,6 +292,13 @@ mod tests {
         assert!(read_allowlist("homelab-platform.service \n", true).is_err());
         assert!(read_allowlist("apps/workspace\n", false).is_ok());
         assert!(read_allowlist("apps/workspace/other\n", false).is_err());
+    }
+
+    #[test]
+    fn policy_paths_cannot_escape_store_using_parent_components() {
+        assert!(read_policy("/nix/store/../etc/passwd").is_err());
+        assert!(read_policy("/nix/store/../../tmp/outside").is_err());
+        assert!(read_policy("/tmp/non-store-policy").is_err());
     }
 
     #[test]
