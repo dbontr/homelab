@@ -57,6 +57,9 @@
       packages.${defaultSystem}.homelab-security = import ./packages/security.nix {
         pkgs = nixpkgs.legacyPackages.${defaultSystem};
       };
+      packages.${defaultSystem}.homelab-security-authority = import ./packages/security-authority.nix {
+        pkgs = nixpkgs.legacyPackages.${defaultSystem};
+      };
 
       packages.${defaultSystem}.homelab-executor = import ./packages/executor.nix {
         pkgs = nixpkgs.legacyPackages.${defaultSystem};
