@@ -23,6 +23,7 @@ import (
  "github.com/dbontr/homelab-new/system/internal/monitoring"
  "github.com/dbontr/homelab-new/system/internal/mediahttp"
  "github.com/dbontr/homelab-new/system/internal/httpjson"
+ "github.com/dbontr/homelab-new/system/internal/bookhttp"
  "github.com/dbontr/homelab-new/system/observability"
  "github.com/dbontr/homelab-new/system/profiles"
  "github.com/dbontr/homelab-new/system/recipes"
@@ -196,11 +197,7 @@ func(s *Server) Handler()http.Handler{
  mux.HandleFunc("GET /v1/compute/profiles/{id}",s.profileRoutes)
  mux.HandleFunc("PUT /v1/compute/profiles/{id}",s.profileRoutes)
  mux.HandleFunc("POST /v1/compute/profiles/{id}/plan",s.profilePlanRoute)
- mux.HandleFunc("GET /v1/books/search",s.bookRoutes)
- mux.HandleFunc("GET /v1/books/lending",s.bookRoutes)
- mux.HandleFunc("GET /v1/books/requests",s.bookRoutes)
- mux.HandleFunc("POST /v1/books/requests",s.bookRoutes)
- mux.HandleFunc("PUT /v1/books/requests/{id}",s.bookRoutes)
+ bookhttp.Register(mux,s.db,s.bookCatalog)
  mediahttp.Register(mux,s.media)
  return http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){
   w.Header().Set("Cache-Control","no-store")
