@@ -7,7 +7,7 @@ import (
 )
 
 func TestExclusiveOwnershipAndReacquisition(t *testing.T){
- dir:=t.TempDir()
+ dir:=privateDir(t)
  first,err:=Acquire(dir,"security")
  if err!=nil{t.Fatal(err)}
  if _,err:=Acquire(dir,"security");err==nil{
@@ -24,7 +24,7 @@ func TestExclusiveOwnershipAndReacquisition(t *testing.T){
 }
 
 func TestRejectsUnsafePathsPermissionsAndSymlinks(t *testing.T){
- dir:=t.TempDir()
+ dir:=privateDir(t)
  for _,tc:=range []struct{dir,name string}{
   {"relative","security"},{dir,"../security"},{dir,"security/other"},
  }{
@@ -53,7 +53,7 @@ func TestRejectsUnsafePathsPermissionsAndSymlinks(t *testing.T){
 }
 
 func TestRejectsWritableOrMismatchedLockFile(t *testing.T){
- dir:=t.TempDir()
+ dir:=privateDir(t)
  path:=filepath.Join(dir,".executor.lock")
  if err:=os.WriteFile(path,nil,0660);err!=nil{t.Fatal(err)}
  if err:=os.Chmod(path,0660);err!=nil{t.Fatal(err)}
@@ -65,4 +65,11 @@ func TestRejectsWritableOrMismatchedLockFile(t *testing.T){
  if err!=nil{t.Fatal(err)}
  defer lease.Close()
  if _,err:=os.Lstat(path);err!=nil{t.Fatal("lock inode unexpectedly removed")}
+}
+
+func privateDir(t *testing.T)string{
+ t.Helper()
+ dir:=t.TempDir()
+ if err:=os.Chmod(dir,0700);err!=nil{t.Fatal(err)}
+ return dir
 }
