@@ -97,3 +97,14 @@ authentication mechanism; the host continues to mediate Health tool
 calls. Compilation, bundle compatibility, CSP enforcement, asset URL
 resolution, browser accessibility, data preservation and fallback behavior
 still require acceptance before enabling this configuration.
+
+
+The standalone Learning library provides read-only Dioxus inspection for
+concept graphs, evidence descriptions, sealed problem statements, source
+records, practice history and delayed retrieval obligations. Its Go
+owner-session route allows only a fixed set of read operations and requires
+the normal origin, session and CSRF checks. Grading, source modification,
+attachment upload, answer-key disclosure and arbitrary MCP calls remain
+unavailable through this route. The richer embedded Learning App continues
+to serve source uploads, interactive grading and adaptive-session tools
+until equivalent native flows satisfy permission and behavior parity.

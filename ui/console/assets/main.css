@@ -573,3 +573,12 @@ main.content { max-width: 94rem; margin: 0 auto; padding: 2rem; }
 .health-companion-exercises { display: flex; flex-wrap: wrap; gap: .5rem; }
 .health-completion-confirm { display: flex; align-items: center; gap: .75rem; }
 .health-completion-confirm input { width: 1.125rem; height: 1.125rem; }
+
+
+/* Learning source and problem excerpts */
+.learning-problem-statement {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    max-width: 82ch;
+    line-height: 1.7;
+}

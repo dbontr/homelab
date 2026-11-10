@@ -25,6 +25,7 @@ mod health_dashboard;
 mod workout_planner;
 mod health_groceries;
 mod workout_companion;
+mod learning_library;
 #[cfg(feature = "embedded-app")]
 mod mcp_app;
 
@@ -48,6 +49,7 @@ enum Page {
     Tasks,
     Motivation,
     Learning,
+    LearningLibrary,
     Health,
     ReactionTime,
     HealthMetrics,
@@ -77,6 +79,7 @@ impl Page {
             Self::Tasks => "Tasks",
             Self::Motivation => "Motivation",
             Self::Learning => "Learning",
+            Self::LearningLibrary => "Learning library",
             Self::Health => "Health",
             Self::ReactionTime => "Reaction time",
             Self::HealthMetrics => "Health metrics",
@@ -107,6 +110,7 @@ const PERSONAL: &[(Page, &str, &str)] = &[
     (Page::Calendar, "Calendar", "calendar"),
     (Page::Planner, "Weekly planner", "planner"),
     (Page::Learning, "Learning", "learning"),
+    (Page::LearningLibrary, "Learning library", "books"),
     (Page::Health, "Health", "health"),
     (Page::ReactionTime, "Reaction time", "activity"),
     (Page::HealthMetrics, "Health metrics", "monitoring"),
@@ -340,6 +344,7 @@ fn App() -> Element {
                                 Page::Tasks => rsx! { tasks::Tasks { csrf: csrf.clone() } },
                                 Page::Motivation => rsx! { motivation::Motivation { csrf: csrf.clone() } },
                                 Page::Learning => rsx! { personal::Learning { csrf: csrf.clone() } },
+                                Page::LearningLibrary => rsx! { learning_library::LearningLibrary { csrf: csrf.clone() } },
                                 Page::Health => rsx! { personal::Health { csrf: csrf.clone() } },
                                 Page::ReactionTime => rsx! { cognitive::ReactionTime { csrf: csrf.clone() } },
                                 Page::HealthMetrics => rsx! { health_dashboard::HealthDashboard { csrf: csrf.clone() } },
