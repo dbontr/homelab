@@ -779,6 +779,7 @@ func (r *Runner) importArchive(ctx context.Context, op Operation, c *Client) (ma
 	dest := tar.NewWriter(&packed)
 	var total int64
 	count := 0
+	seen := map[string]bool{}
 	for {
 		header, err := source.Next()
 		if err == io.EOF {
@@ -796,9 +797,13 @@ func (r *Runner) importArchive(ctx context.Context, op Operation, c *Client) (ma
 			continue
 		}
 		relative := strings.Join(components[1:], "/")
-		if !safeArchiveEntry(relative) || relative == "." {
+		if !safeArchiveEntry(relative) || relative == "." || path.Clean(relative) != relative {
 			return nil, errors.New("unsafe repository archive entry")
 		}
+		if seen[relative] {
+			return nil, errors.New("duplicate repository archive path")
+		}
+		seen[relative] = true
 		if relative == ".pwm-source-revision" {
 			return nil, errors.New("repository archive contains reserved source receipt")
 		}
