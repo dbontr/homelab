@@ -110,3 +110,58 @@ func TestSessionManagerNotConfiguredDoesNotPermitBrowserAccess(t *testing.T) {
 	w:=request(s.Handler(),"GET","/ui/session","","")
 	if w.Code!=503{t.Fatalf("missing owner verifier accepted: %d",w.Code)}
 }
+
+
+func TestOwnerEngineeringReadAllowlistDoesNotPermitExecutions(t *testing.T) {
+    db, err := store.Open(filepath.Join(t.TempDir(),"state.json"),"UTC")
+    if err != nil { t.Fatal(err) }
+    service, err := New(db,strings.Repeat("t",40),nil)
+    if err != nil { t.Fatal(err) }
+    secret, err := security.HashPassphrase([]byte("owner-read-only-workspace-passphrase"))
+    if err != nil { t.Fatal(err) }
+    sessions, err := session.New(secret)
+    if err != nil { t.Fatal(err) }
+    service.SetSessions(sessions)
+    token, csrf, _, err := sessions.Login([]byte("owner-read-only-workspace-passphrase"))
+    if err != nil { t.Fatal(err) }
+    _ = csrf
+    allowed := []string{
+        "/v1/engineering/projects",
+        "/v1/engineering/nodes",
+        "/v1/engineering/projects/project-a/jobs",
+        "/v1/engineering/projects/project-a/workspaces",
+        "/v1/engineering/projects/project-a/context",
+        "/v1/engineering/projects/project-a/repositories",
+        "/v1/engineering/projects/project-a/research",
+        "/v1/engineering/projects/project-a/research-sources",
+    }
+    for _, path := range allowed {
+        req := httptest.NewRequest("GET",path,nil)
+        req.AddCookie(&http.Cookie{Name:uiCookie,Value:token})
+        if !service.sessionReadAllowed(req) {
+            t.Errorf("legitimate engineering inspection was denied: %s",path)
+        }
+    }
+    for _, path := range []string{
+        "/v1/engineering/runs",
+        "/v1/engineering/projects/project-a/jobs/other",
+        "/v1/engineering/projects/project-a/resource-plan",
+        "/v1/engineering/projects/project-a/../../../cluster",
+        "/v1/engineering/projects/project-a/something",
+    } {
+        req := httptest.NewRequest("GET",path,nil)
+        req.AddCookie(&http.Cookie{Name:uiCookie,Value:token})
+        if service.sessionReadAllowed(req) {
+            t.Errorf("browser session gained unauthorized engineering read: %s",path)
+        }
+    }
+    req := httptest.NewRequest("POST","/v1/engineering/runs",
+        strings.NewReader(`{"objective":"execute"}`))
+    req.AddCookie(&http.Cookie{Name:uiCookie,Value:token})
+    req.Header.Set("Origin","https://console.example")
+    req.Header.Set("Content-Type","application/json")
+    req.Header.Set("X-CSRF-Token",csrf)
+    if service.sessionOwnerWriteAllowed(req) {
+        t.Fatal("owner browser session gained engineering execution privileges")
+    }
+}
