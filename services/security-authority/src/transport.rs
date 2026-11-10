@@ -2,8 +2,8 @@
 use std::collections::BTreeMap;
 use std::ffi::CString;
 use std::fs;
-use std::os::unix::fs::PermissionsExt;
-use std::path::Path;
+use std::os::unix::fs::{FileTypeExt, PermissionsExt};
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -388,6 +388,16 @@ async fn private_headers(request: axum::extract::Request, next: Next) -> Respons
 }
 
 /// Paths must be owned by the security service and absent before bind.
+struct OwnedSocket(PathBuf);
+
+impl Drop for OwnedSocket {
+    fn drop(&mut self) {
+        if fs::symlink_metadata(&self.0).is_ok_and(|meta| meta.file_type().is_socket()) {
+            let _ = fs::remove_file(&self.0);
+        }
+    }
+}
+
 pub async fn serve_unix(
     socket: &Path,
     mode: u32,
@@ -406,6 +416,7 @@ pub async fn serve_unix(
         return Err("security socket path already exists".into());
     }
     let listener = UnixListener::bind(socket)?;
+    let _owned_socket = OwnedSocket(socket.to_path_buf());
     if let Some(gid) = group {
         let c_path = CString::new(socket.as_os_str().as_encoded_bytes())?;
         if unsafe { libc::chown(c_path.as_ptr(), !0, gid) } != 0 {
