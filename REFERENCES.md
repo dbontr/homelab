@@ -11,6 +11,7 @@
 - [Go tls.X509KeyPair](https://pkg.go.dev/crypto/tls#X509KeyPair) — Go project. Used for: parsing validated PEM key pairs after enforcing private-key file permissions.
 - [Linux flock(2)](https://man7.org/linux/man-pages/man2/flock.2.html) — Linux man-pages project. Used for: nonblocking, process-lifetime advisory locks on state resources before opening service stores.
 - [Linux open(2)](https://man7.org/linux/man-pages/man2/open.2.html) — Linux man-pages project. Used for: O_NOFOLLOW descriptor-bound reads of protected interface and executor credential files.
+- [bytes crate: Bytes::from_owner](https://docs.rs/bytes/latest/bytes/struct.Bytes.html#method.from_owner) — bytes project. Used for: retaining a zeroizing owner of remote credential response buffers until the last HTTP body reference is released.
 - [Rust Standard Library: Command](https://doc.rust-lang.org/std/process/struct.Command.html) — Rust project. Used for: shell-free, explicit-argument privileged command dispatch in the Rust actuator.
 - [RustCrypto PBKDF2](https://docs.rs/pbkdf2/0.12.2/pbkdf2/) — RustCrypto project. Used for: verifying the owner PBKDF2-HMAC-SHA256 credential record in Rust.
 - [RustCrypto HMAC](https://docs.rs/hmac/0.12.1/hmac/) — RustCrypto project. Used for: six-digit HMAC-SHA1 TOTP verification.
