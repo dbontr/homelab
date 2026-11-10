@@ -671,7 +671,8 @@ mod tests {
             expected_revision: 1, enabled: true, goal_id: "research".into(),
             identity: "Researcher".into(), outcome: "Publish sound work".into(),
             next_step: "Prove a lemma".into(), intensity: Intensity::Guided,
-            daily_limit: 1, quiet_start_utc_hour: 22, quiet_end_utc_hour: 6,
+            daily_limit: 1, proactive_enabled: false, cadence_minutes: 240,
+            holdout_weekday_utc: None, quiet_start_utc_hour: 22, quiet_end_utc_hour: 6,
         }).unwrap();
         assert!(matches!(e.suggest(86400 + 23 * 3600), Err(Error::Limited(_))));
         assert!(matches!(e.suggest(86400 + 12 * 3600), Err(Error::Limited(_))));
