@@ -89,3 +89,6 @@
 - [GitLab repositories API](https://docs.gitlab.com/api/repositories/) — GitLab. Used for: pinned Git archive downloads and project-scoped repository snapshots.
 - [GitLab personal access tokens](https://docs.gitlab.com/user/profile/personal_access_tokens/) — GitLab. Used for: user-scoped API credentials, expiration and scope review.
 - [Go httputil.ReverseProxy](https://pkg.go.dev/net/http/httputil#ReverseProxy) — Go project. Used for: fixed-origin reverse proxying, request header sanitization and independent HTTP interface transport.\n- [The Rust Programming Language: Understanding Ownership](https://doc.rust-lang.org/book/ch04-00-understanding-ownership.html) — Rust project. Used for: ownership and borrowing guarantees when selecting Rust for memory-sensitive service implementations.\n
+- [Axum Documentation](https://docs.rs/axum/latest/axum/) — Tokio/Axum project. Used for: the owner-authenticated, loopback-only motivation service HTTP interface.
+- [Rust fs2 Documentation](https://docs.rs/fs2/latest/fs2/) — fs2 maintainers. Used for: process-lifetime exclusive ownership of the motivation state lock.
+- [Finite-time Analysis of the Multiarmed Bandit Problem](https://homes.di.unimi.it/~cesabian/Pubblicazioni/ml-02.pdf) — Auer, Cesa-Bianchi and Fischer, 2002. Used for: an exploratory upper-confidence-bound strategy selector over self-reported results.

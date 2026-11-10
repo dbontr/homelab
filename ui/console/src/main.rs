@@ -18,6 +18,7 @@ mod engineering_knowledge;
 mod engineering_diff;
 mod knowledge;
 mod workflows;
+mod motivation;
 
 use dioxus::prelude::*;
 use components::Icon;
@@ -37,6 +38,7 @@ enum Page {
     Calendar,
     Planner,
     Tasks,
+    Motivation,
     Learning,
     Health,
     Recipes,
@@ -60,6 +62,7 @@ impl Page {
             Self::Calendar => "Calendar",
             Self::Planner => "Weekly planner",
             Self::Tasks => "Tasks",
+            Self::Motivation => "Motivation",
             Self::Learning => "Learning",
             Self::Health => "Health",
             Self::Recipes => "Recipes",
@@ -82,6 +85,7 @@ const ENGINEERING: &[(Page, &str, &str)] = &[
 ];
 const PERSONAL: &[(Page, &str, &str)] = &[
     (Page::Tasks, "Tasks", "tasks"),
+    (Page::Motivation, "Motivation", "activity"),
     (Page::Calendar, "Calendar", "calendar"),
     (Page::Planner, "Weekly planner", "planner"),
     (Page::Learning, "Learning", "learning"),
@@ -305,6 +309,7 @@ fn App() -> Element {
                                 Page::Calendar => rsx! { calendar::Calendar {} },
                                 Page::Planner => rsx! { planner::Planner {} },
                                 Page::Tasks => rsx! { tasks::Tasks { csrf: csrf.clone() } },
+                                Page::Motivation => rsx! { motivation::Motivation { csrf: csrf.clone() } },
                                 Page::Learning => rsx! { personal::Learning { csrf: csrf.clone() } },
                                 Page::Health => rsx! { personal::Health { csrf: csrf.clone() } },
                                 Page::Recipes => rsx! { recipes::Recipes { csrf: csrf.clone() } },
