@@ -18,6 +18,8 @@ var ownerLearningReadTools = map[string]struct{}{
 	"list_learning_sources":  {},
 	"list_practice_sessions": {},
 	"get_practice_session":   {},
+	"get_proposition":       {},
+	"get_reasoning_chain":   {},
 }
 
 func ownerLearningReadPathAllowed(path string) bool {

@@ -7,12 +7,13 @@ use crate::api;
 use crate::components::{Card, Empty, Heading, Loading, Notice};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum View { Graph, Problems, Reviews, Sources, Practice }
+enum View { Graph, Reasoning, Problems, Reviews, Sources, Practice }
 
 impl View {
     fn label(self) -> &'static str {
         match self {
             Self::Graph => "Concept graph",
+            Self::Reasoning => "Reasoning",
             Self::Problems => "Problem library",
             Self::Reviews => "Review queue",
             Self::Sources => "Sources",
@@ -31,6 +32,9 @@ enum Query {
     Sources,
     PracticeSessions,
     PracticeSession,
+    ReasoningGraph,
+    Proposition,
+    ReasoningChain,
 }
 impl Query {
     fn name(self) -> &'static str {
@@ -43,6 +47,9 @@ impl Query {
             Self::Sources => "list_learning_sources",
             Self::PracticeSessions => "list_practice_sessions",
             Self::PracticeSession => "get_practice_session",
+            Self::ReasoningGraph => "get_reasoning_graph",
+            Self::Proposition => "get_proposition",
+            Self::ReasoningChain => "get_reasoning_chain",
         }
     }
     fn route(self) -> String {
@@ -87,7 +94,7 @@ pub fn LearningLibrary(csrf: String) -> Element {
             span { class: "small muted", "Read-only owner-session inspection" }
         }
         div { class: "health-plan-list", role: "group", aria_label: "Learning library sections",
-            for section in [View::Graph,View::Problems,View::Reviews,View::Sources,View::Practice] {
+            for section in [View::Graph,View::Reasoning,View::Problems,View::Reviews,View::Sources,View::Practice] {
                 button {
                     class: if view() == section { "btn btn-primary" } else { "btn btn-outline" },
                     aria_pressed: view() == section,
@@ -98,6 +105,7 @@ pub fn LearningLibrary(csrf: String) -> Element {
         }
         match view() {
             View::Graph => rsx! { ConceptGraph { csrf: csrf.clone() } },
+            View::Reasoning => rsx! { ReasoningGraph { csrf: csrf.clone() } },
             View::Problems => rsx! { ProblemLibrary { csrf: csrf.clone() } },
             View::Reviews => rsx! { ReviewQueue { csrf: csrf.clone() } },
             View::Sources => rsx! { SourceList { csrf: csrf.clone() } },
@@ -198,6 +206,189 @@ fn ConceptGraph(csrf: String) -> Element {
                             h3 { {label(&value,&["name","title","label","identifier"])} }
                             p { class: "small muted", "{concept_id()}" }
                             p { {label(&value,&["description","definition","explanation","summary"])} }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+#[component]
+fn ReasoningGraph(csrf: String) -> Element {
+    let mut proposition_id = use_signal(String::new);
+    let mut chain_id = use_signal(String::new);
+    let mut graph = use_resource({
+        let token=csrf.clone();
+        move || {
+            let token=token.clone();
+            async move {
+                read::<Value>(&token,Query::ReasoningGraph,json!({"limit":150})).await
+            }
+        }
+    });
+    let mut proposition = use_resource({
+        let token=csrf.clone();
+        move || {
+            let token=token.clone();
+            let id=proposition_id();
+            async move {
+                if id.is_empty() {return Ok(Value::Null);}
+                read::<Value>(&token,Query::Proposition,json!({"proposition_id":id})).await
+            }
+        }
+    });
+    let mut chain = use_resource(move || {
+        let token=csrf.clone();
+        let id=chain_id();
+        async move {
+            if id.is_empty() {return Ok(Value::Null);}
+            read::<Value>(&token,Query::ReasoningChain,json!({"chain_id":id})).await
+        }
+    });
+    rsx! {
+        Card {
+            title: "Reasoning provenance".to_owned(),
+            description: "Review recorded propositions, premise groups, and disputes without inferring logical or source validity.".to_owned(),
+            button { class: "btn btn-outline", onclick: move |_| graph.restart(), "Refresh reasoning" }
+            match graph.cloned() {
+                None => rsx! { Loading {} },
+                Some(Err(message)) => rsx! { Notice { message } },
+                Some(Ok(value)) => {
+                    let claims=records(&value,&["propositions"]);
+                    let chains=records(&value,&["chains"]);
+                    let disputes=records(&value,&["disputes"]);
+                    rsx! {
+                        div { class: "card-body stack",
+                            p { class: "small muted",
+                                "{claims.len()} propositions · {chains.len()} reasoning chains · {disputes.len()} disputes"
+                            }
+                            if claims.is_empty() {
+                                Empty {
+                                    title: "No propositions".to_owned(),
+                                    description: "No recorded propositions were returned.".to_owned()
+                                }
+                            } else {
+                                h3 { "Propositions" }
+                                div { class: "health-plan-list",
+                                    for item in claims {
+                                        button {
+                                            class: "btn btn-outline btn-sm",
+                                            onclick: {
+                                                let id=label(&item,&["id","proposition_id"]);
+                                                move |_| proposition_id.set(id.clone())
+                                            },
+                                            {label(&item,&["statement","title","id"])}
+                                        }
+                                    }
+                                }
+                            }
+                            if !chains.is_empty() {
+                                h3 { "Reasoning chains" }
+                                div { class: "table-clip",
+                                    table { class: "table",
+                                        thead { tr {
+                                            th { "Relation" }
+                                            th { "Conclusion" }
+                                            th { "Review" }
+                                            th { "Inspect" }
+                                        } }
+                                        tbody {
+                                            for item in chains {
+                                                tr {
+                                                    td { {label(&item,&["relation","kind"])} }
+                                                    td { {label(&item,&["conclusion","conclusion_id"])} }
+                                                    td {
+                                                        if item.get("review_active").and_then(Value::as_bool) == Some(true) {
+                                                            "Reviewed, current prerequisites"
+                                                        } else {
+                                                            "Unreviewed or blocked"
+                                                        }
+                                                    }
+                                                    td {
+                                                        button {
+                                                            class: "btn btn-outline btn-sm",
+                                                            onclick: {
+                                                                let id=label(&item,&["id","chain_id"]);
+                                                                move |_| chain_id.set(id.clone())
+                                                            },
+                                                            "Open chain"
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if !proposition_id().is_empty() {
+            Card {
+                title: "Proposition".to_owned(),
+                description: "Original claim and source context; confidence is not automatically upgraded.".to_owned(),
+                match proposition.cloned() {
+                    None => rsx! { Loading {} },
+                    Some(Err(message)) => rsx! { Notice { message } },
+                    Some(Ok(value)) => rsx! {
+                        div { class: "card-body stack",
+                            p { class: "learning-problem-statement",
+                                {label(&value,&["statement","title","id"])}
+                            }
+                            p { class: "small muted",
+                                {label(&value,&["status","review_status"])}
+                            }
+                            p { {label(&value,&["context","source_reference","explanation"])} }
+                        }
+                    }
+                }
+            }
+        }
+        if !chain_id().is_empty() {
+            Card {
+                title: "Reasoning chain".to_owned(),
+                description: "All premises are required together. A formal propositional result does not certify the interpretation.".to_owned(),
+                match chain.cloned() {
+                    None => rsx! { Loading {} },
+                    Some(Err(message)) => rsx! { Notice { message } },
+                    Some(Ok(value)) => {
+                        let premises=value.get("premises").and_then(Value::as_array)
+                            .map(|items| items.iter().map(|item|
+                                item.as_str().map(str::to_owned).unwrap_or_else(|| item.to_string())
+                            ).collect::<Vec<_>>().join(" AND "))
+                            .unwrap_or_else(|| "Premises unavailable".to_owned());
+                        let formal=value.get("latest_formal_check").cloned().unwrap_or(Value::Null);
+                        rsx! {
+                            div { class: "card-body stack",
+                                p { class: "small muted",
+                                    "Relation: {label(&value,&["relation","kind"])}"
+                                }
+                                p { "Premises: {premises}" }
+                                p { "Conclusion: {label(&value,&["conclusion","conclusion_id"])}" }
+                                p { class: "learning-problem-statement",
+                                    {label(&value,&["explanation","rationale"])}
+                                }
+                                p { class: "small muted",
+                                    if value.get("review_active").and_then(Value::as_bool)==Some(true) {
+                                        "Reviewed and prerequisites current"
+                                    } else {
+                                        "Review is absent or blocked"
+                                    }
+                                }
+                                if !formal.is_null() {
+                                    p { class: "small muted",
+                                        if formal.get("claim_snapshot_current").and_then(Value::as_bool)==Some(true) {
+                                            {format!("Formal check: {}",label(&formal,&["verdict"]))}
+                                        } else {
+                                            "Formal check is stale for the current proposition wording"
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -513,7 +704,8 @@ mod tests {
     #[test]
     fn every_library_query_has_one_exact_browser_route() {
         for q in [Query::Graph,Query::Concept,Query::Problems,Query::Problem,
-            Query::Reviews,Query::Sources,Query::PracticeSessions,Query::PracticeSession] {
+            Query::Reviews,Query::Sources,Query::PracticeSessions,Query::PracticeSession,
+            Query::ReasoningGraph,Query::Proposition,Query::ReasoningChain] {
             let expected=format!("/v1/learning/app-tools/{}/call",q.name());
             assert_eq!(q.route(),expected);
             assert!(!expected.contains(".."));
