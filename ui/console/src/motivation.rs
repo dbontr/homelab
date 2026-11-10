@@ -37,6 +37,8 @@ pub fn Motivation(csrf: String) -> Element {
     let mut fascination = use_signal(|| 3u8);
     let mut session_wellbeing = use_signal(|| 3u8);
     let mut evidence_ref = use_signal(String::new);
+    let mut focus_duration = use_signal(|| 45u16);
+    let mut focus_reflection = use_signal(String::new);
     let mut trigger = use_signal(|| "session_start".to_owned());
     let mut current_question = use_signal(String::new);
     let mut metrics = use_resource(|| async {
@@ -87,6 +89,14 @@ pub fn Motivation(csrf: String) -> Element {
             !item.get("cancelled").and_then(Value::as_bool).unwrap_or(false)).cloned();
     let pending_id = pending.as_ref().and_then(|item| item.get("id"))
         .and_then(Value::as_u64);
+    let focus_active = snapshot.as_ref()
+        .and_then(|value| value.get("focus_sessions"))
+        .and_then(Value::as_array)
+        .and_then(|items| items.iter().rev().find(|s|
+            s.get("status").and_then(Value::as_str) == Some("active")))
+        .cloned();
+    let active_focus_id = focus_active.as_ref()
+        .and_then(|item| item.get("id")).and_then(Value::as_u64);
 
     rsx! {
         Heading {
@@ -401,6 +411,141 @@ pub fn Motivation(csrf: String) -> Element {
                     }
                 }
                 Card {
+                    title: "Voluntary focus commitment".to_owned(),
+                    description: "Commit to a concrete intellectual step. The server records the elapsed interval; actual work remains yours to verify. You may always end a session.".to_owned(),
+                    if let Some(active) = focus_active {
+                        p { class: "card-description",
+                            {format!("Current step: {}", field(&active, "step"))}
+                        }
+                        p { class: "card-description",
+                            {format!("Target: {} minutes · Started (Unix UTC): {}",
+                                api::property(&active, &["target_minutes"]),
+                                api::property(&active, &["started_at"]))}
+                        }
+                        label { class: "form-row",
+                            span { class: "label", "Reflection or reason for changing course" }
+                            textarea { class: "field", maxlength: "400",
+                                value: "{focus_reflection()}",
+                                oninput: move |event| focus_reflection.set(event.value()) }
+                        }
+                        div { class: "inline-row",
+                            button {
+                                class: "btn btn-primary",
+                                disabled: busy(),
+                                onclick: move |_| {
+                                    let Some(id) = active_focus_id else { return; };
+                                    let token = csrf();
+                                    busy.set(true);
+                                    error.set(String::new());
+                                    spawn(async move {
+                                        let payload=json!({"id":id,"completed":true,"reflection":focus_reflection()});
+                                        match api::write::<Value,_>(Method::POST,
+                                            "/v1/motivation/focus/end",&token,&payload).await {
+                                            Ok(_) => {
+                                                focus_reflection.set(String::new());
+                                                notice.set("Focus outcome recorded".to_owned());
+                                                state.restart();
+                                                metrics.restart();
+                                            }
+                                            Err(message) => error.set(message),
+                                        }
+                                        busy.set(false);
+                                    });
+                                },
+                                "Finish commitment"
+                            }
+                            button {
+                                class: "btn btn-outline",
+                                disabled: busy() || focus_reflection().trim().chars().count() < 5,
+                                onclick: move |_| {
+                                    let Some(id) = active_focus_id else { return; };
+                                    let token = csrf();
+                                    busy.set(true);
+                                    error.set(String::new());
+                                    spawn(async move {
+                                        let payload=json!({"id":id,"completed":false,"reflection":focus_reflection()});
+                                        match api::write::<Value,_>(Method::POST,
+                                            "/v1/motivation/focus/end",&token,&payload).await {
+                                            Ok(_) => {
+                                                focus_reflection.set(String::new());
+                                                notice.set("Deliberate early exit recorded".to_owned());
+                                                state.restart();
+                                                metrics.restart();
+                                            }
+                                            Err(message) => error.set(message),
+                                        }
+                                        busy.set(false);
+                                    });
+                                },
+                                "End early"
+                            }
+                            button {
+                                class: "btn btn-outline",
+                                disabled: busy(),
+                                onclick: move |_| {
+                                    let Some(id) = active_focus_id else { return; };
+                                    let token = csrf();
+                                    busy.set(true);
+                                    error.set(String::new());
+                                    spawn(async move {
+                                        let payload=json!({"id":id,"completed":false,"emergency":true});
+                                        match api::write::<Value,_>(Method::POST,
+                                            "/v1/motivation/focus/end",&token,&payload).await {
+                                            Ok(_) => {
+                                                focus_reflection.set(String::new());
+                                                notice.set("Focus commitment ended".to_owned());
+                                                state.restart();
+                                                metrics.restart();
+                                            }
+                                            Err(message) => error.set(message),
+                                        }
+                                        busy.set(false);
+                                    });
+                                },
+                                "Leave immediately"
+                            }
+                        }
+                    } else {
+                        form {
+                            class: "task-editor-fields",
+                            onsubmit: move |event| {
+                                event.prevent_default();
+                                if busy() { return; }
+                                let payload=json!({"target_minutes":focus_duration()});
+                                let token=csrf();
+                                busy.set(true);
+                                error.set(String::new());
+                                spawn(async move {
+                                    match api::write::<Value,_>(Method::POST,
+                                        "/v1/motivation/focus",&token,&payload).await {
+                                        Ok(_) => {
+                                            notice.set("Focus commitment opened".to_owned());
+                                            state.restart();
+                                            metrics.restart();
+                                        }
+                                        Err(message) => error.set(message),
+                                    }
+                                    busy.set(false);
+                                });
+                            },
+                            label { class: "form-row",
+                                span { class: "label", "Intended focus interval (10–240 minutes)" }
+                                input { class: "field", type: "number", min: "10", max: "240",
+                                    value: "{focus_duration()}",
+                                    oninput: move |event| {
+                                        if let Ok(value)=event.value().parse::<u16>() {
+                                            focus_duration.set(value);
+                                        }
+                                    } }
+                            }
+                            p { class: "card-description",
+                                "This uses the next step in your current aspirational identity. It remains available even when motivational prompts are disabled."
+                            }
+                            button { class: "btn btn-primary", disabled: busy(), "Begin focus" }
+                        }
+                    }
+                }
+                Card {
                     title: "Independent intellectual engagement".to_owned(),
                     description: "Record genuine intellectual work, including days without any intervention. These are self-reports, not verified learning achievements.".to_owned(),
                     form {
@@ -487,6 +632,10 @@ pub fn Motivation(csrf: String) -> Element {
                             p { {format!("Holdout minutes: {} · Self-initiated holdout minutes: {}",
                                 api::property(&value, &["holdout_minutes"]),
                                 api::property(&value, &["holdout_self_initiated_minutes"]))} }
+                            p { {format!("Focus completed: {} · Ended early: {} · Logged elapsed focus minutes: {}",
+                                api::property(&value, &["focus_completed"]),
+                                api::property(&value, &["focus_abandoned"]),
+                                api::property(&value, &["focus_elapsed_minutes"]))} }
                             p { {format!("Average fascination: {} / 5 · Average well-being: {} / 5",
                                 api::property(&value, &["mean_fascination"]),
                                 api::property(&value, &["mean_wellbeing"]))} }
