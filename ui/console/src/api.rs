@@ -110,6 +110,7 @@ fn response_error(status: reqwest::StatusCode) -> String {
     }
 }
 
+#[cfg(not(feature = "embedded-app"))]
 pub async fn get<T: DeserializeOwned>(path: &str) -> Result<T, String> {
     let response = reqwest::Client::new()
         .get(url(path)?)
@@ -153,6 +154,7 @@ pub async fn logout(csrf: &str) -> Result<(), String> {
     }
 }
 
+#[cfg(not(feature = "embedded-app"))]
 pub async fn write<T: DeserializeOwned, P: Serialize>(
     method: Method, path: &str, csrf: &str, payload: &P
 ) -> Result<T, String> {
@@ -289,4 +291,55 @@ mod tests {
         assert_eq!(property(&rows[0], &["unknown"]), "—");
         assert!(list(&serde_json::json!({}), &["projects"]).is_empty());
     }
+}
+
+
+#[cfg(feature = "embedded-app")]
+pub async fn get<T: DeserializeOwned>(path: &str) -> Result<T, String> {
+    let action = match path {
+        "/v1/health/goals" => "health_goal_list",
+        "/v1/health/records" => "health_record_list",
+        _ => return Err("The Health App cannot request this owner-only route".to_owned()),
+    };
+    crate::mcp_app::call_tool(action, serde_json::json!({})).await
+}
+
+#[cfg(feature = "embedded-app")]
+pub async fn write<T: DeserializeOwned, P: Serialize>(
+    method: Method,
+    path: &str,
+    _csrf: &str,
+    payload: &P,
+) -> Result<T, String> {
+    if method != Method::POST || path != "/v1/health/reaction-test" {
+        return Err("The Health App cannot write to this owner-only route".to_owned());
+    }
+    let value = serde_json::to_value(payload)
+        .map_err(|_| "Reaction trials have invalid JSON".to_owned())?;
+    let raw = value.get("trials_ms").and_then(Value::as_array)
+        .ok_or("Reaction trial measurements are required")?;
+    if raw.len() != 5 {
+        return Err("The reaction task requires exactly five trials".to_owned());
+    }
+    let mut samples = Vec::with_capacity(5);
+    for item in raw {
+        let number = item.as_f64().ok_or("Invalid reaction trial")?;
+        if !number.is_finite() || !(80.0..=1500.0).contains(&number) {
+            return Err("Reaction trials must be between 80 and 1500 ms".to_owned());
+        }
+        samples.push(number);
+    }
+    let mut ordered = samples.clone();
+    ordered.sort_by(f64::total_cmp);
+    crate::mcp_app::call_tool("health_record_add", serde_json::json!({
+        "domain": "cognition", "metric": "simple_reaction_ms",
+        "value": ordered[2], "unit": "ms",
+        "source": "browser_visual_reaction_test", "method": "estimated",
+        "metadata": {
+            "trials_ms": samples,
+            "mean_ms": ordered.iter().sum::<f64>() / 5.0,
+            "protocol": "five trial visual response",
+            "constraints": "Browser and display latency; not clinically standardized"
+        }
+    })).await
 }

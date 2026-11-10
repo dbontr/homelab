@@ -1,7 +1,11 @@
+#[cfg(not(feature = "embedded-app"))]
 use reqwest::Method;
 use serde::de::DeserializeOwned;
-use serde_json::{Value, json};
+use serde_json::Value;
+#[cfg(not(feature = "embedded-app"))]
+use serde_json::json;
 
+#[cfg(not(feature = "embedded-app"))]
 use crate::api;
 
 // Browser pages use the owner-session, CSRF-protected HTTP surface. Service
@@ -39,6 +43,7 @@ impl Tool {
     }
 }
 
+#[cfg(not(feature = "embedded-app"))]
 pub async fn call<T: DeserializeOwned>(
     csrf: &str,
     tool: Tool,
@@ -76,4 +81,17 @@ mod tests {
             assert!(tool.route().ends_with("/call"));
         }
     }
+}
+
+#[cfg(feature = "embedded-app")]
+pub async fn call<T: DeserializeOwned>(
+    _csrf: &str,
+    tool: Tool,
+    args: Value,
+) -> Result<T, String> {
+    let name = tool.route()
+        .strip_prefix("/v1/tools/health__")
+        .and_then(|route| route.strip_suffix("/call"))
+        .ok_or("Invalid Health MCP App tool identity")?;
+    crate::mcp_app::call_tool(name, args).await
 }

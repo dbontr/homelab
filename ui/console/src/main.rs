@@ -25,6 +25,8 @@ mod health_dashboard;
 mod workout_planner;
 mod health_groceries;
 mod workout_companion;
+#[cfg(feature = "embedded-app")]
+mod mcp_app;
 
 use dioxus::prelude::*;
 use components::Icon;
@@ -117,8 +119,14 @@ const PERSONAL: &[(Page, &str, &str)] = &[
     (Page::Media, "Media", "media"),
 ];
 
+#[cfg(not(feature = "embedded-app"))]
 fn main() {
     dioxus::launch(App);
+}
+
+#[cfg(feature = "embedded-app")]
+fn main() {
+    dioxus::launch(mcp_app::Embedded);
 }
 
 #[allow(non_snake_case)]
