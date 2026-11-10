@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"errors"
+	"io"
 	"log"
 	"os"
 	"os/signal"
@@ -16,6 +17,8 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/dbontr/homelab-new/system/statelease"
+
 	"github.com/dbontr/homelab-new/system/security"
 )
 
@@ -24,11 +27,22 @@ func readRequiredFile(name string) ([]byte, error) {
 	if !filepath.IsAbs(path) {
 		return nil, errors.New("required protected credential path missing")
 	}
-	return os.ReadFile(path)
+	file,err:=os.OpenFile(path,os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_CLOEXEC,0)
+ if err!=nil{return nil,errors.New("protected credential cannot be opened")}
+ defer file.Close()
+ info,err:=file.Stat()
+ if err!=nil||!info.Mode().IsRegular()||info.Mode().Perm()&0022!=0{return nil,errors.New("credential is not a protected regular file")}
+ const maxCredentialBytes=1<<20
+ raw,err:=io.ReadAll(io.LimitReader(file,maxCredentialBytes+1))
+ if err!=nil||len(raw)>maxCredentialBytes{return nil,errors.New("protected credential exceeds size limit")}
+ return raw,nil
 }
 
 func main() {
 	log.SetFlags(log.LstdFlags | log.LUTC)
+ lease,err:=statelease.Acquire("/var/lib/homelab-securityd","securityd")
+ if err!=nil{log.Fatal("cannot acquire exclusive security state ownership: ",err)}
+ defer lease.Close()
 	verifierBytes, err := readRequiredFile("HOMELAB_SECURITY_PASSWORD_FILE")
 	if err != nil {
 		log.Fatal("cannot load owner password verifier: ", err)
