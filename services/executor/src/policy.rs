@@ -1,7 +1,7 @@
 //! Trusted Nix-defined operation and resource policy.
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::env;
-use std::fs::{self, File, OpenOptions};
+use std::fs::OpenOptions;
 use std::io::Read;
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Component, Path, PathBuf};
@@ -70,6 +70,18 @@ pub fn valid_service(value: &str) -> bool {
         && value.ends_with(".service")
         && value.bytes().all(|c| c.is_ascii_alphanumeric() || b"_.@-".contains(&c))
         && !FORBIDDEN_SERVICES.iter().any(|name| lower.contains(name))
+}
+
+pub fn valid_health_service(value: &str) -> bool {
+    const CRITICAL: &[&str] = &[
+        "network","firewall","cloudflared","pihole","k3s","tailscale",
+        "docker","jellyfin","nginx","systemd-networkd",
+    ];
+    let lower = value.to_ascii_lowercase();
+    !value.is_empty() && value.len() <= 128
+        && value.as_bytes()[0].is_ascii_alphanumeric()
+        && value.bytes().all(|c| c.is_ascii_alphanumeric() || b"@_.-".contains(&c))
+        && !CRITICAL.iter().any(|term| lower.contains(term))
 }
 
 pub fn valid_kube_name(value: &str) -> bool {
@@ -273,7 +285,7 @@ impl Policy {
         let health: Vec<String> = serde_json::from_slice(
             &bounded_file(&absolute("HOMELAB_EXECUTOR_HEALTH_FILE")?, 64 << 10, false)?)
             .map_err(|_| Error::Configuration("invalid health policy"))?;
-        if health.is_empty() || health.len() > 32 || health.iter().any(|s| !valid_service(s)) {
+        if health.is_empty() || health.len() > 32 || health.iter().any(|s| !valid_health_service(s)) {
             return Err(Error::Configuration("invalid release health policy"));
         }
         Ok(Self {
