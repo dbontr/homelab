@@ -313,6 +313,56 @@ pub fn owner_router(shared: Shared) -> Router {
         .with_state(shared)
 }
 
+async fn remote_authorize(
+    axum::Extension(_peer): axum::Extension<crate::remote::VerifiedPeer>,
+    State(shared): State<Shared>,
+    headers: HeaderMap,
+    raw: Bytes,
+) -> Response {
+    operation_response(shared, headers, raw, true).await
+}
+
+async fn remote_preview(
+    axum::Extension(_peer): axum::Extension<crate::remote::VerifiedPeer>,
+    State(shared): State<Shared>,
+    headers: HeaderMap,
+    raw: Bytes,
+) -> Response {
+    operation_response(shared, headers, raw, false).await
+}
+
+async fn remote_service_credential(
+    axum::Extension(peer): axum::Extension<crate::remote::VerifiedPeer>,
+    State(shared): State<Shared>,
+    RoutePath(alias): RoutePath<String>,
+) -> Response {
+    let credential = shared.with_authority(|authority| {
+        authority.use_service_credential(&peer.identity, &alias, |secret| secret.to_vec())
+    });
+    let Ok(bytes) = credential else {
+        return protected_status("service credential access denied", StatusCode::FORBIDDEN);
+    };
+    if bytes.is_empty() || bytes.len() > 32_768 {
+        return protected_status("service credential unavailable", StatusCode::FORBIDDEN);
+    }
+    let mut response = axum::body::Body::from(bytes).into_response();
+    response.headers_mut().insert(
+        header::CONTENT_TYPE, HeaderValue::from_static("application/octet-stream")
+    );
+    response
+}
+
+// No session, owner-factor or browser handler is available over remote TLS.
+pub fn remote_router(shared: Shared) -> Router {
+    Router::new()
+        .route("/v1/authorize", post(remote_authorize))
+        .route("/v1/preview", post(remote_preview))
+        .route("/v1/service-credentials/{alias}", get(remote_service_credential))
+        .layer(DefaultBodyLimit::max(MAX_JSON_BYTES))
+        .layer(middleware::from_fn(private_headers))
+        .with_state(shared)
+}
+
 pub fn client_router(shared: Shared) -> Router {
     Router::new()
         .route("/v1/session", get(session_client_get).delete(session_client_delete))
