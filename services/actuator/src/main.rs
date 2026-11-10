@@ -170,6 +170,7 @@ fn admit(args: &[String], policy: &Policy) -> Result<Action, &'static str> {
         let version = if args.len() == 6 {
             let value = &args[5];
             if value.is_empty() || value.len() > 128
+                || !value.as_bytes()[0].is_ascii_alphanumeric()
                 || !value.bytes().all(|b| b.is_ascii_alphanumeric()
                     || matches!(b, b'.' | b'_' | b'-'))
             {
