@@ -5,7 +5,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde::Serialize;
 use serde_json::Value;
 
-use crate::canonical::{argument_digest, canonical_arguments};
+use crate::canonical::canonical_arguments;
+use sha2::{Digest, Sha256};
 use crate::credentials::{AuthenticatorState, Factors, PassphraseRecord};
 use crate::state::StateStore;
 use crate::Error;
@@ -391,7 +392,7 @@ impl Authority {
             Ok(value) => value,
             Err(_) => return Ok(Decision::Denied("invalid operation arguments")),
         };
-        let digest = argument_digest(&canonical)?;
+        let digest: [u8; 32] = Sha256::digest(&canonical).into();
         if !rule.destructive {
             if consume {
                 self.session.as_mut().expect("live session exists").last_activity = now;
@@ -400,22 +401,24 @@ impl Authority {
         }
         self.prune(now);
         let session = self.session.as_ref().expect("live session exists").clone();
-        for (id, item) in &self.pending {
-            if item.session_id == session.id && item.operation == operation
-                && item.target == target && item.digest == digest
-            {
-                if item.confirmed {
-                    if consume {
-                        self.pending.remove(id);
-                        self.session.as_mut().expect("live session exists").last_activity = now;
-                    }
-                    return Ok(Decision::Allowed);
+        let matching = self.pending.iter().find_map(|(id, item)| {
+            (item.session_id == session.id
+                && item.operation == operation
+                && item.target == target
+                && item.digest == digest).then(|| (id.clone(), item.clone()))
+        });
+        if let Some((id, item)) = matching {
+            if item.confirmed {
+                if consume {
+                    self.pending.remove(&id);
+                    self.session.as_mut().expect("live session exists").last_activity = now;
                 }
-                return Ok(Decision::Confirmation {
-                    id: id.clone(),
-                    expires_at: item.expires,
-                });
+                return Ok(Decision::Allowed);
             }
+            return Ok(Decision::Confirmation {
+                id,
+                expires_at: item.expires,
+            });
         }
         if self.pending.len() >= MAX_PENDING {
             return Ok(Decision::Denied("confirmation capacity exhausted"));
