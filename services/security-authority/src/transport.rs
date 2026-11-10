@@ -35,7 +35,7 @@ const LOCAL_OWNER: &str = "local-operator";
 pub struct Shared {
     pub(crate) oauth: Option<crate::oauth::SharedBroker>,
     authority: Arc<Mutex<Authority>>,
-    csrf: Arc<Mutex<BTreeMap<String, Instant>>>,
+    csrf: Arc<Mutex<BTreeMap<String, (String, Instant)>>>, 
     browser_origin: Option<String>,
 }
 
@@ -57,28 +57,28 @@ impl Shared {
         action(&mut authority)
     }
 
-    fn new_csrf(&self) -> Option<String> {
+    fn new_csrf(&self, principal: &str) -> Option<String> {
         let mut values = self.csrf.lock().ok()?;
         let now = Instant::now();
-        values.retain(|_, expiry| *expiry > now);
+        values.retain(|_, (_, expiry)| *expiry > now);
         if values.len() >= MAX_CSRF {
             return None;
         }
         let mut bytes = [0; 24];
         getrandom::fill(&mut bytes).ok()?;
         let token = hex::encode(bytes);
-        values.insert(token.clone(), now + CSRF_LIFETIME);
+        values.insert(token.clone(), (principal.into(), now + CSRF_LIFETIME));
         Some(token)
     }
 
-    fn take_csrf(&self, token: &str) -> bool {
+    fn take_csrf(&self, principal: &str, token: &str) -> bool {
         if token.len() != 48 {
             return false;
         }
         let Ok(mut values) = self.csrf.lock() else {
             return false;
         };
-        values.remove(token).is_some_and(|expiry| expiry > Instant::now())
+        values.remove(token).is_some_and(|(owner, expiry)| owner == principal && expiry > Instant::now())
     }
 }
 
@@ -458,12 +458,17 @@ fn checked_browser_assertion<'a>(shared: &Shared, headers: &'a HeaderMap) -> Res
 }
 
 fn browser_page(shared: &Shared, assertion: &str, message: &str) -> Response {
-    let Some(csrf) = shared.new_csrf() else {
+    let (principal, session, pending) = shared.with_authority(|auth| (
+        auth.browser_principal(assertion),
+        auth.browser_status(assertion),
+        auth.browser_pending(assertion),
+    ));
+    let Ok(principal) = principal else {
+        return protected_status("verified owner identity required", StatusCode::FORBIDDEN);
+    };
+    let Some(csrf) = shared.new_csrf(&principal) else {
         return protected_status("owner browser unavailable", StatusCode::SERVICE_UNAVAILABLE);
     };
-    let (session, pending) = shared.with_authority(|auth| (
-        auth.browser_status(assertion), auth.browser_pending(assertion),
-    ));
     let Ok(session) = session else {
         return protected_status("verified owner identity required", StatusCode::FORBIDDEN);
     };
@@ -532,14 +537,14 @@ async fn browser_form(
     {
         return protected_status("untrusted owner request", StatusCode::FORBIDDEN);
     }
-    if shared.with_authority(|auth| auth.browser_principal(assertion).is_err()) {
+    let Ok(principal) = shared.with_authority(|auth| auth.browser_principal(assertion)) else {
         return protected_status("verified owner identity required", StatusCode::FORBIDDEN);
-    }
+    };
     let Ok(form) = serde_urlencoded::from_bytes::<BTreeMap<String, String>>(&raw) else {
         return protected_status("invalid owner form", StatusCode::BAD_REQUEST);
     };
     let csrf = form.get("csrf").map(String::as_str).unwrap_or("");
-    if !shared.take_csrf(csrf) {
+    if !shared.take_csrf(&principal, csrf) {
         return protected_status("invalid owner form", StatusCode::FORBIDDEN);
     }
     let password = Zeroizing::new(form.get("password").cloned().unwrap_or_default());
