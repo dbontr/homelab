@@ -8,6 +8,7 @@ pub mod canonical;
 pub mod credentials;
 pub mod sessions;
 pub mod state;
+pub mod vault;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Error {
