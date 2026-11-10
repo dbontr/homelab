@@ -566,3 +566,10 @@ main.content { max-width: 94rem; margin: 0 auto; padding: 2rem; }
 @media (max-width: 900px) {
     .health-grocery-item { grid-template-columns: repeat(2,minmax(0,1fr)); }
 }
+
+
+/* Workout companion */
+.health-companion-section { display: grid; gap: 1rem; }
+.health-companion-exercises { display: flex; flex-wrap: wrap; gap: .5rem; }
+.health-completion-confirm { display: flex; align-items: center; gap: .75rem; }
+.health-completion-confirm input { width: 1.125rem; height: 1.125rem; }

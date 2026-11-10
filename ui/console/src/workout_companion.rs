@@ -2,7 +2,6 @@ use dioxus::prelude::*;
 use gloo_timers::future::TimeoutFuture;
 use serde_json::{Value, json};
 
-use crate::api;
 use crate::components::{Card, Empty, Heading, Loading, Notice};
 use crate::health_tools::{self, Tool};
 use crate::workout_planner::Plan;
