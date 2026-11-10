@@ -100,8 +100,9 @@ still require acceptance before enabling this configuration.
 
 
 The standalone Learning library provides read-only Dioxus inspection for
-concept graphs, evidence descriptions, sealed problem statements, source
-records, practice history and delayed retrieval obligations. Its Go
+concept graphs, reasoning-chain provenance, evidence descriptions, sealed
+problem statements, source records, practice history and delayed retrieval
+obligations. Its Go
 owner-session route allows only a fixed set of read operations and requires
 the normal origin, session and CSRF checks. Grading, source modification,
 attachment upload, answer-key disclosure and arbitrary MCP calls remain
