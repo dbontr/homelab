@@ -6,6 +6,7 @@ license = "MIT"
 description = "Independent owner authentication and authorization kernel"
 
 [dependencies]
+jsonwebtoken = "9.3.1"
 aes-gcm = "0.10.3"
 base64 = "0.22.1"
 chrono = { version = "0.4.40", default-features = false, features = ["std", "serde", "clock"] }

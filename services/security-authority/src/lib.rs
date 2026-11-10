@@ -4,6 +4,7 @@
 //! No external interface may assert that a password or TOTP check succeeded
 //! without invoking the cryptographic verifier in this crate.
 
+pub mod access;
 pub mod canonical;
 pub mod credentials;
 pub mod sessions;
