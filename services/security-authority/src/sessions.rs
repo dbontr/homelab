@@ -613,4 +613,37 @@ mod tests {
             "infrastructure__service_restart","jupiter",exact,true,6_035).unwrap(),
             Decision::Denied("owner authentication required"));
     }
+
+    #[test]
+    fn absolute_limit_survives_repeated_valid_activity() {
+        let mut authority = fixture();
+        authority.login_at("principal-a", PASSWORD, &otp(300), 9_000).unwrap();
+        let arguments = br#"{"host":"jupiter"}"#;
+        for step in 1..=7 {
+            let at = 9_000 + step * 6_000;
+            assert_eq!(
+                authority.authorize_at("principal-a", "platform-gateway",
+                    "workspace__status", "jupiter", arguments, true, at).unwrap(),
+                Decision::Allowed
+            );
+        }
+        assert!(!authority.status_at("principal-a", 9_000 + ABSOLUTE_SECONDS).active);
+    }
+
+    #[test]
+    fn pending_confirmation_never_exposes_secret_fields() {
+        let mut authority = fixture();
+        authority.login_at("principal-a", PASSWORD, &otp(400), 12_000).unwrap();
+        let args = br#"{"host":"jupiter","password":"private-value","service":"homelab-platform.service"}"#;
+        let result = authority.authorize_at(
+            "principal-a", "platform-gateway", "infrastructure__service_restart",
+            "jupiter", args, true, 12_001,
+        ).unwrap();
+        assert!(matches!(result, Decision::Confirmation { .. }));
+        let pending = authority.pending_at("principal-a", 12_002);
+        assert_eq!(pending.len(), 1);
+        assert!(pending[0].arguments.contains("[REDACTED]"));
+        assert!(!pending[0].arguments.contains("private-value"));
+    }
+
 }
