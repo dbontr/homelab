@@ -414,7 +414,10 @@ func(s *Server)localTools()[]map[string]any{
   tools=append(tools,
    tool("motivation_status","Read the owner-defined identity, opt-in status and self-reported intervention history",map[string]any{}),
    tool("motivation_metrics","Summarize recent self-reported voluntary intellectual work and well-being",map[string]any{}),
-   tool("motivation_suggest","Request one bounded, consented motivational intervention; no external notifications are sent",map[string]any{}),
+   tool("motivation_suggest","Request one context-aware, consented motivational intervention; no external notifications are sent",map[string]any{
+    "trigger":map[string]any{"type":"string","enum":[]string{"session_start","resistance","distraction","uncertainty","milestone"}},
+    "question":map[string]any{"type":"string","maxLength":320},
+   }),
    tool("motivation_pause","Immediately pause the opt-in motivation service",map[string]any{}))
  }
  if s.deviceCatalog!=nil{
@@ -619,7 +622,7 @@ func(s *Server)localTool(ctx context.Context,name string,raw json.RawMessage)(an
   switch name{
   case "motivation_status":return s.motivation.Call(ctx,http.MethodGet,"/v1/motivation/state",nil)
   case "motivation_metrics":return s.motivation.Call(ctx,http.MethodGet,"/v1/motivation/metrics",nil)
-  case "motivation_suggest":return s.motivation.Call(ctx,http.MethodPost,"/v1/motivation/interventions",nil)
+  case "motivation_suggest":return s.motivation.Call(ctx,http.MethodPost,"/v1/motivation/interventions",raw)
   case "motivation_pause":return s.motivation.Call(ctx,http.MethodPost,"/v1/motivation/pause",nil)
   }
  }

@@ -36,6 +36,8 @@ pub fn Motivation(csrf: String) -> Element {
     let mut fascination = use_signal(|| 3u8);
     let mut session_wellbeing = use_signal(|| 3u8);
     let mut evidence_ref = use_signal(String::new);
+    let mut trigger = use_signal(|| "session_start".to_owned());
+    let mut current_question = use_signal(String::new);
     let mut metrics = use_resource(|| async {
         api::get::<Value>("/v1/motivation/metrics").await
     });
@@ -238,6 +240,23 @@ pub fn Motivation(csrf: String) -> Element {
                 Card {
                     title: "Intervention".to_owned(),
                     description: "Choose when to request one. Strategies adapt to self-reported feedback, not fabricated performance metrics.".to_owned(),
+                    label { class: "form-row",
+                        span { class: "label", "Current situation" }
+                        select { class: "field", value: "{trigger()}",
+                            onchange: move |event| trigger.set(event.value()),
+                            option { value: "session_start", "Beginning meaningful work" }
+                            option { value: "resistance", "Resisting the next step" }
+                            option { value: "distraction", "Attention drifting" }
+                            option { value: "uncertainty", "Unsure how to proceed" }
+                            option { value: "milestone", "A meaningful result" }
+                        }
+                    }
+                    label { class: "form-row",
+                        span { class: "label", "Authentic question (optional)" }
+                        input { class: "field", maxlength: "320", value: "{current_question()}",
+                            placeholder: "Which relationship am I trying to derive?",
+                            oninput: move |event| current_question.set(event.value()) }
+                    }
                     div { class: "inline-row",
                         button {
                             class: "btn btn-primary", disabled: busy() || !service_enabled,
@@ -246,7 +265,8 @@ pub fn Motivation(csrf: String) -> Element {
                                 busy.set(true);
                                 error.set(String::new());
                                 spawn(async move {
-                                    match api::write::<Value, _>(Method::POST, "/v1/motivation/interventions", &token, &json!({})).await {
+                                    match api::write::<Value, _>(Method::POST, "/v1/motivation/interventions", &token,
+                                        &json!({"trigger":trigger(),"question":current_question()})).await {
                                         Ok(_) => state.restart(),
                                         Err(message) => error.set(message),
                                     }

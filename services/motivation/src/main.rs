@@ -8,7 +8,7 @@ use axum::{
 };
 use homelab_motivation::{
     CheckinInput, EngagementSummary, Engine, Error, FeedbackInput, Intervention,
-    ProfileChange, Record, unix_seconds,
+    ProfileChange, Record, SuggestRequest, unix_seconds,
 };
 use serde_json::{Value, json};
 use std::{
@@ -73,8 +73,10 @@ async fn profile(
 async fn pause(State(app): State<App>) -> Result<Json<Record>, ApiError> {
     with_engine(&app, |engine| engine.pause()).map(Json)
 }
-async fn suggest(State(app): State<App>) -> Result<Json<Intervention>, ApiError> {
-    with_engine(&app, |engine| engine.suggest(unix_seconds())).map(Json)
+async fn suggest(
+    State(app): State<App>, Json(request): Json<SuggestRequest>,
+) -> Result<Json<Intervention>, ApiError> {
+    with_engine(&app, |engine| engine.suggest_with_context(request, unix_seconds())).map(Json)
 }
 async fn feedback(
     State(app): State<App>, Json(input): Json<FeedbackInput>,

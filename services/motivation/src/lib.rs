@@ -91,6 +91,26 @@ pub enum Strategy {
     Reflection,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Trigger {
+    #[default]
+    SessionStart,
+    Resistance,
+    Distraction,
+    Uncertainty,
+    Milestone,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SuggestRequest {
+    #[serde(default)]
+    pub trigger: Trigger,
+    #[serde(default)]
+    pub question: String,
+}
+
 const STRATEGIES: [Strategy; 5] = [
     Strategy::Outcome,
     Strategy::Inquiry,
@@ -123,6 +143,8 @@ pub struct FeedbackInput {
 pub struct Intervention {
     pub id: u64,
     pub strategy: Strategy,
+    #[serde(default)]
+    pub trigger: Trigger,
     pub message: String,
     pub created_at: u64,
     pub feedback: Option<Feedback>,
@@ -305,6 +327,15 @@ impl Engine {
     }
 
     pub fn suggest(&mut self, now: u64) -> Result<Intervention, Error> {
+        self.suggest_with_context(SuggestRequest::default(), now)
+    }
+
+    pub fn suggest_with_context(&mut self, request: SuggestRequest, now: u64)
+        -> Result<Intervention, Error> {
+        if request.question.chars().count() > 320 ||
+            request.question.chars().any(char::is_control) {
+            return Err(Error::Invalid("invalid research question"));
+        }
         let p = &self.state.profile;
         if !p.enabled {
             return Err(Error::Conflict("motivation interventions are paused"));
@@ -331,13 +362,14 @@ impl Engine {
             .is_some_and(|last| now.saturating_sub(last.created_at) < COOLDOWN_SECONDS) {
             return Err(Error::Limited("intervention cooldown is active"));
         }
-        let strategy = select_strategy(&self.state.interventions);
+        let strategy = select_strategy(&self.state.interventions, request.trigger);
         let next_id = self.state.next_id.checked_add(1)
             .ok_or(Error::Invalid("intervention identity exhausted"))?;
         let event = Intervention {
             id: self.state.next_id,
             strategy,
-            message: format_message(p, strategy),
+            trigger: request.trigger,
+            message: format_message(p, strategy, &request.question),
             created_at: now,
             feedback: None,
             cancelled: false,
@@ -418,12 +450,23 @@ fn validate_record(record: &Record) -> Result<(), Error> {
     Ok(())
 }
 
-fn select_strategy(events: &[Intervention]) -> Strategy {
-    let completed: Vec<&Intervention> = events.iter().filter(|e| e.feedback.is_some()).collect();
+fn select_strategy(events: &[Intervention], trigger: Trigger) -> Strategy {
+    let completed: Vec<&Intervention> = events.iter()
+        .filter(|e| e.feedback.is_some() && e.trigger == trigger).collect();
     let total = completed.len();
-    let mut best = Strategy::Outcome;
+    let preferred = match trigger {
+        Trigger::SessionStart => Strategy::Outcome,
+        Trigger::Resistance => Strategy::Accountability,
+        Trigger::Distraction => Strategy::Challenge,
+        Trigger::Uncertainty => Strategy::Inquiry,
+        Trigger::Milestone => Strategy::Reflection,
+    };
+    let order = std::iter::once(preferred).chain(
+        STRATEGIES.into_iter().filter(|strategy| *strategy != preferred)
+    );
+    let mut best = preferred;
     let mut best_value = f64::NEG_INFINITY;
-    for strategy in STRATEGIES {
+    for strategy in order {
         let matches: Vec<_> = completed.iter().filter(|e| e.strategy == strategy).collect();
         if matches.is_empty() { return strategy; }
         let average = matches.iter().map(|event| {
@@ -442,7 +485,7 @@ fn select_strategy(events: &[Intervention]) -> Strategy {
     best
 }
 
-fn format_message(p: &Profile, strategy: Strategy) -> String {
+fn format_message(p: &Profile, strategy: Strategy, question: &str) -> String {
     let opening = match strategy {
         Strategy::Outcome => format!(
             "Your chosen objective is: {}. What tangible evidence would move you toward that result today?",
@@ -465,10 +508,12 @@ fn format_message(p: &Profile, strategy: Strategy) -> String {
             p.outcome
         ),
     };
+    let focus = if question.trim().is_empty() { String::new() }
+        else { format!(" Your research question is: {}.", question.trim()) };
     if p.intensity == Intensity::Direct {
-        format!("{opening} Your next committed step is: {}. Choose deliberately: begin it, or revise the commitment.", p.next_step)
+        format!("{opening}{focus} Your next committed step is: {}. Choose deliberately: begin it, or revise the commitment.", p.next_step)
     } else {
-        format!("{opening} A useful next step is: {}.", p.next_step)
+        format!("{opening}{focus} A useful next step is: {}.", p.next_step)
     }
 }
 
@@ -511,6 +556,23 @@ mod tests {
         }), Err(Error::Conflict(_))));
         e.pause().unwrap();
         assert!(matches!(e.suggest(100_000), Err(Error::Conflict(_))));
+        drop(e);
+        fs::remove_dir_all(dir).unwrap();
+    }
+    #[test]
+    fn situation_directs_initial_strategy_without_invented_motives() {
+        let (mut e, dir) = engine();
+        configured(&mut e);
+        let prompt = e.suggest_with_context(SuggestRequest {
+            trigger: Trigger::Resistance,
+            question: "Can coupled oscillators optimize a physical objective?".into(),
+        }, 100_000).unwrap();
+        assert_eq!(prompt.strategy, Strategy::Accountability);
+        assert!(prompt.message.contains("coupled oscillators"));
+        assert_eq!(prompt.trigger, Trigger::Resistance);
+        assert!(matches!(e.suggest_with_context(SuggestRequest {
+            trigger: Trigger::Distraction, question: "bad\ninput".into(),
+        }, 100_050), Err(Error::Invalid(_))));
         drop(e);
         fs::remove_dir_all(dir).unwrap();
     }
