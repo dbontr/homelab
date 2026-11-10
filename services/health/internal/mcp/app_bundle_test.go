@@ -118,3 +118,49 @@ func TestRustAppBundleRequiresExactHTTPSOriginAndSafeNames(t *testing.T) {
         if validAssetName(name) { t.Errorf("accepted unsafe public asset %q",name) }
     }
 }
+
+
+func TestRustAppBundlePreservesMCPAuthorityAndOriginalResourceIdentity(t *testing.T) {
+    root := sourceBundle(t)
+    bundle, err := LoadAppBundle(root,"https://assets.example.test")
+    if err != nil { t.Fatal(err) }
+    tools := map[string]toolEntry{}
+    for _, name := range []string{
+        "health_cognitive_test","health_dashboard",
+        "health_workout_editor","health_grocery_editor","health_workout_companion",
+    } {
+        tools[name] = toolEntry{Tool:Tool{Name:name,Meta:map[string]any{
+            "ui":map[string]any{"resourceUri":"ui://personal-health-mcp/test.html"},
+        }}}
+    }
+    server := &Server{tools:tools}
+    if fallback := server.appHTML("cognitive","legacy view"); fallback != "legacy view" {
+        t.Fatal("disabled Rust App selection did not retain the legacy resource")
+    }
+    if err := server.SetAppBundle(bundle); err != nil { t.Fatal(err) }
+    if !strings.Contains(server.appHTML("cognitive","legacy view"),"content=\"cognitive\"") {
+        t.Fatal("selected Rust App did not preserve its exact view marker")
+    }
+    for name, entry := range server.tools {
+        ui, _ := entry.Meta["ui"].(map[string]any)
+        csp, _ := ui["csp"].(map[string]any)
+        origins, _ := csp["resourceDomains"].([]string)
+        if len(origins) != 1 || origins[0] != "https://assets.example.test" {
+            t.Fatalf("%s has missing or overbroad asset CSP",name)
+        }
+    }
+    handler, err := server.HTTPHandler(strings.Repeat("x",32),nil)
+    if err != nil { t.Fatal(err) }
+    assets := httptest.NewRecorder()
+    handler.ServeHTTP(assets,httptest.NewRequest(http.MethodGet,"/assets/client.wasm",nil))
+    if assets.Code != http.StatusOK {
+        t.Fatalf("public static code unavailable: %d",assets.Code)
+    }
+    private := httptest.NewRecorder()
+    req := httptest.NewRequest(http.MethodPost,"/mcp",strings.NewReader("{}"))
+    req.Header.Set("Content-Type","application/json")
+    handler.ServeHTTP(private,req)
+    if private.Code != http.StatusUnauthorized {
+        t.Fatalf("static asset configuration bypassed private MCP authorization: %d",private.Code)
+    }
+}
