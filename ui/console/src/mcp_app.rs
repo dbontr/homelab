@@ -19,6 +19,27 @@ const PROTOCOL: &str = "2026-01-26";
 const MAX_MESSAGE: usize = 256 * 1024;
 const MAX_PENDING: usize = 32;
 
+
+fn decode_response(raw: &str) -> Option<(u32, Result<Value, String>)> {
+    if raw.len() > MAX_MESSAGE { return None; }
+    let message: Value = serde_json::from_str(raw).ok()?;
+    if message.get("jsonrpc").and_then(Value::as_str) != Some("2.0") {
+        return None;
+    }
+    let id = message.get("id").and_then(Value::as_u64)
+        .and_then(|value| u32::try_from(value).ok())?;
+    let response = if let Some(error) = message.get("error") {
+        let message = error.get("message").and_then(Value::as_str)
+            .unwrap_or("Host rejected the request");
+        Err(message.chars().take(240).collect())
+    } else if let Some(result) = message.get("result") {
+        Ok(result.clone())
+    } else {
+        Err("Host response has no result".to_owned())
+    };
+    Some((id, response))
+}
+
 struct Pending {
     reply: oneshot::Sender<Result<Value, String>>,
     _timeout: Timeout,
@@ -50,26 +71,9 @@ impl Bridge {
             }
             let Ok(raw) = JSON::stringify(&event.data()) else { return };
             let Some(raw) = raw.as_string() else { return };
-            if raw.len() > MAX_MESSAGE { return; }
-            let Ok(message) = serde_json::from_str::<Value>(&raw) else { return };
-            if message.get("jsonrpc").and_then(Value::as_str) != Some("2.0") {
-                return;
-            }
-            let Some(id) = message.get("id").and_then(Value::as_u64)
-                .and_then(|id| u32::try_from(id).ok()) else {
-                return; // A host notification is not a response.
-            };
+            let Some((id, response)) = decode_response(&raw) else { return };
             let Some(pending) = pending_messages.borrow_mut().remove(&id) else { return };
-            let answer = if let Some(error) = message.get("error") {
-                let message = error.get("message").and_then(Value::as_str)
-                    .unwrap_or("Host rejected the request");
-                Err(message.chars().take(240).collect())
-            } else if let Some(result) = message.get("result") {
-                Ok(result.clone())
-            } else {
-                Err("Host response has no result".to_owned())
-            };
-            let _ = pending.reply.send(answer);
+            let _ = pending.reply.send(response);
         });
         current.add_event_listener_with_callback("message", listener.as_ref().unchecked_ref())
             .map_err(|_| "MCP Apps message listener unavailable")?;
@@ -148,7 +152,7 @@ pub async fn initialize() -> Result<(), String> {
         "appCapabilities":{"availableDisplayModes":["inline","fullscreen"]},
         "protocolVersion":PROTOCOL
     })).await?;
-    if result.get("protocolVersion").and_then(Value::as_str).is_none() {
+    if result.get("protocolVersion").and_then(Value::as_str) != Some(PROTOCOL) {
         return Err("MCP Apps host did not confirm protocol initialization".to_owned());
     }
     notify_initialized()
@@ -222,5 +226,28 @@ mod tests {
         assert_eq!(PROTOCOL, "2026-01-26");
         assert!(MAX_PENDING <= 32);
         assert!(MAX_MESSAGE <= 256 * 1024);
+    }
+
+
+    #[test]
+    fn response_parser_rejects_notifications_and_malformed_envelopes() {
+        for value in [
+            r#"{"jsonrpc":"2.0","method":"ui/notifications/host-context-changed"}"#,
+            r#"{"jsonrpc":"1.0","id":1,"result":{}}"#,
+            r#"{"id":1,"result":{}}"#,
+            r#"{"jsonrpc":"2.0","id":"one","result":{}}"#,
+            r#"{"jsonrpc":"2.0","id":4294967296,"result":{}}"#,
+        ] {
+            assert!(decode_response(value).is_none(), "{value}");
+        }
+        let (id, value) = decode_response(
+            r#"{"jsonrpc":"2.0","id":7,"result":{"protocolVersion":"2026-01-26"}}"#
+        ).expect("valid response");
+        assert_eq!(id, 7);
+        assert_eq!(value.unwrap()["protocolVersion"], PROTOCOL);
+        let (_, failure) = decode_response(
+            r#"{"jsonrpc":"2.0","id":3,"error":{"code":-32601,"message":"not found"}}"#
+        ).expect("valid error response");
+        assert_eq!(failure.unwrap_err(), "not found");
     }
 }
