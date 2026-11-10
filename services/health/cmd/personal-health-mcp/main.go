@@ -46,6 +46,13 @@ func main() {
   if err!=nil {log.Fatalf("RecipeSage integration: %v",err)}
  }
  server:=mcp.New(recipes,store)
+ if directory:=os.Getenv("PERSONAL_HEALTH_APP_BUNDLE");directory!="" {
+  bundle,err:=mcp.LoadAppBundle(directory,os.Getenv("PERSONAL_HEALTH_APP_ORIGIN"))
+  if err!=nil {log.Fatalf("Health WASM app bundle: %v",err)}
+  if err=server.SetAppBundle(bundle);err!=nil {log.Fatalf("Health WASM app selection: %v",err)}
+ }else if os.Getenv("PERSONAL_HEALTH_APP_ORIGIN")!="" {
+  log.Fatal("Health WASM asset origin requires an operator-selected bundle")
+ }
  server.EnableFoodData(fooddata.New(fooddata.Config{USDAKey:os.Getenv("USDA_FDC_API_KEY")}))
  var googleClient *googlehealth.Client
  if os.Getenv("GOOGLE_HEALTH_ACCESS_TOKEN")!="" || os.Getenv("GOOGLE_HEALTH_REFRESH_TOKEN")!="" {
