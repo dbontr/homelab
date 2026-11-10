@@ -90,7 +90,7 @@ func TestWorkspaceBridgeFailsClosedOnUntrustedEndpointsAndMalformedReplies(t *te
  defer done()
  if err:=policy.Call(context.Background(),"infrastructure__workspace_stop",
   map[string]any{"host":"saturn","project_id":"research","workspace_id":"ws1"});err==nil{
-  t.Fatal("missing downstream success field was accepted")
+  t.Fatal("invalid MCP tool result was accepted")
  }
  for _,url:=range []string{"http://example.com/mcp","https://user:pass@example.com/mcp",
   "https://example.com/not-mcp","https://example.com/mcp?target=other"}{
