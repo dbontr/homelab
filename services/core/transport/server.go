@@ -24,6 +24,7 @@ import (
  "github.com/dbontr/homelab-new/system/internal/mediahttp"
  "github.com/dbontr/homelab-new/system/internal/httpjson"
  "github.com/dbontr/homelab-new/system/internal/bookhttp"
+ "github.com/dbontr/homelab-new/system/internal/calendarhttp"
  "github.com/dbontr/homelab-new/system/observability"
  "github.com/dbontr/homelab-new/system/profiles"
  "github.com/dbontr/homelab-new/system/recipes"
@@ -86,7 +87,7 @@ func(s *Server) SetCalendarService(fetch func(context.Context)(calendar.Feed,err
  return nil
 }
 func(s *Server) fetchCalendar(ctx context.Context)(calendar.Feed,error){
- if s.calendarSource==nil{return calendar.Feed{},errors.New("calendar is not configured")}
+ if s.calendarSource==nil{return calendar.Feed{},calendarhttp.ErrNotConfigured}
  return s.calendarSource(ctx)
 }
 func(s *Server) Handler()http.Handler{
@@ -198,15 +199,9 @@ func(s *Server) Handler()http.Handler{
  mux.HandleFunc("GET /v1/tasks/conflicts",s.taskConflicts)
  mux.HandleFunc("GET /v1/planning/week",s.uiWeekPlan)
  mux.HandleFunc("GET /v1/planning/review",s.uiTaskReview)
- mux.HandleFunc("GET /v1/calendar",s.calendarEvents)
- mux.HandleFunc("GET /v1/calendar/occurrences",s.calendarOccurrences)
- mux.HandleFunc("GET /v1/devices",func(w http.ResponseWriter,_ *http.Request){
-  if s.deviceCatalog==nil{writeError(w,http.StatusServiceUnavailable,"device catalog is not configured");return}
-  writeJSON(w,http.StatusOK,s.deviceCatalog.List())
- })
- mux.HandleFunc("GET /v1/nodes",func(w http.ResponseWriter,_ *http.Request){
-  if s.nodeCatalog==nil{writeError(w,http.StatusServiceUnavailable,"node catalog is not configured");return}
-  writeJSON(w,http.StatusOK,s.nodeCatalog.List())
+ calendarhttp.RegisterOwnerRoutes(mux,s.fetchCalendar)
+ devices.Register(mux,func()(*devices.Catalog,*devices.NodeCatalog){
+  return s.deviceCatalog,s.nodeCatalog
  })
  profiles.Register(mux,s.profiles)
  mux.HandleFunc("POST /v1/compute/profiles/{id}/plan",s.profilePlanRoute)
@@ -236,12 +231,6 @@ func(s *Server) Handler()http.Handler{
 func writeJSON(w http.ResponseWriter,code int,v any){httpjson.Write(w,code,v)}
 func writeError(w http.ResponseWriter,code int,msg string){httpjson.Error(w,code,msg)}
 func decode(r *http.Request,v any)error{return httpjson.Decode(r,v)}
-func(s *Server)calendarEvents(w http.ResponseWriter,r *http.Request){
- if s.calendarSource==nil{writeError(w,503,"calendar is not configured");return}
- feed,e:=s.fetchCalendar(r.Context())
- if e!=nil{writeError(w,502,"calendar feed unavailable");return}
- writeJSON(w,200,feed)
-}
 type rpcRequest struct { JSONRPC string `json:"jsonrpc"`; ID json.RawMessage `json:"id,omitempty"`; Method string `json:"method"`; Params json.RawMessage `json:"params,omitempty"` }
 type rpcResponse struct { JSONRPC string `json:"jsonrpc"`; ID json.RawMessage `json:"id,omitempty"`; Result json.RawMessage `json:"result,omitempty"`; Error *rpcError `json:"error,omitempty"` }
 type rpcError struct { Code int `json:"code"`; Message string `json:"message"` }
