@@ -17,7 +17,7 @@ func TestReadOnlyCalendarFeed(t *testing.T){
  shared:=httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){
   if r.Method!="GET"{t.Fatalf("calendar request method %s",r.Method)}
   w.Header().Set("Content-Type","text/calendar")
-  _,_=w.Write([]byte("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:1\r\nDTSTART:20261109T120000Z\r\nSUMMARY:Seminar\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"))
+  _,_=w.Write([]byte("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:1\r\nDTSTART:20261109T120000Z\r\nDTEND:20261109T130000Z\r\nSUMMARY:Seminar\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"))
  }))
  defer shared.Close()
  db,e:=store.Open(filepath.Join(t.TempDir(),"state.json"),"UTC");if e!=nil{t.Fatal(e)}
