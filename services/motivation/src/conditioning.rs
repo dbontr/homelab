@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 const DAYS: u64 = 28;
 const MAX_PER_DAY: usize = 8;
 
+fn utc_weekday(timestamp: u64) -> u8 { ((timestamp / 86400 + 4) % 7) as u8 }
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Checkin {
     pub recorded_at: u64,
@@ -13,6 +15,8 @@ pub struct Checkin {
     pub wellbeing: u8,
     pub intervention_id: Option<u64>,
     pub evidence_ref: String,
+    #[serde(default)]
+    pub holdout: bool,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -35,6 +39,8 @@ pub struct EngagementSummary {
     pub minutes: u64,
     pub self_initiated_sessions: usize,
     pub self_initiated_minutes: u64,
+    pub holdout_minutes: u64,
+    pub holdout_self_initiated_minutes: u64,
     pub mean_fascination: f64,
     pub mean_wellbeing: f64,
     pub interventions_with_feedback: usize,
@@ -57,6 +63,7 @@ impl Engine {
     pub fn tick(&mut self, now: u64) -> Result<Option<Intervention>, Error> {
         let policy = &self.state.profile;
         if !policy.enabled || !policy.proactive_enabled { return Ok(None); }
+        if policy.holdout_weekday_utc == Some(utc_weekday(now)) { return Ok(None); }
         if self.state.interventions.iter()
             .any(|event| event.feedback.is_none() && !event.cancelled) { return Ok(None); }
         if self.state.interventions.last().is_some_and(|event|
@@ -89,6 +96,7 @@ impl Engine {
             wellbeing: input.wellbeing,
             intervention_id: input.intervention_id,
             evidence_ref: input.evidence_ref.trim().to_owned(),
+            holdout: self.state.profile.holdout_weekday_utc == Some(utc_weekday(now)),
         };
         if !valid_checkins(std::slice::from_ref(&proposed), self.state.next_id) {
             return Err(Error::Invalid("invalid engagement check-in"));
@@ -132,6 +140,11 @@ impl Engine {
             self_initiated_sessions: recent.iter().filter(|c| c.self_initiated).count(),
             self_initiated_minutes: recent.iter().filter(|c| c.self_initiated)
                 .map(|c| u64::from(c.minutes)).sum(),
+            holdout_minutes: recent.iter().filter(|c| c.holdout)
+                .map(|c| u64::from(c.minutes)).sum(),
+            holdout_self_initiated_minutes: recent.iter()
+                .filter(|c| c.holdout && c.self_initiated)
+                .map(|c| u64::from(c.minutes)).sum(),
             mean_fascination: 0.0,
             mean_wellbeing: 0.0,
             interventions_with_feedback: self.state.interventions.iter()
@@ -167,7 +180,7 @@ mod tests {
     fn activate(e: &mut Engine) {
         e.update_profile(ProfileChange {
             expected_revision: 0, enabled: true, proactive_enabled: true,
-            cadence_minutes: 120, goal_id: "research".into(),
+            cadence_minutes: 120, holdout_weekday_utc: None, goal_id: "research".into(),
             identity: "Original researcher".into(),
             outcome: "Prove a useful theorem".into(),
             next_step: "Establish a lemma".into(),
@@ -188,6 +201,30 @@ mod tests {
         assert!(e.tick(86400 + 13 * 3600).unwrap().is_none());
         let second = e.tick(86400 + 16 * 3600).unwrap().unwrap();
         assert_ne!(one.id, second.id);
+        drop(e);
+        fs::remove_dir_all(dir).unwrap();
+    }
+    #[test]
+    fn voluntary_work_can_be_measured_on_intervention_free_day() {
+        let (mut e, dir) = engine();
+        activate(&mut e);
+        e.update_profile(ProfileChange {
+            expected_revision: 1, enabled: true, proactive_enabled: true,
+            cadence_minutes: 120, holdout_weekday_utc: Some(5),
+            goal_id: "research".into(), identity: "Original researcher".into(),
+            outcome: "Prove a useful theorem".into(),
+            next_step: "Establish a lemma".into(), intensity: Intensity::Direct,
+            daily_limit: 4, quiet_start_utc_hour: 22, quiet_end_utc_hour: 6,
+        }).unwrap();
+        let friday = 86400 + 12 * 3600;
+        assert!(e.tick(friday).unwrap().is_none());
+        e.checkin(CheckinInput {
+            minutes: 50, self_initiated: true, fascination: 4, wellbeing: 4,
+            intervention_id: None, evidence_ref: String::new(),
+        }, friday).unwrap();
+        let summary=e.metrics(friday + 10);
+        assert_eq!(summary.holdout_minutes, 50);
+        assert_eq!(summary.holdout_self_initiated_minutes, 50);
         drop(e);
         fs::remove_dir_all(dir).unwrap();
     }

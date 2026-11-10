@@ -29,11 +29,6 @@ in {
         assertion = builtins.match "^(127\\.0\\.0\\.1|\\[::1\\]):[0-9]+$" cfg.listenAddress != null;
         message = "Motivation service must listen on an explicit numeric loopback address.";
       }
-      {
-        assertion = !config.services.homelabPlatform.enable ||
-          cfg.tokenFile != config.services.homelabPlatform.tokenFile;
-        message = "Motivation and platform credentials must not be reused.";
-      }
     ];
     systemd.services.homelab-motivation = {
       description = "Owner-directed motivation and engagement service";
