@@ -14,6 +14,7 @@ import (
 
     "github.com/dbontr/homelab-new/system/agentflow"
     "github.com/dbontr/homelab-new/system/books"
+    "github.com/dbontr/homelab-new/system/internal/calendarhttp"
     "github.com/dbontr/homelab-new/system/devices"
     "github.com/dbontr/homelab-new/system/media"
     "github.com/dbontr/homelab-new/system/observability"
@@ -98,7 +99,6 @@ func main(){
     planner,err:=configuredCapabilityPlanner(vault)
     if err!=nil{log.Fatal("capability model configuration: ",err)}
     if planner!=nil{server.SetCapabilityPlanner(planner)}
-    server.StartWorkflowScheduler(context.Background())
     if socket:=os.Getenv("HOMELAB_ENGINEERING_SOCKET");socket!=""{
         client,err:=agentflow.NewClient(socket)
         if err!=nil{log.Fatal(err)}
@@ -160,7 +160,18 @@ func main(){
     }else if os.Getenv("HOMELAB_SEERR_API_KEY_FILE")!=""||os.Getenv("HOMELAB_SEERR_VAULT_ALIAS")!=""{
         log.Fatal("Seerr credential requires endpoint")
     }
-    if file:=os.Getenv("HOMELAB_CALENDAR_URL_FILE");file!=""{
+    if endpoint:=os.Getenv("HOMELAB_CALENDAR_SERVICE_URL");endpoint!=""{
+        if os.Getenv("HOMELAB_CALENDAR_URL_FILE")!=""{
+            log.Fatal("calendar service and local calendar feed must not be configured together")
+        }
+        token,e:=secret(os.Getenv("HOMELAB_CALENDAR_SERVICE_TOKEN_FILE"))
+        if e!=nil{log.Fatal("calendar service identity: ",e)}
+        client,e:=calendarhttp.NewClient(endpoint,token)
+        if e!=nil{log.Fatal("calendar service connection: ",e)}
+        if e:=server.SetCalendarService(client.Fetch);e!=nil{log.Fatal(e)}
+    }else if os.Getenv("HOMELAB_CALENDAR_SERVICE_TOKEN_FILE")!=""{
+        log.Fatal("calendar service credential requires an endpoint")
+    }else if file:=os.Getenv("HOMELAB_CALENDAR_URL_FILE");file!=""{
         raw,e:=os.ReadFile(file);if e!=nil{log.Fatal(e)}
         if e:=server.SetCalendarURL(strings.TrimSpace(string(raw)));e!=nil{log.Fatal(e)}
     }
@@ -187,6 +198,7 @@ func main(){
     addr:=os.Getenv("HOMELAB_LISTEN_ADDR");if addr==""{addr="127.0.0.1:8300"}
     host,_,e:=net.SplitHostPort(addr);if e!=nil{log.Fatal(e)}
     if host!="127.0.0.1"&&host!="::1"&&host!="localhost"{log.Fatal("homelab-platform must listen on loopback behind an authenticated ingress")}
+    server.StartWorkflowScheduler(context.Background())
     srv:=&http.Server{Addr:addr,Handler:server.Handler(),ReadHeaderTimeout:10*time.Second,ReadTimeout:30*time.Second,WriteTimeout:180*time.Second,IdleTimeout:120*time.Second}
     log.Print(fmt.Sprintf("homelab-platform listening on %s",addr))
     log.Fatal(srv.ListenAndServe())

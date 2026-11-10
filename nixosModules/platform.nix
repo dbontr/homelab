@@ -1,9 +1,11 @@
 { config, lib, pkgs, ... }:
 let
   cfg = config.services.homelabPlatform;
+  calendarCfg = config.services.homelabCalendar;
   package = import ../packages/platform.nix { inherit pkgs; };
 in
 {
+  imports = [ ./calendar.nix ];
   options.services.homelabPlatform = {
     enable = lib.mkEnableOption "the independent domain service runtime";
     mcpInterfaceTokenFile = lib.mkOption { type = lib.types.nullOr lib.types.str; default = null; description = "Service-only token for the optional unified MCP listener."; };
@@ -170,6 +172,18 @@ in
   config = lib.mkIf cfg.enable {
     assertions = [
       {
+        assertion = !calendarCfg.enable || cfg.calendarURLFile == null;
+        message = "The calendar sharing URL belongs to the independent calendar service when enabled.";
+      }
+      {
+        assertion = !calendarCfg.enable || (
+          calendarCfg.tokenFile != cfg.tokenFile &&
+          calendarCfg.tokenFile != cfg.mcpInterfaceTokenFile &&
+          calendarCfg.tokenFile != cfg.apiInterfaceTokenFile
+        );
+        message = "The calendar service must not reuse platform or external-interface credentials.";
+      }
+      {
         assertion = (cfg.apiInterfaceTokenFile != null || cfg.apiInterfaceWritePaths == []) &&
           (cfg.apiInterfaceTokenFile == null || cfg.apiInterfaceTokenFile != cfg.tokenFile) &&
           (cfg.mcpInterfaceTokenFile == null || cfg.mcpInterfaceTokenFile != cfg.tokenFile) &&
@@ -268,8 +282,8 @@ in
     systemd.services.homelab-platform = {
       description = "Personal computing platform";
       wantedBy = [ "multi-user.target" ];
-      after = [ "network-online.target" ];
-      wants = [ "network-online.target" ];
+      after = [ "network-online.target" ] ++ lib.optional calendarCfg.enable "homelab-calendar.service";
+      wants = [ "network-online.target" ] ++ lib.optional calendarCfg.enable "homelab-calendar.service";
       environment = {
         HOMELAB_LISTEN_ADDR = cfg.listenAddress;
         HOMELAB_ALLOWED_ORIGINS = lib.concatStringsSep "," cfg.allowedOrigins;
@@ -336,6 +350,9 @@ in
         HOMELAB_SEERR_VAULT_ALIAS = cfg.seerr.vaultAlias;
       } // lib.optionalAttrs (cfg.calendarURLFile != null) {
         HOMELAB_CALENDAR_URL_FILE = "/run/credentials/homelab-platform.service/calendar_url";
+      } // lib.optionalAttrs calendarCfg.enable {
+        HOMELAB_CALENDAR_SERVICE_URL = "http://" + calendarCfg.listenAddress;
+        HOMELAB_CALENDAR_SERVICE_TOKEN_FILE = "/run/credentials/homelab-platform.service/calendar-service-token";
       } // (lib.foldl' (acc: name:
         let
           integration = cfg.integrations.${name};
@@ -368,6 +385,7 @@ in
           ++ lib.optional (cfg.mcpInterfaceTokenFile != null) "mcp-interface:${cfg.mcpInterfaceTokenFile}"
           ++ lib.optional (cfg.apiInterfaceTokenFile != null) "api-interface:${cfg.apiInterfaceTokenFile}"
           ++ lib.optional (cfg.calendarURLFile != null) "calendar_url:${cfg.calendarURLFile}"
+          ++ lib.optional calendarCfg.enable "calendar-service-token:${calendarCfg.tokenFile}"
           ++ lib.optional (cfg.consolePassphraseFile != null) "console_passphrase:${cfg.consolePassphraseFile}"
           ++ lib.optional (cfg.books.contactFile != null) "books_contact:${cfg.books.contactFile}"
           ++ lib.optional (cfg.seerr.apiKeyFile != null) "seerr_api_key:${cfg.seerr.apiKeyFile}"

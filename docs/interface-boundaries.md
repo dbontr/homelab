@@ -14,6 +14,8 @@ Homelab consists of one collection of independently operated services and three 
 | `api/` | Optional native HTTP listener; read-only unless exact write resources are configured |
 | `infrastructure/`, `nixosModules/`, `packages/` | Host and cluster resources, process and credential isolation, builds and release policy |
 
+The optional `homelab-calendar` daemon owns the external calendar sharing-link credential and serves only authenticated, read-only calendar feed data over a loopback listener. The platform uses the same bounded feed source for native views, MCP tools and scheduling, and continues without calendar availability if the daemon stops. The service can run without the UI, MCP or public API.
+
 Moonfin/Seerr, the monitoring stack, K3s, and service-specific SQL persistence remain services, not gateway plugins. NixOS can operate these components without a web UI, an MCP client or an external API.
 
 ## Data and credentials

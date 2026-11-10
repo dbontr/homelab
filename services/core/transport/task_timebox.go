@@ -42,11 +42,11 @@ func (s *Server) taskConflicts(w http.ResponseWriter,r *http.Request){
    out.Conflicts=append(out.Conflicts,Conflict{Source:"task",Title:task.Title,Start:other.Format(time.RFC3339),End:until.Format(time.RFC3339)})
   }
  }
- if s.calendarURL==""{
+ if s.calendarSource==nil{
   out.Limitations=append(out.Limitations,"No external calendar configured")
   writeJSON(w,200,out);return
  }
- feed,err:=calendar.Fetch(r.Context(),s.client,s.calendarURL)
+ feed,err:=s.fetchCalendar(r.Context())
  if err!=nil{
   out.Limitations=append(out.Limitations,"External calendar unavailable; only scheduled tasks were compared")
   writeJSON(w,200,out);return
