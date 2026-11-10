@@ -3,8 +3,6 @@ package main
 
 import (
 	"context"
-	"crypto/tls"
-	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"io"
@@ -173,12 +171,10 @@ func main() {
 		}()
 	}
  if listen:=os.Getenv("HOMELAB_SECURITY_REMOTE_LISTEN");listen!=""{
-  cert,err:=tls.LoadX509KeyPair(os.Getenv("HOMELAB_SECURITY_REMOTE_CERT"),os.Getenv("HOMELAB_SECURITY_REMOTE_KEY"))
+  cert,err:=security.LoadTLSIdentity(os.Getenv("HOMELAB_SECURITY_REMOTE_CERT"),os.Getenv("HOMELAB_SECURITY_REMOTE_KEY"))
   if err!=nil{log.Fatal("remote security certificate unavailable: ",err)}
-  ca,err:=readRequiredFile("HOMELAB_SECURITY_REMOTE_CLIENT_CA")
+  roots,err:=security.LoadTLSRoots(os.Getenv("HOMELAB_SECURITY_REMOTE_CLIENT_CA"))
   if err!=nil{log.Fatal("remote security client trust unavailable: ",err)}
-  roots:=x509.NewCertPool()
-  if !roots.AppendCertsFromPEM(ca){log.Fatal("invalid remote security client trust")}
   var clients []string
   if err:=json.Unmarshal([]byte(os.Getenv("HOMELAB_SECURITY_REMOTE_CLIENT_IDENTITIES")),&clients);err!=nil||len(clients)==0{
    log.Fatal("invalid trusted executor identity list")
