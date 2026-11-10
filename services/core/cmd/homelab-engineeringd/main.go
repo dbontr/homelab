@@ -84,7 +84,9 @@ func main(){
   os.Getenv("HOMELAB_ENGINEERING_MODEL_TOKEN_FILE")!=""{
   log.Fatal("engineering model credential requires model endpoint")
  }
- engine:=&agentflow.Engine{Store:store,Compute:compute,Author:author,AllowedProjects:projects}
+ nativeMode:=os.Getenv("HOMELAB_ENGINEERING_NATIVE_VERIFICATION")
+ if nativeMode!=""&&nativeMode!="0"&&nativeMode!="1"{log.Fatal("invalid engineering verification selection")}
+ engine:=&agentflow.Engine{Store:store,Compute:compute,Author:author,AllowedProjects:projects,NativeVerification:nativeMode=="1"}
  ctx,stop:=signal.NotifyContext(context.Background(),syscall.SIGINT,syscall.SIGTERM)
  defer stop()
  go engine.Serve(ctx)

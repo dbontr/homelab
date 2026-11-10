@@ -26,6 +26,7 @@ type Engine struct {
 	Compute         ToolCaller
 	Author          Author
 	AllowedProjects map[string]bool
+	NativeVerification bool
 	activeMu        sync.Mutex
 	active          map[string]context.CancelFunc
 }
@@ -36,6 +37,13 @@ func (e *Engine) Submit(p Program) (RunSummary, error) {
 	}
 	if !e.AllowedProjects[p.Project] {
 		return RunSummary{}, errors.New("engineering project not authorized")
+	}
+	if e.NativeVerification {
+		for _, check := range p.Checks {
+			if _, ok := nativeVerificationAction(check); !ok {
+				return RunSummary{}, errors.New("native verification requires a registered build or test action")
+			}
+		}
 	}
 	if p.Review {
 		if _, ok := e.Author.(ReviewAuthor); !ok { return RunSummary{}, errors.New("review provider not configured") }
@@ -412,7 +420,7 @@ func (e *Engine) Dispatch(ctx context.Context, claim Claim) (json.RawMessage, er
 			reports := make([]map[string]any, 0, len(commands))
 			for _, entry := range commands {
 				command := str(entry)
-				result, err := e.workspaceAction(ctx, w, "command", map[string]any{"command": "cd " + repoRoot(repo) + " && " + command})
+				result, err := e.verificationCommand(ctx, w, repo, command)
 				if err != nil {
 					return nil, err
 				}
@@ -466,7 +474,7 @@ func (e *Engine) Dispatch(ctx context.Context, claim Claim) (json.RawMessage, er
 			failedCode := float64(0)
 			for _, entry := range commands {
 				command := str(entry)
-				result, callErr := e.workspaceAction(ctx, w, "command", map[string]any{"command": "cd " + repoRoot(repo) + " && " + command})
+				result, callErr := e.verificationCommand(ctx, w, repo, command)
 				if callErr != nil {
 					return nil, callErr
 				}
