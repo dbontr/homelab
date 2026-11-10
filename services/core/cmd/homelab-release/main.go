@@ -10,6 +10,7 @@ import (
  "time"
 
  "github.com/dbontr/homelab-new/system/release"
+ "github.com/dbontr/homelab-new/system/statelease"
 )
 
 func configured()( *release.Controller,error){
@@ -40,10 +41,24 @@ func configured()( *release.Controller,error){
  return release.New(cfg)
 }
 
+// Exclusive release-state custody prevents a local recovery CLI from
+// modifying the same generation journal while the privileged daemon owns it.
+func acquireReleaseLease(state,operation string)(*statelease.Lease,error){
+ switch operation {
+ case "status":return nil,nil
+ case "stage","activate","revert","recover":
+  return statelease.Acquire(state,"executord")
+ default:return nil,errors.New("unknown release operation")
+ }
+}
+
 func run(args []string)error{
  if os.Geteuid()!=0{return errors.New("release management requires a local administrator")}
  ctrl,err:=configured();if err!=nil{return err}
  if len(args)==0{return errors.New("expected stage, activate, recover, or status")}
+ lease,err:=acquireReleaseLease(ctrl.Config.StateDir,args[0])
+ if err!=nil{return fmt.Errorf("exclusive release-state access unavailable: %w",err)}
+ if lease!=nil{defer lease.Close()}
  duration:=15*time.Minute
  if args[0]=="stage"{duration=2*time.Hour}
  if args[0]=="status"{duration=10*time.Second}
