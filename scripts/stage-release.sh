@@ -26,7 +26,7 @@ fi
 source_module=""
 case "$component" in
   "") [[ "$mode" == complete ]] || exit 2 ;;
-  homelab-platform|homelab-calendard|homelab-engineeringd|homelab-approve|homelab-securityd|homelab-executord|homelab-release|homelab-admin)
+  homelab-platform|homelab-calendard|homelab-engineeringd|homelab-securityd|homelab-executord|homelab-release|homelab-admin)
     source_module=services/core ;;
   homelab-compute-controller|homelab-compute-worker)
     source_module=services/compute ;;
@@ -124,7 +124,6 @@ if [[ "$mode" == complete ]]; then
   build_go . ./mcp homelab-mcp
   build_go . ./api homelab-api
   build_go services/core ./cmd/homelab-engineeringd homelab-engineeringd
-  build_go services/core ./cmd/homelab-approve homelab-approve
   build_go services/core ./cmd/homelab-securityd homelab-securityd
   build_go services/core ./cmd/homelab-executord homelab-executord
   build_go services/core ./cmd/homelab-release homelab-release
