@@ -6,15 +6,16 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
 const calendarSecret = "calendar-service-identity-with-sufficient-length"
 
 func TestCalendarServiceCredentialAndPrivateSource(t *testing.T) {
-	feedRequests := 0
+	var feedRequests atomic.Int32
 	provider := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		feedRequests++
+		feedRequests.Add(1)
 		if r.Method != http.MethodGet || r.Header.Get("Authorization") != "" {
 			t.Error("calendar provider received an unexpected method or credential")
 		}
@@ -43,13 +44,13 @@ func TestCalendarServiceCredentialAndPrivateSource(t *testing.T) {
 		handler.ServeHTTP(out,req)
 		if out.Code!=tc.status{t.Fatalf("%s %s: %d, expected %d",tc.method,tc.path,out.Code,tc.status)}
 	}
-	if feedRequests!=0{t.Fatal("unauthorized requests reached the private provider")}
+	if feedRequests.Load()!=0{t.Fatal("unauthorized requests reached the private provider")}
 	client,err:=NewClient(service.URL,calendarSecret)
 	if err!=nil{t.Fatal(err)}
 	feed,err:=client.Fetch(context.Background())
 	if err!=nil{t.Fatal(err)}
 	if len(feed.Events)!=1||feed.Events[0].Summary!="Seminar"{t.Fatalf("calendar event lost: %+v",feed)}
-	if feedRequests!=1{t.Fatalf("calendar provider called %d times",feedRequests)}
+	if feedRequests.Load()!=1{t.Fatalf("calendar provider called %d times",feedRequests.Load())}
 	if _,err:=NewClient(service.URL,"short");err==nil{t.Fatal("weak calendar credentials admitted")}
 	if _,err:=NewClient("https://calendar.example",calendarSecret);err==nil{t.Fatal("external calendar service origin admitted")}
 	if _,err:=NewClient(service.URL+"/arbitrary",calendarSecret);err==nil{t.Fatal("calendar service path override admitted")}
