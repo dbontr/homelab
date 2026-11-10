@@ -6,7 +6,7 @@ use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Datelike, Utc};
 use fs2::FileExt;
 use serde::{Deserialize, Serialize};
 
@@ -67,7 +67,7 @@ impl Event {
             && !self.operation.is_empty() && self.operation.len() <= 128
             && valid_host(&self.target)
             && matches!(self.outcome.as_str(), "started" | "accepted" | "succeeded" | "failed")
-            && DateTime::parse_from_rfc3339(&self.at).is_ok()
+            && DateTime::parse_from_rfc3339(&self.at).is_ok_and(|date| date.year() > 1)
     }
 }
 
@@ -125,7 +125,11 @@ impl AuditJournal {
             return Err(Error::Storage("audit journal has a partial record"));
         }
         let mut seen = BTreeMap::new();
-        for line in contents.split(|b| *b == b'\n').filter(|x| !x.is_empty()) {
+        let record_data = if contents.is_empty() { &contents[..] }
+            else { &contents[..contents.len() - 1] };
+        for line in record_data.split(|b| *b == b'\n') {
+            if contents.is_empty() { break; }
+            if line.is_empty() { return Err(Error::Storage("audit contains an empty record")); }
             if line.len() > 2048 { return Err(Error::Storage("audit record exceeds limit")); }
             let entry: Event = serde_json::from_slice(line)
                 .map_err(|_| Error::Storage("invalid audit record"))?;
