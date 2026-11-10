@@ -262,7 +262,7 @@ impl Broker {
 
     pub async fn token_request(
         http: &Client, provider: &Provider, form: &[(String, String)]
-    ) -> Result<Vec<u8>, Error> {
+    ) -> Result<Zeroizing<Vec<u8>>, Error> {
         let response = http.post(safe_https(&provider.token_url)?)
             .form(form).send().await.map_err(|_| Error::Storage)?;
         if !response.status().is_success()
@@ -288,7 +288,7 @@ impl Broker {
         {
             return Err(Error::Unauthorized);
         }
-        Ok(bytes.to_vec())
+        Ok(bytes)
     }
 
     pub async fn device_begin(
@@ -313,7 +313,7 @@ impl Broker {
         {
             return Err(Error::Unauthorized);
         }
-        let mut bytes = Vec::new();
+        let mut bytes = Zeroizing::new(Vec::new());
         while let Some(chunk) = response.chunk().await.map_err(|_| Error::Storage)? {
             if bytes.len() + chunk.len() > MAX_TOKEN_BYTES {
                 return Err(Error::Unauthorized);
@@ -367,7 +367,7 @@ impl Broker {
     }
 
     pub async fn device_poll(&mut self, provider: &str, id: &str)
-        -> Result<(DeviceStatus, Option<(String, Vec<u8>)>), Error>
+        -> Result<(DeviceStatus, Option<(String, Zeroizing<Vec<u8>>)>), Error>
     {
         self.prune();
         let flow = self.device.get(id).ok_or(Error::Unauthorized)?;
@@ -414,7 +414,7 @@ impl Broker {
             }
             return Ok((DeviceStatus {
                 state: "authorized".into(), retry_after_seconds: None, credential: None,
-            }, Some((flow.session_id, bytes.to_vec()))));
+            }, Some((flow.session_id, bytes))));
         }
         let response: Value = serde_json::from_slice(&bytes).map_err(|_| Error::Unauthorized)?;
         let error = response.get("error").and_then(Value::as_str).ok_or(Error::Unauthorized)?;
@@ -539,11 +539,10 @@ async fn oauth_device_poll(
     };
     let result = broker.lock().await.device_poll(&provider, &input.id).await;
     match result {
-        Ok((mut status, Some((session, mut token)))) => {
+        Ok((mut status, Some((session, token)))) => {
             let stored = shared.with_authority(|auth|
                 auth.store_broker_credential(&session, &provider, &token)
             );
-            token.zeroize();
             match stored {
                 Ok(handle) => {
                     status.credential = Some(handle);
@@ -698,13 +697,12 @@ async fn oauth_callback(State(shared): State<Shared>, headers: HeaderMap, raw: a
         ("client_id".into(), flow.provider.client_id.clone()),
         ("code_verifier".into(), flow.verifier.to_string()),
     ];
-    let Ok(mut credential) = Broker::token_request(&http, &flow.provider, &form).await else {
+    let Ok(credential) = Broker::token_request(&http, &flow.provider, &form).await else {
         return failure("OAuth token exchange rejected", StatusCode::FORBIDDEN);
     };
     let stored = shared.with_authority(|auth|
         auth.store_broker_credential(&flow.session_id, &flow.provider.name, &credential)
     );
-    credential.zeroize();
     if stored.is_err() {
         return failure("OAuth credential custody unavailable", StatusCode::FORBIDDEN);
     }
