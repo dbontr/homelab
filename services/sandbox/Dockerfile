@@ -2,7 +2,7 @@
 FROM rust:1.99.1-bookworm AS build
 WORKDIR /src
 COPY services/sandbox/src ./src
-RUN rustc --edition=2021 -D warnings -C opt-level=2 src/main.rs -o /out/homelab-engineering-sandbox
+RUN mkdir -p /out && rustc --edition=2021 -D warnings -C opt-level=2 src/main.rs -o /out/homelab-engineering-sandbox
 
 FROM golang:1.27.3-bookworm
 COPY --from=rust:1.99.1-bookworm /usr/local/cargo /usr/local/cargo
