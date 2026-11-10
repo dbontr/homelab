@@ -11,6 +11,7 @@ import (
  "github.com/dbontr/homelab-new/system/calendar"
  "encoding/json"
  "context"
+ "sync/atomic"
 )
 func TestReadOnlyCalendarFeed(t *testing.T){
  shared:=httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){
@@ -35,9 +36,9 @@ func TestCalendarServiceSuppliesNativeMCPAndRecurrenceViews(t *testing.T) {
 	const serviceToken="separate-calendar-service-token-with-sufficient-length"
 	feed,err:=calendar.Parse("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:1\r\nDTSTART:20261109T120000Z\r\nSUMMARY:Seminar\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n")
 	if err!=nil{t.Fatal(err)}
-	calls:=0
+	var calls atomic.Int32
 	private:=httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){
-		calls++
+		calls.Add(1)
 		if r.URL.Path!="/v1/calendar"||r.Header.Get("Authorization")!="Bearer "+serviceToken{
 			t.Error("calendar was read without the dedicated service identity")
 		}
@@ -70,6 +71,6 @@ func TestCalendarServiceSuppliesNativeMCPAndRecurrenceViews(t *testing.T) {
 	if mcp.Code!=http.StatusOK||!strings.Contains(mcp.Body.String(),"Seminar"){
 		t.Fatalf("unified MCP calendar feed unavailable: %d %s",mcp.Code,mcp.Body.String())
 	}
-	if calls!=3{t.Fatalf("calendar service received %d calls, want 3",calls)}
+	if calls.Load()!=3{t.Fatalf("calendar service received %d calls, want 3",calls.Load())}
 	if _,err:=client.Fetch(context.Background());err!=nil{t.Fatal(err)}
 }
