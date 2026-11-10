@@ -49,8 +49,11 @@ checks trigger rollback. The host journal preserves interrupted release state
 for explicit recovery.
 
 The Rust package is `homelab-executor-authority`. Its code resides under
-`services/executor`, and Nix packages the separate `executord` and
-`recovery` binaries. A reviewed `Cargo.lock` is required before Rust can
+`services/executor`, and Nix packages the separate `executord`,
+`recovery` and copied-state `preflight` binaries. The preflight accepts an
+independent owner-only directory, rejects live directory/inode aliases,
+replays the protected audit transitions and validates staged manifests and
+any release journal before a change of implementation. A reviewed `Cargo.lock` is required before Rust can
 be selected in the NixOS module. The root-only
 `homelab-executor-recovery.service` is not enabled automatically. It can
 be started deliberately after stopping the active executor, and it must
