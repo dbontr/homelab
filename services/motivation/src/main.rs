@@ -88,7 +88,7 @@ fn read_token(path: &Path) -> Result<String, Box<dyn std::error::Error>> {
         metadata.permissions().mode() & 0o077 != 0 {
         return Err("token file must be a private regular file".into());
     }
-    let mut file = fs::OpenOptions::new().read(true)
+    let file = fs::OpenOptions::new().read(true)
         .custom_flags(libc::O_NOFOLLOW).open(path)?;
     if !file.metadata()?.is_file() || file.metadata()?.permissions().mode() & 0o077 != 0 {
         return Err("token descriptor is not a private regular file".into());
