@@ -4,6 +4,7 @@ import (
  "bytes"
  "context"
  "encoding/json"
+ "encoding/hex"
  "errors"
  "io"
  "net"
@@ -26,20 +27,30 @@ func NewClient(socket string)(*Client,error){
  return &Client{http:&http.Client{Transport:transport,Timeout:180*time.Second}},nil
 }
 
-func(c *Client) Execute(ctx context.Context,operation,target string,args json.RawMessage)(security.Authorization,error){
+func(c *Client) Execute(ctx context.Context,operation,target string,args json.RawMessage)(ExecutionResult,error){
  payload,err:=json.Marshal(map[string]any{"operation":operation,"target":target,"arguments":args})
- if err!=nil{return security.Authorization{},err}
+ if err!=nil{return ExecutionResult{},err}
  req,err:=http.NewRequestWithContext(ctx,http.MethodPost,"http://unix/v1/execute",bytes.NewReader(payload))
- if err!=nil{return security.Authorization{},err}
+ if err!=nil{return ExecutionResult{},err}
  req.Header.Set("Content-Type","application/json")
  req.Header.Set("Cf-Access-Jwt-Assertion",security.AccessAssertion(ctx))
  response,err:=c.http.Do(req)
- if err!=nil{return security.Authorization{},err}
+ if err!=nil{return ExecutionResult{},err}
  defer response.Body.Close()
- if response.StatusCode!=http.StatusOK{return security.Authorization{},errors.New("executor refused operation")}
- var value security.Authorization
+ if response.StatusCode!=http.StatusOK{return ExecutionResult{},errors.New("executor refused operation")}
+ var value ExecutionResult
  raw,err:=io.ReadAll(io.LimitReader(response.Body,8193))
- if err!=nil||len(raw)>8192{return security.Authorization{},errors.New("invalid executor reply")}
- if err:=json.Unmarshal(raw,&value);err!=nil{return security.Authorization{},err}
+ if err!=nil||len(raw)>8192{return ExecutionResult{},errors.New("invalid executor reply")}
+ if err:=json.Unmarshal(raw,&value);err!=nil{return ExecutionResult{},err}
+ if value.Allowed {
+  if (value.State!=ExecutionAccepted&&value.State!=ExecutionCompleted)||len(value.AuditID)!=32 {
+   return ExecutionResult{},errors.New("executor returned an invalid execution outcome")
+  }
+  if _,err:=hex.DecodeString(value.AuditID);err!=nil {
+   return ExecutionResult{},errors.New("executor returned an invalid audit ID")
+  }
+ } else if value.State!=""||value.AuditID!="" {
+  return ExecutionResult{},errors.New("executor returned a contradictory authorization decision")
+ }
  return value,nil
 }

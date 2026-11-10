@@ -49,7 +49,7 @@ func(j *AuditJournal)Record(id,operation,target,digest,outcome string)error{
  if j==nil{return errors.New("audit journal unavailable")}
  if len(id)!=32||len(digest)!=64||len(operation)==0||len(operation)>128||
   !nodePattern.MatchString(target)||len(target)>63||
-  (outcome!="started"&&outcome!="succeeded"&&outcome!="failed"){
+  (outcome!="started"&&outcome!="accepted"&&outcome!="succeeded"&&outcome!="failed"){
   return errors.New("invalid audit event")
  }
  if _,err:=hex.DecodeString(id);err!=nil{return errors.New("invalid audit ID")}

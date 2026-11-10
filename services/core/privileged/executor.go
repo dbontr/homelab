@@ -102,95 +102,153 @@ func New(cfg Config)(*Executor,error){
 
 // Execute accepts only typed operations and canonical JSON. The executor
 // cannot be used as an arbitrary command runner, even by an unlocked gateway.
-func(e *Executor) Execute(ctx context.Context,operation,target string,args json.RawMessage)(security.Authorization,error){
- if target!=e.cfg.Host{return security.Authorization{Reason:"target is not this host"},nil}
- canonical,fields,err:=canonicaljson.Object(args)
- if err!=nil{return security.Authorization{Reason:"invalid operation arguments"},nil}
- verb:=serviceAction(operation)
- switch operation{
- case "infrastructure__service_start","infrastructure__service_stop","infrastructure__service_reload","infrastructure__service_restart":
-  if len(fields)!=2{return security.Authorization{Reason:"unexpected arguments"},nil}
-  service,ok:=fields["service"].(string)
-  if !ok||!e.services[service]{return security.Authorization{Reason:"service not permitted"},nil}
-  host,ok:=fields["host"].(string)
-  if !ok||host!=target{return security.Authorization{Reason:"host mismatch"},nil}
- case "cluster__deployment_restart","cluster__deployment_scale":
-  if _,_,err:=e.cfg.Kubernetes.command(operation,fields);err!=nil{
-   return security.Authorization{Reason:"Kubernetes policy denied operation"},nil
-  }
-  host,ok:=fields["host"].(string)
-  if !ok||host!=target{return security.Authorization{Reason:"host mismatch"},nil}
- case "infrastructure__workspace_stop","infrastructure__workspace_build_environment",
- "infrastructure__workspace_register_software","infrastructure__workspace_revoke_worker":
-  host,ok:=fields["host"].(string)
-  if !ok||host!=target{return security.Authorization{Reason:"host mismatch"},nil}
-  if _,_,err:=e.cfg.Workspace.operationArgs(operation,fields);err!=nil{
-   return security.Authorization{Reason:"Workspace resource policy denied operation"},nil
-  }
- case "infrastructure__release_activate","infrastructure__release_revert":
-  if !e.cfg.AllowRelease{return security.Authorization{Reason:"release activation not enabled for this host"},nil}
-  if len(fields)!=2{return security.Authorization{Reason:"unexpected arguments"},nil}
-  host,ok:=fields["host"].(string)
-  if !ok||host!=target{return security.Authorization{Reason:"host mismatch"},nil}
-  id,ok:=fields["release_id"].(string)
-  if !ok||!releasePattern.MatchString(id){return security.Authorization{Reason:"invalid staged release ID"},nil}
- default:
-  return security.Authorization{Reason:"unregistered privileged operation"},nil
- }
- // Require an audit destination before consuming a one-time owner approval.
- // A partially constructed executor must also fail closed.
- if e.cfg.Audit==nil {
-  return security.Authorization{Reason:"protected audit journal required"},errors.New("audit journal unavailable")
- }
- // Authentication/confirmation takes place in the separate security process.
- // No gateway-supplied claim of approval is accepted.
- decision,err:=e.cfg.Auth.Authorize(ctx,operation,target,canonical)
- if err!=nil{
-  log.Print("security audit privileged_operation denied")
-  return security.Authorization{Reason:"independent authorization unavailable"},err
- }
- if !decision.Allowed{
-  log.Print("security audit privileged_operation denied")
-  return decision,nil
- }
- // A durable start entry must exist before any privileged side effect.
- var entropy [16]byte
- if _,err:=rand.Read(entropy[:]);err!=nil{return security.Authorization{Reason:"audit identity unavailable"},err}
- auditID:=hex.EncodeToString(entropy[:])
- digest:=sha256.Sum256(canonical)
- argumentDigest:=hex.EncodeToString(digest[:])
- if err:=e.cfg.Audit.Record(auditID,operation,target,argumentDigest,"started");err!=nil{
-  return security.Authorization{Reason:"audit recording unavailable"},err
- }
- switch operation{
- case "infrastructure__service_start","infrastructure__service_stop","infrastructure__service_reload","infrastructure__service_restart":
-  err=e.cfg.Run(ctx,e.cfg.Systemctl,verb,fields["service"].(string))
- case "infrastructure__workspace_stop","infrastructure__workspace_build_environment",
- "infrastructure__workspace_register_software","infrastructure__workspace_revoke_worker":
-  err=e.cfg.Workspace.Call(ctx,operation,fields)
- case "infrastructure__release_activate":
-  err=e.cfg.Releases.Activate(ctx,fields["release_id"].(string))
+// ExecutionState distinguishes a request accepted for further processing from
+// a release transition verified by its host-local health checks.
+type ExecutionState string
 
- case "infrastructure__release_revert":
-  err=e.cfg.Releases.Revert(ctx,fields["release_id"].(string))
- case "cluster__deployment_restart","cluster__deployment_scale":
-  var command string
-  var argv []string
-  command,argv,err=e.cfg.Kubernetes.command(operation,fields)
-  if err==nil{err=e.cfg.Run(ctx,command,argv...)}
+const (
+	ExecutionAccepted  ExecutionState = "accepted"
+	ExecutionCompleted ExecutionState = "completed"
+)
 
- }
- outcome:="succeeded"
- if err!=nil{outcome="failed"}
- if auditErr:=e.cfg.Audit.Record(auditID,operation,target,argumentDigest,outcome);auditErr!=nil {
-  return security.Authorization{Reason:"privileged outcome is uncertain: audit unavailable"},errors.Join(err,auditErr)
- }
- if err!=nil{
-  log.Print("security audit privileged_operation failed")
-  return security.Authorization{Reason:"execution failed"},err
- }
- log.Print("security audit privileged_operation succeeded")
- return security.Authorization{Allowed:true},nil
+// ExecutionResult retains the authorization response fields for wire
+// compatibility while reporting the independently audited execution outcome.
+type ExecutionResult struct {
+	security.Authorization
+	State   ExecutionState `json:"state,omitempty"`
+	AuditID string         `json:"audit_id,omitempty"`
+}
+
+func (e *Executor) Execute(ctx context.Context, operation, target string, args json.RawMessage) (ExecutionResult, error) {
+	deny := func(reason string) ExecutionResult {
+		return ExecutionResult{Authorization: security.Authorization{Reason: reason}}
+	}
+	if e == nil || target != e.cfg.Host {
+		return deny("target is not this host"), nil
+	}
+	canonical, fields, err := canonicaljson.Object(args)
+	if err != nil {
+		return deny("invalid operation arguments"), nil
+	}
+	verb := serviceAction(operation)
+	switch operation {
+	case "infrastructure__service_start", "infrastructure__service_stop", "infrastructure__service_reload", "infrastructure__service_restart":
+		if len(fields) != 2 {
+			return deny("unexpected arguments"), nil
+		}
+		service, ok := fields["service"].(string)
+		if !ok || !e.services[service] {
+			return deny("service not permitted"), nil
+		}
+		host, ok := fields["host"].(string)
+		if !ok || host != target {
+			return deny("host mismatch"), nil
+	}
+	case "cluster__deployment_restart", "cluster__deployment_scale":
+		if _, _, err := e.cfg.Kubernetes.command(operation, fields); err != nil {
+			return deny("Kubernetes policy denied operation"), nil
+		}
+		host, ok := fields["host"].(string)
+		if !ok || host != target {
+			return deny("host mismatch"), nil
+		}
+	case "infrastructure__workspace_stop", "infrastructure__workspace_build_environment",
+		"infrastructure__workspace_register_software", "infrastructure__workspace_revoke_worker":
+		host, ok := fields["host"].(string)
+		if !ok || host != target {
+			return deny("host mismatch"), nil
+		}
+		if _, _, err := e.cfg.Workspace.operationArgs(operation, fields); err != nil {
+			return deny("Workspace resource policy denied operation"), nil
+		}
+	case "infrastructure__release_activate", "infrastructure__release_revert":
+		if !e.cfg.AllowRelease {
+			return deny("release activation not enabled for this host"), nil
+		}
+		if len(fields) != 2 {
+			return deny("unexpected arguments"), nil
+		}
+		host, ok := fields["host"].(string)
+		if !ok || host != target {
+			return deny("host mismatch"), nil
+		}
+		id, ok := fields["release_id"].(string)
+		if !ok || !releasePattern.MatchString(id) {
+			return deny("invalid staged release ID"), nil
+		}
+	default:
+		return deny("unregistered privileged operation"), nil
+	}
+	// A signed owner decision and a durable audit start entry must precede
+	// any operation that can change an external resource.
+	if e.cfg.Auth == nil {
+		return deny("independent authorization unavailable"), errors.New("authorization service unavailable")
+	}
+	if e.cfg.Audit == nil {
+		return deny("protected audit journal required"), errors.New("audit journal unavailable")
+	}
+	decision, err := e.cfg.Auth.Authorize(ctx, operation, target, canonical)
+	if err != nil {
+		log.Print("security audit privileged_operation denied")
+		return deny("independent authorization unavailable"), err
+	}
+	if !decision.Allowed {
+		log.Print("security audit privileged_operation denied")
+		return ExecutionResult{Authorization: decision}, nil
+	}
+	var entropy [16]byte
+	if _, err := rand.Read(entropy[:]); err != nil {
+		return deny("audit identity unavailable"), err
+	}
+	auditID := hex.EncodeToString(entropy[:])
+	digest := sha256.Sum256(canonical)
+	argumentDigest := hex.EncodeToString(digest[:])
+	if err := e.cfg.Audit.Record(auditID, operation, target, argumentDigest, "started"); err != nil {
+		return deny("audit recording unavailable"), err
+	}
+	switch operation {
+	case "infrastructure__service_start", "infrastructure__service_stop", "infrastructure__service_reload", "infrastructure__service_restart":
+		err = e.cfg.Run(ctx, e.cfg.Systemctl, verb, fields["service"].(string))
+	case "infrastructure__workspace_stop", "infrastructure__workspace_build_environment",
+		"infrastructure__workspace_register_software", "infrastructure__workspace_revoke_worker":
+		err = e.cfg.Workspace.Call(ctx, operation, fields)
+	case "infrastructure__release_activate":
+		err = e.cfg.Releases.Activate(ctx, fields["release_id"].(string))
+	case "infrastructure__release_revert":
+		err = e.cfg.Releases.Revert(ctx, fields["release_id"].(string))
+	case "cluster__deployment_restart", "cluster__deployment_scale":
+		var command string
+		var argv []string
+		command, argv, err = e.cfg.Kubernetes.command(operation, fields)
+		if err == nil {
+			err = e.cfg.Run(ctx, command, argv...)
+		}
+	}
+	// Release activation and reversion perform host-local health checks.
+	// A successful command submission cannot establish service readiness,
+	// scheduler completion, or a finished Workspace operation.
+	state := ExecutionAccepted
+	outcome := "accepted"
+	if operation == "infrastructure__release_activate" || operation == "infrastructure__release_revert" {
+		state = ExecutionCompleted
+		outcome = "succeeded"
+	}
+	if err != nil {
+		outcome = "failed"
+	}
+	if auditErr := e.cfg.Audit.Record(auditID, operation, target, argumentDigest, outcome); auditErr != nil {
+		return deny("privileged outcome is uncertain: audit unavailable"), errors.Join(err, auditErr)
+	}
+	if err != nil {
+		log.Print("security audit privileged_operation failed")
+		return deny("execution failed"), err
+	}
+	log.Print("security audit privileged_operation " + outcome)
+	return ExecutionResult{
+		Authorization: security.Authorization{Allowed: true},
+		State: state,
+		AuditID: auditID,
+	}, nil
 }
 
 func(e *Executor) Handler()http.Handler{

@@ -29,8 +29,8 @@ func TestExecutorAuditDeniesWhenPrivateJournalCannotBeWritten(t *testing.T){
  if strings.Count(string(raw),"\n")!=2||strings.Contains(string(raw),"service")&&strings.Contains(string(raw),"eminence.service") {
   t.Fatal("audit record count incorrect or raw arguments disclosed")
  }
- if !strings.Contains(string(raw),`"outcome":"started"`)||!strings.Contains(string(raw),`"outcome":"succeeded"`){
-  t.Fatal("audit lacked started or confirmed outcome")
+ if !strings.Contains(string(raw),`"outcome":"started"`)||!strings.Contains(string(raw),`"outcome":"accepted"`){
+  t.Fatal("audit lacked started or accepted outcome")
  }
  blocker:=filepath.Join(t.TempDir(),"unwriteable")
  if err:=os.Mkdir(blocker,0700);err!=nil{t.Fatal(err)}
