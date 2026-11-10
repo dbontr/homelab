@@ -27,8 +27,9 @@ var serviceCredentialHandle=regexp.MustCompile(`^[A-Za-z0-9_-]{32}$`)
 func serviceCredentialKey(identity,alias string)string{return identity+"\x00"+alias}
 
 // SetServiceCredentialGrants registers an immutable, explicit service identity
-// to credential binding. A revoked or rotated vault record is used on each
-// request; the daemon does not retain a plaintext credential cache.
+// to credential binding. The grant captures the current encrypted-record
+// revision unless an exact revision was configured. Rotation or deletion
+// invalidates that binding; no plaintext credential is cached.
 func(a *AdminSessions)SetServiceCredentialGrants(grants []ServiceCredentialGrant)error{
  if a==nil||len(grants)>128{return errors.New("invalid service credential policy")}
  a.mu.Lock()
