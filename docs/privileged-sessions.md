@@ -36,7 +36,7 @@ sudo homelab-admin close
 
 ## Privileged Workspace delegation
 
-The optional `services.homelabExecutor.workspace` configuration uses a fixed HTTPS Workspace MCP endpoint (or loopback HTTP for a colocated controller) and a protected controller credential loaded only into the privileged executor through systemd. The platform gateway does not receive the controller root token.
+The optional `services.homelabExecutor.workspace` configuration uses a fixed HTTPS Workspace MCP endpoint (or loopback HTTP for a colocated controller) and a protected controller credential loaded only into the privileged executor through systemd. The platform gateway does not receive the controller root token. The executor verifies the credential file's mode and type on the open descriptor for each authorized call and does not follow symbolic links. Vault-supplied tokens have the same length limit as protected file credentials.
 
 The executor accepts four typed operations: stop an allowlisted project workspace, queue an environment build in an allowlisted project, register a software package collection with exact approved image/software/package identifiers, and revoke an allowlisted compute worker. Each call independently verifies the signed owner principal, current session, operation, resource and canonical arguments before the executor reads the credential. All four operations require one-time owner confirmation. The executor forwards only the fixed Workspace MCP tool name and validated downstream fields; it does not expose the controller's unrestricted `tools/call` interface or a shell.
 
