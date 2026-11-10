@@ -18,48 +18,8 @@ type KubernetesPolicy struct {
  MaxReplicas int
 }
 
-var kubeName=regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?package privileged
-
-import (
- "encoding/json"
- "errors"
- "path/filepath"
- "regexp"
- "strconv"
- "strings"
-)
-
-// KubernetesPolicy restricts infrastructure mutations to an operator-managed
-// set of namespaces and deployments. No model-supplied command is executed.
-type KubernetesPolicy struct {
- Binary string
- Kubeconfig string
- Namespaces map[string][]string
- MaxReplicas int
-}
-
-)
-var kubeResourceVersion=regexp.MustCompile(`^[A-Za-z0-9._-]{1,128}package privileged
-
-import (
- "encoding/json"
- "errors"
- "path/filepath"
- "regexp"
- "strconv"
- "strings"
-)
-
-// KubernetesPolicy restricts infrastructure mutations to an operator-managed
-// set of namespaces and deployments. No model-supplied command is executed.
-type KubernetesPolicy struct {
- Binary string
- Kubeconfig string
- Namespaces map[string][]string
- MaxReplicas int
-}
-
-)
+var kubeName=regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
+var kubeResourceVersion=regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
 
 func validKubeName(value string) bool {
  return len(value)>0&&len(value)<=63&&kubeName.MatchString(value)
