@@ -14,7 +14,6 @@ import (
     "strings"
     "syscall"
     "time"
-
 )
 
 // USB disk access is disabled unless the worker operator and workspace request
@@ -83,8 +82,7 @@ func usbDockerMapping(configured string) (string, uint32, error) {
     }
     lines := strings.Split(strings.TrimSpace(string(output)), "\n")
     if len(lines) != 2 || !strings.HasPrefix(lines[0], "/dev/") ||
-        strings.ContainsAny(lines[0], "
-	 ") {
+        strings.ContainsAny(lines[0], "\r\n\t ") {
         return "", 0, errors.New("malformed native USB identity")
     }
     group, err := strconv.ParseUint(lines[1], 10, 32)
