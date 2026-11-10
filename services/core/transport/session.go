@@ -91,7 +91,7 @@ func (s *Server) sessionReadAllowed(r *http.Request) bool {
         (strings.HasSuffix(p,"/jobs") || strings.HasSuffix(p,"/workspaces") || strings.HasSuffix(p,"/artifacts") ||
          strings.HasSuffix(p,"/context") || strings.HasSuffix(p,"/repositories") ||
          strings.HasSuffix(p,"/research") || strings.HasSuffix(p,"/research-sources"))) &&
-    !(strings.HasPrefix(p,"/v1/learning/sessions/") && (len(strings.Split(p,"/"))==5 || len(strings.Split(p,"/"))==6 && strings.HasSuffix(p,"/pending"))) {
+    !(strings.HasPrefix(p,"/v1/learning/sessions/") && (len(strings.Split(p,"/"))==5 || len(strings.Split(p,"/"))==6 && (strings.HasSuffix(p,"/pending") || strings.HasSuffix(p,"/next") || strings.HasSuffix(p,"/probe")))) {
 		return false
 	}
 	_,_,ok := s.sessions.Check(s.sessionCookie(r))

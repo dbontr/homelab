@@ -43,6 +43,8 @@ func (s *Server) sessionOwnerWriteAllowed(r *http.Request) bool {
         allowed=true
     case r.Method == http.MethodPost && path == "/v1/learning/sessions":
         allowed = true
+    case r.Method == http.MethodPost && ownerLearningSessionWritePath(path):
+        allowed = true
     case r.Method == http.MethodPost && strings.HasPrefix(path, "/v1/learning/questions/"):
         allowed = len(strings.Split(path, "/"))==6 && strings.HasSuffix(path, "/answer")
     case r.Method == http.MethodPut && strings.HasPrefix(path, "/v1/books/requests/"):
