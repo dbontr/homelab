@@ -18,6 +18,11 @@
 - [Serde JSON](https://docs.rs/serde_json/latest/serde_json/) — Serde project. Used for: canonical request parsing, duplicate-key rejection and arbitrary-precision values in the Rust authority.
 - [jsonwebtoken 9.3.1](https://docs.rs/crate/jsonwebtoken/9.3.1) — Rust jsonwebtoken project. Used for: RS256 owner assertion verification against pinned JWKS in the Rust security authority.
 - [fs2](https://docs.rs/fs2/latest/fs2/) — Rust community crate. Used for: exclusive Linux state-directory locks during authority migration.
+- [Axum](https://docs.rs/axum/0.8.6/axum/) — Tokio project. Used for: bounded HTTP owner, gateway, browser, and remote authorization routes over isolated transports.
+- [Tokio](https://docs.rs/tokio/1.47.1/tokio/) — Tokio project. Used for: owned Unix sockets, remote TLS streams, asynchronous OAuth requests, and controlled service shutdown.
+- [Rustls](https://docs.rs/rustls/0.23.0/rustls/) — Rustls project. Used for: TLS 1.3 client authentication and certificate-chain verification in the independent authority.
+- [Reqwest](https://docs.rs/reqwest/0.12.23/reqwest/) — Reqwest project. Used for: bounded allowlisted OAuth token and device authorization requests.
+- [Nixpkgs Rust packaging](https://github.com/NixOS/nixpkgs/blob/master/doc/languages-frameworks/rust.section.md) — NixOS project. Used for: reproducible buildRustPackage and cargoLock dependency custody.
 - [Rust Standard Library: PermissionsExt](https://doc.rust-lang.org/std/os/unix/fs/trait.PermissionsExt.html) — Rust project. Used for: rejecting writable Nix policy files in the Rust actuator.
 - [Go archive/zip Package](https://pkg.go.dev/archive/zip) — Go project. Used for: portable recipe bundle generation and bounded ZIP entry reading.
 - [Model Context Protocol Specification](https://modelcontextprotocol.io/specification/2025-06-18) — MCP project; 2025-06-18. Used for: stateless JSON-RPC transport, tool discovery, and tool calls.
