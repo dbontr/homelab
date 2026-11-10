@@ -20,6 +20,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/dbontr/homelab-new/system/canonicaljson"
@@ -607,7 +608,7 @@ func (a *AdminSessions) loadState() error {
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	f, err := os.Open(a.stateFile)
+	f, err := os.OpenFile(a.stateFile,os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_CLOEXEC,0)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}

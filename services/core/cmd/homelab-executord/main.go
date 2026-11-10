@@ -19,6 +19,7 @@ import (
  "github.com/dbontr/homelab-new/system/privileged"
  "github.com/dbontr/homelab-new/system/release"
  "github.com/dbontr/homelab-new/system/security"
+ "github.com/dbontr/homelab-new/system/statelease"
 )
 
 func required(name string)string{
@@ -78,6 +79,9 @@ func main(){
  if len(health)==0{log.Fatal("at least one health service is required")}
  source:=required("HOMELAB_EXECUTOR_SOURCE")
  state:=required("HOMELAB_EXECUTOR_RELEASE_STATE")
+ lease,err:=statelease.Acquire(state,"executord")
+ if err!=nil{log.Fatal("cannot acquire exclusive executor state ownership: ",err)}
+ defer lease.Close()
  nix:=required("HOMELAB_EXECUTOR_NIX")
  nixEnv:=required("HOMELAB_EXECUTOR_NIX_ENV")
  git:=required("HOMELAB_EXECUTOR_GIT")
