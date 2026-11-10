@@ -2,6 +2,7 @@
 package calendarhttp
 
 import (
+	"bytes"
 	"context"
 	"crypto/subtle"
 	"encoding/json"
@@ -76,7 +77,11 @@ func (c *Client) Fetch(ctx context.Context) (calendar.Feed, error) {
 	if response.StatusCode != http.StatusOK || response.ContentLength > maxFeedBytes {
 		return calendar.Feed{}, fmt.Errorf("calendar service returned HTTP %d or oversized feed", response.StatusCode)
 	}
-	decoder := json.NewDecoder(io.LimitReader(response.Body, maxFeedBytes+1))
+	body, err := io.ReadAll(io.LimitReader(response.Body, maxFeedBytes+1))
+	if err != nil || len(body) > maxFeedBytes {
+		return calendar.Feed{}, errors.New("calendar service response exceeds size limit")
+	}
+	decoder := json.NewDecoder(bytes.NewReader(body))
 	decoder.DisallowUnknownFields()
 	var feed calendar.Feed
 	if err := decoder.Decode(&feed); err != nil {
