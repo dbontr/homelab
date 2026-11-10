@@ -1,7 +1,7 @@
 //! Single-writer, crash-resistant authentication replay state.
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
-use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
+use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, SecondsFormat, Utc};
@@ -202,6 +202,7 @@ impl StateStore {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::os::unix::fs::PermissionsExt;
     fn dir() -> PathBuf {
         let mut id = [0u8; 16];
         getrandom::fill(&mut id).unwrap();
