@@ -90,7 +90,7 @@ func TestWorkspaceBridgeFailsClosedOnUntrustedEndpointsAndMalformedReplies(t *te
  defer done()
  if err:=policy.Call(context.Background(),"infrastructure__workspace_stop",
   map[string]any{"host":"saturn","project_id":"research","workspace_id":"ws1"});err==nil{
-  t.Fatal("missing downstream success field was accepted")
+  t.Fatal("invalid MCP tool result was accepted")
  }
  for _,url:=range []string{"http://example.com/mcp","https://user:pass@example.com/mcp",
   "https://example.com/not-mcp","https://example.com/mcp?target=other"}{
@@ -103,7 +103,7 @@ func TestWorkspaceExecutorReauthorizesEveryMutation(t *testing.T){
  calls:=0
  policy,done:=testWorkspacePolicy(t,http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){
   calls++;w.Header().Set("Content-Type","application/json")
-  _,_=w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"isError":false}}`))
+  _,_=w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"isError":false,"content":[]}}`))
  }))
  defer done()
  auth:=&fakeAuth{decision:security.Authorization{Reason:"owner confirmation required"}}
@@ -125,4 +125,17 @@ func TestWorkspaceExecutorReauthorizesEveryMutation(t *testing.T){
  auth.decision=security.Authorization{Allowed:true}
  result,err=executor.Execute(context.Background(),"infrastructure__workspace_stop","saturn",args)
  if err!=nil||!result.Allowed||calls!=1||auth.calls!=2{t.Fatal("approved Workspace operation not delegated",result,err)}
+}
+
+
+func TestWorkspaceBridgeAcceptsToolResultWithoutExplicitIsError(t *testing.T) {
+    policy, done := testWorkspacePolicy(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        w.Header().Set("Content-Type", "application/json")
+        _, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"content":[]}}`))
+    }))
+    defer done()
+    args := map[string]any{"host":"saturn","project_id":"research","workspace_id":"ws1"}
+    if err := policy.Call(context.Background(), "infrastructure__workspace_stop", args); err != nil {
+        t.Fatalf("valid MCP tool result was rejected: %v", err)
+    }
 }
