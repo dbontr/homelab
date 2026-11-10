@@ -1,5 +1,7 @@
 # Privileged owner sessions
 
+Security and executor daemons use separate process-lifetime state ownership leases. Each daemon must obtain the lock in its protected state directory before reading durable state or accepting privileged requests. No backup, recovery, or replacement daemon may write these directories while an owner holds the lease.
+
 The independent `homelab-securityd` process owns password verification, the TOTP secret, session state, and confirmation decisions. Its default configuration binds no TCP listener. The optional remote authorization listener uses mutual TLS and exposes only authorization decisions to allowlisted executor certificate identities. Its owner socket is mode 0600. Its gateway socket is mode 0660 with membership restricted to `homelab-security-client`. A separate systemd service account holds the credential files, and the platform gateway must not receive them.
 
 ## Session policy
