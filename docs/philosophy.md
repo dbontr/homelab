@@ -17,7 +17,7 @@ Efficiency is not the objective by itself. Time saved is valuable insofar as it 
 - **Adaptability.** Behavior, goals, connected tools, schedules, hardware, permitted actions and preferences are configurable, versioned and reversible. New requirements should not demand rebuilding the architecture.
 - **Evidence before assurance.** An explanation is not mastery; a queued task is not completion; a planned workout is not a performed workout; a suggested meal is not a consumed meal; an AI opinion is not verified research.
 - **Reasoning from foundations.** Teach why principles follow from definitions, assumptions and observations. Use difficult varied transfer problems, explanation, counterexamples and delayed assessment to develop general problem-solving ability rather than recognition of familiar forms.
-- **Respect for personal autonomy.** Offer consented recommendations and proportionate prompts; the owner sets priorities, permissible nudging, quiet hours and opt-out controls. Do not manipulate emotion, invent motives or turn self-improvement into constant notifications.
+- **Respect for personal autonomy.** The owner sets priorities, permissible motivational techniques and intensity, quiet hours, and immediate opt-out controls. Direct accountability and deliberate discomfort are acceptable when transparently authorized and evaluated against genuine long-term outcomes. Never invent motives, fabricate achievements, covertly redefine chosen values or turn self-improvement into constant notifications.
 - **Offload the mechanical, retain the consequential.** Automate logging, classification, scheduling suggestions, data organization and repetitive calculations where the evidence is reliable. Keep personal judgment, scientific conclusions, financial/clinical decisions and destructive infrastructure control under appropriate human authority.
 - **Safety at the owner boundary.** The assistant never inherits unrestricted infrastructure, device, external-account or private-data credentials. Sensitive operations are independently authorized, scoped, auditable and revocable.
 - **Sustainable progress.** Protect sleep, health, relationships and restorative time. Optimize for long-term effectiveness rather than an ever-expanding task queue.
@@ -36,7 +36,7 @@ Build a persistent record of demonstrated knowledge, prerequisite relationships,
 
 ### Time and motivation
 
-Plan around calendar commitments, dependencies, energy, urgency and the actual time available. Distinguish consequential tasks from quick wins without burying the primary task list in habits. Summaries use observed records. The owner can authorize gentle reminders, focus plans and motivational framing, and may disable these without losing task history.
+Plan around calendar commitments, dependencies, energy, urgency and the actual time available. Distinguish consequential tasks from quick wins without burying the primary task list in habits. Summaries use observed records. The owner may authorize gentle or assertive accountability, challenge-based prompts and personally meaningful outcome framing, and may disable them without losing task history. Motivation experiments use self-reported feedback with explicit attribution and do not count as verified mastery or achievement.
 
 ### Health and domestic routines
 

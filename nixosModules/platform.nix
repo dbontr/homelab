@@ -2,10 +2,11 @@
 let
   cfg = config.services.homelabPlatform;
   calendarCfg = config.services.homelabCalendar;
+  motivationCfg = config.services.homelabMotivation;
   package = import ../packages/platform.nix { inherit pkgs; };
 in
 {
-  imports = [ ./calendar.nix ];
+  imports = [ ./calendar.nix ./motivation.nix ];
   options.services.homelabPlatform = {
     enable = lib.mkEnableOption "the independent domain service runtime";
     mcpInterfaceTokenFile = lib.mkOption { type = lib.types.nullOr lib.types.str; default = null; description = "Service-only token for the optional unified MCP listener."; };
@@ -184,6 +185,15 @@ in
         message = "The calendar service must not reuse platform or external-interface credentials.";
       }
       {
+        assertion = !motivationCfg.enable || (
+          motivationCfg.tokenFile != cfg.tokenFile &&
+          motivationCfg.tokenFile != cfg.mcpInterfaceTokenFile &&
+          motivationCfg.tokenFile != cfg.apiInterfaceTokenFile &&
+          motivationCfg.tokenFile != calendarCfg.tokenFile
+        );
+        message = "The motivation domain service must use its own credential.";
+      }
+      {
         assertion = (cfg.apiInterfaceTokenFile != null || cfg.apiInterfaceWritePaths == []) &&
           (cfg.apiInterfaceTokenFile == null || cfg.apiInterfaceTokenFile != cfg.tokenFile) &&
           (cfg.mcpInterfaceTokenFile == null || cfg.mcpInterfaceTokenFile != cfg.tokenFile) &&
@@ -282,8 +292,10 @@ in
     systemd.services.homelab-platform = {
       description = "Personal computing platform";
       wantedBy = [ "multi-user.target" ];
-      after = [ "network-online.target" ] ++ lib.optional calendarCfg.enable "homelab-calendar.service";
-      wants = [ "network-online.target" ] ++ lib.optional calendarCfg.enable "homelab-calendar.service";
+      after = [ "network-online.target" ] ++ lib.optional calendarCfg.enable "homelab-calendar.service"
+        ++ lib.optional motivationCfg.enable "homelab-motivation.service";
+      wants = [ "network-online.target" ] ++ lib.optional calendarCfg.enable "homelab-calendar.service"
+        ++ lib.optional motivationCfg.enable "homelab-motivation.service";
       environment = {
         HOMELAB_LISTEN_ADDR = cfg.listenAddress;
         HOMELAB_ALLOWED_ORIGINS = lib.concatStringsSep "," cfg.allowedOrigins;
@@ -352,6 +364,9 @@ in
       } // lib.optionalAttrs calendarCfg.enable {
         HOMELAB_CALENDAR_SERVICE_URL = "http://" + calendarCfg.listenAddress;
         HOMELAB_CALENDAR_SERVICE_TOKEN_FILE = "/run/credentials/homelab-platform.service/calendar-service-token";
+      } // lib.optionalAttrs motivationCfg.enable {
+        HOMELAB_MOTIVATION_SERVICE_URL = "http://" + motivationCfg.listenAddress;
+        HOMELAB_MOTIVATION_SERVICE_TOKEN_FILE = "/run/credentials/homelab-platform.service/motivation-service-token";
       } // (lib.foldl' (acc: name:
         let
           integration = cfg.integrations.${name};
@@ -385,6 +400,7 @@ in
           ++ lib.optional (cfg.apiInterfaceTokenFile != null) "api-interface:${cfg.apiInterfaceTokenFile}"
           ++ lib.optional (cfg.calendarURLFile != null) "calendar_url:${cfg.calendarURLFile}"
           ++ lib.optional calendarCfg.enable "calendar-service-token:${calendarCfg.tokenFile}"
+          ++ lib.optional motivationCfg.enable "motivation-service-token:${motivationCfg.tokenFile}"
           ++ lib.optional (cfg.consolePassphraseFile != null) "console_passphrase:${cfg.consolePassphraseFile}"
           ++ lib.optional (cfg.books.contactFile != null) "books_contact:${cfg.books.contactFile}"
           ++ lib.optional (cfg.seerr.apiKeyFile != null) "seerr_api_key:${cfg.seerr.apiKeyFile}"
