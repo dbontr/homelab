@@ -1,5 +1,5 @@
 //! Canonical argument hashing and duplicate-key rejection.
-use std::{collections::BTreeMap, fmt};
+use std::fmt;
 use serde::de::{self, MapAccess, SeqAccess, Visitor};
 use serde::Deserialize;
 use serde_json::{Map, Number, Value};
