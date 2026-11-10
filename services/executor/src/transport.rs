@@ -155,6 +155,19 @@ async fn remote_status(
     }
 }
 
+async fn remote_audit_status(
+    axum::Extension(_peer): axum::Extension<VerifiedCoordinator>,
+    State(executor): State<Arc<Executor>>, headers: HeaderMap
+) -> Response {
+    let Ok(owner) = assertion(&headers) else {
+        return (StatusCode::FORBIDDEN, "signed owner assertion required").into_response();
+    };
+    match executor.audit_status(owner).await {
+        Ok(value) => result(value),
+        Err(error) => refused(error),
+    }
+}
+
 pub fn gateway_router(executor: Arc<Executor>) -> Router {
     Router::new().route("/v1/execute", post(execute))
         .layer(DefaultBodyLimit::max(MAX_BODY))
@@ -167,6 +180,7 @@ fn coordinator_router(executor: Arc<Executor>) -> Router {
         .route("/v1/release/stage", post(remote_stage))
         .route("/v1/release/preview", post(remote_preview))
         .route("/v1/release/status", get(remote_status))
+        .route("/v1/audit/status", get(remote_audit_status))
         .layer(DefaultBodyLimit::max(MAX_BODY))
         .layer(middleware::from_fn(private_headers))
         .with_state(executor)
