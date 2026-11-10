@@ -530,3 +530,25 @@ main.content { max-width: 94rem; margin: 0 auto; padding: 2rem; }
 .health-metrics-form { display: grid; gap: 1rem; }
 .health-metric-plot { display: block; width: 100%; height: auto; max-height: 26rem; }
 .health-metric-plot circle { color: var(--primary); }
+
+
+/* Workout-plan editing */
+.health-plan-picker, .health-plan-editor { display: grid; gap: 1rem; }
+.health-plan-list, .health-plan-actions {
+    display: flex; gap: .5rem; flex-wrap: wrap; align-items: center;
+}
+.health-session-editor {
+    border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 1rem; display: grid; gap: 1rem;
+}
+.health-session-heading {
+    display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+}
+.health-session-heading h3 { font-size: .925rem; margin: 0; }
+.health-exercise-editor {
+    display: grid; grid-template-columns: minmax(8rem, 2fr) repeat(2, minmax(4rem, 1fr))
+        minmax(8rem, 2fr) auto; align-items: end; gap: .75rem;
+}
+@media (max-width: 800px) {
+    .health-exercise-editor { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

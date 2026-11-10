@@ -22,6 +22,7 @@ mod motivation;
 mod cognitive;
 mod health_tools;
 mod health_dashboard;
+mod workout_planner;
 
 use dioxus::prelude::*;
 use components::Icon;
@@ -46,6 +47,7 @@ enum Page {
     Health,
     ReactionTime,
     HealthMetrics,
+    WorkoutPlans,
     Recipes,
     Books,
     Activity,
@@ -72,6 +74,7 @@ impl Page {
             Self::Health => "Health",
             Self::ReactionTime => "Reaction time",
             Self::HealthMetrics => "Health metrics",
+            Self::WorkoutPlans => "Workout plans",
             Self::Recipes => "Recipes",
             Self::Books => "Books",
             Self::Activity => "Activity",
@@ -99,6 +102,7 @@ const PERSONAL: &[(Page, &str, &str)] = &[
     (Page::Health, "Health", "health"),
     (Page::ReactionTime, "Reaction time", "activity"),
     (Page::HealthMetrics, "Health metrics", "monitoring"),
+    (Page::WorkoutPlans, "Workout plans", "health"),
     (Page::Recipes, "Recipes", "recipes"),
     (Page::Books, "Books", "books"),
     (Page::Activity, "Activity", "activity"),
@@ -323,6 +327,7 @@ fn App() -> Element {
                                 Page::Health => rsx! { personal::Health { csrf: csrf.clone() } },
                                 Page::ReactionTime => rsx! { cognitive::ReactionTime { csrf: csrf.clone() } },
                                 Page::HealthMetrics => rsx! { health_dashboard::HealthDashboard { csrf: csrf.clone() } },
+                                Page::WorkoutPlans => rsx! { workout_planner::WorkoutPlanner { csrf: csrf.clone() } },
                                 Page::Recipes => rsx! { recipes::Recipes { csrf: csrf.clone() } },
                                 Page::Books => rsx! { books::Books { csrf: csrf.clone() } },
                                 Page::Activity => rsx! { activity::Activity {} },

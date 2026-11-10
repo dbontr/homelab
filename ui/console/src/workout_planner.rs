@@ -195,7 +195,7 @@ pub fn WorkoutPlanner(csrf: String) -> Element {
                     for (index, session) in plan.sessions.iter().enumerate() {
                         section { class: "health-session-editor", key: "{session.id}",
                             div { class: "health-session-heading",
-                                h3 { "Session {index + 1}" }
+                                h3 { {format!("Session {}", index + 1)} }
                                 button {
                                     class: "btn btn-outline btn-sm", r#type: "button",
                                     disabled: busy(),
@@ -406,7 +406,7 @@ mod tests {
         let mut plan = Plan { kind: "workout".to_owned(), title: "Training".to_owned(),
             ..Plan::default() };
         assert!(validate(&plan).is_ok());
-        add_session(&mut plan);
+        plan.sessions.push(Session { id: "session-1".to_owned(), ..Session::default() });
         assert!(validate(&plan).is_err());
         plan.sessions[0].date = "2026-11-10".to_owned();
         plan.sessions[0].title = "Lower body".to_owned();
