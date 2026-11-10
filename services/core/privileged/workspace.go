@@ -12,6 +12,7 @@ import (
  "path/filepath"
  "regexp"
  "strings"
+ "syscall"
  "time"
 )
 
@@ -129,6 +130,27 @@ func(p *WorkspacePolicy)operationArgs(operation string,fields map[string]any)(st
  }
 }
 
+// readWorkspaceCredential validates the opened file descriptor so an attacker
+// cannot replace a credential path with a symlink after service configuration.
+func readWorkspaceCredential(path string)(string,error){
+ const maxCredentialBytes=8192
+ file,err:=os.OpenFile(path,os.O_RDONLY|syscall.O_NOFOLLOW,0)
+ if err!=nil{return "",errors.New("Workspace authorization credential unavailable")}
+ defer file.Close()
+ info,err:=file.Stat()
+ if err!=nil||!info.Mode().IsRegular()||info.Mode().Perm()&0077!=0||
+  info.Size()<32||info.Size()>maxCredentialBytes{
+  return "",errors.New("Workspace authorization credential unavailable")
+ }
+ secret,err:=io.ReadAll(io.LimitReader(file,maxCredentialBytes+1))
+ if err!=nil||len(secret)>maxCredentialBytes{
+  return "",errors.New("Workspace authorization credential unavailable")
+ }
+ token:=strings.TrimSuffix(string(secret),"\n")
+ for i:=range secret{secret[i]=0}
+ return token,nil
+}
+
 // Call sends only validated downstream arguments and a credential sourced from
 // protected systemd storage. The response is never used as a command or URL.
 func(p *WorkspacePolicy)Call(ctx context.Context,operation string,fields map[string]any)error{
@@ -142,13 +164,10 @@ func(p *WorkspacePolicy)Call(ctx context.Context,operation string,fields map[str
   token,err=p.TokenSource()
   if err!=nil{return errors.New("Workspace vault credential unavailable")}
  }else{
-  var secret []byte
-  secret,err=os.ReadFile(p.TokenFile)
-  if err!=nil||len(secret)>8192{return errors.New("Workspace authorization credential unavailable")}
-  token=strings.TrimSuffix(string(secret),"\n")
-  for i:=range secret{secret[i]=0}
+  token,err=readWorkspaceCredential(p.TokenFile)
+  if err!=nil{return err}
  }
- if len(token)<32||strings.ContainsAny(token,"\x00\r\n\t "){
+ if len(token)<32||len(token)>8192||strings.ContainsAny(token,"\x00\r\n\t "){
   return errors.New("Workspace credential is invalid")
  }
  payload,err:=json.Marshal(map[string]any{
