@@ -11,6 +11,8 @@ pub enum Tool {
     MetricSeries,
     NutrientDaily,
     GoalSet,
+    PlanList,
+    PlanSave,
 }
 
 impl Tool {
@@ -19,6 +21,8 @@ impl Tool {
             Self::MetricSeries => "/v1/tools/health__health_metric_series/call",
             Self::NutrientDaily => "/v1/tools/health__health_nutrient_daily/call",
             Self::GoalSet => "/v1/tools/health__health_goal_set/call",
+            Self::PlanList => "/v1/tools/health__health_plan_list/call",
+            Self::PlanSave => "/v1/tools/health__health_plan_save/call",
         }
     }
 }
@@ -55,7 +59,7 @@ mod tests {
 
     #[test]
     fn health_tools_have_fixed_owner_session_routes() {
-        for tool in [Tool::MetricSeries, Tool::NutrientDaily, Tool::GoalSet] {
+        for tool in [Tool::MetricSeries, Tool::NutrientDaily, Tool::GoalSet, Tool::PlanList, Tool::PlanSave] {
             assert!(tool.route().starts_with("/v1/tools/health__"));
             assert!(tool.route().ends_with("/call"));
         }
