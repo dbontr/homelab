@@ -290,7 +290,6 @@ in
         HOMELAB_TIME_ZONE = cfg.timeZone;
         HOMELAB_DEVICES_FILE = pkgs.writeText "homelab-hardware.json" (builtins.toJSON cfg.devices);
         HOMELAB_NODES_FILE = pkgs.writeText "homelab-nodes.json" (builtins.toJSON (import ../hardware.nix).nodes);
-        HOMELAB_APPROVAL_SOCKET = "/run/homelab-platform/approval.sock";
         HOMELAB_STATE_FILE = "/var/lib/homelab-platform/state.json";
         HOMELAB_PROFILES_FILE = "/var/lib/homelab-platform/profiles.json";
         HOMELAB_RECIPES_FILE = "/var/lib/homelab-platform/recipes.json";
