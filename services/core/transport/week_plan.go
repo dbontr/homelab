@@ -28,8 +28,8 @@ func (s *Server) planWeekCapacities(ctx context.Context,day string,capacities [7
  }
  reserved:=[]store.BusyWindow{}
  limitations:=[]string{}
- if s.calendarURL!=""{
-  feed,err:=calendar.Fetch(ctx,s.client,s.calendarURL)
+ if s.calendarSource!=nil{
+  feed,err:=s.fetchCalendar(ctx)
   if err!=nil{
    limitations=append(limitations,"Calendar unavailable: only recorded task reservations are considered")
   }else{
