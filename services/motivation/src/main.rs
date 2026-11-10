@@ -7,7 +7,8 @@ use axum::{
     routing::{get, post, put},
 };
 use homelab_motivation::{
-    Engine, Error, FeedbackInput, Intervention, ProfileChange, Record, unix_seconds,
+    CheckinInput, EngagementSummary, Engine, Error, FeedbackInput, Intervention,
+    ProfileChange, Record, unix_seconds,
 };
 use serde_json::{Value, json};
 use std::{
@@ -17,6 +18,7 @@ use std::{
     io::Read,
     path::Path,
     sync::{Arc, Mutex},
+    time::Duration,
 };
 use subtle::ConstantTimeEq;
 
@@ -79,6 +81,26 @@ async fn feedback(
 ) -> Result<Json<Record>, ApiError> {
     with_engine(&app, |engine| engine.record_feedback(input, unix_seconds())).map(Json)
 }
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DismissRequest { id: u64 }
+
+async fn dismiss(
+    State(app): State<App>, Json(input): Json<DismissRequest>,
+) -> Result<Json<Record>, ApiError> {
+    with_engine(&app, |engine| engine.dismiss(input.id)).map(Json)
+}
+
+async fn checkin(
+    State(app): State<App>, Json(input): Json<CheckinInput>,
+) -> Result<Json<Record>, ApiError> {
+    with_engine(&app, |engine| engine.checkin(input, unix_seconds())).map(Json)
+}
+
+async fn metrics(State(app): State<App>) -> Result<Json<EngagementSummary>, ApiError> {
+    with_engine(&app, |engine| Ok(engine.metrics(unix_seconds()))).map(Json)
+}
+
 async fn healthz() -> Json<Value> { Json(json!({"status":"ok"})) }
 
 fn read_token(path: &Path) -> Result<String, Box<dyn std::error::Error>> {
@@ -122,10 +144,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/v1/motivation/pause", post(pause))
         .route("/v1/motivation/interventions", post(suggest))
         .route("/v1/motivation/feedback", post(feedback))
+        .route("/v1/motivation/dismiss", post(dismiss))
+        .route("/v1/motivation/checkins", post(checkin))
+        .route("/v1/motivation/metrics", get(metrics))
         .route_layer(middleware::from_fn_with_state(app.clone(), authenticate));
     let router = Router::new().merge(protected)
         .route("/healthz", get(healthz))
         .with_state(app);
+    let scheduler_state = app.engine.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(60));
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        loop {
+            interval.tick().await;
+            let Ok(mut engine) = scheduler_state.lock() else { break };
+            if let Err(error) = engine.tick(unix_seconds()) {
+                eprintln!("motivation scheduler: {error}");
+            }
+        }
+    });
     let listener = tokio::net::TcpListener::bind(listen).await?;
     axum::serve(listener, router).await?;
     Ok(())

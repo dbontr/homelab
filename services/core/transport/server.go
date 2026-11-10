@@ -413,6 +413,7 @@ func(s *Server)localTools()[]map[string]any{
  if s.motivation!=nil{
   tools=append(tools,
    tool("motivation_status","Read the owner-defined identity, opt-in status and self-reported intervention history",map[string]any{}),
+   tool("motivation_metrics","Summarize recent self-reported voluntary intellectual work and well-being",map[string]any{}),
    tool("motivation_suggest","Request one bounded, consented motivational intervention; no external notifications are sent",map[string]any{}),
    tool("motivation_pause","Immediately pause the opt-in motivation service",map[string]any{}))
  }
@@ -617,6 +618,7 @@ func(s *Server)localTool(ctx context.Context,name string,raw json.RawMessage)(an
  if s.motivation!=nil{
   switch name{
   case "motivation_status":return s.motivation.Call(ctx,http.MethodGet,"/v1/motivation/state",nil)
+  case "motivation_metrics":return s.motivation.Call(ctx,http.MethodGet,"/v1/motivation/metrics",nil)
   case "motivation_suggest":return s.motivation.Call(ctx,http.MethodPost,"/v1/motivation/interventions",nil)
   case "motivation_pause":return s.motivation.Call(ctx,http.MethodPost,"/v1/motivation/pause",nil)
   }
