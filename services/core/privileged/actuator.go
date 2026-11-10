@@ -8,6 +8,7 @@ import (
  "path/filepath"
  "strconv"
  "strings"
+ "syscall"
 )
 
 // RustActuatorConfig is trusted operator configuration, not a tool argument.
@@ -73,7 +74,7 @@ func NewRustRun(cfg RustActuatorConfig)(Run,error){
    }else{return errors.New("unsupported Rust Kubernetes arguments")}
   default:return errors.New("unsupported Rust administrative binary")
   }
-  cmd:=exec.CommandContext(ctx,cfg.Binary,args...)
+  cmd:=exec.Command(cfg.Binary,args...)
   cmd.Env=[]string{
    "HOME=/var/empty","LANG=C","PATH=/run/current-system/sw/bin:/usr/bin:/bin",
    "HOMELAB_ACTUATOR_SYSTEMCTL="+cfg.Systemctl,
@@ -86,6 +87,26 @@ func NewRustRun(cfg RustActuatorConfig)(Run,error){
   cmd.Stdin=nil
   cmd.Stdout=io.Discard
   cmd.Stderr=io.Discard
-  return cmd.Run()
+  return runActuatorProcess(ctx,cmd)
  },nil
+}
+
+// runActuatorProcess keeps the actuator and its child in one Linux process
+// group. Cancellation must terminate both processes before returning.
+func runActuatorProcess(ctx context.Context,cmd *exec.Cmd)error{
+ if err:=ctx.Err();err!=nil{return err}
+ cmd.SysProcAttr=&syscall.SysProcAttr{Setpgid:true}
+ if err:=cmd.Start();err!=nil{return err}
+ finished:=make(chan error,1)
+ go func(){finished<-cmd.Wait()}()
+ select{
+ case err:=<-finished:
+  if canceled:=ctx.Err();canceled!=nil{return canceled}
+  return err
+ case <-ctx.Done():
+  // The fixed systemctl or kubectl child inherits the actuator process group.
+  _=syscall.Kill(-cmd.Process.Pid,syscall.SIGKILL)
+  <-finished
+  return ctx.Err()
+ }
 }
