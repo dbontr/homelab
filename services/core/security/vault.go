@@ -10,6 +10,8 @@ import (
  "encoding/json"
  "errors"
  "fmt"
+ "io"
+ "syscall"
  "os"
  "path/filepath"
  "sort"
@@ -44,13 +46,16 @@ func OpenVault(path string, secret []byte)(*Vault,error){
  }
  v:=&Vault{path:path,records:map[string]storedCredential{}}
  copy(v.key[:],secret)
- info,err:=os.Lstat(path)
- if err==nil&&(!info.Mode().IsRegular()||info.Mode().Perm()&0077!=0){
+ file,err:=os.OpenFile(path,os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_CLOEXEC,0)
+ if errors.Is(err,os.ErrNotExist){return v,nil}
+ if err!=nil{return nil,errors.New("credential vault cannot be opened")}
+ defer file.Close()
+ info,err:=file.Stat()
+ if err!=nil||!info.Mode().IsRegular()||info.Mode().Perm()&0077!=0{
    return nil,errors.New("credential vault must be an owner-only regular file")
  }
- if errors.Is(err,os.ErrNotExist){return v,nil}
+ data,err:=io.ReadAll(io.LimitReader(file,(8<<20)+1))
  if err!=nil{return nil,err}
- data,err:=os.ReadFile(path);if err!=nil{return nil,err}
  if len(data)>8<<20{return nil,errors.New("credential vault exceeds size limit")}
  if err:=json.Unmarshal(data,&v.records);err!=nil||v.records==nil{
    return nil,errors.New("invalid credential vault")
