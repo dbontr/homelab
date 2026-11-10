@@ -881,6 +881,34 @@ mod tests {
     }
 
     #[test]
+    fn credential_grants_fail_closed_after_persistence_fault() {
+        let mut authority = fixture();
+        authority.attach_vault([b'k'; 32]).unwrap();
+        let handle = authority.vault.as_mut().unwrap()
+            .store(&mut authority.store, "research", b"protected").unwrap();
+        authority.configure_service_grants(vec![ServiceCredentialGrant {
+            client_dns: "worker.internal".into(),
+            alias: "service_token".into(),
+            provider: "research".into(),
+            handle: handle.id,
+        }]).unwrap();
+        let peer = VerifiedServiceIdentity::from_authenticated_peer(
+            "worker.internal".into()
+        ).unwrap();
+        assert_eq!(
+            authority.use_service_credential(&peer, "service_token",
+                |secret| secret.to_vec()).unwrap(),
+            b"protected"
+        );
+        authority.store.fault_for_test();
+        assert_eq!(
+            authority.use_service_credential(&peer, "service_token",
+                |secret| secret.to_vec()),
+            Err(Error::Storage)
+        );
+    }
+
+    #[test]
     fn pending_confirmation_never_exposes_secret_fields() {
         let mut authority = fixture();
         authority.login_at("principal-a", PASSWORD, &otp(400), 12_000).unwrap();
