@@ -634,6 +634,12 @@ mod tests {
             }],
         ).unwrap();
         let shared = Shared::new(authority, None, None).unwrap();
+        let csrf = shared.new_csrf("verified-principal").unwrap();
+        assert!(!shared.take_csrf("another-principal", &csrf));
+        assert!(!shared.take_csrf("verified-principal", &csrf));
+        let accepted = shared.new_csrf("verified-principal").unwrap();
+        assert!(shared.take_csrf("verified-principal", &accepted));
+        assert!(!shared.take_csrf("verified-principal", &accepted));
         let owner = owner_router(shared.clone());
         let gateway = client_router(shared.clone());
         let remote = remote_router(shared);
