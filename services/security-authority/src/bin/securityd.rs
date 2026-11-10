@@ -1,9 +1,9 @@
 //! Independent owner authority: no local HTTP ingress is exposed over TCP.
 use std::ffi::CString;
 use std::path::Path;
-use std::sync::Arc;
 
 use homelab_security_authority::bootstrap;
+use homelab_security_authority::remote::Remote;
 use homelab_security_authority::transport::{self, Shared};
 
 fn group_id(name: &str) -> Result<u32, &'static str> {
@@ -22,6 +22,7 @@ fn group_id(name: &str) -> Result<u32, &'static str> {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let settings = bootstrap::initialize(Path::new("/var/lib/homelab-securityd"))?;
+    let remote = Remote::from_environment()?;
     let browser_enabled = settings.browser_origin.is_some();
     let shared = Shared::new(settings.authority, settings.browser_origin)?;
 
@@ -47,12 +48,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     }
     if browser_enabled {
         let browser_gid = group_id("homelab-security-browser")?;
+        let shared_browser = shared.clone();
         listeners.spawn(async move {
             transport::serve_unix(
                 Path::new("/run/homelab-security-browser/browser.sock"), 0o660,
-                Some(browser_gid), transport::browser_router(shared)
+                Some(browser_gid), transport::browser_router(shared_browser)
             ).await
         });
+    }
+    if let Some(remote) = remote {
+        let shared = shared.clone();
+        listeners.spawn(async move { remote.serve(shared).await });
     }
 
     #[cfg(unix)]
