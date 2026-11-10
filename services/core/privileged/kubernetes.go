@@ -18,7 +18,48 @@ type KubernetesPolicy struct {
  MaxReplicas int
 }
 
-var kubeName=regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
+var kubeName=regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?package privileged
+
+import (
+ "encoding/json"
+ "errors"
+ "path/filepath"
+ "regexp"
+ "strconv"
+ "strings"
+)
+
+// KubernetesPolicy restricts infrastructure mutations to an operator-managed
+// set of namespaces and deployments. No model-supplied command is executed.
+type KubernetesPolicy struct {
+ Binary string
+ Kubeconfig string
+ Namespaces map[string][]string
+ MaxReplicas int
+}
+
+)
+var kubeResourceVersion=regexp.MustCompile(`^[A-Za-z0-9._-]{1,128}package privileged
+
+import (
+ "encoding/json"
+ "errors"
+ "path/filepath"
+ "regexp"
+ "strconv"
+ "strings"
+)
+
+// KubernetesPolicy restricts infrastructure mutations to an operator-managed
+// set of namespaces and deployments. No model-supplied command is executed.
+type KubernetesPolicy struct {
+ Binary string
+ Kubeconfig string
+ Namespaces map[string][]string
+ MaxReplicas int
+}
+
+)
 
 func validKubeName(value string) bool {
  return len(value)>0&&len(value)<=63&&kubeName.MatchString(value)
@@ -69,14 +110,22 @@ func (p *KubernetesPolicy) command(operation string,fields map[string]any)(strin
   if len(fields)!=3{return "",nil,errors.New("unexpected Kubernetes arguments")}
   return p.Binary,append(base,"rollout","restart",resource),nil
  case "cluster__deployment_scale":
-  if len(fields)!=4{return "",nil,errors.New("unexpected Kubernetes arguments")}
+  if len(fields)!=4&&len(fields)!=5{return "",nil,errors.New("unexpected Kubernetes arguments")}
   raw,ok:=fields["replicas"].(json.Number)
   if !ok{return "",nil,errors.New("replica count must be an integer")}
   count,err:=strconv.Atoi(raw.String())
   if err!=nil||count<0||count>p.MaxReplicas||strings.Contains(raw.String(),"."){
    return "",nil,errors.New("replica count outside policy")
   }
-  return p.Binary,append(base,"scale",resource,"--replicas="+strconv.Itoa(count)),nil
+  command:=append(base,"scale",resource,"--replicas="+strconv.Itoa(count))
+  if len(fields)==5{
+   version,ok:=fields["resource_version"].(string)
+   if !ok||!kubeResourceVersion.MatchString(version){
+    return "",nil,errors.New("invalid Kubernetes resource version precondition")
+   }
+   command=append(command,"--resource-version="+version)
+  }
+  return p.Binary,command,nil
  default:
   return "",nil,errors.New("unknown Kubernetes action")
  }
