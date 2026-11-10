@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"strconv"
 	"time"
 
 	"github.com/dbontr/homelab-new/system/calendar"
@@ -41,8 +42,9 @@ func NewClient(raw, token string) (*Client, error) {
 		return nil, errors.New("calendar service requires a protected token and loopback HTTP origin")
 	}
 	ip := net.ParseIP(u.Hostname())
-	if ip == nil || !ip.IsLoopback() {
-		return nil, errors.New("calendar service must use a literal loopback IP")
+	port, portErr := strconv.Atoi(u.Port())
+	if ip == nil || !ip.IsLoopback() || portErr != nil || port < 1 || port > 65535 {
+		return nil, errors.New("calendar service must use a literal loopback IP and valid port")
 	}
 	return &Client{
 		endpoint: strings.TrimSuffix(u.String(), "/"),
