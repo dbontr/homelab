@@ -1,5 +1,4 @@
 //! Canonical admission, independent authorization, audit and restricted execution.
-use std::path::Path;
 use std::process::Stdio;
 use std::os::unix::process::CommandExt;
 use std::sync::Arc;
