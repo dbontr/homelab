@@ -310,6 +310,74 @@ impl Authority {
             .verify(assertion, audience)
     }
 
+    pub(crate) fn local_status(&mut self) -> SessionStatus {
+        let Ok(now) = unix_now() else {
+            return SessionStatus::inactive();
+        };
+        if !self.live(now) {
+            return SessionStatus::inactive();
+        }
+        let principal = self.session.as_ref()
+            .map(|session| session.principal.clone()).unwrap_or_default();
+        self.status_at(&principal, now)
+    }
+
+    pub(crate) fn local_pending(&mut self) -> Vec<ConfirmationPreview> {
+        let Ok(now) = unix_now() else {
+            return Vec::new();
+        };
+        if !self.live(now) {
+            return Vec::new();
+        }
+        let principal = self.session.as_ref()
+            .map(|session| session.principal.clone()).unwrap_or_default();
+        self.pending_at(&principal, now)
+    }
+
+    pub(crate) fn local_revoke(&mut self) {
+        self.session = None;
+        self.pending.clear();
+    }
+
+    pub(crate) fn verify_owner_factors(
+        &mut self, password: &str, otp: &str
+    ) -> Result<(), Error> {
+        self.authenticate_factors(password, otp, unix_now()?)
+    }
+
+    pub(crate) fn browser_principal(&self, assertion: &str) -> Result<String, Error> {
+        let audience = self.browser_audience.as_ref().ok_or(Error::Unauthorized)?;
+        self.verified_principal(assertion, audience)
+    }
+
+    pub(crate) fn browser_pending(&mut self, assertion: &str)
+        -> Result<Vec<ConfirmationPreview>, Error>
+    {
+        let principal = self.browser_principal(assertion)?;
+        self.pending(&principal)
+    }
+
+    pub(crate) fn browser_status(&mut self, assertion: &str)
+        -> Result<SessionStatus, Error>
+    {
+        let principal = self.browser_principal(assertion)?;
+        self.status(&principal)
+    }
+
+    pub(crate) fn browser_confirm(
+        &mut self, assertion: &str, id: &str, password: &str, otp: &str
+    ) -> Result<(), Error> {
+        let principal = self.browser_principal(assertion)?;
+        self.confirm(&principal, id, password, otp)
+    }
+
+    pub(crate) fn browser_revoke(&mut self, assertion: &str)
+        -> Result<bool, Error>
+    {
+        let principal = self.browser_principal(assertion)?;
+        self.revoke(&principal)
+    }
+
     pub fn login_browser(
         &mut self,
         assertion: &str,
