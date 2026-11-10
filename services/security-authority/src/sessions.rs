@@ -308,9 +308,15 @@ impl Authority {
         otp: &str,
         now: i64,
     ) -> Result<(), Error> {
-        self.factors.verify(&mut self.replay, password, otp, now, |next| {
+        let result = self.factors.verify(&mut self.replay, password, otp, now, |next| {
             self.store.persist_authenticator(next)
-        })
+        });
+        if !self.store.healthy() {
+            self.session = None;
+            self.pending.clear();
+            return Err(Error::Storage);
+        }
+        result
     }
 
     pub fn login(
@@ -344,6 +350,11 @@ impl Authority {
     }
 
     fn live(&mut self, now: i64) -> bool {
+        if !self.store.healthy() {
+            self.session = None;
+            self.pending.clear();
+            return false;
+        }
         let Some(session) = &self.session else {
             return false;
         };
