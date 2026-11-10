@@ -278,7 +278,8 @@ impl Authority {
         args: &[u8],
     ) -> Result<Decision, Error> {
         let principal = self.verified_principal(assertion, &self.gateway_audience)?;
-        self.authorize(&principal, &self.client.clone(), operation, target, args)
+        let client = self.client.clone();
+        self.authorize(&principal, &client, operation, target, args)
     }
 
     pub fn preview_gateway(
@@ -289,7 +290,8 @@ impl Authority {
         args: &[u8],
     ) -> Result<Decision, Error> {
         let principal = self.verified_principal(assertion, &self.gateway_audience)?;
-        self.preview(&principal, &self.client.clone(), operation, target, args)
+        let client = self.client.clone();
+        self.preview(&principal, &client, operation, target, args)
     }
 
     pub fn status_gateway(&mut self, assertion: &str)
