@@ -588,6 +588,55 @@ mod tests {
         }
     }
 
+    #[tokio::test]
+    async fn socket_routers_do_not_cross_privilege_boundaries() {
+        use axum::body::Body;
+        use axum::http::Request;
+        use tower::ServiceExt;
+        use crate::credentials::PassphraseRecord;
+        use crate::sessions::OperationPolicy;
+
+        let mut id = [0u8; 16];
+        getrandom::fill(&mut id).unwrap();
+        let dir = std::env::temp_dir()
+            .join(format!("transport-boundary-test-{}", hex::encode(id)));
+        fs::create_dir(&dir).unwrap();
+        fs::set_permissions(&dir, fs::Permissions::from_mode(0o700)).unwrap();
+        let authority = Authority::open(
+            &dir, "operator".into(), "platform-gateway".into(),
+            PassphraseRecord {
+                version: 1,
+                iterations: 310_000,
+                salt: "YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4".into(),
+                digest: "l9m+PJ5k/gZlE6OL9Ek9YfJ7L5ajP+9F+d5Z1mp4TXg".into(),
+            },
+            "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
+            vec![OperationPolicy {
+                operation: "workspace__status".into(),
+                targets: vec!["jupiter".into()],
+                destructive: false,
+            }],
+        ).unwrap();
+        let shared = Shared::new(authority, None, None).unwrap();
+        let owner = owner_router(shared.clone());
+        let gateway = client_router(shared.clone());
+        let remote = remote_router(shared);
+
+        let request = Request::builder().uri("/v1/session")
+            .body(Body::empty()).unwrap();
+        assert_eq!(owner.oneshot(request).await.unwrap().status(), StatusCode::OK);
+
+        let request = Request::builder().uri("/v1/session")
+            .body(Body::empty()).unwrap();
+        assert_eq!(gateway.oneshot(request).await.unwrap().status(), StatusCode::FORBIDDEN);
+
+        let request = Request::builder().uri("/v1/session")
+            .body(Body::empty()).unwrap();
+        assert_eq!(remote.oneshot(request).await.unwrap().status(), StatusCode::NOT_FOUND);
+
+        fs::remove_dir_all(dir).unwrap();
+    }
+
     #[test]
     fn escaping_prevents_untrusted_confirmation_html() {
         assert_eq!(escape_html("<script>\"&"), "&lt;script&gt;&quot;&amp;");
