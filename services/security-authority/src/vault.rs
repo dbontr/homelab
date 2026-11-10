@@ -250,7 +250,7 @@ mod tests {
     #[test]
     fn decrypts_go_aes_gcm_record() {
         let dir = private_dir();
-        let record = r#"{"abcdefghijklmnopqrstuvwxABCDEFGH":{"created_at":"2026-11-10T13:00:00Z","data":"DLSMWnGi41gg6TbuAat8MZmC8aPOp8dmn7s/5cVdSUxwDw","id":"abcdefghijklmnopqrstuvwxABCDEFGH","nonce":"AAECAwQFBgcICQoL","provider":"research"}}"#;
+        let record = include_str!("../tests/fixtures/vault-records.json");
         fs::write(dir.join("credentials.json"), record).unwrap();
         let mut permissions = fs::metadata(dir.join("credentials.json")).unwrap().permissions();
         permissions.set_mode(0o600);
