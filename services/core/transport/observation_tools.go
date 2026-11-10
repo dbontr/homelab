@@ -58,7 +58,7 @@ func(s *Server) calendarTool(ctx context.Context,name string,raw json.RawMessage
  if len(raw)>0&&json.Unmarshal(raw,&args)!=nil{return nil,errors.New("invalid planning arguments")}
  switch name{
  case "calendar_occurrences":
-  if s.calendarURL==""{return nil,errors.New("calendar is not configured")}
+  if s.calendarSource==nil{return nil,errors.New("calendar is not configured")}
   now:=time.Now().UTC()
   from,until:=now,now.AddDate(0,0,30)
   if args.Start!=""||args.End!=""{
@@ -69,7 +69,7 @@ func(s *Server) calendarTool(ctx context.Context,name string,raw json.RawMessage
     return nil,errors.New("calendar window must be RFC3339 and at most 366 days")
    }
   }
-  feed,err:=calendar.Fetch(ctx,s.client,s.calendarURL)
+  feed,err:=s.fetchCalendar(ctx)
   if err!=nil{return nil,errors.New("calendar feed unavailable")}
   return calendar.Expand(feed,from,until)
  case "weekly_plan":
