@@ -524,3 +524,9 @@ main.content { max-width: 94rem; margin: 0 auto; padding: 2rem; }
     .reaction-progress { grid-template-columns: 1fr; }
     .reaction-target { min-height: 10rem; }
 }
+
+
+/* Health measurement plots */
+.health-metrics-form { display: grid; gap: 1rem; }
+.health-metric-plot { display: block; width: 100%; height: auto; max-height: 26rem; }
+.health-metric-plot circle { color: var(--primary); }

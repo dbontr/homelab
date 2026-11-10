@@ -20,6 +20,8 @@ mod knowledge;
 mod workflows;
 mod motivation;
 mod cognitive;
+mod health_tools;
+mod health_dashboard;
 
 use dioxus::prelude::*;
 use components::Icon;
@@ -43,6 +45,7 @@ enum Page {
     Learning,
     Health,
     ReactionTime,
+    HealthMetrics,
     Recipes,
     Books,
     Activity,
@@ -68,6 +71,7 @@ impl Page {
             Self::Learning => "Learning",
             Self::Health => "Health",
             Self::ReactionTime => "Reaction time",
+            Self::HealthMetrics => "Health metrics",
             Self::Recipes => "Recipes",
             Self::Books => "Books",
             Self::Activity => "Activity",
@@ -94,6 +98,7 @@ const PERSONAL: &[(Page, &str, &str)] = &[
     (Page::Learning, "Learning", "learning"),
     (Page::Health, "Health", "health"),
     (Page::ReactionTime, "Reaction time", "activity"),
+    (Page::HealthMetrics, "Health metrics", "monitoring"),
     (Page::Recipes, "Recipes", "recipes"),
     (Page::Books, "Books", "books"),
     (Page::Activity, "Activity", "activity"),
@@ -317,6 +322,7 @@ fn App() -> Element {
                                 Page::Learning => rsx! { personal::Learning { csrf: csrf.clone() } },
                                 Page::Health => rsx! { personal::Health { csrf: csrf.clone() } },
                                 Page::ReactionTime => rsx! { cognitive::ReactionTime { csrf: csrf.clone() } },
+                                Page::HealthMetrics => rsx! { health_dashboard::HealthDashboard { csrf: csrf.clone() } },
                                 Page::Recipes => rsx! { recipes::Recipes { csrf: csrf.clone() } },
                                 Page::Books => rsx! { books::Books { csrf: csrf.clone() } },
                                 Page::Activity => rsx! { activity::Activity {} },

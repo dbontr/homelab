@@ -47,6 +47,7 @@
 - [shadcn/ui](https://github.com/shadcn-ui/ui) — shadcn/ui project. Used for: semantic component composition, design vocabulary, and accessible interaction patterns in the Rust console.
 - [shadcn/ui Theming](https://ui.shadcn.com/docs/theming) — shadcn/ui project. Used for: exact neutral light/dark design tokens, sidebar colors, and radius scale for the Rust/Dioxus console.
 - [Dioxus 0.7 Documentation](https://dioxuslabs.com/learn/0.7/) — Dioxus project. Used for: Rust RSX components, WASM rendering and future desktop packaging.
+- [MCP Apps specification (2026-01-26)](https://github.com/modelcontextprotocol/ext-apps/blob/main/specification/2026-01-26/apps.mdx) — Model Context Protocol project. Used for: embedded view lifecycle, JSON-RPC tool messages, UI resource MIME types and host iframe security contracts.
 - [Dioxus 0.7 Handling User Input](https://dioxuslabs.com/learn/0.7/essentials/basics/event_handlers/) — Dioxus project. Used for: browser file selection, `FileData` metadata and asynchronous image reads in the Rust recipe editor.
 - [OpenAI Plugins UI Reference](https://developers.openai.com/plugins/reference) — OpenAI. Used for: opening a vetted owner authentication URL from a ChatGPT component without exposing credentials through tool inputs.
 - [MCP Elicitation — URL Mode](https://modelcontextprotocol.io/specification/2025-11-25/client/elicitation) — MCP project. Used for: treating password and second-factor entry as a trusted out-of-band browser interaction rather than client-side form elicitation.
