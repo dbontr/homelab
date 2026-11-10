@@ -198,6 +198,8 @@ pub struct Policy {
     pub release_enabled: bool,
     pub systemctl: PathBuf,
     pub actuator: PathBuf,
+    pub service_policy_file: PathBuf,
+    pub deployment_policy_file: PathBuf,
     pub services: BTreeSet<String>,
     pub deployments: BTreeSet<String>,
     pub max_replicas: u32,
@@ -225,11 +227,13 @@ impl Policy {
     pub fn load() -> Result<Self, Error> {
         let host = required("HOMELAB_EXECUTOR_HOST")?;
         if !valid_host(&host) { return Err(Error::Configuration("invalid host")); }
-        let services = allowlist_file(&absolute("HOMELAB_EXECUTOR_RUST_SERVICES")?)?;
+        let service_policy_file = absolute("HOMELAB_EXECUTOR_RUST_SERVICES")?;
+        let services = allowlist_file(&service_policy_file)?;
         if services.len() > 64 || services.iter().any(|s| !valid_service(s)) {
             return Err(Error::Configuration("unsafe systemd allowlist"));
         }
-        let deployments = allowlist_file(&absolute("HOMELAB_EXECUTOR_RUST_KUBERNETES")?)?;
+        let deployment_policy_file = absolute("HOMELAB_EXECUTOR_RUST_KUBERNETES")?;
+        let deployments = allowlist_file(&deployment_policy_file)?;
         for d in &deployments {
             let (namespace, deployment) = d.split_once('/')
                 .ok_or(Error::Configuration("invalid Kubernetes policy"))?;
@@ -276,6 +280,7 @@ impl Policy {
             host, release_enabled: env::var("HOMELAB_EXECUTOR_RELEASE_ENABLE").as_deref() == Ok("true"),
             systemctl: absolute("HOMELAB_EXECUTOR_SYSTEMCTL")?,
             actuator: absolute("HOMELAB_EXECUTOR_RUST_ACTUATOR")?,
+            service_policy_file, deployment_policy_file,
             services, deployments, max_replicas, workspace, workspace_token, workspace_vault_alias,
             state_dir: absolute("HOMELAB_EXECUTOR_RELEASE_STATE")?,
             source: absolute("HOMELAB_EXECUTOR_SOURCE")?,
