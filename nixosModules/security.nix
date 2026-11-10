@@ -2,10 +2,16 @@
 let
   cfg = config.services.homelabSecurity;
   package = import ../packages/security.nix { inherit pkgs; };
+  rustPackage = import ../packages/security-authority.nix { inherit pkgs; };
 in
 {
   options.services.homelabSecurity = {
     enable = lib.mkEnableOption "independent password and TOTP privileged-session service";
+    implementation = lib.mkOption {
+      type = lib.types.enum [ "go" "rust" ];
+      default = "go";
+      description = "Single authoritative security daemon implementation; Rust requires a locked, verified release.";
+    };
     package = lib.mkOption {
       type = lib.types.package;
       default = package;
@@ -140,6 +146,8 @@ in
 
   config = lib.mkIf cfg.enable {
     assertions = [
+      { assertion = cfg.implementation != "rust" || builtins.pathExists ../services/security-authority/Cargo.lock;
+        message = "Rust security authority requires a checked-in Cargo.lock before it can be selected."; }
       { assertion = !cfg.remote.enable ||
           (cfg.remote.listenAddress != null && cfg.remote.certificateFile != null &&
            cfg.remote.keyFile != null && cfg.remote.clientCAFile != null &&
@@ -197,7 +205,7 @@ in
         '';
       };
     };
-    environment.systemPackages = [ cfg.package ];
+    environment.systemPackages = [ cfg.package ] ++ lib.optional (cfg.implementation == "rust") rustPackage;
     systemd.services.homelab-securityd = {
       description = "Independent owner authentication and privileged-session policy";
       wantedBy = [ "multi-user.target" ];
@@ -254,7 +262,9 @@ in
           "access-jwks:${cfg.access.jwksFile}"
           "access-owner:${cfg.access.ownerEmailFile}"
         ];
-        ExecStart = "${cfg.package}/bin/homelab-securityd";
+        ExecStart = if cfg.implementation == "rust"
+          then "${rustPackage}/bin/securityd"
+          else "${cfg.package}/bin/homelab-securityd";
         Restart = "on-failure";
         RestartSec = "5s";
         UMask = "0077";
