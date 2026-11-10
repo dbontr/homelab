@@ -6,6 +6,7 @@ license = "MIT"
 description = "Independent owner authentication and authorization kernel"
 
 [dependencies]
+tower = { version = "0.5.2", features = ["util"] }
 reqwest = { version = "0.12.23", default-features = false, features = ["rustls-tls", "json"] }
 url = "2.5.4"
 hyper = { version = "1.7.0", features = ["server", "http1"] }
