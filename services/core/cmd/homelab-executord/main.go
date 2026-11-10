@@ -38,23 +38,19 @@ func trustedRemoteListener(address string)error{
 }
 
 func remoteIdentity()(tls.Certificate,*x509.CertPool,error){
- cert,err:=tls.LoadX509KeyPair(required("HOMELAB_EXECUTOR_REMOTE_CERT"),required("HOMELAB_EXECUTOR_REMOTE_KEY"))
+ cert,err:=security.LoadTLSIdentity(required("HOMELAB_EXECUTOR_REMOTE_CERT"),required("HOMELAB_EXECUTOR_REMOTE_KEY"))
  if err!=nil{return tls.Certificate{},nil,errors.New("cannot load remote TLS server identity")}
- caBytes,err:=os.ReadFile(required("HOMELAB_EXECUTOR_REMOTE_CA"))
- if err!=nil{return tls.Certificate{},nil,errors.New("cannot read coordinator trust roots")}
- roots:=x509.NewCertPool()
- if !roots.AppendCertsFromPEM(caBytes){return tls.Certificate{},nil,errors.New("invalid coordinator trust roots")}
+ roots,err:=security.LoadTLSRoots(required("HOMELAB_EXECUTOR_REMOTE_CA"))
+ if err!=nil{return tls.Certificate{},nil,errors.New("cannot load coordinator trust roots")}
  return cert,roots,nil
 }
 
 func authorizationClient()(privileged.Authorizer,error){
  if endpoint:=os.Getenv("HOMELAB_EXECUTOR_AUTH_ENDPOINT");endpoint!=""{
-  cert,err:=tls.LoadX509KeyPair(required("HOMELAB_EXECUTOR_AUTH_CERT"),required("HOMELAB_EXECUTOR_AUTH_KEY"))
+  cert,err:=security.LoadTLSIdentity(required("HOMELAB_EXECUTOR_AUTH_CERT"),required("HOMELAB_EXECUTOR_AUTH_KEY"))
   if err!=nil{return nil,errors.New("cannot load executor authorization identity")}
-  rootsData,err:=os.ReadFile(required("HOMELAB_EXECUTOR_AUTH_CA"))
+  roots,err:=security.LoadTLSRoots(required("HOMELAB_EXECUTOR_AUTH_CA"))
   if err!=nil{return nil,errors.New("cannot load authorization trust roots")}
-  roots:=x509.NewCertPool()
-  if !roots.AppendCertsFromPEM(rootsData){return nil,errors.New("invalid authorization trust roots")}
   return security.NewRemoteAuthorizationClient(security.RemoteAuthorizationConfig{
    Endpoint:endpoint,ServerName:required("HOMELAB_EXECUTOR_AUTH_SERVER_NAME"),
    TrustRoots:roots,Certificate:cert,
