@@ -9,6 +9,7 @@ import (
  "path/filepath"
  "strings"
  "testing"
+ "time"
 )
 
 func TestServiceCredentialGrantsBindOneVerifiedIdentityAndProvider(t *testing.T){
@@ -55,11 +56,11 @@ func TestServiceCredentialGrantsBindOneVerifiedIdentityAndProvider(t *testing.T)
   allowed.Header().Get("Cache-Control")!="no-store"{
   t.Fatalf("authorized service secret was not securely delivered: %d",allowed.Code)
  }
- // Rotation keeps the handle stable but exposes only the current credential.
+ // Rotation keeps the handle but invalidates the revision-pinned service grant.
  if _,err:=vault.Rotate(handle.ID,"gitlab",[]byte("glpat-rotated-secret-example"));err!=nil{t.Fatal(err)}
  rotated:=request("gitlab","compute.internal",true,false)
- if rotated.Code!=200||rotated.Body.String()!="glpat-rotated-secret-example"{
-  t.Fatal("service credential did not reflect owner rotation")
+ if rotated.Code==200||strings.Contains(rotated.Body.String(),"glpat-rotated-secret-example"){
+  t.Fatal("service credential grant survived rotation under the same handle")
  }
  if err:=vault.Delete(handle.ID);err!=nil{t.Fatal(err)}
  revoked:=request("gitlab","compute.internal",true,false)
@@ -108,5 +109,20 @@ func TestServiceCredentialPolicyRejectsUnknownAndDuplicateGrants(t *testing.T){
  grant.ClientDNS="compute.internal/../../private"
  if err:=manager.SetServiceCredentialGrants([]ServiceCredentialGrant{grant});err==nil{
   t.Fatal("invalid service certificate identity was accepted")
+ }
+ manager=create()
+ grant.ClientDNS="compute.internal"
+ grant.Handle=manager.vault.List()[0].ID
+ grant.Revision=strings.Repeat("0",64)
+ if err:=manager.SetServiceCredentialGrants([]ServiceCredentialGrant{grant});err==nil{
+  t.Fatal("stale credential revision was accepted")
+ }
+ manager=create()
+ grant.Handle=manager.vault.List()[0].ID
+ grant.Revision=""
+ expired:=time.Now().UTC().Add(-time.Minute)
+ grant.ExpiresAt=&expired
+ if err:=manager.SetServiceCredentialGrants([]ServiceCredentialGrant{grant});err==nil{
+  t.Fatal("expired service credential grant was accepted")
  }
 }
