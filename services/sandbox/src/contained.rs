@@ -21,14 +21,13 @@ fn checkout(repository: &str) -> Result<PathBuf, &'static str> {
     if !valid_name(owner) || !valid_name(name) {
         return Err("invalid repository identity");
     }
-    let source = Path::new("/workspace").join("repos").join(owner).join(name);
+    let source = Path::new("/workspace").join("repos").join(format!("{owner}__{name}"));
     let resolved = fs::canonicalize(&source)
         .map_err(|_| "repository checkout is unavailable")?;
     if resolved != source {
         return Err("repository checkout is redirected");
     }
-    for ancestor in [Path::new("/workspace").join("repos"),
-                     Path::new("/workspace").join("repos").join(owner)] {
+    for ancestor in [Path::new("/workspace").join("repos")] {
         let metadata = fs::symlink_metadata(ancestor)
             .map_err(|_| "repository ancestor is unavailable")?;
         if !metadata.is_dir() || metadata.file_type().is_symlink() {
@@ -109,6 +108,8 @@ pub(crate) fn run(repository: &str, revision: &str, action: &str) -> Result<(), 
         .env("CARGO_HOME", "/usr/local/cargo")
         .env("CARGO_TARGET_DIR", "/tmp/cargo-target")
         .env("CARGO_NET_OFFLINE", "true").env("LC_ALL", "C")
+        .env("RUSTUP_HOME", "/usr/local/rustup")
+        .env("PATH", "/usr/local/go/bin:/usr/local/cargo/bin:/usr/bin:/bin")
         .stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
     let after = fs::metadata(&source).map_err(|_| "checkout disappeared")?;
     if before.dev() != after.dev() || before.ino() != after.ino() {
