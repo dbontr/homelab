@@ -57,6 +57,7 @@ type Kubernetes struct {
 	StorageClass    string
 	ImagePullSecret string
 	BuilderImage string
+	VerificationImage string
 	BuilderRegistry string
 	BuilderAuthSecret string
 	GPURuntimeClass string
@@ -101,6 +102,10 @@ func NewKubernetes(namespace, project string, cpu float64, memory, jobs int) (*K
 			!kubernetesName.MatchString(builderAuth)) {
 		return nil, errors.New("Kubernetes builder requires an approved image, HTTPS registry and credential Secret")
 	}
+	verificationImage := os.Getenv("PWM_KUBE_VERIFICATION_IMAGE")
+	if verificationImage != "" && !validBuilderImage(verificationImage) {
+		return nil, errors.New("native verifier image requires a pinned OCI digest")
+	}
 	workloadNode := os.Getenv("PWM_KUBE_WORKLOAD_NODE")
 	if workloadNode != "" && !kubernetesName.MatchString(workloadNode) {
 		return nil, errors.New("invalid Kubernetes workload node")
@@ -111,7 +116,7 @@ func NewKubernetes(namespace, project string, cpu float64, memory, jobs int) (*K
 	}
 	k := &Kubernetes{Namespace: namespace, Project: project, Binary: binary,
 		Storage: storage, StorageClass: class, ImagePullSecret: pullSecret,
-		BuilderImage: builderImage, BuilderRegistry: builderRegistry,
+		BuilderImage: builderImage, VerificationImage: verificationImage, BuilderRegistry: builderRegistry,
 		BuilderAuthSecret: builderAuth,
 		WorkloadNode: workloadNode, CPU: cpu, MemoryMB: memory, MaxJobs: jobs}
 	k.GPURuntimeClass = runtimeClass

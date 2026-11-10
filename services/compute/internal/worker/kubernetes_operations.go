@@ -33,6 +33,12 @@ func (k *Kubernetes) Handle(ctx context.Context, r *Runner, op Operation, c *Cli
 	case "prune_volume":
 		return k.PruneVolume(ctx, op.Workspace)
 	case "command":
+		if marker, selected := payload["sandbox_check"]; selected {
+			if marker != true {
+				return nil, errors.New("invalid native verification selection")
+			}
+			return k.VerifyNativeCheck(ctx, op, payload)
+		}
 		return k.Command(ctx, op.Workspace, getString(payload, "command"), nil)
 	case "read_file":
 		filename, err := safePath(getString(payload, "path"))

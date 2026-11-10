@@ -586,6 +586,9 @@ func (r *Runner) Handle(ctx context.Context, op Operation, c *Client) (map[strin
 		}
 		return map[string]any{"status": "stopped", "volume": n}, nil
 	case "command":
+		if _, selected := payload["sandbox_check"]; selected {
+			return nil, errors.New("native verification requires isolated Kubernetes worker")
+		}
 		return r.Command(ctx, op.Workspace, getString(payload, "command"), nil)
 	case "read_file":
 		p, err := safePath(getString(payload, "path"))
