@@ -87,6 +87,7 @@ fi
   cargo fmt --all -- --check
   cargo test --offline
   cargo check --offline --target wasm32-unknown-unknown
+  cargo check --offline --features embedded-app --target wasm32-unknown-unknown
 )
 (
   cd "$root/services/motivation"
