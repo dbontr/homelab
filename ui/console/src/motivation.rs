@@ -15,7 +15,7 @@ pub fn Motivation(csrf: String) -> Element {
     let mut state = use_resource(|| async {
         api::get::<Value>("/v1/motivation/state").await
     });
-    let mut initialized = use_signal(|| false);
+    let mut seen_profile_revision = use_signal(|| None::<u64>);
     let mut goal_id = use_signal(String::new);
     let goals = use_resource(|| async {
         api::get::<Vec<Value>>("/v1/goals").await
@@ -60,9 +60,10 @@ pub fn Motivation(csrf: String) -> Element {
     let mut notice = use_signal(String::new);
 
     use_effect(move || {
-        if initialized() { return; }
         if let Some(Ok(snapshot)) = state.cloned() {
             if let Some(profile) = snapshot.get("profile") {
+                let revision = profile.get("revision").and_then(Value::as_u64).unwrap_or(0);
+                if seen_profile_revision() == Some(revision) { return; }
                 goal_id.set(field(profile, "goal_id"));
                 identity.set(field(profile, "identity"));
                 outcome.set(field(profile, "outcome"));
@@ -76,7 +77,7 @@ pub fn Motivation(csrf: String) -> Element {
                     .map(|day| day.to_string()).unwrap_or_else(|| "none".to_owned()));
                 quiet_start.set(profile.get("quiet_start_utc_hour").and_then(Value::as_u64).unwrap_or(0) as u8);
                 quiet_end.set(profile.get("quiet_end_utc_hour").and_then(Value::as_u64).unwrap_or(0) as u8);
-                initialized.set(true);
+                seen_profile_revision.set(Some(revision));
             }
         }
     });
@@ -107,7 +108,7 @@ pub fn Motivation(csrf: String) -> Element {
             description: "Cultivate deliberate intellectual interests through owner-defined goals and measured interventions.".to_owned(),
             button {
                 class: "btn btn-outline",
-                onclick: move |_| { initialized.set(false); state.restart(); metrics.restart(); },
+                onclick: move |_| { seen_profile_revision.set(None); state.restart(); metrics.restart(); },
                 "Refresh"
             }
         }
@@ -279,6 +280,8 @@ pub fn Motivation(csrf: String) -> Element {
                                         match api::write::<Value, _>(Method::POST, "/v1/motivation/pause", &token, &json!({})).await {
                                             Ok(_) => {
                                                 enabled.set(false);
+                                                proactive_enabled.set(false);
+                                                seen_profile_revision.set(None);
                                                 notice.set("Interventions paused".to_owned());
                                                 state.restart();
                                             }
