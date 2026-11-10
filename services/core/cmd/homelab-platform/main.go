@@ -20,6 +20,7 @@ import (
     "github.com/dbontr/homelab-new/system/profiles"
     "github.com/dbontr/homelab-new/system/recipes"
     "github.com/dbontr/homelab-new/system/store"
+    "github.com/dbontr/homelab-new/system/internal/stateowner"
     "github.com/dbontr/homelab-new/system/security"
     "github.com/dbontr/homelab-new/system/privileged"
     "github.com/dbontr/homelab-new/system/release"
@@ -59,6 +60,14 @@ func configuredBackend(name,upper string,vault *security.RemoteAuthorizationClie
 func main(){
     token,e:=secret(os.Getenv("HOMELAB_API_TOKEN_FILE"));if e!=nil{log.Fatal(e)}
     state:=os.Getenv("HOMELAB_STATE_FILE");if state==""{state="/var/lib/homelab-platform/state.json"}
+    profileFile:=os.Getenv("HOMELAB_PROFILES_FILE")
+    if profileFile==""{profileFile=filepath.Join(filepath.Dir(state),"profiles.json")}
+    recipeFile:=os.Getenv("HOMELAB_RECIPES_FILE")
+    if recipeFile==""{recipeFile=filepath.Join(filepath.Dir(state),"recipes.json")}
+    workflowDir:=filepath.Join(filepath.Dir(state),"workflows")
+    ownership,e:=stateowner.Acquire(state,profileFile,recipeFile,workflowDir)
+    if e!=nil{log.Fatal("state ownership: ",e)}
+    defer ownership.Close()
     db,e:=store.Open(state,os.Getenv("HOMELAB_TIME_ZONE"));if e!=nil{log.Fatal(e)}
     vault,err:=security.NewVaultClientFromEnv("HOMELAB")
     if err!=nil{log.Fatal("service credential trust: ",err)}
@@ -83,7 +92,7 @@ func main(){
     if e:=server.SetInterfaceTokens(mcpInterfaceToken,apiInterfaceToken,apiWritePaths);e!=nil{
         log.Fatal("interface service policy: ",e)
     }
-    workflows,err:=agentflow.Open(filepath.Join(filepath.Dir(state),"workflows"))
+    workflows,err:=agentflow.Open(workflowDir)
     if err!=nil{log.Fatal(err)}
     server.SetWorkflows(workflows)
     planner,err:=configuredCapabilityPlanner(vault)
@@ -109,12 +118,8 @@ func main(){
     if raw:=os.Getenv("HOMELAB_ALLOWED_ORIGINS");raw!=""{
         if err:=server.SetAllowedOrigins(strings.Split(raw,","));err!=nil{log.Fatal(err)}
     }
-    profileFile:=os.Getenv("HOMELAB_PROFILES_FILE")
-    if profileFile=="" {profileFile=filepath.Join(filepath.Dir(state),"profiles.json")}
     registry,e:=profiles.Open(profileFile);if e!=nil{log.Fatal(e)}
     server.SetProfiles(registry)
-    recipeFile:=os.Getenv("HOMELAB_RECIPES_FILE")
-    if recipeFile=="" {recipeFile=filepath.Join(filepath.Dir(state),"recipes.json")}
     recipeStore,e:=recipes.Open(recipeFile);if e!=nil{log.Fatal(e)}
     server.SetRecipes(recipeStore)
     if file:=os.Getenv("HOMELAB_CONSOLE_PASSPHRASE_FILE");file!=""{
