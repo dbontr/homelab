@@ -253,6 +253,55 @@ impl Authority {
         vault.store(&mut self.store, provider, secret)
     }
 
+    pub fn rotate_credential(
+        &mut self,
+        principal: &str,
+        password: &str,
+        otp: &str,
+        id: &str,
+        provider: &str,
+        secret: &[u8],
+    ) -> Result<(), Error> {
+        let now = unix_now()?;
+        if !self.live(now)
+            || self.session.as_ref().is_none_or(|s| s.principal != principal)
+        {
+            return Err(Error::Unauthorized);
+        }
+        self.authenticate_factors(password, otp, now)?;
+        let vault = self.vault.as_mut().ok_or(Error::InvalidConfiguration)?;
+        vault.rotate(&mut self.store, id, provider, secret)
+    }
+
+    pub fn revoke_credential(
+        &mut self,
+        principal: &str,
+        password: &str,
+        otp: &str,
+        id: &str,
+    ) -> Result<(), Error> {
+        let now = unix_now()?;
+        if !self.live(now)
+            || self.session.as_ref().is_none_or(|s| s.principal != principal)
+        {
+            return Err(Error::Unauthorized);
+        }
+        self.authenticate_factors(password, otp, now)?;
+        let vault = self.vault.as_mut().ok_or(Error::InvalidConfiguration)?;
+        vault.delete(&mut self.store, id)
+    }
+
+    pub fn credential_handles(&mut self, principal: &str)
+        -> Result<Vec<CredentialHandle>, Error>
+    {
+        if !self.live(unix_now()?)
+            || self.session.as_ref().is_none_or(|s| s.principal != principal)
+        {
+            return Err(Error::Unauthorized);
+        }
+        Ok(self.vault.as_ref().ok_or(Error::InvalidConfiguration)?.handles())
+    }
+
     fn authenticate_factors(
         &mut self,
         password: &str,
