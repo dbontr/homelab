@@ -130,6 +130,7 @@ func TestOwnerEngineeringReadAllowlistDoesNotPermitExecutions(t *testing.T) {
         "/v1/engineering/nodes",
         "/v1/engineering/projects/project-a/jobs",
         "/v1/engineering/projects/project-a/workspaces",
+        "/v1/engineering/projects/project-a/artifacts",
         "/v1/engineering/projects/project-a/context",
         "/v1/engineering/projects/project-a/repositories",
         "/v1/engineering/projects/project-a/research",

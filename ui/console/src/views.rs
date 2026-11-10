@@ -148,6 +148,15 @@ pub fn Projects() -> Element {
             }
         }
     });
+    let mut artifacts = use_resource(||{
+        let project=selected();
+        async move{
+            match project{
+                Some(id)=>api::get::<Value>(&format!("/v1/engineering/projects/{id}/artifacts")).await,
+                None=>Ok(Value::Null),
+            }
+        }
+    });
     let rows = data.cloned().and_then(Result::ok)
         .map(|value| api::list(&value, &["projects", "items", "results"]))
         .unwrap_or_default();
@@ -164,7 +173,7 @@ pub fn Projects() -> Element {
             title: "Projects".to_owned(),
             description: "Research, engineering and isolated development workspaces.".to_owned(),
             button { class: "btn btn-outline", onclick: move |_| {
-                data.restart();jobs.restart();workspaces.restart();
+                data.restart();jobs.restart();workspaces.restart();artifacts.restart();
             },
                 Icon { name: "refresh".to_owned() } "Refresh"
             }
@@ -215,6 +224,52 @@ pub fn Projects() -> Element {
             }
         }
         if let Some(id) = selected() {
+            Card {
+                title: "Durable artifacts".to_owned(),
+                description:format!("Confirmed outputs associated with project {id}; no files are transferred by this view."),
+                match artifacts.cloned() {
+                    None => rsx! { Loading {} },
+                    Some(Err(message)) => rsx! { Notice { message } },
+                    Some(Ok(value)) => {
+                        let items = api::list(&value,&["artifacts","items","results"]);
+                        rsx! {
+                            if items.is_empty() {
+                                Empty {
+                                    title: "No saved artifacts".to_owned(),
+                                    description: "The compute controller reported no durable project outputs.".to_owned()
+                                }
+                            } else {
+                                div { class: "table-clip",
+                                    table { class: "table",
+                                        thead { tr {
+                                            th { "Artifact" }
+                                            th { "Type" }
+                                            th { "Size" }
+                                            th { "SHA-256" }
+                                        } }
+                                        tbody {
+                                            for item in items.into_iter().take(100) {
+                                                tr {
+                                                    td { {api::property(&item,&["name","id","artifact_id"])} }
+                                                    td { class: "muted",
+                                                        {api::property(&item,&["media_type","mime_type","kind","type"])}
+                                                    }
+                                                    td { class: "muted",
+                                                        {api::property(&item,&["size_bytes","size"])}
+                                                    }
+                                                    td { class: "mono muted",
+                                                        {api::property(&item,&["sha256","digest"])}
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             Card {
                 title: "Execution jobs".to_owned(),
                 description:format!("Project {id}; observed jobs only. Agent execution is not controlled here."),

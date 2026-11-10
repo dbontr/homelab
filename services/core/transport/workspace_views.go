@@ -20,6 +20,7 @@ func (s *Server) uiWorkspaceProjectView(w http.ResponseWriter,r *http.Request){
  switch kind{
  case "jobs":tool="list_project_jobs"
  case "workspaces":tool="workspace_list"
+ case "artifacts":tool="list_project_artifacts"
  case "context":tool="knowledge_context"
  case "repositories":tool="repository_memberships"
  case "research-sources":tool="research_sources"

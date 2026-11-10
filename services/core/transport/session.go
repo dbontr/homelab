@@ -88,7 +88,7 @@ func (s *Server) sessionReadAllowed(r *http.Request) bool {
     !(strings.HasPrefix(p,"/v1/automations/") && len(strings.Split(p,"/"))==4) &&
     !(strings.HasPrefix(p,"/v1/workspace/projects/") && len(strings.Split(p,"/"))==6 && (strings.HasSuffix(p,"/jobs")||strings.HasSuffix(p,"/workspaces"))) &&
     !(strings.HasPrefix(p,"/v1/engineering/projects/") && len(strings.Split(p,"/"))==6 &&
-        (strings.HasSuffix(p,"/jobs") || strings.HasSuffix(p,"/workspaces") ||
+        (strings.HasSuffix(p,"/jobs") || strings.HasSuffix(p,"/workspaces") || strings.HasSuffix(p,"/artifacts") ||
          strings.HasSuffix(p,"/context") || strings.HasSuffix(p,"/repositories") ||
          strings.HasSuffix(p,"/research") || strings.HasSuffix(p,"/research-sources"))) &&
     !(strings.HasPrefix(p,"/v1/learning/sessions/") && (len(strings.Split(p,"/"))==5 || len(strings.Split(p,"/"))==6 && strings.HasSuffix(p,"/pending"))) {
