@@ -650,9 +650,27 @@ mod tests {
 
         let request = Request::builder().uri("/v1/session")
             .body(Body::empty()).unwrap();
-        assert_eq!(gateway.oneshot(request).await.unwrap().status(), StatusCode::FORBIDDEN);
+        assert_eq!(gateway.clone().oneshot(request).await.unwrap().status(), StatusCode::FORBIDDEN);
+
+        let request = Request::builder().uri("/v1/authorize")
+            .method("POST")
+            .header("content-type","application/json")
+            .header("cf-access-jwt-assertion","untrusted")
+            .body(Body::from(r#"{"operation":"workspace__status","target":"jupiter","arguments":{}}"#))
+            .unwrap();
+        assert_eq!(gateway.clone().oneshot(request).await.unwrap().status(), StatusCode::FORBIDDEN);
+
+        for path in ["/v1/credentials", "/v1/oauth/providers"] {
+            let request = Request::builder().uri(path)
+                .body(Body::empty()).unwrap();
+            assert_eq!(gateway.clone().oneshot(request).await.unwrap().status(), StatusCode::NOT_FOUND);
+        }
 
         let request = Request::builder().uri("/v1/session")
+            .body(Body::empty()).unwrap();
+        assert_eq!(remote.clone().oneshot(request).await.unwrap().status(), StatusCode::NOT_FOUND);
+
+        let request = Request::builder().uri("/v1/credentials")
             .body(Body::empty()).unwrap();
         assert_eq!(remote.oneshot(request).await.unwrap().status(), StatusCode::NOT_FOUND);
 
