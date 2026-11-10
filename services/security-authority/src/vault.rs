@@ -216,6 +216,15 @@ impl Vault {
         Ok(use_secret(&secret))
     }
 
+    /// Validate every encrypted record before admitting a migrated vault.
+    pub(crate) fn validate_all(&self) -> Result<(), Error> {
+        for record in self.records.values() {
+            let secret = Zeroizing::new(decrypt(&self.key, record)?);
+            checked_secret(&secret).map_err(|_| Error::Storage)?;
+        }
+        Ok(())
+    }
+
     pub(crate) fn handles(&self) -> Vec<CredentialHandle> {
         self.records.values().map(|record| CredentialHandle {
             id: record.id.clone(),
