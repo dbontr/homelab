@@ -8,6 +8,7 @@ Homelab is one product, composed of independently operated services and optional
 | --- | --- | --- |
 | MCP, native HTTP API, external integration, concurrent controllers, orchestration and scheduling | Go | Networking, concurrency, uncomplicated deployment and established service interfaces |
 | Browser console and native performance-sensitive interfaces | Rust/WASM | Strong typing, native components and portable WebAssembly targets |
+| Owner-directed adaptive motivation and its private persistent state | Rust | Typed goal commitments, deterministic intervention selection and single-writer state ownership |
 | Privileged execution, isolation, hardware access and narrowly scoped security mechanisms | Rust | Compile-time memory safety and precise resource ownership |
 | Numerical kernels, accelerator control and FPGA/GPU-facing code | Rust; vendor C/C++ as required | Explicit memory layout, device interoperability and predictable execution |
 | Relational persistence, indexing and transactional state | SQL through the owning service | Database-level constraints and transaction semantics |
@@ -20,6 +21,7 @@ HTML and CSS remain the browser's presentation formats. Generated JavaScript req
 
 - `services/core/` is the Go application module and owns personal planning, recipes, core coordination, the domain state store and the internal capability router.
 - `services/compute/`, `services/health/` and `services/learning/` are separate Go modules with independent state and deployment boundaries.
+- `services/motivation/` is an independent Rust domain process; it owns owner-approved aspirational profiles, intervention selection and privately recorded self-reports. Go forwards only its admitted operations.
 - `services/bridge/` is a restricted internal transport. It owns neither domain records nor privileged credentials.
 - `ui/` contains Rust/WASM presentation code and the private owner-session ingress.
 - `mcp/` and `api/` contain optional Go entry points; neither can own application state, privileged execution, background schedulers or another service's credentials.
