@@ -239,7 +239,7 @@ async fn credentials_owner_put(
     let result = shared.with_authority(|auth| auth.rotate_credential(
         LOCAL_OWNER, &password, &input.totp, &id, &input.provider, secret.as_bytes()));
     match result {
-        Ok(()) => { audit("credential_rotated"); json_reply(StatusCode::OK, json!({"id":id,"provider":input.provider})) },
+        Ok(handle) => { audit("credential_rotated"); json_reply(StatusCode::OK, handle) },
         Err(_) => { audit("credential_rotation_denied"); protected_status("credential rotation denied", StatusCode::FORBIDDEN) },
     }
 }
