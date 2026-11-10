@@ -54,8 +54,9 @@ async fn exchange<S>(io: S, host: &str, path: &str, method: Method, assertion: &
     content: Vec<u8>, limit: usize) -> Result<(StatusCode, Option<String>, Vec<u8>), Error>
 where S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static
 {
-    let (mut sender, connection) = http1::Builder::new().max_buf_size(16 << 10)
-        .handshake(TokioIo::new(io)).await
+    let mut builder = http1::Builder::new();
+    builder.max_buf_size(16 << 10);
+    let (mut sender, connection) = builder.handshake(TokioIo::new(io)).await
         .map_err(|_| Error::Unavailable("authorization handshake failed"))?;
     tokio::spawn(async move { let _ = connection.await; });
     let mut request = Request::builder().method(method).uri(path)
