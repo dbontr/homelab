@@ -5,6 +5,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde::Serialize;
 use serde_json::Value;
 
+use crate::access::AccessVerifier;
 use crate::canonical::canonical_arguments;
 use sha2::{Digest, Sha256};
 use crate::credentials::{AuthenticatorState, Factors, PassphraseRecord};
@@ -98,6 +99,9 @@ pub struct Authority {
     session: Option<Session>,
     pending: BTreeMap<String, Confirmation>,
     vault: Option<Vault>,
+    access: Option<AccessVerifier>,
+    gateway_audience: String,
+    browser_audience: Option<String>,
 }
 
 fn valid_identifier(id: &str) -> bool {
@@ -220,7 +224,84 @@ impl Authority {
             session: None,
             pending: BTreeMap::new(),
             vault: None,
+            access: None,
+            gateway_audience: String::new(),
+            browser_audience: None,
         })
+    }
+
+    /// Only the independent authority verifies signed gateway identity.
+    /// The owner portal uses a distinct audience for password entry.
+    pub fn configure_access(
+        &mut self,
+        verifier: AccessVerifier,
+        gateway_audience: String,
+        browser_audience: Option<String>,
+    ) -> Result<(), Error> {
+        if self.access.is_some()
+            || gateway_audience.is_empty()
+            || browser_audience.as_ref().is_some_and(|v| v.is_empty() || *v == gateway_audience)
+        {
+            return Err(Error::InvalidConfiguration);
+        }
+        self.access = Some(verifier);
+        self.gateway_audience = gateway_audience;
+        self.browser_audience = browser_audience;
+        Ok(())
+    }
+
+    fn verified_principal(&self, assertion: &str, audience: &str)
+        -> Result<String, Error>
+    {
+        self.access
+            .as_ref()
+            .ok_or(Error::Unauthorized)?
+            .verify(assertion, audience)
+    }
+
+    pub fn login_browser(
+        &mut self,
+        assertion: &str,
+        password: &str,
+        otp: &str,
+    ) -> Result<SessionStatus, Error> {
+        let audience = self.browser_audience.as_deref().ok_or(Error::Unauthorized)?;
+        let principal = self.verified_principal(assertion, audience)?;
+        self.login(&principal, password, otp)
+    }
+
+    pub fn authorize_gateway(
+        &mut self,
+        assertion: &str,
+        operation: &str,
+        target: &str,
+        args: &[u8],
+    ) -> Result<Decision, Error> {
+        let principal = self.verified_principal(assertion, &self.gateway_audience)?;
+        self.authorize(&principal, &self.client.clone(), operation, target, args)
+    }
+
+    pub fn preview_gateway(
+        &mut self,
+        assertion: &str,
+        operation: &str,
+        target: &str,
+        args: &[u8],
+    ) -> Result<Decision, Error> {
+        let principal = self.verified_principal(assertion, &self.gateway_audience)?;
+        self.preview(&principal, &self.client.clone(), operation, target, args)
+    }
+
+    pub fn status_gateway(&mut self, assertion: &str)
+        -> Result<SessionStatus, Error>
+    {
+        let principal = self.verified_principal(assertion, &self.gateway_audience)?;
+        self.status(&principal)
+    }
+
+    pub fn revoke_gateway(&mut self, assertion: &str) -> Result<bool, Error> {
+        let principal = self.verified_principal(assertion, &self.gateway_audience)?;
+        self.revoke(&principal)
     }
 
     /// The vault and authenticator share a process-lifetime ownership lease.
