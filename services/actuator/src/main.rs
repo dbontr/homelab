@@ -25,7 +25,7 @@ struct Policy {
 enum Action {
     Service { verb: String, unit: String },
     Restart { namespace: String, deployment: String },
-    Scale { namespace: String, deployment: String, replicas: u32 },
+    Scale { namespace: String, deployment: String, replicas: u32, version: Option<String> },
 }
 
 fn valid_service(value: &str) -> bool {
@@ -151,7 +151,7 @@ fn admit(args: &[String], policy: &Policy) -> Result<Action, &'static str> {
             namespace: namespace.clone(), deployment: deployment.clone()
         });
     }
-    if args.len() == 5 && args[0] == "deployment" && args[1] == "scale" {
+    if (args.len() == 5 || args.len() == 6) && args[0] == "deployment" && args[1] == "scale" {
         let namespace = &args[2];
         let deployment = &args[3];
         let raw = &args[4];
@@ -167,8 +167,21 @@ fn admit(args: &[String], policy: &Policy) -> Result<Action, &'static str> {
         if replicas > policy.max_replicas {
             return Err("replica count outside policy");
         }
+        let version = if args.len() == 6 {
+            let value = &args[5];
+            if value.is_empty() || value.len() > 128
+                || !value.as_bytes()[0].is_ascii_alphanumeric()
+                || !value.bytes().all(|b| b.is_ascii_alphanumeric()
+                    || matches!(b, b'.' | b'_' | b'-'))
+            {
+                return Err("invalid Kubernetes version precondition");
+            }
+            Some(value.clone())
+        } else {
+            None
+        };
         return Ok(Action::Scale {
-            namespace: namespace.clone(), deployment: deployment.clone(), replicas
+            namespace: namespace.clone(), deployment: deployment.clone(), replicas, version
         });
     }
     Err("unrecognized privileged action")
@@ -202,7 +215,7 @@ fn invoke(action: Action) -> Result<(), &'static str> {
             ]);
             command
         }
-        Action::Scale { namespace, deployment, replicas } => {
+        Action::Scale { namespace, deployment, replicas, version } => {
             let kubeconfig = checked_binary("HOMELAB_ACTUATOR_KUBECONFIG")?;
             let mut command = Command::new(checked_binary("HOMELAB_ACTUATOR_KUBECTL")?);
             command.args([
@@ -213,6 +226,9 @@ fn invoke(action: Action) -> Result<(), &'static str> {
                 format!("deployment/{deployment}"),
                 format!("--replicas={replicas}"),
             ]);
+            if let Some(expected_version) = version {
+                command.arg(format!("--resource-version={expected_version}"));
+            }
             command
         }
     };
@@ -282,6 +298,14 @@ mod tests {
         assert!(request(&["deployment", "scale", "kube-system", "workspace", "1"], &p).is_err());
         assert!(request(&["deployment", "scale", "apps", "unknown", "1"], &p).is_err());
         assert!(request(&["deployment", "scale", "apps", "workspace", "2", "other"], &p).is_err());
+        assert!(matches!(
+            request(&["deployment", "scale", "apps", "workspace", "2", "v_123"], &p),
+            Ok(Action::Scale { version: Some(_), .. })
+        ));
+        assert!(request(&["deployment", "scale", "apps", "workspace", "2", "--force"], &p).is_err());
+        assert!(request(&["deployment", "scale", "apps", "workspace", "2", "1/2"], &p).is_err());
+        assert!(request(&["deployment", "scale", "apps", "workspace", "2", ""], &p).is_err());
+        assert!(request(&["deployment", "scale", "apps", "workspace", "2", "v1", "extra"], &p).is_err());
     }
 
     #[test]
