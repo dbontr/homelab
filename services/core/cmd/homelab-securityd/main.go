@@ -22,19 +22,31 @@ import (
 	"github.com/dbontr/homelab-new/system/security"
 )
 
-func readRequiredFile(name string) ([]byte, error) {
-	path := os.Getenv(name)
-	if !filepath.IsAbs(path) {
-		return nil, errors.New("required protected credential path missing")
-	}
-	file,err:=os.OpenFile(path,os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_CLOEXEC,0)
- if err!=nil{return nil,errors.New("protected credential cannot be opened")}
+func readRequiredFile(name string) ([]byte,error) {
+ return readConfiguredFile(name,false)
+}
+
+func readPrivateCredential(name string) ([]byte,error) {
+ return readConfiguredFile(name,true)
+}
+
+// readConfiguredFile permits public, immutable policy material but requires
+// owner-only file permissions for password, TOTP and vault credentials.
+func readConfiguredFile(name string, private bool) ([]byte,error) {
+ path:=os.Getenv(name)
+ if !filepath.IsAbs(path){return nil,errors.New("required protected file path missing")}
+ file,err:=os.OpenFile(path,os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_CLOEXEC,0)
+ if err!=nil{return nil,errors.New("configured file cannot be opened")}
  defer file.Close()
  info,err:=file.Stat()
- if err!=nil||!info.Mode().IsRegular()||info.Mode().Perm()&0022!=0{return nil,errors.New("credential is not a protected regular file")}
- const maxCredentialBytes=1<<20
- raw,err:=io.ReadAll(io.LimitReader(file,maxCredentialBytes+1))
- if err!=nil||len(raw)>maxCredentialBytes{return nil,errors.New("protected credential exceeds size limit")}
+ if err!=nil||!info.Mode().IsRegular(){return nil,errors.New("configured file must be regular")}
+ mode:=info.Mode().Perm()
+ if (private&&mode&0077!=0)||(!private&&mode&0022!=0){
+  return nil,errors.New("configured file permissions are unsafe")
+ }
+ const maxConfiguredFileBytes=1<<20
+ raw,err:=io.ReadAll(io.LimitReader(file,maxConfiguredFileBytes+1))
+ if err!=nil||len(raw)>maxConfiguredFileBytes{return nil,errors.New("configured file exceeds size limit")}
  return raw,nil
 }
 
@@ -43,11 +55,11 @@ func main() {
  lease,err:=statelease.Acquire("/var/lib/homelab-securityd","securityd")
  if err!=nil{log.Fatal("cannot acquire exclusive security state ownership: ",err)}
  defer lease.Close()
-	verifierBytes, err := readRequiredFile("HOMELAB_SECURITY_PASSWORD_FILE")
+	verifierBytes, err := readPrivateCredential("HOMELAB_SECURITY_PASSWORD_FILE")
 	if err != nil {
 		log.Fatal("cannot load owner password verifier: ", err)
 	}
-	totpBytes, err := readRequiredFile("HOMELAB_SECURITY_TOTP_FILE")
+	totpBytes, err := readPrivateCredential("HOMELAB_SECURITY_TOTP_FILE")
 	if err != nil {
 		log.Fatal("cannot load TOTP configuration: ", err)
 	}
@@ -72,7 +84,7 @@ func main() {
 		log.Fatal("cannot initialize security service: ", err)
 	}
  if os.Getenv("HOMELAB_SECURITY_VAULT_KEY_FILE")!=""{
-  key,err:=readRequiredFile("HOMELAB_SECURITY_VAULT_KEY_FILE")
+  key,err:=readPrivateCredential("HOMELAB_SECURITY_VAULT_KEY_FILE")
   if err!=nil||len(key)!=32{log.Fatal("invalid credential vault key")}
   vault,err:=security.OpenVault("/var/lib/homelab-securityd/credentials.json",key)
   for i:=range key{key[i]=0}
@@ -105,7 +117,7 @@ func main() {
  if gatewayAudience!="" {
   jwks,err:=readRequiredFile("HOMELAB_SECURITY_ACCESS_JWKS_FILE")
   if err!=nil{log.Fatal("Access JWKS unavailable: ",err)}
-  email,err:=readRequiredFile("HOMELAB_SECURITY_ACCESS_OWNER_FILE")
+  email,err:=readPrivateCredential("HOMELAB_SECURITY_ACCESS_OWNER_FILE")
   if err!=nil{log.Fatal("owner identity unavailable: ",err)}
   verifier,err=security.NewAccessVerifier(os.Getenv("HOMELAB_SECURITY_ACCESS_ISSUER"),strings.TrimSpace(string(email)),jwks)
   if err!=nil{log.Fatal("invalid verified owner identity configuration: ",err)}
