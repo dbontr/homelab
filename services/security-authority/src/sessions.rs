@@ -345,6 +345,65 @@ impl Authority {
         self.authenticate_factors(password, otp, unix_now()?)
     }
 
+    pub(crate) fn local_session_id(&mut self) -> Result<String, Error> {
+        if !self.live(unix_now()?) {
+            return Err(Error::Unauthorized);
+        }
+        let session = self.session.as_ref().ok_or(Error::Unauthorized)?;
+        if session.principal != "local-operator" {
+            return Err(Error::Unauthorized);
+        }
+        Ok(session.id.clone())
+    }
+
+    // A trusted OAuth broker may store a token only for a currently active
+    // owner session that initiated the one-use provider authorization.
+    pub(crate) fn store_broker_credential(
+        &mut self, session_id: &str, provider: &str, token: &[u8]
+    ) -> Result<CredentialHandle, Error> {
+        if !self.live(unix_now()?) {
+            return Err(Error::Unauthorized);
+        }
+        if self.session.as_ref().is_none_or(|s|
+            s.principal != "local-operator" || s.id != session_id
+        ) {
+            return Err(Error::Unauthorized);
+        }
+        let vault = self.vault.as_mut().ok_or(Error::InvalidConfiguration)?;
+        vault.store(&mut self.store, provider, token)
+    }
+
+    pub(crate) fn replace_broker_credential(
+        &mut self, session_id: &str, id: &str, provider: &str, token: &[u8]
+    ) -> Result<(), Error> {
+        if !self.live(unix_now()?)
+            || self.session.as_ref().is_none_or(|s|
+                s.principal != "local-operator" || s.id != session_id
+            )
+        {
+            return Err(Error::Unauthorized);
+        }
+        let vault = self.vault.as_mut().ok_or(Error::InvalidConfiguration)?;
+        vault.rotate(&mut self.store, id, provider, token)
+    }
+
+    pub(crate) fn with_broker_credential<R>(
+        &mut self,
+        session_id: &str, id: &str, provider: &str,
+        callback: impl FnOnce(&[u8]) -> R
+    ) -> Result<R, Error> {
+        if !self.live(unix_now()?)
+            || self.session.as_ref().is_none_or(|s|
+                s.principal != "local-operator" || s.id != session_id
+            )
+        {
+            return Err(Error::Unauthorized);
+        }
+        let vault = self.vault.as_ref().ok_or(Error::InvalidConfiguration)?;
+        vault.with_secret(id, provider, None, callback)
+    }
+
+
     pub(crate) fn browser_principal(&self, assertion: &str) -> Result<String, Error> {
         let audience = self.browser_audience.as_ref().ok_or(Error::Unauthorized)?;
         self.verified_principal(assertion, audience)
