@@ -165,9 +165,16 @@ func LoadAppBundle(directory, origin string) (*AppBundle, error) {
 func (b *AppBundle) view(name string) string {
     html := b.pages[name]
     if html == "" { return "" }
-    // MCP hosts load resources into sandboxed srcdoc documents.
+    // Dioxus emits root-relative script and asset URLs. Sandboxed srcdoc
+    // documents have a different origin, so the verified resource host must
+    // be part of those URLs. Relative imports still use the declared base URI.
+    root := b.origin + "/mcp-assets/"
+    html = strings.NewReplacer(
+        `src="/`, `src="`+root,
+        `href="/`, `href="`+root,
+    ).Replace(html)
     return strings.Replace(html, "<head>",
-        "<head><base href=\""+b.origin+"/mcp-assets/\">", 1)
+        "<head><base href=""+root+"">", 1)
 }
 
 func (b *AppBundle) serve(w http.ResponseWriter, r *http.Request) {
@@ -220,6 +227,7 @@ func (s *Server) SetAppBundle(bundle *AppBundle) error {
         ui["csp"] = map[string]any{
             "resourceDomains": []string{bundle.origin},
             "connectDomains": []string{bundle.origin},
+            "baseUriDomains": []string{bundle.origin},
         }
         entry.Meta["ui"] = ui
         s.tools[name] = entry
@@ -231,4 +239,26 @@ func (s *Server) SetAppBundle(bundle *AppBundle) error {
 func (s *Server) appHTML(view, fallback string) string {
     if s.bundle == nil { return fallback }
     return s.bundle.view(view)
+}
+
+// Resource-level CSP is mandatory for host rendering. Tool metadata is
+// advisory discovery data; it does not authorize remote assets by itself.
+func (s *Server) appResource(uri, view, fallback string) map[string]any {
+    resource := map[string]any{
+        "uri": uri,
+        "mimeType": "text/html;profile=mcp-app",
+        "text": s.appHTML(view, fallback),
+    }
+    if s.bundle != nil {
+        resource["_meta"] = map[string]any{
+            "ui": map[string]any{
+                "csp": map[string]any{
+                    "resourceDomains": []string{s.bundle.origin},
+                    "connectDomains": []string{s.bundle.origin},
+                    "baseUriDomains": []string{s.bundle.origin},
+                },
+            },
+        }
+    }
+    return resource
 }

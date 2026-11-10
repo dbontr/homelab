@@ -47,6 +47,19 @@ func TestRustAppBundleHasExactPublicAssetsAndViewIdentity(t *testing.T) {
     bundle, err := LoadAppBundle(root, "https://assets.example.test")
     if err != nil { t.Fatal(err) }
     if len(bundle.pages) != 5 { t.Fatalf("missing Rust views: %d",len(bundle.pages)) }
+    // Root-relative Dioxus boot scripts must resolve to the declared HTTPS
+    // asset origin rather than the sandbox host's origin.
+    bundle.pages["cognitive"] = strings.Replace(bundle.pages["cognitive"],
+        "</head>", "<script src=\"/wasm/client.js\"></script><link href=\"/assets/style.css\" rel=\"stylesheet\"></head>",1)
+    rendered := bundle.view("cognitive")
+    for _, target := range []string{
+        "src=\"https://assets.example.test/mcp-assets/wasm/client.js\"",
+        "href=\"https://assets.example.test/mcp-assets/assets/style.css\"",
+    } {
+        if !strings.Contains(rendered,target) {
+            t.Fatalf("Dioxus asset URL did not use the selected origin: %s", target)
+        }
+    }
     for view := range healthAppViews {
         html := bundle.view(view)
         if !strings.Contains(html,"<base href=\"https://assets.example.test/mcp-assets/\">") ||
@@ -138,6 +151,17 @@ func TestRustAppBundlePreservesMCPAuthorityAndOriginalResourceIdentity(t *testin
         t.Fatal("disabled Rust App selection did not retain the legacy resource")
     }
     if err := server.SetAppBundle(bundle); err != nil { t.Fatal(err) }
+    resource := server.appResource(cognitiveUIURI,"cognitive","legacy view")
+    metadata, _ := resource["_meta"].(map[string]any)
+    config, _ := metadata["ui"].(map[string]any)
+    contentPolicy, _ := config["csp"].(map[string]any)
+    for _, field := range []string{"resourceDomains","connectDomains","baseUriDomains"} {
+        values, _ := contentPolicy[field].([]string)
+        if len(values) != 1 || values[0] != bundle.origin {
+            t.Fatalf("MCP Apps resource requires exact %s: %#v",field,values)
+        }
+    }
+
     if !strings.Contains(server.appHTML("cognitive","legacy view"),"content=\"cognitive\"") {
         t.Fatal("selected Rust App did not preserve its exact view marker")
     }

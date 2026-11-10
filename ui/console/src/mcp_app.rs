@@ -200,7 +200,7 @@ pub fn Embedded() -> Element {
         }
     });
     rsx! {
-        document::Stylesheet { href: crate::CSS }
+        style { {include_str!("../assets/main.css")} }
         if !error().is_empty() {
             Notice { message: error() }
         } else if !ready() {

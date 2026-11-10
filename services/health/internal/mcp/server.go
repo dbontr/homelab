@@ -103,23 +103,23 @@ func (s *Server) Dispatch(ctx context.Context, data []byte) *response {
   switch p.URI {
   case healthUIURI:
   return &response{JSONRPC:"2.0",ID:req.ID,Result:map[string]any{"contents":[]any{
-   map[string]string{"uri":healthUIURI,"mimeType":"text/html;profile=mcp-app","text":s.appHTML("workout-editor",workoutHTML)},
+   s.appResource(healthUIURI,"workout-editor",workoutHTML),
   }}}
   case cognitiveUIURI:
   return &response{JSONRPC:"2.0",ID:req.ID,Result:map[string]any{"contents":[]any{
-   map[string]string{"uri":cognitiveUIURI,"mimeType":"text/html;profile=mcp-app","text":s.appHTML("cognitive",cognitiveHTML)},
+   s.appResource(cognitiveUIURI,"cognitive",cognitiveHTML),
   }}}
   case dashboardURI:
   return &response{JSONRPC:"2.0",ID:req.ID,Result:map[string]any{"contents":[]any{
-   map[string]string{"uri":dashboardURI,"mimeType":"text/html;profile=mcp-app","text":s.appHTML("dashboard",dashboardHTML)},
+   s.appResource(dashboardURI,"dashboard",dashboardHTML),
   }}}
   case groceryUIURI:
   return &response{JSONRPC:"2.0",ID:req.ID,Result:map[string]any{"contents":[]any{
-   map[string]string{"uri":groceryUIURI,"mimeType":"text/html;profile=mcp-app","text":s.appHTML("groceries",groceryHTML)},
+   s.appResource(groceryUIURI,"groceries",groceryHTML),
   }}}
   case companionUIURI:
   return &response{JSONRPC:"2.0",ID:req.ID,Result:map[string]any{"contents":[]any{
-   map[string]string{"uri":companionUIURI,"mimeType":"text/html;profile=mcp-app","text":s.appHTML("workout-companion",companionHTML)},
+   s.appResource(companionUIURI,"workout-companion",companionHTML),
   }}}
   default:
     return rpcErr(req.ID,-32602,"unknown resource")
