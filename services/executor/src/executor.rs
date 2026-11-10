@@ -205,6 +205,22 @@ impl Executor {
         self.authorization.decision(operation,host,&args,assertion,false).await
     }
 
+    /// A started entry with no terminal record is not assumed to have failed.
+    /// Only an independently authorized coordinator can inspect these receipts.
+    pub async fn audit_status(&self, assertion: &str) -> Result<Value, Error> {
+        let host = &self.policy.host;
+        let args = canonical_arguments(&serde_json::to_vec(
+            &json!({"host":host}))
+            .map_err(|_| Error::Protocol("audit observation encoding failed"))?)?;
+        let decision = self.authorization.decision(
+            "infrastructure__audit_status",host,&args,assertion,true).await?;
+        if !decision.allowed {
+            return Err(Error::Denied("audit observation not authorized"));
+        }
+        let pending = self.audit.unresolved()?;
+        Ok(json!({"host":host,"unresolved":pending,"count":pending.len()}))
+    }
+
     pub async fn observe(&self, assertion: &str) -> Result<Value, Error> {
         if !self.policy.release_enabled { return Err(Error::Denied("release observation disabled")); }
         let host = &self.policy.host;
