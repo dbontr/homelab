@@ -12,7 +12,7 @@ make_release() {
   release="$temporary/release-$counter"
   mkdir -p "$release/bin" "$release/console/assets"
   for binary in \
-    homelab-platform homelab-calendard homelab-engineeringd homelab-approve homelab-securityd \
+    homelab-platform homelab-calendard homelab-engineeringd homelab-securityd \
     homelab-executord homelab-release homelab-admin homelab-compute-controller \
     homelab-compute-worker homelab-learning homelab-health \
     homelab-mcp homelab-api; do
