@@ -15,6 +15,7 @@ import (
 // Backend discovery is not authority to execute a privileged operation.
 func TestPrivilegedBackendToolCannotUseGatewayCredentials(t *testing.T){
  var calls atomic.Int32
+ var discoveries atomic.Int32
  backend:=httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){
   var input rpcRequest
   if err:=json.NewDecoder(r.Body).Decode(&input);err!=nil{t.Error(err);return}
@@ -22,6 +23,7 @@ func TestPrivilegedBackendToolCannotUseGatewayCredentials(t *testing.T){
   var outcome any
   switch input.Method {
   case "tools/list":
+   discoveries.Add(1)
    outcome=map[string]any{"tools":[]any{
     map[string]any{"name":"configure","description":"Configure","inputSchema":map[string]any{"type":"object"}},
     map[string]any{"name":"worker_revoke","description":"Revoke","inputSchema":map[string]any{"type":"object"}},
@@ -61,7 +63,7 @@ func TestPrivilegedBackendToolCannotUseGatewayCredentials(t *testing.T){
    }
   }
  }
- if calls.Load()!=0{t.Fatal("privileged tool reached a backend")}
+ if calls.Load()!=0||discoveries.Load()!=0{t.Fatal("denied privileged operation contacted a backend")}
  catalog:=request(handler,http.MethodGet,"/v1/tools","",auth)
  if strings.Contains(catalog.Body.String(),`"compute__worker_revoke"`)||
     strings.Contains(catalog.Body.String(),`"cluster__configure"`)||
