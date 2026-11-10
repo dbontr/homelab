@@ -75,7 +75,7 @@
 - [OCI Image Specification](https://github.com/opencontainers/image-spec) — Open Containers Initiative. Used for: digest-qualified image identities in the registry build pipeline.
 - [Dioxus 0.7 Deployment](https://dioxuslabs.com/learn/0.7/guides/deploy/) — Dioxus project. Used for: packaging static Rust/WASM console assets for an independent native release.
 - [Open Library Search API](https://openlibrary.org/dev/docs/api/search) — Open Library/Internet Archive. Used for: bounded on-demand work discovery, stable work identifiers, authors and publication metadata.
-- [Open Library API Usage Guidelines](https://openlibrary.org/developers/api) — Open Library/Internet Archive. Used for: identified human-initiated requests, conservative one-request-per-second pacing, and short-lived search caching.
+- [Open Library API Usage Guidelines](https://openlibrary.org/developers/api) — Open Library/Internet Archive. Used for: identified human-initiated requests, conservative one-request-per-second pacing, rate limits, short-lived search caching and bounded book availability lookup.
 
 - [RFC 8446: The Transport Layer Security (TLS) Protocol Version 1.3](https://www.rfc-editor.org/rfc/rfc8446) — IETF. Used for: TLS 1.3 transport between trusted release coordinator and host executors.
 - [RFC 5280: Internet X.509 Public Key Infrastructure Certificate Profile](https://www.rfc-editor.org/rfc/rfc5280) — IETF. Used for: verified server and client certificate identities and trust anchors in authenticated release transport.
@@ -91,7 +91,6 @@
 - [USDA FoodData Central API Guide](https://fdc.nal.usda.gov/api-guide/) — USDA Agricultural Research Service. Used for: API-key protected food lookups, Food Details schema, and reviewed FDC identifiers.
 - [USDA FoodData Central Foundation Foods Documentation](https://fdc.nal.usda.gov/Foundation_Foods_Documentation/) — USDA Agricultural Research Service. Used for: source-reported nutrients per 100 grams, Atwater energy identifiers, and explicit missing-nutrient treatment.
 - [Open Library Read API](https://openlibrary.org/dev/docs/api/read) — Open Library. Used for: provider-owned online reading and borrowing availability lookup by exact ISBN and documented result status.
-- [Open Library API Usage Guidelines](https://openlibrary.org/developers/api) — Open Library. Used for: identified requests, rate limits, and bounded human-initiated book availability lookup.
 - [GNU Coreutils sha2sum utilities](https://www.gnu.org/software/coreutils/manual/html_node/sha2-utilities.html) — GNU project. Used for: reproducible SHA-256 manifests and offline staged-release file integrity checks.
 - [Docker Buildx Build Reference](https://docs.docker.com/reference/cli/docker/buildx/build/) — Docker. Used for: source-owned Compute OCI image builds, registry push/load modes and metadata digest receipts.
 - [RFC 8628: OAuth 2.0 Device Authorization Grant](https://www.rfc-editor.org/rfc/rfc8628) — IETF. Used for: owner-only device-code enrollment, verification URI presentation, interval-constrained authorization polling and provider error handling.
