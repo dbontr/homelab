@@ -182,8 +182,6 @@ func main(){
         if raw:=os.Getenv("HOMELAB_SECURITY_LOGIN_URL");raw!=""{
             if err:=server.SetSecurityLoginURL(raw);err!=nil{log.Fatal(err)}
         }
-    }else{
-        serveApprovals(server,os.Getenv("HOMELAB_APPROVAL_SOCKET"))
     }
     if socket:=os.Getenv("HOMELAB_EXECUTOR_SOCKET");socket!=""{
         if os.Getenv("HOMELAB_SECURITY_SOCKET")==""{log.Fatal("executor requires independent owner authorization")}

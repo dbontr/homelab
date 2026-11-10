@@ -29,7 +29,7 @@ func TestUnadvertisedBackendToolIsNeverForwarded(t *testing.T){
  db,err:=store.Open(filepath.Join(t.TempDir(),"state.json"),"UTC");if err!=nil{t.Fatal(err)}
  s,err:=New(db,strings.Repeat("t",40),[]Backend{{Name:"workspace",URL:backend.URL}});if err!=nil{t.Fatal(err)}
  w:=request(s.Handler(),"POST","/v1/tools/workspace__worker_revoke/call",`{"arguments":{"node_id":"worker"}}`,strings.Repeat("t",40))
- if calls!=0||!strings.Contains(w.Body.String(),"approval_required"){
+ if calls!=0||!strings.Contains(w.Body.String(),"executor-side authorization"){
   t.Fatalf("privileged tool must not be forwarded: %s",w.Body.String())
  }
  w=request(s.Handler(),"POST","/v1/tools/workspace__unadvertised/call",`{"arguments":{}}`,strings.Repeat("t",40))

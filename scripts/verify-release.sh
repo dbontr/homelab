@@ -51,7 +51,7 @@ if [[ ( ${#metadata[@]} -ne 2 && ${#metadata[@]} -ne 3 ) ||
 fi
 
 declared=(
-  homelab-platform homelab-calendard homelab-engineeringd homelab-approve homelab-securityd
+  homelab-platform homelab-calendard homelab-engineeringd homelab-securityd
   homelab-executord homelab-release homelab-admin homelab-compute-controller
   homelab-compute-worker homelab-learning homelab-health
   homelab-mcp homelab-api

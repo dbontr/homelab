@@ -35,7 +35,7 @@ import (
  "github.com/dbontr/homelab-new/system/store"
 )
 type Backend struct { Name string; URL string; Token string; TokenSource func()(string,error) }
-type Server struct { db *store.Store; token string; mcpInterfaceToken string; apiInterfaceToken string; apiInterfaceWritePaths map[string]bool; backend []Backend; client *http.Client; calendarSource func(context.Context)(calendar.Feed,error); gate *approval.Gate; privilegeClient *security.AdminClient; executorClient *privileged.Client; fleetClient *release.FleetClient; securityLoginURL string; allowedOrigins map[string]struct{}; media *media.Client; deviceCatalog *devices.Catalog; nodeCatalog *devices.NodeCatalog; profiles *profiles.Registry; recipes *recipes.Store; sessions *session.Manager; observability *observability.Client; bookCatalog *books.Catalog; engineering agentflow.Manager; workflows *agentflow.Store; capabilityPlanner agentflow.CapabilityPlanner; inflight chan struct{} }
+type Server struct { db *store.Store; token string; mcpInterfaceToken string; apiInterfaceToken string; apiInterfaceWritePaths map[string]bool; backend []Backend; client *http.Client; calendarSource func(context.Context)(calendar.Feed,error); privilegeClient *security.AdminClient; executorClient *privileged.Client; fleetClient *release.FleetClient; securityLoginURL string; allowedOrigins map[string]struct{}; media *media.Client; deviceCatalog *devices.Catalog; nodeCatalog *devices.NodeCatalog; profiles *profiles.Registry; recipes *recipes.Store; sessions *session.Manager; observability *observability.Client; bookCatalog *books.Catalog; engineering agentflow.Manager; workflows *agentflow.Store; capabilityPlanner agentflow.CapabilityPlanner; inflight chan struct{} }
 
 func New(db *store.Store,token string,backends []Backend)(*Server,error){
  if db==nil||len(token)<32||strings.ContainsAny(token,"\r\n\t"){return nil,errors.New("store and a strong access token are required")}
@@ -49,7 +49,7 @@ func New(db *store.Store,token string,backends []Backend)(*Server,error){
   if u.User!=nil||u.RawQuery!=""||u.Fragment!=""{return nil,errors.New("invalid backend URL")}
   if u.Scheme!="https"&&!(u.Scheme=="http"&&(u.Hostname()=="localhost"||u.Hostname()=="127.0.0.1"||u.Hostname()=="::1")){return nil,errors.New("backend must use HTTPS or loopback HTTP")}
  }
- return &Server{db:db,token:token,backend:backends,gate:approval.New(),inflight:make(chan struct{},32),client:&http.Client{Timeout:120*time.Second,CheckRedirect:func(_ *http.Request,_ []*http.Request)error{return errors.New("backend redirects are disabled")}}},nil
+ return &Server{db:db,token:token,backend:backends,inflight:make(chan struct{},32),client:&http.Client{Timeout:120*time.Second,CheckRedirect:func(_ *http.Request,_ []*http.Request)error{return errors.New("backend redirects are disabled")}}},nil
 }
 func(s *Server) SetDeviceCatalog(catalog *devices.Catalog) { s.deviceCatalog = catalog }
 func(s *Server) SetNodeCatalog(catalog *devices.NodeCatalog) { s.nodeCatalog = catalog }
@@ -467,8 +467,6 @@ func(s *Server)localTools()[]map[string]any{
   if s.securityLoginURL!="" {
    tools=append(tools,tool("security_session_open","Open the independent HTTPS authentication page to enter password and TOTP directly, outside ChatGPT. No credentials are returned to the model.",map[string]any{}))
   }
- } else {
-  tools=append(tools,tool("approval_status","Check an administrator approval",map[string]any{"id":prop("string")},"id"))
  }
  if s.hasBackend("workspace") {tools=append(tools,tool("software_catalog","List approved images, software collections, and program requests",map[string]any{}))}
  if s.profiles!=nil {tools=append(tools,
@@ -562,7 +560,7 @@ func(s *Server)toolList(r *http.Request)[]map[string]any{
     if !ok{continue}
     name,ok:=advertised["name"].(string)
     if !ok||!validBackendToolName(name){continue}
-    if s.privilegeClient!=nil&&approval.ScopeFor(backend.Name+"__"+name)!=""{continue}
+    if approval.ScopeFor(backend.Name+"__"+name)!=""{continue}
     if backend.Name=="workspace"&&(
      name=="github_merge_pull_request"||
      name=="github_mark_pull_request_ready"||
@@ -678,7 +676,6 @@ func(s *Server)localTool(ctx context.Context,name string,raw json.RawMessage)(an
   kind,id,err:=parseResourceReference(args.Reference)
   if err!=nil{return nil,err}
   return s.resource(ctx,kind,id)
- case "approval_status":return s.privilegeStatus(args.ID)
  case "security_session_status":
   if s.privilegeClient==nil{return nil,errors.New("independent security service not configured")}
   return s.privilegeClient.Status(ctx)

@@ -8,7 +8,7 @@ The independent `homelab-securityd` service can hold an owner administrative ses
 
 Authenticated sessions have a 120-minute inactivity limit and an absolute 12-hour lifetime. Approved routine operations may reuse the active session. The owner or authorized MCP client can revoke it immediately. Destructive operations require an independent, owner-only confirmation of the exact action, resource and canonical argument digest with a fresh password and TOTP. Confirmations expire quickly and can be consumed only once. No administrative token is returned to the model. See [privileged sessions](privileged-sessions.md) for local enrollment, operation policy and commands.
 
-The legacy gateway-local approval socket remains available for development installations without the independent security client. It is not a security boundary against arbitrary code execution in the gateway process and must not authorize production cluster administrator credentials. Even with the independent session service, any downstream executor that accepts a broadly privileged credential from the gateway could bypass the authorization check. Such executors must independently validate grants and resource permissions before production write access is enabled.
+Privileged operations fail closed when independent owner security is not configured. The gateway cannot issue administrator approval grants or forward privileged backend calls. A separate executor validates owner identity, operation policy, target, confirmation and audit custody before using a privileged credential. An authenticated session alone cannot grant an MCP caller unrestricted backend access.
 
 ## Authentication and software accounts
 
