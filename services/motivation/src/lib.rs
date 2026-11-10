@@ -31,6 +31,8 @@ pub struct Profile {
     pub proactive_enabled: bool,
     #[serde(default = "default_cadence")]
     pub cadence_minutes: u16,
+    #[serde(default)]
+    pub holdout_weekday_utc: Option<u8>,
     pub goal_id: String,
     pub identity: String,
     pub outcome: String,
@@ -48,13 +50,14 @@ impl Default for Profile {
             enabled: false,
             proactive_enabled: false,
             cadence_minutes: default_cadence(),
+            holdout_weekday_utc: None,
             goal_id: String::new(),
             identity: String::new(),
             outcome: String::new(),
             next_step: String::new(),
             intensity: Intensity::Guided,
             daily_limit: 4,
-            proactive_enabled: false, cadence_minutes: 240,
+            proactive_enabled: false, cadence_minutes: 240, holdout_weekday_utc: None,
             quiet_start_utc_hour: 0,
             quiet_end_utc_hour: 0,
         }
@@ -70,6 +73,8 @@ pub struct ProfileChange {
     pub proactive_enabled: bool,
     #[serde(default = "default_cadence")]
     pub cadence_minutes: u16,
+    #[serde(default)]
+    pub holdout_weekday_utc: Option<u8>,
     #[serde(default)]
     pub goal_id: String,
     pub identity: String,
@@ -297,6 +302,7 @@ impl Engine {
             enabled: change.enabled,
             proactive_enabled: change.proactive_enabled,
             cadence_minutes: change.cadence_minutes,
+            holdout_weekday_utc: change.holdout_weekday_utc,
             goal_id: change.goal_id.trim().to_owned(),
             identity: change.identity.trim().to_owned(),
             outcome: change.outcome.trim().to_owned(),
@@ -422,6 +428,7 @@ fn validate_profile(p: &Profile) -> Result<(), Error> {
     }
     if p.daily_limit == 0 || p.daily_limit > 8 ||
         p.cadence_minutes < 60 || p.cadence_minutes > 1440 ||
+        p.holdout_weekday_utc.is_some_and(|day| day > 6) ||
         p.quiet_start_utc_hour > 23 || p.quiet_end_utc_hour > 23 {
         return Err(Error::Invalid("invalid intervention limits"));
     }
@@ -538,7 +545,7 @@ mod tests {
             outcome: "Test a meaningful scientific conjecture".into(),
             next_step: "Derive the governing equation".into(),
             intensity: Intensity::Direct, daily_limit: 4,
-            proactive_enabled: false, cadence_minutes: 240,
+            proactive_enabled: false, cadence_minutes: 240, holdout_weekday_utc: None,
             quiet_start_utc_hour: 0, quiet_end_utc_hour: 0,
         }).unwrap();
     }
@@ -551,7 +558,7 @@ mod tests {
             expected_revision: 0, enabled: true, goal_id: String::new(),
             identity: "x".into(), outcome: "x".into(), next_step: "x".into(),
             intensity: Intensity::Guided, daily_limit: 3,
-            proactive_enabled: false, cadence_minutes: 240,
+            proactive_enabled: false, cadence_minutes: 240, holdout_weekday_utc: None,
             quiet_start_utc_hour: 0, quiet_end_utc_hour: 0,
         }), Err(Error::Conflict(_))));
         e.pause().unwrap();
@@ -607,7 +614,7 @@ mod tests {
             identity: "Mathematician".into(), outcome: "Prove a theorem".into(),
             next_step: "Investigate an open lemma".into(),
             intensity: Intensity::Guided, daily_limit: 4,
-            proactive_enabled: false, cadence_minutes: 240,
+            proactive_enabled: false, cadence_minutes: 240, holdout_weekday_utc: None,
             quiet_start_utc_hour: 0, quiet_end_utc_hour: 0,
         }).unwrap();
         assert!(e.snapshot().interventions[0].cancelled);

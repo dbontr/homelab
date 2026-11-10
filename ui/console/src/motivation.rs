@@ -25,6 +25,7 @@ pub fn Motivation(csrf: String) -> Element {
     let mut daily_limit = use_signal(|| 4u8);
     let mut proactive_enabled = use_signal(|| false);
     let mut cadence_minutes = use_signal(|| 240u16);
+    let mut holdout_day = use_signal(|| "none".to_owned());
     let mut quiet_start = use_signal(|| 0u8);
     let mut quiet_end = use_signal(|| 0u8);
     let mut engagement = use_signal(|| 3u8);
@@ -58,6 +59,8 @@ pub fn Motivation(csrf: String) -> Element {
                 daily_limit.set(profile.get("daily_limit").and_then(Value::as_u64).unwrap_or(4) as u8);
                 proactive_enabled.set(profile.get("proactive_enabled").and_then(Value::as_bool).unwrap_or(false));
                 cadence_minutes.set(profile.get("cadence_minutes").and_then(Value::as_u64).unwrap_or(240) as u16);
+                holdout_day.set(profile.get("holdout_weekday_utc").and_then(Value::as_u64)
+                    .map(|day| day.to_string()).unwrap_or_else(|| "none".to_owned()));
                 quiet_start.set(profile.get("quiet_start_utc_hour").and_then(Value::as_u64).unwrap_or(0) as u8);
                 quiet_end.set(profile.get("quiet_end_utc_hour").and_then(Value::as_u64).unwrap_or(0) as u8);
                 initialized.set(true);
@@ -114,6 +117,7 @@ pub fn Motivation(csrf: String) -> Element {
                                 "daily_limit": daily_limit(),
                                 "proactive_enabled": proactive_enabled(),
                                 "cadence_minutes": cadence_minutes(),
+                                "holdout_weekday_utc": holdout_day().parse::<u8>().ok(),
                                 "quiet_start_utc_hour": quiet_start(),
                                 "quiet_end_utc_hour": quiet_end()
                             });
@@ -207,8 +211,22 @@ pub fn Motivation(csrf: String) -> Element {
                                     if let Ok(value) = event.value().parse::<u16>() { cadence_minutes.set(value); }
                                 } }
                         }
+                        label { class: "form-row",
+                            span { class: "label", "Weekly intervention-free day (UTC)" }
+                            select { class: "field", value: "{holdout_day()}",
+                                onchange: move |event| holdout_day.set(event.value()),
+                                option { value: "none", "No scheduled holdout" }
+                                option { value: "0", "Sunday" }
+                                option { value: "1", "Monday" }
+                                option { value: "2", "Tuesday" }
+                                option { value: "3", "Wednesday" }
+                                option { value: "4", "Thursday" }
+                                option { value: "5", "Friday" }
+                                option { value: "6", "Saturday" }
+                            }
+                        }
                         p { class: "card-description",
-                            "Defaults are off. Quiet hours use UTC; identical start and end disables quiet hours. Scheduled prompts stay in the private inbox until reviewed or dismissed. External messages and device restrictions are not enabled."
+                            "Defaults are off. Quiet hours use UTC; identical start and end disables quiet hours. A holdout day suppresses scheduled prompts so voluntary interest can be observed. External messages and device restrictions are not enabled."
                         }
                         div { class: "inline-row",
                             button { class: "btn btn-primary", disabled: busy(), "Save profile" }
@@ -458,6 +476,9 @@ pub fn Motivation(csrf: String) -> Element {
                                 api::property(&value, &["sessions"]),
                                 api::property(&value, &["minutes"]),
                                 api::property(&value, &["self_initiated_minutes"]))} }
+                            p { {format!("Holdout minutes: {} · Self-initiated holdout minutes: {}",
+                                api::property(&value, &["holdout_minutes"]),
+                                api::property(&value, &["holdout_self_initiated_minutes"]))} }
                             p { {format!("Average fascination: {} / 5 · Average well-being: {} / 5",
                                 api::property(&value, &["mean_fascination"]),
                                 api::property(&value, &["mean_wellbeing"]))} }
