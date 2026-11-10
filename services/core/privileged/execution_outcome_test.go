@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/dbontr/homelab-new/system/security"
@@ -120,9 +121,9 @@ func TestExecutorClientRejectsAmbiguousSuccess(t *testing.T) {
 
 
 func TestWorkspaceAndKubernetesSubmissionsDoNotClaimCompletion(t *testing.T) {
-	var workspaceCalls, kubernetesCalls int
+	var workspaceCalls, kubernetesCalls atomic.Int32
 	workspace, done := testWorkspacePolicy(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		workspaceCalls++
+		workspaceCalls.Add(1)
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"content":[]}}`))
 	}))
@@ -139,7 +140,7 @@ func TestWorkspaceAndKubernetesSubmissionsDoNotClaimCompletion(t *testing.T) {
 		Releases: &fakeRelease{}, Audit: testExecutorAudit(t),
 		Run: func(_ context.Context, command string, args ...string) error {
 			if command != "/usr/bin/kubectl" { t.Fatalf("unexpected executable %q", command) }
-			kubernetesCalls++
+			kubernetesCalls.Add(1)
 			return nil
 		},
 	})
@@ -153,7 +154,7 @@ func TestWorkspaceAndKubernetesSubmissionsDoNotClaimCompletion(t *testing.T) {
 			t.Fatalf("submitted %s reported a final state: %+v, %v", tc.operation, result, err)
 		}
 	}
-	if workspaceCalls != 1 || kubernetesCalls != 1 {
-		t.Fatalf("unexpected submitted operations: workspace %d, Kubernetes %d", workspaceCalls, kubernetesCalls)
+	if workspaceCalls.Load() != 1 || kubernetesCalls.Load() != 1 {
+		t.Fatalf("unexpected submitted operations: workspace %d, Kubernetes %d", workspaceCalls.Load(), kubernetesCalls.Load())
 	}
 }
