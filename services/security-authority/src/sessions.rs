@@ -399,7 +399,7 @@ impl Authority {
 
     /// Owner-only credential enrollment is gated by an active owner session
     /// and a fresh password/TOTP verification.
-    pub fn store_credential(
+    pub(crate) fn store_credential(
         &mut self,
         principal: &str,
         password: &str,
@@ -418,7 +418,7 @@ impl Authority {
         vault.store(&mut self.store, provider, secret)
     }
 
-    pub fn rotate_credential(
+    pub(crate) fn rotate_credential(
         &mut self,
         principal: &str,
         password: &str,
@@ -438,7 +438,7 @@ impl Authority {
         vault.rotate(&mut self.store, id, provider, secret)
     }
 
-    pub fn revoke_credential(
+    pub(crate) fn revoke_credential(
         &mut self,
         principal: &str,
         password: &str,
@@ -456,7 +456,7 @@ impl Authority {
         vault.delete(&mut self.store, id)
     }
 
-    pub fn credential_handles(&mut self, principal: &str)
+    pub(crate) fn credential_handles(&mut self, principal: &str)
         -> Result<Vec<CredentialHandle>, Error>
     {
         if !self.live(unix_now()?)
@@ -484,7 +484,7 @@ impl Authority {
         result
     }
 
-    pub fn login(
+    pub(crate) fn login(
         &mut self,
         principal: &str,
         password: &str,
@@ -534,7 +534,7 @@ impl Authority {
         true
     }
 
-    pub fn status(&mut self, principal: &str) -> Result<SessionStatus, Error> {
+    pub(crate) fn status(&mut self, principal: &str) -> Result<SessionStatus, Error> {
         Ok(self.status_at(principal, unix_now()?))
     }
 
@@ -556,7 +556,7 @@ impl Authority {
         }
     }
 
-    pub fn revoke(&mut self, principal: &str) -> Result<bool, Error> {
+    pub(crate) fn revoke(&mut self, principal: &str) -> Result<bool, Error> {
         Ok(self.revoke_at(principal, unix_now()?))
     }
 
@@ -575,7 +575,7 @@ impl Authority {
         self.pending.retain(|_, item| now < item.expires);
     }
 
-    pub fn pending(&mut self, principal: &str) -> Result<Vec<ConfirmationPreview>, Error> {
+    pub(crate) fn pending(&mut self, principal: &str) -> Result<Vec<ConfirmationPreview>, Error> {
         Ok(self.pending_at(principal, unix_now()?))
     }
 
@@ -600,7 +600,7 @@ impl Authority {
             .collect()
     }
 
-    pub fn preview(
+    pub(crate) fn preview(
         &mut self,
         principal: &str,
         client: &str,
@@ -611,7 +611,7 @@ impl Authority {
         self.authorize_at(principal, client, operation, target, args, false, unix_now()?)
     }
 
-    pub fn authorize(
+    pub(crate) fn authorize(
         &mut self,
         principal: &str,
         client: &str,
@@ -702,7 +702,7 @@ impl Authority {
         })
     }
 
-    pub fn confirm(
+    pub(crate) fn confirm(
         &mut self,
         principal: &str,
         id: &str,
