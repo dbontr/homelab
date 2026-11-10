@@ -67,6 +67,16 @@ fi
   "$testdir/actuator-tests"
   rustc --edition=2021 -D warnings src/main.rs -o "$testdir/homelab-actuator"
 )
+for directory in "$root/services/compute/native-hardware" "$root/services/sandbox"; do
+  (
+    cd "$directory"
+    testdir=$(mktemp -d)
+    trap 'rm -rf -- "$testdir"' EXIT
+    rustc --edition=2021 -D warnings --test src/main.rs -o "$testdir/native-tests"
+    "$testdir/native-tests"
+    rustc --edition=2021 -D warnings src/main.rs -o "$testdir/native-binary"
+  )
+done
 
 if ! command -v cargo >/dev/null 2>&1; then
   printf '%s\n' 'Rust Cargo is required to verify the console source.' >&2
