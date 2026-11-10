@@ -74,6 +74,9 @@
       packages.${defaultSystem}.homelab-native-hardware = import ./packages/hardware-native.nix {
         pkgs = nixpkgs.legacyPackages.${defaultSystem};
       };
+      packages.${defaultSystem}.homelab-engineering-sandbox = import ./packages/engineering-sandbox.nix {
+        pkgs = nixpkgs.legacyPackages.${defaultSystem};
+      };
       packages.${defaultSystem}.homelab-motivation = import ./packages/motivation.nix {
         pkgs = nixpkgs.legacyPackages.${defaultSystem};
       };
