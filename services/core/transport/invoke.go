@@ -8,6 +8,7 @@ import (
 
  "github.com/dbontr/homelab-new/system/canonicaljson"
  "github.com/dbontr/homelab-new/system/security"
+ "github.com/dbontr/homelab-new/system/privileged"
  "github.com/dbontr/homelab-new/system/approval"
 )
 
@@ -40,7 +41,13 @@ func (s *Server) invoke(ctx context.Context,name string,args json.RawMessage,id 
      "confirmation_id":decision.ConfirmationID,"confirmation_expires_at":decision.ConfirmationExpiresAt,
      "instructions":"Sign in through the protected owner page and confirm destructive changes there. Retry identical arguments."})
   }
-  return result(map[string]bool{"executed":true})
+  if decision.State==privileged.ExecutionAccepted{
+   return result(map[string]any{"accepted":true,"state":decision.State,"audit_id":decision.AuditID})
+  }
+  if decision.State==privileged.ExecutionCompleted{
+   return result(map[string]any{"executed":true,"completed":true,"state":decision.State,"audit_id":decision.AuditID})
+  }
+  return toolError("independent privileged executor returned an invalid execution outcome")
  }
  if name=="workspace__resource_plan" ||
   name=="workspace__workspace_create" || name=="workspace__task_compute_submit" {
