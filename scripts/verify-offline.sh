@@ -87,6 +87,14 @@ printf '%s\n' 'Checking Rust security authority'
   cargo clippy --locked --offline --all-targets -- -D warnings
 )
 
+printf '%s\n' 'Checking Rust executor authority'
+(
+  cd "$root/services/executor"
+  cargo fmt --all -- --check
+  cargo test --locked --offline --all-targets
+  cargo clippy --locked --offline --all-targets -- -D warnings
+)
+
 if ! command -v helm >/dev/null 2>&1; then
   printf "%s\n" "Helm is required to verify Compute controller templates." >&2
   exit 1
