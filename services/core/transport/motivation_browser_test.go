@@ -61,12 +61,15 @@ func TestMotivationBrowserRoutesRequireOwnerSessionAndCSRF(t *testing.T) {
     var sessionState struct { CSRF string `json:"csrf_token"` }
     if err:=json.Unmarshal(state.Body.Bytes(),&sessionState);err!=nil {t.Fatal(err)}
     if sessionState.CSRF=="" {t.Fatal("CSRF missing")}
-    if w:=call("GET","/v1/motivation/state","",cookie,"");w.Code!=200 {
-        t.Fatalf("authenticated read: %d %s",w.Code,w.Body.String())
+    for _,path:=range []string{"/v1/motivation/state","/v1/motivation/metrics"} {
+        if w:=call("GET",path,"",cookie,"");w.Code!=200 {
+            t.Fatalf("authenticated read %s: %d %s",path,w.Code,w.Body.String())
+        }
     }
     cases:=[]struct{method,path string}{
         {"PUT","/v1/motivation/profile"},{"POST","/v1/motivation/pause"},
         {"POST","/v1/motivation/interventions"},{"POST","/v1/motivation/feedback"},
+        {"POST","/v1/motivation/checkins"},{"POST","/v1/motivation/dismiss"},
     }
     for _,item:=range cases {
         if w:=call(item.method,item.path,"{}",cookie,"");w.Code!=401 {
@@ -76,7 +79,7 @@ func TestMotivationBrowserRoutesRequireOwnerSessionAndCSRF(t *testing.T) {
             t.Fatalf("authorized call %s %s: %d %s",item.method,item.path,w.Code,w.Body.String())
         }
     }
-    if len(calls)!=5 {t.Fatalf("expected five authorized upstream calls, got %v",calls)}
+    if len(calls)!=8 {t.Fatalf("expected eight authorized upstream calls, got %v",calls)}
     if w:=call("POST","/mcp",`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`,cookie,sessionState.CSRF);w.Code!=401 {
         t.Fatal("browser session reached MCP")
     }

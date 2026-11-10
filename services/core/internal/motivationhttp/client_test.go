@@ -49,6 +49,20 @@ func TestOwnerTransportProxiesExactRoutesWithoutCallerHeaders(t *testing.T){
  }
 }
 
+func TestMotivationAdmitsOnlyDomainOperations(t *testing.T){
+ if !admitted("GET","/v1/motivation/metrics") ||
+  !admitted("POST","/v1/motivation/checkins") ||
+  !admitted("POST","/v1/motivation/dismiss") {
+  t.Fatal("expected motivation operations are not admitted")
+ }
+ for _,path:=range []string{
+   "/v1/motivation/../state", "/v1/tools", "/v1/recipes",
+   "/v1/motivation/profile/../../v1/security",
+ }{
+  if admitted("POST",path){t.Fatalf("unexpected cross-domain route: %s",path)}
+ }
+}
+
 func TestMissingServiceIsUnavailable(t *testing.T){
  mux:=http.NewServeMux()
  Register(mux,nil)
