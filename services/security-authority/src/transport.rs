@@ -2,29 +2,28 @@
 use std::collections::BTreeMap;
 use std::ffi::CString;
 use std::fs;
-use std::os::unix::fs::{MetadataExt, PermissionsExt};
-use std::path::{Path, PathBuf};
+use std::os::unix::fs::PermissionsExt;
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use axum::body::Bytes;
 use axum::extract::{DefaultBodyLimit, Path as RoutePath, State};
-use axum::http::{header, HeaderMap, HeaderValue, Method, StatusCode};
+use axum::http::{header, HeaderMap, HeaderValue, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::{Html, IntoResponse, Redirect, Response};
-use axum::routing::{delete, get, post};
+use axum::routing::{get, post};
 use axum::{Json, Router};
 use hyper_util::rt::{TokioExecutor, TokioIo};
 use hyper_util::server::conn::auto::Builder;
 use hyper_util::service::TowerToHyperService;
 use serde::{Deserialize, Serialize};
 use serde_json::value::RawValue;
-use serde_json::{json, Value};
+use serde_json::json;
 use tokio::net::UnixListener;
 use zeroize::Zeroizing;
 
-use crate::sessions::{Authority, AuthorizationWire, Decision, SessionStatus};
-use crate::vault::CredentialHandle;
+use crate::sessions::{Authority, AuthorizationWire};
 use crate::Error;
 
 const MAX_JSON_BYTES: usize = 1 << 20;
@@ -52,7 +51,7 @@ impl Shared {
     }
 
     fn with_authority<T>(&self, action: impl FnOnce(&mut Authority) -> T) -> T {
-        let mut authority = self.authority.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut authority = self.authority.lock().unwrap_or_else(|_| std::process::abort());
         action(&mut authority)
     }
 
@@ -86,7 +85,7 @@ fn valid_origin(origin: &str) -> bool {
         return false;
     };
     !host.is_empty() && host.len() < 254
-        && !host.contains(['/', '?', '#', '@', '\\', ' '])
+        && !host.chars().any(|c| matches!(c, '/' | '?' | '#' | '@' | '\\' | ' '))
         && host.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-'))
         && !host.starts_with('.') && !host.ends_with('.')
         && host.parse::<std::net::IpAddr>().is_err()
@@ -432,7 +431,7 @@ fn browser_page(shared: &Shared, assertion: &str, message: &str) -> Response {
     }
     html.push_str("</main></body></html>");
     let mut response = Html(html).into_response();
-    response.headers_mut().insert(header::CONTENT_SECURITY_POLICY,
+    response.headers_mut().insert("content-security-policy",
         HeaderValue::from_static("default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"));
     response
 }
