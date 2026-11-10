@@ -8,6 +8,12 @@ The independent `homelab-securityd` process owns password verification, the TOTP
 
 The Rust authority kernel uses the same owner-only `.securityd.lock`, `authenticator.json` schema, and AES-256-GCM `credentials.json` record format as the Go security service. Ownership is exclusive; the two implementations must never run with write access to the same directory concurrently. Session and confirmation state is never persisted across process restarts. The Rust runtime must preserve signed owner assertion verification and the existing owner, gateway, remote mTLS and credential endpoints before a deployment selector can be enabled. A rollback stops the active service, confirms that it has released its state lease, and starts the other implementation only after validating replay and vault state.
 
+## Rust authority admission
+
+The Rust authority kernel must validate a private copy of the authentication state and encrypted vault before it can become an operational service. Its offline security-preflight binary acquires the same .securityd.lock used by the Go daemon, reads the stored replay and vault records, verifies each AES-GCM authentication tag, checks the finite operation policy, and validates any configured signing keys and service credential grants. It refuses the default live state path and requires an independent owner-only copy. Run it through Cargo with the same security configuration variables and --state-dir pointing at the copied directory. Do not run two state owners against one directory.
+
+The active-authority selector is not enabled until the Rust service supplies the owner, gateway, browser, OAuth, credential-broker, and mutual-TLS transports required by the configured installation. A source-level cryptography module and successful state preflight do not prove that authenticated network requests work. A release must also pass Go/Rust compatibility tests, offline Rust compilation, Nix packaging, adversarial authorization tests, and a controlled rollback on isolated state. The Go security daemon remains the authority while these requirements are incomplete.
+
 ## Session policy
 
 The owner authenticates with a PBKDF2-HMAC-SHA256 password verifier and a six-digit RFC 6238 authenticator code. TOTP counters cannot be reused, including across security-service restarts; the verifier records accepted counters and failed-attempt lockout in an owner-only state file. Five failures trigger a five-minute lockout.
