@@ -159,6 +159,10 @@ pub fn HealthGroceries(csrf: String) -> Element {
                     Some(Ok(plans)) => {
                         let meal_plans = plans.into_iter()
                             .filter(|plan| plan.get("kind").and_then(Value::as_str) == Some("meal"))
+                            .map(|plan| (
+                                plan.get("id").and_then(Value::as_str).unwrap_or("").to_owned(),
+                                plan.get("title").and_then(Value::as_str).unwrap_or("Untitled").to_owned()
+                            ))
                             .collect::<Vec<_>>();
                         rsx! {
                             if meal_plans.is_empty() {
@@ -173,11 +177,8 @@ pub fn HealthGroceries(csrf: String) -> Element {
                                         class: "field", value: "{selected_plan()}",
                                         onchange: move |event| selected_plan.set(event.value()),
                                         option { value: "", "Choose a meal plan" }
-                                        for plan in meal_plans {
-                                            option {
-                                                value: "{plan["id"].as_str().unwrap_or("")}",
-                                                "{plan["title"].as_str().unwrap_or("Untitled")}"
-                                            }
+                                        for (plan_id, plan_title) in meal_plans {
+                                            option { value: "{plan_id}", "{plan_title}" }
                                         }
                                     }
                                 }
