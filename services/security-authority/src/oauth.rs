@@ -18,7 +18,6 @@ use sha2::{Digest, Sha256};
 use tokio::sync::Mutex;
 use zeroize::{Zeroize, Zeroizing};
 
-use crate::bootstrap::required;
 use crate::transport::{json_input, Shared};
 use crate::Error;
 
@@ -142,7 +141,7 @@ fn validate_provider(provider: &Provider) -> Result<Option<SocketAddr>, Error> {
         if !provider.authorize_url.is_empty()
             || !provider.redirect_url.is_empty()
             || provider.device_verification_host.is_empty()
-            || provider.device_verification_host.contains(['/', ':', '@', '?', '#', ' '])
+            || provider.device_verification_host.chars().any(|c| matches!(c, '/' | ':' | '@' | '?' | '#' | ' '))
         {
             return Err(Error::InvalidConfiguration);
         }
@@ -253,10 +252,10 @@ impl Broker {
             .checked_add_signed(chrono::Duration::seconds(300))
             .ok_or(Error::Storage)?
             .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-        Ok(BeginResult { url: url.into(), expires_at })
+        Ok(BeginResult { url: url.to_string(), expires_at })
     }
 
-    pub fn take_browser(&mut self, state: &str) -> Result<BrowserFlow, Error> {
+    fn take_browser(&mut self, state: &str) -> Result<BrowserFlow, Error> {
         self.prune();
         self.browser.remove(state).ok_or(Error::Unauthorized)
     }
