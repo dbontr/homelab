@@ -126,6 +126,7 @@ func main(){
  }
  audit,err:=privileged.OpenAuditJournal(required("HOMELAB_EXECUTOR_AUDIT_FILE"))
  if err!=nil{log.Fatal("cannot initialize restricted audit journal: ",err)}
+ defer audit.Close()
  e,err:=privileged.New(privileged.Config{
   Host:host,Systemctl:systemctl,AllowedServices:services,AllowRelease:os.Getenv("HOMELAB_EXECUTOR_RELEASE_ENABLE")=="true",
   Kubernetes:kubernetes,Workspace:workspace,Auth:client,Run:privileged.FixedRun,Releases:releases,Audit:audit,

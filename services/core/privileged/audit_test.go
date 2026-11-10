@@ -12,7 +12,7 @@ import (
 )
 
 func TestExecutorAuditDeniesWhenPrivateJournalCannotBeWritten(t *testing.T){
- dir:=t.TempDir()
+ dir:=privateAuditDir(t)
  journal,err:=OpenAuditJournal(filepath.Join(dir,"actions.jsonl"))
  if err!=nil{t.Fatal(err)}
  runner:=0
@@ -32,10 +32,12 @@ func TestExecutorAuditDeniesWhenPrivateJournalCannotBeWritten(t *testing.T){
  if !strings.Contains(string(raw),`"outcome":"started"`)||!strings.Contains(string(raw),`"outcome":"accepted"`){
   t.Fatal("audit lacked started or accepted outcome")
  }
- blocker:=filepath.Join(t.TempDir(),"unwriteable")
+ blocker:=filepath.Join(privateAuditDir(t),"unwriteable")
  if err:=os.Mkdir(blocker,0700);err!=nil{t.Fatal(err)}
  blockedJournal,err:=OpenAuditJournal(filepath.Join(blocker,"actions.jsonl"))
  if err!=nil{t.Fatal(err)}
+ if err:=blockedJournal.Close();err!=nil{t.Fatal(err)}
+ if err:=os.Remove(filepath.Join(blocker,"actions.jsonl"));err!=nil{t.Fatal(err)}
  if err:=os.Remove(blocker);err!=nil{t.Fatal(err)}
  executor.cfg.Audit=blockedJournal
  decision,err=executor.Execute(context.Background(),"infrastructure__service_restart","jupiter",args)
@@ -43,7 +45,7 @@ func TestExecutorAuditDeniesWhenPrivateJournalCannotBeWritten(t *testing.T){
 }
 func TestAuditJournalRejectsUnsafePaths(t *testing.T){
  if _,err:=OpenAuditJournal("relative.log");err==nil{t.Fatal("relative audit file accepted")}
- dir:=t.TempDir()
+ dir:=privateAuditDir(t)
  target:=filepath.Join(dir,"real")
  if err:=os.WriteFile(target,[]byte(""),0644);err!=nil{t.Fatal(err)}
  if _,err:=OpenAuditJournal(target);err==nil{t.Fatal("world-readable audit accepted")}
