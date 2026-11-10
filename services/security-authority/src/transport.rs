@@ -31,6 +31,15 @@ const MAX_CSRF: usize = 256;
 const CSRF_LIFETIME: Duration = Duration::from_secs(600);
 const LOCAL_OWNER: &str = "local-operator";
 
+// Keep a remote credential protected until its HTTP body releases the buffer.
+struct ProtectedBody(Zeroizing<Vec<u8>>);
+
+impl AsRef<[u8]> for ProtectedBody {
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_slice()
+    }
+}
+
 #[derive(Clone)]
 pub struct Shared {
     pub(crate) oauth: Option<crate::oauth::SharedBroker>,
@@ -172,7 +181,8 @@ async fn session_owner_post(State(shared): State<Shared>, headers: HeaderMap, ra
         return protected_status("invalid request", StatusCode::BAD_REQUEST);
     };
     let password = Zeroizing::new(factors.password);
-    match shared.with_authority(|auth| auth.login(LOCAL_OWNER, &password, &factors.totp)) {
+    let totp = Zeroizing::new(factors.totp);
+    match shared.with_authority(|auth| auth.login(LOCAL_OWNER, &password, &totp)) {
         Ok(status) => { audit("owner_session_opened"); json_reply(StatusCode::OK, status) },
         Err(_) => { audit("owner_authentication_denied"); protected_status("authentication denied", StatusCode::UNAUTHORIZED) },
     }
@@ -198,7 +208,8 @@ async fn confirmations_owner_post(
         return protected_status("invalid confirmation request", StatusCode::BAD_REQUEST);
     };
     let password = Zeroizing::new(factors.password);
-    match shared.with_authority(|auth| auth.confirm(LOCAL_OWNER, &id, &password, &factors.totp)) {
+    let totp = Zeroizing::new(factors.totp);
+    match shared.with_authority(|auth| auth.confirm(LOCAL_OWNER, &id, &password, &totp)) {
         Ok(()) => { audit("owner_confirmation_accepted"); json_reply(StatusCode::OK, json!({"confirmed":true})) },
         Err(_) => { audit("owner_confirmation_denied"); protected_status("confirmation denied", StatusCode::FORBIDDEN) },
     }
@@ -216,9 +227,10 @@ async fn credentials_owner_post(State(shared): State<Shared>, headers: HeaderMap
         return protected_status("invalid credential request", StatusCode::BAD_REQUEST);
     };
     let password = Zeroizing::new(input.password);
+    let totp = Zeroizing::new(input.totp);
     let secret = Zeroizing::new(input.secret);
     let result = shared.with_authority(|auth| auth.store_credential(
-        LOCAL_OWNER, &password, &input.totp, &input.provider, secret.as_bytes()));
+        LOCAL_OWNER, &password, &totp, &input.provider, secret.as_bytes()));
     match result {
         Ok(handle) => { audit("credential_stored"); json_reply(StatusCode::OK, handle) },
         Err(_) => { audit("credential_store_denied"); protected_status("credential request denied", StatusCode::FORBIDDEN) },
@@ -235,9 +247,10 @@ async fn credentials_owner_put(
         return protected_status("invalid credential request", StatusCode::BAD_REQUEST);
     };
     let password = Zeroizing::new(input.password);
+    let totp = Zeroizing::new(input.totp);
     let secret = Zeroizing::new(input.secret);
     let result = shared.with_authority(|auth| auth.rotate_credential(
-        LOCAL_OWNER, &password, &input.totp, &id, &input.provider, secret.as_bytes()));
+        LOCAL_OWNER, &password, &totp, &id, &input.provider, secret.as_bytes()));
     match result {
         Ok(handle) => { audit("credential_rotated"); json_reply(StatusCode::OK, handle) },
         Err(_) => { audit("credential_rotation_denied"); protected_status("credential rotation denied", StatusCode::FORBIDDEN) },
@@ -254,7 +267,8 @@ async fn credentials_owner_delete(
         return protected_status("invalid credential request", StatusCode::BAD_REQUEST);
     };
     let password = Zeroizing::new(input.password);
-    match shared.with_authority(|auth| auth.revoke_credential(LOCAL_OWNER, &password, &input.totp, &id)) {
+    let totp = Zeroizing::new(input.totp);
+    match shared.with_authority(|auth| auth.revoke_credential(LOCAL_OWNER, &password, &totp, &id)) {
         Ok(()) => { audit("credential_revoked"); json_reply(StatusCode::OK, json!({"revoked":true})) },
         Err(_) => { audit("credential_revocation_denied"); protected_status("credential revocation denied", StatusCode::FORBIDDEN) },
     }
@@ -355,7 +369,7 @@ async fn remote_service_credential(
     RoutePath(alias): RoutePath<String>,
 ) -> Response {
     let credential = shared.with_authority(|authority| {
-        authority.use_service_credential(&peer.identity, &alias, |secret| secret.to_vec())
+        authority.use_service_credential(&peer.identity, &alias, |secret| Zeroizing::new(secret.to_vec()))
     });
     let Ok(bytes) = credential else {
         return protected_status("service credential access denied", StatusCode::FORBIDDEN);
@@ -363,7 +377,7 @@ async fn remote_service_credential(
     if bytes.is_empty() || bytes.len() > 32_768 {
         return protected_status("service credential unavailable", StatusCode::FORBIDDEN);
     }
-    let mut response = axum::body::Body::from(bytes).into_response();
+    let mut response = axum::body::Body::from(Bytes::from_owner(ProtectedBody(bytes))).into_response();
     response.headers_mut().insert(
         header::CONTENT_TYPE, HeaderValue::from_static("application/octet-stream")
     );
