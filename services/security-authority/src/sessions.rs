@@ -972,6 +972,42 @@ mod tests {
     }
 
     #[test]
+    fn concurrent_requests_consume_one_destructive_confirmation() {
+        use std::sync::{Arc, Mutex};
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let mut authority = fixture();
+        authority.login_at("principal-a", PASSWORD, &otp(500), 15_000).unwrap();
+        let args = br#"{"host":"jupiter","service":"homelab-platform.service"}"#;
+        let operation = "infrastructure__service_restart";
+        let challenge = authority.authorize_at(
+            "principal-a", "platform-gateway", operation, "jupiter",
+            args, true, 15_001
+        ).unwrap();
+        let Decision::Confirmation { id, .. } = challenge else {
+            panic!("destructive policy did not require confirmation")
+        };
+        authority.confirm_at("principal-a", &id, PASSWORD, &otp(501), 15_030).unwrap();
+        let authority = Arc::new(Mutex::new(authority));
+        let accepted = Arc::new(AtomicUsize::new(0));
+        std::thread::scope(|scope| {
+            for _ in 0..24 {
+                let authority = Arc::clone(&authority);
+                let accepted = Arc::clone(&accepted);
+                scope.spawn(move || {
+                    let decision = authority.lock().unwrap().authorize_at(
+                        "principal-a", "platform-gateway", operation, "jupiter",
+                        args, true, 15_031
+                    ).unwrap();
+                    if decision == Decision::Allowed {
+                        accepted.fetch_add(1, Ordering::SeqCst);
+                    }
+                });
+            }
+        });
+        assert_eq!(accepted.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
     fn absolute_limit_survives_repeated_valid_activity() {
         let mut authority = fixture();
         authority.login_at("principal-a", PASSWORD, &otp(300), 9_000).unwrap();
