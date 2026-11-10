@@ -20,19 +20,19 @@ fi
 (
   cd "$crate"
   cargo fmt --all -- --check
-  cargo test --locked --all-targets
-  cargo clippy --locked --all-targets -- -D warnings
-  cargo build --locked --release --bins
+  CARGO_NET_OFFLINE=true cargo test --locked --offline --all-targets
+  CARGO_NET_OFFLINE=true cargo clippy --locked --offline --all-targets -- -D warnings
+  CARGO_NET_OFFLINE=true cargo build --locked --offline --release --bins
 )
 
 (
   cd "$root/services/core"
-  go test -race -count=5 ./security -run 'TestSecurityAuthority'
-  go test -race -count=1 ./security ./privileged
+  GOWORK=off GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local go test -race -count=5 ./security -run 'TestSecurityAuthority'
+  GOWORK=off GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local go test -race -count=1 ./security ./privileged
 )
 
 if command -v nix >/dev/null 2>&1; then
-  nix build "$root#homelab-security-authority" --no-link
+  nix build --offline "$root#homelab-security-authority" --no-link
 else
   printf 'Nix is unavailable; NixOS package acceptance is not complete.\n' >&2
   exit 1
