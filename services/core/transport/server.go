@@ -34,7 +34,7 @@ import (
  "github.com/dbontr/homelab-new/system/store"
 )
 type Backend struct { Name string; URL string; Token string; TokenSource func()(string,error) }
-type Server struct { db *store.Store; token string; mcpInterfaceToken string; apiInterfaceToken string; apiInterfaceWritePaths map[string]bool; backend []Backend; client *http.Client; calendarURL string; gate *approval.Gate; privilegeClient *security.AdminClient; executorClient *privileged.Client; fleetClient *release.FleetClient; securityLoginURL string; allowedOrigins map[string]struct{}; media *media.Client; deviceCatalog *devices.Catalog; nodeCatalog *devices.NodeCatalog; profiles *profiles.Registry; recipes *recipes.Store; sessions *session.Manager; observability *observability.Client; bookCatalog *books.Catalog; engineering agentflow.Manager; workflows *agentflow.Store; capabilityPlanner agentflow.CapabilityPlanner; inflight chan struct{} }
+type Server struct { db *store.Store; token string; mcpInterfaceToken string; apiInterfaceToken string; apiInterfaceWritePaths map[string]bool; backend []Backend; client *http.Client; calendarSource func(context.Context)(calendar.Feed,error); gate *approval.Gate; privilegeClient *security.AdminClient; executorClient *privileged.Client; fleetClient *release.FleetClient; securityLoginURL string; allowedOrigins map[string]struct{}; media *media.Client; deviceCatalog *devices.Catalog; nodeCatalog *devices.NodeCatalog; profiles *profiles.Registry; recipes *recipes.Store; sessions *session.Manager; observability *observability.Client; bookCatalog *books.Catalog; engineering agentflow.Manager; workflows *agentflow.Store; capabilityPlanner agentflow.CapabilityPlanner; inflight chan struct{} }
 
 func New(db *store.Store,token string,backends []Backend)(*Server,error){
  if db==nil||len(token)<32||strings.ContainsAny(token,"\r\n\t"){return nil,errors.New("store and a strong access token are required")}
@@ -70,9 +70,24 @@ func(s *Server) SetSecurityLoginURL(raw string) error {
  return nil
 }
 func(s *Server) SetCalendarURL(raw string)error{
+ if s.calendarSource!=nil{return errors.New("calendar source already configured")}
  if err:=calendar.ValidateURL(raw);err!=nil{return err}
- s.calendarURL=raw
+ s.calendarSource=func(ctx context.Context)(calendar.Feed,error){
+  return calendar.Fetch(ctx,s.client,raw)
+ }
  return nil
+}
+
+// SetCalendarService selects a separately authenticated, read-only calendar
+// provider without giving the platform access to its external sharing URL.
+func(s *Server) SetCalendarService(fetch func(context.Context)(calendar.Feed,error))error{
+ if fetch==nil||s.calendarSource!=nil{return errors.New("calendar source already configured or invalid")}
+ s.calendarSource=fetch
+ return nil
+}
+func(s *Server) fetchCalendar(ctx context.Context)(calendar.Feed,error){
+ if s.calendarSource==nil{return calendar.Feed{},errors.New("calendar is not configured")}
+ return s.calendarSource(ctx)
 }
 func(s *Server) Handler()http.Handler{
  mux:=http.NewServeMux()
@@ -224,8 +239,8 @@ func writeJSON(w http.ResponseWriter,code int,v any){httpjson.Write(w,code,v)}
 func writeError(w http.ResponseWriter,code int,msg string){httpjson.Error(w,code,msg)}
 func decode(r *http.Request,v any)error{return httpjson.Decode(r,v)}
 func(s *Server)calendarEvents(w http.ResponseWriter,r *http.Request){
- if s.calendarURL==""{writeError(w,503,"calendar is not configured");return}
- feed,e:=calendar.Fetch(r.Context(),s.client,s.calendarURL)
+ if s.calendarSource==nil{writeError(w,503,"calendar is not configured");return}
+ feed,e:=s.fetchCalendar(r.Context())
  if e!=nil{writeError(w,502,"calendar feed unavailable");return}
  writeJSON(w,200,feed)
 }
@@ -503,7 +518,7 @@ func(s *Server)localTools()[]map[string]any{
   tool("book_request_list","List personal book wishes without claiming provider acquisition",map[string]any{"status":prop("string")}),
   tool("book_request_add","Record an independently identified book wish with format and revision",map[string]any{"request":prop("object")},"request"),
   tool("book_request_status","Record manual fulfillment or cancellation of a pending book wish",map[string]any{"id":prop("string"),"status":prop("string"),"expected_revision":prop("integer")},"id","status","expected_revision"))
- if s.calendarURL!=""{tools=append(tools,
+ if s.calendarSource!=nil{tools=append(tools,
   tool("calendar_feed","Read read-only calendar event definitions",map[string]any{}),
   tool("calendar_occurrences","Expand supported iCalendar recurrences into a bounded time window with explicit limitations",map[string]any{"start":prop("string"),"end":prop("string")}))}
  tools=append(tools,tool("weekly_plan","Propose task timeboxes from recorded durations, prerequisites and calendar reservations without changing any records",map[string]any{"from":prop("string"),"daily_minutes":prop("integer"),"start_hour":prop("integer")}))
@@ -700,8 +715,8 @@ func(s *Server)localTool(ctx context.Context,name string,raw json.RawMessage)(an
   if s.nodeCatalog==nil{return nil,errors.New("node catalog is not configured")}
   return s.nodeCatalog.List(),nil
  case "calendar_feed":
-  if s.calendarURL==""{return nil,errors.New("calendar is not configured")}
-  return calendar.Fetch(ctx,s.client,s.calendarURL)
+  if s.calendarSource==nil{return nil,errors.New("calendar is not configured")}
+  return s.fetchCalendar(ctx)
  case "software_catalog":return s.softwareEntries(ctx)
  case "system_status":
   statuses:=map[string]string{}
