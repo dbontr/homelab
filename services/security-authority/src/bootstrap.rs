@@ -1,0 +1,137 @@
+//! Trusted security-daemon configuration and exclusive state initialization.
+use std::env;
+use std::fs::OpenOptions;
+use std::io::Read;
+use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
+use std::path::{Path, PathBuf};
+
+use zeroize::Zeroize;
+
+use crate::access::AccessVerifier;
+use crate::credentials::PassphraseRecord;
+use crate::grants::ServiceCredentialGrant;
+use crate::sessions::{Authority, OperationPolicy};
+use crate::Error;
+
+const MAX_CREDENTIAL_BYTES: usize = 1 << 20;
+
+pub fn required(name: &str) -> Result<String, Error> {
+    env::var(name).ok().filter(|s| !s.is_empty()).ok_or(Error::InvalidConfiguration)
+}
+
+pub fn configured_file(name: &str, private: bool) -> Result<Vec<u8>, Error> {
+    let path = PathBuf::from(required(name)?);
+    if !path.is_absolute() || path.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
+        return Err(Error::InvalidConfiguration);
+    }
+    let mut file = OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
+        .open(path)
+        .map_err(|_| Error::Storage)?;
+    let md = file.metadata().map_err(|_| Error::Storage)?;
+    let forbidden = if private { 0o077 } else { 0o022 };
+    if !md.is_file() || md.mode() & forbidden != 0
+        || (private && md.uid() != unsafe { libc::geteuid() })
+    {
+        return Err(Error::Storage);
+    }
+    let mut raw = Vec::new();
+    file.take((MAX_CREDENTIAL_BYTES + 1) as u64)
+        .read_to_end(&mut raw)
+        .map_err(|_| Error::Storage)?;
+    if raw.len() > MAX_CREDENTIAL_BYTES {
+        raw.zeroize();
+        return Err(Error::Storage);
+    }
+    Ok(raw)
+}
+
+pub struct Settings {
+    pub authority: Authority,
+    pub browser_origin: Option<String>,
+}
+
+pub fn initialize(directory: &Path) -> Result<Settings, Error> {
+    let verifier = configured_file("HOMELAB_SECURITY_PASSWORD_FILE", true)?;
+    let verifier: PassphraseRecord =
+        serde_json::from_slice(&verifier).map_err(|_| Error::InvalidConfiguration)?;
+    let mut otp = configured_file("HOMELAB_SECURITY_TOTP_FILE", true)?;
+    let secret = std::str::from_utf8(&otp)
+        .map_err(|_| Error::InvalidConfiguration)?.trim().to_owned();
+    otp.zeroize();
+    let policies = configured_file("HOMELAB_SECURITY_POLICY_FILE", false)?;
+    let policies: Vec<OperationPolicy> =
+        serde_json::from_slice(&policies).map_err(|_| Error::InvalidConfiguration)?;
+    let opened = Authority::open(
+        directory, required("HOMELAB_SECURITY_OWNER")?, "platform-gateway".into(),
+        verifier, &secret, policies
+    );
+    let mut secret = zeroize::Zeroizing::new(secret);
+    secret.zeroize();
+    let mut authority = opened?;
+
+    if env::var("HOMELAB_SECURITY_VAULT_KEY_FILE").is_ok() {
+        let mut raw = configured_file("HOMELAB_SECURITY_VAULT_KEY_FILE", true)?;
+        if raw.len() != 32 {
+            raw.zeroize();
+            return Err(Error::InvalidConfiguration);
+        }
+        let mut key = [0u8; 32];
+        key.copy_from_slice(&raw);
+        raw.zeroize();
+        let attached = authority.attach_vault(key);
+        key.zeroize();
+        attached?;
+    } else if directory.join("credentials.json").exists() {
+        return Err(Error::InvalidConfiguration);
+    }
+
+    if let Ok(config) = env::var("HOMELAB_SECURITY_SERVICE_CREDENTIAL_GRANTS") {
+        if !config.is_empty() {
+            if config.len() > (128 << 10) {
+                return Err(Error::InvalidConfiguration);
+            }
+            let grants: Vec<ServiceCredentialGrant> =
+                serde_json::from_str(&config).map_err(|_| Error::InvalidConfiguration)?;
+            authority.configure_service_grants(grants)?;
+        }
+    }
+
+    let browser_origin = env::var("HOMELAB_SECURITY_BROWSER_ORIGIN").ok()
+        .filter(|origin| !origin.is_empty());
+
+    if let Ok(audience) = env::var("HOMELAB_SECURITY_ACCESS_GATEWAY_AUD") {
+        if !audience.is_empty() {
+            let jwks = configured_file("HOMELAB_SECURITY_ACCESS_JWKS_FILE", false)?;
+            let mut email = configured_file("HOMELAB_SECURITY_ACCESS_OWNER_FILE", true)?;
+            let owner = std::str::from_utf8(&email)
+                .map_err(|_| Error::InvalidConfiguration)?.trim().to_owned();
+            email.zeroize();
+            authority.configure_access(
+                AccessVerifier::new(
+                    &required("HOMELAB_SECURITY_ACCESS_ISSUER")?, &owner, &jwks
+                )?,
+                audience,
+                env::var("HOMELAB_SECURITY_ACCESS_BROWSER_AUD").ok(),
+            )?;
+        }
+    }
+    if browser_origin.is_some()
+        && env::var("HOMELAB_SECURITY_ACCESS_BROWSER_AUD").is_err()
+    {
+        return Err(Error::InvalidConfiguration);
+    }
+
+    Ok(Settings { authority, browser_origin })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn credential_paths_must_be_absolute() {
+        let missing = configured_file("HOMELAB_SECURITY_TEST_UNSET", true);
+        assert!(missing.is_err());
+    }
+}

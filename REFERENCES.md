@@ -11,7 +11,19 @@
 - [Go tls.X509KeyPair](https://pkg.go.dev/crypto/tls#X509KeyPair) — Go project. Used for: parsing validated PEM key pairs after enforcing private-key file permissions.
 - [Linux flock(2)](https://man7.org/linux/man-pages/man2/flock.2.html) — Linux man-pages project. Used for: nonblocking, process-lifetime advisory locks on state resources before opening service stores.
 - [Linux open(2)](https://man7.org/linux/man-pages/man2/open.2.html) — Linux man-pages project. Used for: O_NOFOLLOW descriptor-bound reads of protected interface and executor credential files.
+- [bytes crate: Bytes::from_owner](https://docs.rs/bytes/latest/bytes/struct.Bytes.html#method.from_owner) — bytes project. Used for: retaining a zeroizing owner of remote credential response buffers until the last HTTP body reference is released.
 - [Rust Standard Library: Command](https://doc.rust-lang.org/std/process/struct.Command.html) — Rust project. Used for: shell-free, explicit-argument privileged command dispatch in the Rust actuator.
+- [RustCrypto PBKDF2](https://docs.rs/pbkdf2/0.12.2/pbkdf2/) — RustCrypto project. Used for: verifying the owner PBKDF2-HMAC-SHA256 credential record in Rust.
+- [RustCrypto HMAC](https://docs.rs/hmac/0.12.1/hmac/) — RustCrypto project. Used for: six-digit HMAC-SHA1 TOTP verification.
+- [RustCrypto AES-GCM](https://docs.rs/aes-gcm/0.10.3/aes_gcm/) — RustCrypto project. Used for: Go-compatible encrypted credential custody in Rust.
+- [Serde JSON](https://docs.rs/serde_json/latest/serde_json/) — Serde project. Used for: canonical request parsing, duplicate-key rejection and arbitrary-precision values in the Rust authority.
+- [jsonwebtoken 9.3.1](https://docs.rs/crate/jsonwebtoken/9.3.1) — Rust jsonwebtoken project. Used for: RS256 owner assertion verification against pinned JWKS in the Rust security authority.
+- [fs2](https://docs.rs/fs2/latest/fs2/) — Rust community crate. Used for: exclusive Linux state-directory locks during authority migration.
+- [Axum](https://docs.rs/axum/0.8.6/axum/) — Tokio project. Used for: bounded HTTP owner, gateway, browser, and remote authorization routes over isolated transports.
+- [Tokio](https://docs.rs/tokio/1.47.1/tokio/) — Tokio project. Used for: owned Unix sockets, remote TLS streams, asynchronous OAuth requests, and controlled service shutdown.
+- [Rustls](https://docs.rs/rustls/0.23.0/rustls/) — Rustls project. Used for: TLS 1.3 client authentication and certificate-chain verification in the independent authority.
+- [Reqwest](https://docs.rs/reqwest/0.12.23/reqwest/) — Reqwest project. Used for: bounded allowlisted OAuth token and device authorization requests.
+- [Nixpkgs Rust packaging](https://github.com/NixOS/nixpkgs/blob/master/doc/languages-frameworks/rust.section.md) — NixOS project. Used for: reproducible buildRustPackage and cargoLock dependency custody.
 - [Rust Standard Library: PermissionsExt](https://doc.rust-lang.org/std/os/unix/fs/trait.PermissionsExt.html) — Rust project. Used for: rejecting writable Nix policy files in the Rust actuator.
 - [Go archive/zip Package](https://pkg.go.dev/archive/zip) — Go project. Used for: portable recipe bundle generation and bounded ZIP entry reading.
 - [Model Context Protocol Specification](https://modelcontextprotocol.io/specification/2025-06-18) — MCP project; 2025-06-18. Used for: stateless JSON-RPC transport, tool discovery, and tool calls.

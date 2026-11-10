@@ -1,0 +1,36 @@
+[package]
+name = "homelab-security-authority"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Independent owner authentication and authorization kernel"
+
+[dependencies]
+tower = { version = "0.5.2", features = ["util"] }
+reqwest = { version = "0.12.23", default-features = false, features = ["rustls-tls", "json"] }
+url = "2.5.4"
+hyper = { version = "1.7.0", features = ["server", "http1"] }
+tokio-rustls = "0.26.4"
+rustls-pemfile = "2.2.0"
+x509-parser = "0.17.0"
+axum = { version = "0.8.6", features = ["json", "form", "tokio"] }
+hyper-util = { version = "0.1.17", features = ["server", "http1", "http2", "tokio", "service"] }
+tokio = { version = "1.47.1", features = ["rt-multi-thread", "macros", "net", "time", "signal", "sync"] }
+serde_urlencoded = "0.7.1"
+jsonwebtoken = "9.3.1"
+aes-gcm = "0.10.3"
+base64 = "0.22.1"
+chrono = { version = "0.4.40", default-features = false, features = ["std", "serde", "clock"] }
+data-encoding = "2.6.0"
+fs2 = "0.4.3"
+getrandom = "0.3.3"
+hex = "0.4.3"
+hmac = "0.12.1"
+libc = "0.2.171"
+pbkdf2 = "0.12.2"
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = { version = "1.0.140", features = ["arbitrary_precision", "raw_value"] }
+sha1 = "0.10.6"
+sha2 = "0.10.9"
+subtle = "2.6.1"
+zeroize = "1.8.1"
