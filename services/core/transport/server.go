@@ -198,6 +198,7 @@ func(s *Server) Handler()http.Handler{
   writeJSON(w,200,map[string]any{"tools":s.toolList(r)})
  })
  mux.HandleFunc("POST /v1/tools/{name}/call",s.nativeToolCall)
+ mux.HandleFunc("POST /v1/health/app-tools/{name}/call",s.uiHealthAppToolCall)
  mux.HandleFunc("GET /v1/tasks/delegations",s.uiTaskDelegations)
  mux.HandleFunc("POST /v1/tasks/{id}/decomposition-preview",s.uiTaskDecompositionPreview)
  mux.HandleFunc("GET /v1/tasks/conflicts",s.taskConflicts)
