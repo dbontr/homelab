@@ -50,8 +50,14 @@ fn copied_state_directory() -> Result<PathBuf, &'static str> {
         return Err("usage: security-preflight --state-dir ABSOLUTE_COPY_DIRECTORY");
     }
     let directory = PathBuf::from(arguments.next().ok_or("state copy required")?);
-    if arguments.next().is_some()
-        || !directory.is_absolute()
+    if arguments.next().is_some() {
+        return Err("preflight requires one independent copied state directory");
+    }
+    validate_copy_directory(directory)
+}
+
+fn validate_copy_directory(directory: PathBuf) -> Result<PathBuf, &'static str> {
+    if !directory.is_absolute()
         || directory == Path::new("/var/lib/homelab-securityd")
         || directory.components().any(|v| matches!(v, std::path::Component::ParentDir))
     {
@@ -61,18 +67,16 @@ fn copied_state_directory() -> Result<PathBuf, &'static str> {
     if !copy.is_dir() || copy.file_type().is_symlink() {
         return Err("state copy must be a real directory");
     }
-    // A bind mount of the live state directory is not an independent copy.
+    // The same inode would allow a bind mount to modify the live state.
     if let Ok(live) = fs::metadata("/var/lib/homelab-securityd") {
         if copy.dev() == live.dev() && copy.ino() == live.ino() {
             return Err("preflight cannot open the live state inode");
         }
     }
-    for name in ["authenticator.json"] {
-        let metadata = fs::symlink_metadata(directory.join(name))
-            .map_err(|_| "copied authentication replay state missing")?;
-        if !metadata.is_file() || metadata.file_type().is_symlink() {
-            return Err("copied authentication replay state invalid");
-        }
+    let metadata = fs::symlink_metadata(directory.join("authenticator.json"))
+        .map_err(|_| "copied authentication replay state missing")?;
+    if !metadata.is_file() || metadata.file_type().is_symlink() {
+        return Err("copied authentication replay state invalid");
     }
     Ok(directory)
 }
@@ -175,5 +179,30 @@ fn main() {
     if let Err(message) = run() {
         eprintln!("{message}");
         std::process::exit(1);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::os::unix::fs::PermissionsExt;
+
+    #[test]
+    fn requires_complete_independent_replay_state() {
+        let mut id = [0u8; 12];
+        getrandom::fill(&mut id).unwrap();
+        let path = env::temp_dir().join(format!("authority-copy-test-{}", hex::encode(id)));
+        fs::create_dir(&path).unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
+        assert!(validate_copy_directory(path.clone()).is_err());
+        fs::write(path.join("authenticator.json"),
+            br#"{"version":1,"last_totp_step":-1,"failures":0,"locked_until":"0001-01-01T00:00:00Z"}"#).unwrap();
+        assert_eq!(validate_copy_directory(path.clone()).unwrap(), path);
+        let link = path.with_extension("link");
+        std::os::unix::fs::symlink(&path, &link).unwrap();
+        assert!(validate_copy_directory(link.clone()).is_err());
+        fs::remove_file(link).unwrap();
+        fs::remove_file(path.join("authenticator.json")).unwrap();
+        fs::remove_dir(path).unwrap();
     }
 }
