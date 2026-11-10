@@ -5,7 +5,7 @@ use aes_gcm::{Aes256Gcm, Nonce};
 use base64::{engine::general_purpose::{STANDARD_NO_PAD, URL_SAFE_NO_PAD}, Engine};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use zeroize::Zeroize;
+use zeroize::{Zeroize, Zeroizing};
 
 use crate::state::StateStore;
 use crate::Error;
@@ -98,7 +98,8 @@ impl Vault {
         }
         for (id, record) in &records {
             if id != &record.id
-                || URL_SAFE_NO_PAD.decode(id).is_err()
+                || id.len() != 32
+                || URL_SAFE_NO_PAD.decode(id).map_or(true, |raw| raw.len() != 24)
                 || !valid_provider(&record.provider)
                 || chrono::DateTime::parse_from_rfc3339(&record.created_at).is_err()
                 || record.nonce.is_empty()
@@ -210,10 +211,9 @@ impl Vault {
         {
             return Err(Error::Unauthorized);
         }
-        let mut secret = decrypt(&self.key, record)?;
-        let result = use_secret(&secret);
-        secret.zeroize();
-        Ok(result)
+        // Drop zeroizes even if the trusted callback unwinds.
+        let secret = Zeroizing::new(decrypt(&self.key, record)?);
+        Ok(use_secret(&secret))
     }
 
     pub(crate) fn handles(&self) -> Vec<CredentialHandle> {
