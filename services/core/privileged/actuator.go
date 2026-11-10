@@ -8,6 +8,7 @@ import (
  "path/filepath"
  "strconv"
  "strings"
+ "syscall"
 )
 
 // RustActuatorConfig is trusted operator configuration, not a tool argument.
@@ -83,9 +84,13 @@ func NewRustRun(cfg RustActuatorConfig)(Run,error){
    "HOMELAB_ACTUATOR_KUBERNETES="+cfg.KubernetesPolicy,
    "HOMELAB_ACTUATOR_MAX_REPLICAS="+strconv.Itoa(cfg.MaxReplicas),
   }
+  cmd.SysProcAttr=&syscall.SysProcAttr{Setpgid:true}
+  cmd.Cancel=func()error{return syscall.Kill(-cmd.Process.Pid,syscall.SIGKILL)}
   cmd.Stdin=nil
   cmd.Stdout=io.Discard
   cmd.Stderr=io.Discard
-  return cmd.Run()
+  err:=cmd.Run()
+  if canceled:=ctx.Err();canceled!=nil{return canceled}
+  return err
  },nil
 }
