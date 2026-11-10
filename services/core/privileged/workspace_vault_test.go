@@ -18,7 +18,7 @@ func TestVaultWorkspaceRequiresIndependentAuthorization(t *testing.T){
   calls++
   if r.Header.Get("Authorization")!="Bearer "+token{t.Error("wrong scoped token")}
   w.Header().Set("Content-Type","application/json")
-  _,_=w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"isError":false}}`))
+  _,_=w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"isError":false,"content":[]}}`))
  }))
  defer upstream.Close()
  policy:=&WorkspacePolicy{Endpoint:upstream.URL+"/mcp",Projects:[]string{"research"},Client:upstream.Client(),
