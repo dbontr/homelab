@@ -7,20 +7,20 @@ lifecycle must remain stable until an equivalent Rust/WASM view is available.
 
 | Owner | Resource or route | Host operations | User interaction |
 | --- | --- | --- | --- |
-| Compute | \`GET /dashboard\` | Direct authenticated Compute HTTP requests | Worker capacity, project workspace creation, image pools, node and device inspection |
-| Learning | \`ui://adaptive-teaching/learning-workspace.html\` | \`ui/initialize\`, \`tools/call\`, tool results and notifications | Knowledge map, assessment problems, teacher conversation, reviews, source attachments and bounded file uploads |
-| Health | \`ui://personal-health-mcp/workout-editor.html\` | \`ui/initialize\`, \`tools/call\` | Versioned workout-plan list and save, session and exercise editing, revision conflict reporting |
-| Health | \`ui://personal-health-mcp/workout-companion.html\` | \`ui/initialize\`, \`tools/call\` | Session selection, exercise set logging, recorded-workout completion |
-| Health | \`ui://personal-health-mcp/groceries.html\` | \`ui/initialize\`, \`tools/call\` | Grocery list reconciliation, meal-plan ingredients, version-fenced grocery saving |
-| Health | \`ui://personal-health-mcp/dashboard.html\` | \`ui/initialize\`, \`tools/call\` | Dated metric series, nutrient comparisons, owner-entered target updates |
-| Health | \`ui://personal-health-mcp/cognitive-test.html\` | \`ui/initialize\`, \`tools/call\` | Five randomized visual response trials, early-response rejection, median and individual observation saving |
+| Compute | `GET /dashboard` | Direct authenticated Compute HTTP requests | Worker capacity, project workspace creation, image pools, node and device inspection |
+| Learning | `ui://adaptive-teaching/learning-workspace.html` | `ui/initialize`, `tools/call`, tool results and notifications | Knowledge map, assessment problems, teacher conversation, reviews, source attachments and bounded file uploads |
+| Health | `ui://personal-health-mcp/workout-editor.html` | `ui/initialize`, `tools/call` | Versioned workout-plan list and save, session and exercise editing, revision conflict reporting |
+| Health | `ui://personal-health-mcp/workout-companion.html` | `ui/initialize`, `tools/call` | Session selection, exercise set logging, recorded-workout completion |
+| Health | `ui://personal-health-mcp/groceries.html` | `ui/initialize`, `tools/call` | Grocery list reconciliation, meal-plan ingredients, version-fenced grocery saving |
+| Health | `ui://personal-health-mcp/dashboard.html` | `ui/initialize`, `tools/call` | Dated metric series, nutrient comparisons, owner-entered target updates |
+| Health | `ui://personal-health-mcp/cognitive-test.html` | `ui/initialize`, `tools/call` | Five randomized visual response trials, early-response rejection, median and individual observation saving |
 
 ## Protocol and authority boundaries
 
 The five Health MCP Apps and the Learning MCP App request
-\`ui/initialize\` with the MCP Apps protocol version \`2026-01-26\`,
-then notify \`ui/notifications/initialized\`. Tool invocations are
-\`tools/call\` JSON-RPC requests forwarded by the host. Their embedded
+`ui/initialize` with the MCP Apps protocol version `2026-01-26`,
+then notify `ui/notifications/initialized`. Tool invocations are
+`tools/call` JSON-RPC requests forwarded by the host. Their embedded
 views never receive credentials held by a backend service.
 
 An independent Rust/Dioxus page is not interchangeable with an MCP App
@@ -32,9 +32,9 @@ A native console implementation is not grounds to remove the embedded
 resource until that host behavior is preserved.
 
 The native visual reaction-time page writes through
-\`POST /v1/health/reaction-test\`. The Go transport checks the five
+`POST /v1/health/reaction-test`. The Go transport checks the five
 samples, calculates the median and mean, marks the observation as
-\`estimated\`, and stores it through the existing Health service. The
+`estimated`, and stores it through the existing Health service. The
 Rust Health metrics page uses three exact owner-session tool routes for
 series, daily nutrients and goal setting. Both pages preserve the
 Health service's record ownership and operate without a public MCP or
