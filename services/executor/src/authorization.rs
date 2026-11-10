@@ -1,5 +1,5 @@
 //! Independently authenticated owner decisions over private Unix IPC or TLS 1.3.
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
