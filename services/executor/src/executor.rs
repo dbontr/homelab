@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use tokio::process::Command;
+use zeroize::Zeroizing;
 
 use crate::audit::AuditJournal;
 use crate::authorization::{AuthorizationClient, Decision};
@@ -122,6 +123,8 @@ impl Executor {
 
     /// The operation task is detached from the HTTP request. A disconnected
     /// caller cannot cancel auditing or silently interrupt a release rollback.
+    /// The authorization decision, durable audit, and side effect run in
+    /// one task independent of the lifetime of the calling HTTP request.
     pub async fn execute(self: &Arc<Self>, request: ExecutionRequest,
         assertion: &str) -> Result<ExecutionResult, Error>
     {
@@ -135,23 +138,26 @@ impl Executor {
             Ok(action) => action,
             Err(error) => return Ok(ExecutionResult::denied(&error.to_string())),
         };
-        let decision = self.authorization.decision(
-            &request.operation,&request.target,&canonical,assertion,true).await?;
-        if !decision.allowed {
-            return Ok(ExecutionResult::from_decision(decision));
-        }
-        let id = random_hex::<16>()?;
-        let digest = hex::encode(Sha256::digest(&canonical));
-        self.audit.record(&id,&request.operation,&request.target,&digest,"started")?;
         let executor = self.clone();
+        let operation = request.operation;
+        let target = request.target;
+        let assertion = Zeroizing::new(assertion.to_owned());
         let job = tokio::spawn(async move {
+            let decision = executor.authorization.decision(
+                &operation, &target, &canonical, &assertion, true).await?;
+            if !decision.allowed {
+                return Ok(ExecutionResult::from_decision(decision));
+            }
+            let id = random_hex::<16>()?;
+            let digest = hex::encode(Sha256::digest(&canonical));
+            executor.audit.record(&id,&operation,&target,&digest,"started")?;
             let result = executor.perform(action).await;
             let outcome = match &result {
                 Ok("completed") => "succeeded",
                 Ok(_) => "accepted",
                 Err(_) => "failed",
             };
-            executor.audit.record(&id,&request.operation,&request.target,&digest,outcome)?;
+            executor.audit.record(&id,&operation,&target,&digest,outcome)?;
             result.map(|state| ExecutionResult::approved(state,id))
         });
         job.await.map_err(|_| Error::Unavailable("privileged execution outcome unknown"))?
@@ -166,17 +172,20 @@ impl Executor {
         let args = canonical_arguments(&serde_json::to_vec(
             &json!({"host":host,"revision":revision}))
             .map_err(|_| Error::Protocol("stage argument serialization failed"))?)?;
-        let decision = self.authorization.decision(
-            "infrastructure__release_stage",host,&args,assertion,true).await?;
-        if !decision.allowed { return Ok(StageResult {decision,manifest:None}); }
-        let id = random_hex::<16>()?;
-        let digest = hex::encode(Sha256::digest(&args));
-        let operation = "infrastructure__release_stage";
-        self.audit.record(&id,operation,host,&digest,"started")?;
         let owner = self.clone();
+        let assertion = Zeroizing::new(assertion.to_owned());
         let revision = revision.to_owned();
         let host = host.to_owned();
         let job = tokio::spawn(async move {
+            let operation = "infrastructure__release_stage";
+            let decision = owner.authorization.decision(
+                operation, &host, &args, &assertion, true).await?;
+            if !decision.allowed {
+                return Ok(StageResult {decision, manifest:None});
+            }
+            let id = random_hex::<16>()?;
+            let digest = hex::encode(Sha256::digest(&args));
+            owner.audit.record(&id,operation,&host,&digest,"started")?;
             let staged = owner.release.stage(&revision).await;
             let outcome = if staged.is_ok() { "succeeded" } else { "failed" };
             owner.audit.record(&id,operation,&host,&digest,outcome)?;
