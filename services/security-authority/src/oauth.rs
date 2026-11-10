@@ -609,9 +609,25 @@ async fn oauth_refresh(
     let Ok(token) = replacement else {
         return failure("OAuth refresh failed", StatusCode::SERVICE_UNAVAILABLE);
     };
-    let token = Zeroizing::new(token);
+    // Providers may rotate only the access token. Keep the previous refresh
+    // credential if the response does not include a replacement.
+    let mut response: Value = match serde_json::from_slice(&token) {
+        Ok(value) => value,
+        Err(_) => return failure("invalid OAuth refresh response", StatusCode::SERVICE_UNAVAILABLE),
+    };
+    if response.get("refresh_token").and_then(Value::as_str).is_none() {
+        if let Some(fields) = response.as_object_mut() {
+            fields.insert("refresh_token".into(), Value::String(refresh.into()));
+        } else {
+            return failure("invalid OAuth refresh response", StatusCode::SERVICE_UNAVAILABLE);
+        }
+    }
+    let secured = match serde_json::to_vec(&response) {
+        Ok(raw) => Zeroizing::new(raw),
+        Err(_) => return failure("invalid OAuth refresh response", StatusCode::SERVICE_UNAVAILABLE),
+    };
     match shared.with_authority(|auth|
-        auth.replace_broker_credential(&session, &input.handle, &provider, &token)
+        auth.replace_broker_credential(&session, &input.handle, &provider, &secured)
     ) {
         Ok(()) => Json(json!({"refreshed":true})).into_response(),
         Err(_) => failure("OAuth credential custody unavailable", StatusCode::FORBIDDEN),
