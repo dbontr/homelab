@@ -1,27 +1,35 @@
 # Identity-directed motivation
 
-## Purpose and ownership
+## Purpose
 
-Motivation is an independent domain service under `services/motivation/`. It helps the owner cultivate enduring interest in difficult, meaningful work. The owner declares the desired identity, linked personal goal (when available), compelling outcome, next step and permitted intensity. These are objectives to be revisited deliberately, not values an adaptive model may rewrite.
+Motivation is a private service for cultivating enduring intellectual engagement around authentic, owner-chosen objectives. It emphasizes meaningful outcomes, rigorous inquiry and the voluntary pursuit of difficult work. It does not claim to manufacture passion.
 
-The immediate application is intellectual work where fascination with a real result makes rigorous learning worthwhile. The service does not claim to cause obsession or guarantee preference change. It distinguishes behavioral compliance, subjective engagement and independently demonstrated mastery.
+The owner defines a desired identity, an outcome worth pursuing, a next step, and an optional personal goal reference. A model or scheduler cannot silently rewrite these commitments. The Rust service is the sole writer of its own private state.
 
-## Adaptation and observation
+## Interventions
 
-The service chooses among five transparent, inspectable strategies: outcome anchoring, inquiry, challenge, direct accountability and reflection. Each intervention quotes actual owner-authored commitments; it does not invent research prospects, social judgment or personal shortcomings.
+Five strategies are available: outcome anchoring, inquiry, challenge, direct accountability and reflection. The owner can identify the present situation: session start, resistance, distraction, uncertainty or milestone. Initial choices are situation-specific. Subsequent strategy selection uses a bounded upper-confidence-bound heuristic that balances exploration with reported engagement, progress and well-being.
 
-After each intervention, the owner may record engagement, progress and well-being on five-point scales, including zero for an unsuccessful or ignored prompt. Those are **self-reports**. An upper-confidence-bound selection rule explores each strategy and then balances measured reward with further exploration. The reward weights are progress 50%, engagement 25%, and well-being 25%. These weights are an initial experimental heuristic, not a clinical or psychological effectiveness claim.
+The owner chooses guided or direct language. The system uses authentic owner-supplied questions, never invented achievements, fictitious research breakthroughs or moral judgments about missing logs.
 
-The service stores interventions and self-reports independently of personal tasks, goals, learning evidence and health records. A linked goal ID is a reference, not authority to modify that goal. No self-report automatically completes a task, awards teaching mastery, records health activity or verifies a scientific result.
+Interventions start disabled. The owner can additionally enable proactive scheduling, independent of the MCP and API. Scheduled suggestions are written to the private in-app inbox; they are not sent to external channels. One unresolved suggestion is held until feedback, dismissal, profile revision or pause. Cadence is 60–1440 minutes, with a 25-minute minimum cooldown, 1–8 suggestions per UTC day and optional UTC quiet hours. A selected weekday can suppress scheduled interventions to provide an intervention-free observation period.
 
-## Control and limits
+Pausing and profile revisions cancel unresolved prompts without fabricating feedback. Very low reported well-being pauses further interventions. No browsing surveillance, device blocking, autonomous messaging or infrastructure operations are authorized.
 
-The service starts off. A revision-matched profile update explicitly enables interventions. Only owner-requested prompts are generated; no background notification scheduler or browsing surveillance is present. The owner can select guided or direct language, 1–8 interventions per UTC day and optional UTC quiet hours. There is one unresolved prompt at a time, at least 25 minutes between distinct prompts, and a 256-event bounded history. Very low well-being feedback pauses further interventions. Pausing never deletes the owner's records, and re-enabling requires a deliberate revision-qualified update.
+## Observations
 
-The experiment should measure voluntary engagement when interventions are withdrawn, learning transfer and retention from the Learning service, and independent health and relationship effects where the owner elects to track them. Improving self-reported engagement alone is not evidence of successful self-transformation.
+Intervention feedback records engagement, progress and well-being linked to the exact strategy. Independent check-ins record minutes of intellectual work, voluntary initiation, fascination, well-being, optional evidence reference and whether the record occurred on a scheduled intervention-free day.
 
-The Rust service owns its private JSON state and exclusive lock. Its dedicated loopback HTTP API requires a separate private token file. The Go core forwards only five exact routes, using a service identity rather than a browser or external API bearer. The Rust/Dioxus UI uses the platform's existing owner-session and CSRF boundary. The optional MCP exposes state, owner-requested suggestions and a pause operation; it cannot alter the aspirational identity or forge feedback. Neither optional interface is needed to run the domain service.
+The Rust service computes 28-day aggregates. These are owner self-reports, not verified task completion, demonstrated learning or causal proof of a psychological intervention. Holdout days and voluntary initiation are exploratory measures, not a randomized trial. An optional reference to a Learning or research record does not give the motivation service access to that record or authority to modify it.
 
-## Source verification
+## Service independence
 
-Run `cargo test --manifest-path services/motivation/Cargo.toml` and `cargo clippy --manifest-path services/motivation/Cargo.toml --all-targets -- -D warnings`. Run the ordinary Go and Dioxus checks before release. Generate and commit an approved Cargo lockfile before attempting reproducible Nix packaging. Source commits never activate a process or modify an existing service's database.
+Source is in services/motivation. The private Rust process owns the profile, scheduler, state lock and all intervention records. The Go core presents eight fixed routes through its existing owner-session and CSRF controls. The Rust/Dioxus view presents those routes. The unified MCP offers status, metrics, requested suggestions and pause without allowing the model to change the aspirational identity or submit purported self-reports.
+
+The optional NixOS service module provides process isolation, a private state directory, credential loading and loopback transport. The service is disabled by default. Its package must be an immutable verified Rust build supplied explicitly; Cargo.lock and build verification are required before activation.
+
+## Verification
+
+Run Rust formatting, unit tests, Clippy, HTTP integration tests, core Go tests, Dioxus WASM build, NixOS evaluation and isolated recovery checks. Validate revoked permissions, request limits, authentication, state continuity, exclusive file ownership, quiet hours and holdouts. Code availability is not production acceptance.
+
+Long-term progress is measured by independently demonstrated competence and freely initiated intellectual work, not the number of motivational prompts displayed.

@@ -1,22 +1,34 @@
-# Motivation
+# Motivation service
 
-This independent Rust domain service cultivates motivation around an owner-authored identity and an authentic, personally meaningful outcome. Its state belongs to this service, not to the UI, MCP or public API.
+This independent Rust service owns the aspirational profile, situation-specific intervention selection, a private scheduled inbox and longitudinal engagement observations. It is not an MCP listener, external API gateway or device administrator.
 
-The service starts disabled. Enable it with an exact-revision profile update that supplies an identity, desired outcome and next step. All suggested interventions are owner-requested, inspectable, limited in frequency and recorded with their exact strategy. Feedback records **self-reported** engagement, progress and well-being, not independently verified learning or performance. Strategy selection uses an upper-confidence-bound exploration rule on this feedback; it must not be represented as proven psychological efficacy.
+## Configuration
 
-The service retains one outstanding intervention until feedback is recorded or the profile is revised or paused. Revisions cancel stale prompts without manufacturing feedback. Completed interventions have a 25-minute cooldown and a UTC-day limit. Optional quiet hours are specified in UTC; identical start and end disables quiet hours. A well-being report of 0 or 1 automatically pauses further suggestions. The owner can pause at any time, inspect history and reactivate only with a revision-matched profile update. The service does not push messages, lock devices, collect browsing history, shame the owner or modify their declared goals.
+The required HOMELAB_MOTIVATION_TOKEN_FILE names an absolute private file containing a 32–4096 character bearer token. HOMELAB_MOTIVATION_LISTEN_ADDR defaults to numeric loopback 127.0.0.1:8341. HOMELAB_MOTIVATION_STATE_FILE optionally selects an absolute state path. When absent, systemd-provided STATE_DIRECTORY selects the private persistence root, falling back to /var/lib/homelab-motivation. The parent directory must exist.
 
-## Private service contract
+The service uses a private exclusive lock, bounded JSON state and atomic replacement. Neither personal records nor credentials belong in Git.
 
-- GET /healthz: local readiness without personal records
-- GET /v1/motivation/state: profile and recorded interventions
-- PUT /v1/motivation/profile: revise all profile fields, including explicit enabled flag and expected_revision
-- POST /v1/motivation/interventions: request a selected intervention
-- POST /v1/motivation/feedback: record one response for an intervention
-- POST /v1/motivation/pause: immediately disable further interventions
+## Private HTTP contract
 
-Every /v1 request requires the dedicated Bearer token. The token file must be a private regular file; the server binds numeric loopback only and holds an exclusive state lock. Persisted state is JSON written by atomic replacement, with a bounded history. The Go core is a credential-holding transport client, never a second writer. No credentials, logs or personal records belong in Git.
+Every /v1 route requires the dedicated service token. The service does not accept browser-session cookies, MCP credentials or external API keys directly.
 
-Configuration: HOMELAB_MOTIVATION_TOKEN_FILE (required), HOMELAB_MOTIVATION_STATE_FILE (optional absolute state path), HOMELAB_MOTIVATION_LISTEN_ADDR (optional numeric loopback address). Provision the parent state directory and token separately. Building this crate does not activate it.
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | /v1/motivation/state | Read owner profile, check-ins and intervention history |
+| PUT | /v1/motivation/profile | Apply a revision-checked profile and opt-in policy |
+| POST | /v1/motivation/interventions | Request a situation-specific intervention |
+| POST | /v1/motivation/feedback | Record self-reported intervention feedback |
+| POST | /v1/motivation/checkins | Record voluntarily initiated work and fascination |
+| GET | /v1/motivation/metrics | Read 28-day engagement aggregates |
+| POST | /v1/motivation/dismiss | Dismiss an unresolved intervention without rating it |
+| POST | /v1/motivation/pause | Immediately pause further interventions |
 
-The Go platform enables the optional adapter only when both HOMELAB_MOTIVATION_SERVICE_URL and HOMELAB_MOTIVATION_SERVICE_TOKEN_FILE are configured. The URL must be an exact numeric loopback HTTP origin; the file must contain the same dedicated token used by the Rust service, with private permissions. The outer platform router enforces owner-session authorization and CSRF for browser writes. No UI or MCP process reads the token file.
+GET /healthz reveals readiness only.
+
+The optional background scheduler creates inbox records only after the owner opts into both interventions and proactive scheduling. It respects quiet hours, cooldown, daily limits, an intervention-free weekday and the unresolved inbox item. It never pushes messages to third parties, edits study records or controls devices.
+
+The Go core is a narrow credential-holding transport client, configured with HOMELAB_MOTIVATION_SERVICE_URL and HOMELAB_MOTIVATION_SERVICE_TOKEN_FILE. Its address must be an exact numeric loopback HTTP origin; its bearer is not supplied to the UI or MCP. Browser writes are subject to the platform's existing owner-session and CSRF checks. The optional MCP offers only read, requested suggestion and pause operations.
+
+## Build and acceptance
+
+Generate a Cargo.lock with the approved toolchain. Verify formatting with cargo fmt --all --check, tests with cargo test --locked, and Clippy with cargo clippy --locked --all-targets -- -D warnings. Verify the Go bridge and Dioxus browser bundle. The NixOS module requires a separately provided immutable package and enables no service by default. Test restart, recovery, credentials, rate limits and state continuity before any authorized deployment.
