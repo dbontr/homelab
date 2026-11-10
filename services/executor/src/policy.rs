@@ -377,3 +377,98 @@ impl Policy {
         Err(Error::Denied("unregistered privileged operation"))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn policy() -> Policy {
+        Policy {
+            host: "jupiter".into(),
+            release_enabled: true,
+            systemctl: "/run/current-system/sw/bin/systemctl".into(),
+            actuator: "/nix/store/fixture/bin/homelab-actuator".into(),
+            service_policy_file: "/nix/store/fixture/services.txt".into(),
+            deployment_policy_file: "/nix/store/fixture/deployments.txt".into(),
+            services: ["homelab-platform.service".into()].into_iter().collect(),
+            deployments: ["apps/controller".into()].into_iter().collect(),
+            max_replicas: 4,
+            workspace: None,
+            workspace_token: None,
+            workspace_vault_alias: None,
+            state_dir: "/var/lib/homelab-releases".into(),
+            source: "/srv/homelab".into(),
+            nix: "/run/current-system/sw/bin/nix".into(),
+            nix_env: "/run/current-system/sw/bin/nix-env".into(),
+            git: "/run/current-system/sw/bin/git".into(),
+            health: vec!["homelab-platform.service".into()],
+            kubeconfig: None,
+            kubectl: None,
+        }
+    }
+
+    fn fields(value: Value) -> Map<String, Value> {
+        value.as_object().unwrap().clone()
+    }
+
+    #[test]
+    fn service_policy_is_exact_and_host_bound() {
+        let policy = policy();
+        let args = fields(json!({"host":"jupiter","service":"homelab-platform.service"}));
+        assert!(matches!(
+            policy.admit("infrastructure__service_restart","jupiter",&args),
+            Ok(Action::Actuator(_))
+        ));
+        for (operation,target,value) in [
+            ("infrastructure__service_restart","venus",json!({"host":"jupiter","service":"homelab-platform.service"})),
+            ("infrastructure__service_restart","jupiter",json!({"host":"jupiter","service":"nginx.service"})),
+            ("infrastructure__service_restart","jupiter",json!({"host":"jupiter","service":"homelab-platform.service","force":true})),
+            ("infrastructure__service_destroy","jupiter",json!({"host":"jupiter","service":"homelab-platform.service"})),
+        ] {
+            assert!(policy.admit(operation,target,&fields(value)).is_err());
+        }
+    }
+
+    #[test]
+    fn kubernetes_admission_binds_namespace_replica_count_and_version() {
+        let policy = policy();
+        let allowed = fields(json!({"host":"jupiter","namespace":"apps",
+            "deployment":"controller","replicas":3,"resource_version":"12345"}));
+        assert!(matches!(policy.admit("cluster__deployment_scale","jupiter",&allowed),
+            Ok(Action::Actuator(args)) if args.last().map(String::as_str) == Some("12345")));
+        for value in [
+            json!({"host":"jupiter","namespace":"apps","deployment":"controller","replicas":5}),
+            json!({"host":"jupiter","namespace":"kube-system","deployment":"controller","replicas":1}),
+            json!({"host":"jupiter","namespace":"apps","deployment":"controller","replicas":1.5}),
+            json!({"host":"jupiter","namespace":"apps","deployment":"controller","replicas":2,
+                "resource_version":"--force"}),
+            json!({"host":"jupiter","namespace":"apps","deployment":"controller","replicas":2,
+                "extra":"malformed"}),
+        ] {
+            assert!(policy.admit("cluster__deployment_scale","jupiter",&fields(value)).is_err());
+        }
+    }
+
+    #[test]
+    fn release_policy_accepts_only_existing_id_shape() {
+        let policy = policy();
+        let id = "a".repeat(48);
+        let args = fields(json!({"host":"jupiter","release_id":id}));
+        assert!(matches!(
+            policy.admit("infrastructure__release_activate","jupiter",&args),
+            Ok(Action::Release { activate: true, .. })
+        ));
+        assert!(policy.admit("infrastructure__release_activate","jupiter",
+            &fields(json!({"host":"jupiter","release_id":"../../system"}))).is_err());
+        assert!(policy.admit("infrastructure__release_status","jupiter",&args).is_err());
+    }
+
+    #[test]
+    fn workspace_administration_is_disabled_without_a_scoped_provider() {
+        let policy = policy();
+        let args = fields(json!({"host":"jupiter","project_id":"research",
+            "workspace_id":"workspace1"}));
+        assert!(policy.admit("infrastructure__workspace_stop","jupiter",&args).is_err());
+    }
+}
