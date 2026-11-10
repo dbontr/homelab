@@ -7,3 +7,8 @@ The primary application runtime is in `services/core/`. The private core router 
 `services/bridge/` contains the restricted internal HTTP transport used by the optional MCP and public API entry points. It does not own application records or privileged operations. The service runtime remains the only owner of its writable state. The core startup acquires exclusive file leases for personal tasks, recipes, profiles and workflow state before initializing those stores. Independent processes must exchange domain operations through authenticated interfaces rather than open the same records as additional writers.
 
 The browser uses owner-session routes and CSRF checks. Neither the browser nor an interface gateway may receive a service's administrator credential. Public interfaces require separate client and route-scoped service credentials; disable or stop those processes without removing the underlying services.
+
+The Rust hardware helper in `compute/native-hardware/` verifies bounded
+host-device mappings under operator policy; the Rust `sandbox/` command
+isolates revision-pinned local build and test actions. Neither component
+takes ownership of Go service scheduling or persistent project state.

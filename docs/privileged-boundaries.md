@@ -2,6 +2,12 @@
 
 Privileged authority is not conferred by an MCP tool, browser session, source workspace, HTTP request, or the presence of a service account. A dedicated owner security service approves exact actions. A separate host executor verifies approval and resource scope before running any privileged operation.
 
+The optional local Rust engineering sandbox has no authorization to switch
+NixOS generations or access host credentials. Native hardware identity
+validation is separately selected by a compute worker under its Go-owned lease
+and the immutable operator device policy. These two facilities do not inherit
+the privileged executor's administrative authority.
+
 ## Process inventory
 
 | Process or subsystem | Canonical implementation | Credential and authority boundary |
