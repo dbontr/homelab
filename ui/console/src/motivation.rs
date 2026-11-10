@@ -58,7 +58,8 @@ pub fn Motivation(csrf: String) -> Element {
         .and_then(|value| value.get("interventions"))
         .and_then(Value::as_array).cloned().unwrap_or_default();
     let pending = interventions.iter().rev()
-        .find(|item| item.get("feedback").is_none_or(Value::is_null)).cloned();
+        .find(|item| item.get("feedback").is_none_or(Value::is_null) &&
+            !item.get("cancelled").and_then(Value::as_bool).unwrap_or(false)).cloned();
     let pending_id = pending.as_ref().and_then(|item| item.get("id"))
         .and_then(Value::as_u64);
 
@@ -149,7 +150,7 @@ pub fn Motivation(csrf: String) -> Element {
                             }
                             label { class: "form-row",
                                 span { class: "label", "Daily maximum" }
-                                input { class: "field", r#type: "number", min: "1", max: "8",
+                                input { class: "field", type: "number", min: "1", max: "8",
                                     value: "{daily_limit()}",
                                     oninput: move |event| {
                                         if let Ok(value) = event.value().parse::<u8>() { daily_limit.set(value); }
@@ -157,7 +158,7 @@ pub fn Motivation(csrf: String) -> Element {
                             }
                             label { class: "form-row",
                                 span { class: "label", "Quiet start (UTC hour)" }
-                                input { class: "field", r#type: "number", min: "0", max: "23",
+                                input { class: "field", type: "number", min: "0", max: "23",
                                     value: "{quiet_start()}",
                                     oninput: move |event| {
                                         if let Ok(value) = event.value().parse::<u8>() { quiet_start.set(value); }
@@ -165,7 +166,7 @@ pub fn Motivation(csrf: String) -> Element {
                             }
                             label { class: "form-row",
                                 span { class: "label", "Quiet end (UTC hour)" }
-                                input { class: "field", r#type: "number", min: "0", max: "23",
+                                input { class: "field", type: "number", min: "0", max: "23",
                                     value: "{quiet_end()}",
                                     oninput: move |event| {
                                         if let Ok(value) = event.value().parse::<u8>() { quiet_end.set(value); }
@@ -173,7 +174,7 @@ pub fn Motivation(csrf: String) -> Element {
                             }
                         }
                         label { class: "form-row",
-                            input { r#type: "checkbox", checked: enabled(),
+                            input { type: "checkbox", checked: enabled(),
                                 onchange: move |event| enabled.set(event.checked()) }
                             span { class: "label", "Enable owner-requested motivational interventions" }
                         }
@@ -183,7 +184,7 @@ pub fn Motivation(csrf: String) -> Element {
                         div { class: "inline-row",
                             button { class: "btn btn-primary", disabled: busy(), "Save profile" }
                             button {
-                                r#type: "button",
+                                type: "button",
                                 class: "btn btn-outline",
                                 disabled: busy() || !service_enabled,
                                 onclick: move |_| {
@@ -231,8 +232,8 @@ pub fn Motivation(csrf: String) -> Element {
                     if let Some(event) = pending {
                         div { class: "card",
                             div { class: "card-body",
-                                p { "{field(&event, "message")}" }
-                                p { class: "card-description", "Strategy: {field(&event, "strategy")}" }
+                                p { {field(&event, "message")} }
+                                p { class: "card-description", {format!("Strategy: {}", field(&event, "strategy"))} }
                             }
                         }
                         form {
@@ -266,7 +267,7 @@ pub fn Motivation(csrf: String) -> Element {
                             div { class: "task-field-grid",
                                 label { class: "form-row",
                                     span { class: "label", "Engagement (0–5)" }
-                                    input { class: "field", r#type: "number", min: "0", max: "5",
+                                    input { class: "field", type: "number", min: "0", max: "5",
                                         value: "{engagement()}",
                                         oninput: move |event| {
                                             if let Ok(value) = event.value().parse::<u8>() { engagement.set(value); }
@@ -274,7 +275,7 @@ pub fn Motivation(csrf: String) -> Element {
                                 }
                                 label { class: "form-row",
                                     span { class: "label", "Actual progress (0–5)" }
-                                    input { class: "field", r#type: "number", min: "0", max: "5",
+                                    input { class: "field", type: "number", min: "0", max: "5",
                                         value: "{progress()}",
                                         oninput: move |event| {
                                             if let Ok(value) = event.value().parse::<u8>() { progress.set(value); }
@@ -282,7 +283,7 @@ pub fn Motivation(csrf: String) -> Element {
                                 }
                                 label { class: "form-row",
                                     span { class: "label", "Well-being (0–5)" }
-                                    input { class: "field", r#type: "number", min: "0", max: "5",
+                                    input { class: "field", type: "number", min: "0", max: "5",
                                         value: "{wellbeing()}",
                                         oninput: move |event| {
                                             if let Ok(value) = event.value().parse::<u8>() { wellbeing.set(value); }
@@ -316,11 +317,14 @@ pub fn Motivation(csrf: String) -> Element {
                         for event in interventions.iter().rev().take(12) {
                             div { class: "list-row",
                                 div {
-                                    strong { "{field(event, "strategy")}" }
-                                    p { class: "card-description", "{field(event, "message")}" }
+                                    strong { {field(event, "strategy")} }
+                                    p { class: "card-description", {field(event, "message")} }
                                     if let Some(feedback) = event.get("feedback").filter(|v| !v.is_null()) {
                                         p { class: "card-description",
-                                            "Engagement {api::property(feedback, &["engagement"])} / 5 · Progress {api::property(feedback, &["progress"])} / 5 · Well-being {api::property(feedback, &["wellbeing"])} / 5"
+                                            {format!("Engagement {} / 5 · Progress {} / 5 · Well-being {} / 5",
+                                                api::property(feedback, &["engagement"]),
+                                                api::property(feedback, &["progress"]),
+                                                api::property(feedback, &["wellbeing"]))}
                                         }
                                     } else {
                                         p { class: "card-description", "Awaiting feedback" }

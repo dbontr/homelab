@@ -1,7 +1,7 @@
 use axum::{
     Json, Router,
     extract::{Request, State},
-    http::{HeaderMap, StatusCode, header},
+    http::{StatusCode, header},
     middleware::{self, Next},
     response::{IntoResponse, Response},
     routing::{get, post, put},
@@ -13,7 +13,8 @@ use serde_json::{Value, json};
 use std::{
     env, fs,
     net::SocketAddr,
-    os::unix::fs::PermissionsExt,
+    os::unix::fs::{OpenOptionsExt, PermissionsExt},
+    io::Read,
     path::Path,
     sync::{Arc, Mutex},
 };
@@ -87,7 +88,14 @@ fn read_token(path: &Path) -> Result<String, Box<dyn std::error::Error>> {
         metadata.permissions().mode() & 0o077 != 0 {
         return Err("token file must be a private regular file".into());
     }
-    let token = fs::read_to_string(path)?.trim().to_owned();
+    let mut file = fs::OpenOptions::new().read(true)
+        .custom_flags(libc::O_NOFOLLOW).open(path)?;
+    if !file.metadata()?.is_file() || file.metadata()?.permissions().mode() & 0o077 != 0 {
+        return Err("token descriptor is not a private regular file".into());
+    }
+    let mut raw = String::new();
+    file.take(4097).read_to_string(&mut raw)?;
+    let token = raw.trim().to_owned();
     if token.len() < 32 || token.len() > 4096 ||
         token.bytes().any(|b| b <= 32 || b == 127) {
         return Err("invalid service token".into());

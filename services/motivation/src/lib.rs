@@ -110,6 +110,8 @@ pub struct Intervention {
     pub message: String,
     pub created_at: u64,
     pub feedback: Option<Feedback>,
+    #[serde(default)]
+    pub cancelled: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -264,12 +266,18 @@ impl Engine {
         validate_profile(&profile)?;
         let mut next = self.state.clone();
         next.profile = profile;
+        for event in &mut next.interventions {
+            if event.feedback.is_none() { event.cancelled = true; }
+        }
         self.commit(next)
     }
 
     pub fn pause(&mut self) -> Result<Record, Error> {
         let mut next = self.state.clone();
         next.profile.enabled = false;
+        for event in &mut next.interventions {
+            if event.feedback.is_none() { event.cancelled = true; }
+        }
         next.profile.revision = next.profile.revision.checked_add(1)
             .ok_or(Error::Invalid("profile revision exhausted"))?;
         self.commit(next)
@@ -281,7 +289,7 @@ impl Engine {
             return Err(Error::Conflict("motivation interventions are paused"));
         }
         if let Some(pending) = self.state.interventions.iter().rev()
-            .find(|event| event.feedback.is_none()) {
+            .find(|event| event.feedback.is_none() && !event.cancelled) {
             return Ok(pending.clone());
         }
         let hour = (now / 3600 % 24) as u8;
@@ -311,6 +319,7 @@ impl Engine {
             message: format_message(p, strategy),
             created_at: now,
             feedback: None,
+            cancelled: false,
         };
         let mut next = self.state.clone();
         next.next_id = next_id;
@@ -331,8 +340,8 @@ impl Engine {
         let event = next.interventions.iter_mut()
             .find(|event| event.id == input.intervention_id)
             .ok_or(Error::Invalid("intervention not found"))?;
-        if event.feedback.is_some() {
-            return Err(Error::Conflict("feedback already recorded"));
+        if event.cancelled || event.feedback.is_some() {
+            return Err(Error::Conflict("intervention already resolved"));
         }
         event.feedback = Some(Feedback {
             engagement: input.engagement,
@@ -378,7 +387,8 @@ fn validate_record(record: &Record) -> Result<(), Error> {
         return Err(Error::Invalid("stored intervention history is invalid"));
     }
     if record.interventions.windows(2).any(|w| w[0].id >= w[1].id) ||
-        record.interventions.iter().filter(|e| e.feedback.is_none()).count() > 1 {
+        record.interventions.iter().filter(|e| e.feedback.is_none() && !e.cancelled).count() > 1 ||
+        record.interventions.iter().any(|e| e.cancelled && e.feedback.is_some()) {
         return Err(Error::Invalid("stored intervention sequence is invalid"));
     }
     Ok(())
@@ -497,6 +507,29 @@ mod tests {
         assert_eq!(reopened.snapshot().interventions.len(), 2);
         assert_eq!(reopened.snapshot().interventions[0].feedback.as_ref().unwrap().progress, 3);
         drop(reopened);
+        fs::remove_dir_all(dir).unwrap();
+    }
+    #[test]
+    fn changed_identity_cancels_outdated_intervention() {
+        let (mut e, dir) = engine();
+        configured(&mut e);
+        let old = e.suggest(100_000).unwrap();
+        e.update_profile(ProfileChange {
+            expected_revision: 1, enabled: true, goal_id: "research".into(),
+            identity: "Mathematician".into(), outcome: "Prove a theorem".into(),
+            next_step: "Investigate an open lemma".into(),
+            intensity: Intensity::Guided, daily_limit: 4,
+            quiet_start_utc_hour: 0, quiet_end_utc_hour: 0,
+        }).unwrap();
+        assert!(e.snapshot().interventions[0].cancelled);
+        assert!(matches!(e.record_feedback(FeedbackInput {
+            intervention_id: old.id, engagement: 5, progress: 5, wellbeing: 5,
+            notes: String::new(),
+        }, 100_010), Err(Error::Conflict(_))));
+        let next = e.suggest(102_000).unwrap();
+        assert_ne!(next.id, old.id);
+        assert!(next.message.contains("Prove a theorem"));
+        drop(e);
         fs::remove_dir_all(dir).unwrap();
     }
     #[test]
