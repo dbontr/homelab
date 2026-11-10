@@ -43,13 +43,13 @@ func NewRustRun(cfg RustActuatorConfig)(Run,error){
    }
    args=[]string{"service",argv[0],argv[1]}
   case cfg.Kubectl!=""&&binary==cfg.Kubectl:
-   if len(argv)!=6||argv[0]!="--kubeconfig="+cfg.Kubeconfig||
+   if (len(argv)!=6&&len(argv)!=7)||argv[0]!="--kubeconfig="+cfg.Kubeconfig||
     !strings.HasPrefix(argv[1],"--namespace=")||argv[2]!="--request-timeout=15s"{
     return errors.New("invalid Rust Kubernetes action")
    }
    namespace:=strings.TrimPrefix(argv[1],"--namespace=")
    if !validKubeName(namespace){return errors.New("invalid Rust Kubernetes namespace")}
-   if argv[3]=="rollout"&&argv[4]=="restart"&&strings.HasPrefix(argv[5],"deployment/"){
+   if len(argv)==6&&argv[3]=="rollout"&&argv[4]=="restart"&&strings.HasPrefix(argv[5],"deployment/"){
     deployment:=strings.TrimPrefix(argv[5],"deployment/")
     if !validKubeName(deployment){return errors.New("invalid Rust Kubernetes deployment")}
     args=[]string{"deployment","restart",namespace,deployment}
@@ -62,6 +62,14 @@ func NewRustRun(cfg RustActuatorConfig)(Run,error){
     count,err:=strconv.Atoi(replicas)
     if err!=nil||count<0||count>cfg.MaxReplicas{return errors.New("Rust replica limit exceeded")}
     args=[]string{"deployment","scale",namespace,deployment,strconv.Itoa(count)}
+    if len(argv)==7{
+     if !strings.HasPrefix(argv[6],"--resource-version="){
+      return errors.New("unsupported Rust Kubernetes scale precondition")
+     }
+     version:=strings.TrimPrefix(argv[6],"--resource-version=")
+     if !kubeResourceVersion.MatchString(version){return errors.New("invalid Rust Kubernetes resource version")}
+     args=append(args,version)
+    }
    }else{return errors.New("unsupported Rust Kubernetes arguments")}
   default:return errors.New("unsupported Rust administrative binary")
   }
