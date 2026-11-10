@@ -102,6 +102,11 @@ impl Factors {
         format!("{:06}", truncated % 1_000_000)
     }
 
+    #[cfg(test)]
+    pub(crate) fn totp_test_code(&self, step: i64) -> String {
+        self.totp_for(step)
+    }
+
     fn matching_step(&self, code: &str, now_seconds: i64, last_step: i64) -> Option<i64> {
         if code.len() != 6 || !code.bytes().all(|b| b.is_ascii_digit()) {
             return None;
