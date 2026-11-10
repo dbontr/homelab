@@ -188,6 +188,9 @@ impl WorkspacePolicy {
                     }
                     ordered.push(name);
                 }
+                if fields.len() == 5 && !fields.contains_key("description") {
+                    return Err(Error::Denied("unexpected Workspace software field"));
+                }
                 let mut args = serde_json::json!({"image_id":image,"software_id":software,"packages":ordered});
                 if let Some(description) = fields.get("description") {
                     let description = description.as_str().ok_or(Error::Denied("invalid description"))?;
@@ -289,7 +292,7 @@ impl Policy {
             return Err(Error::Configuration("invalid release health policy"));
         }
         Ok(Self {
-            host, release_enabled: env::var("HOMELAB_EXECUTOR_RELEASE_ENABLE").as_deref() == Ok("true"),
+            host, release_enabled: env::var("HOMELAB_EXECUTOR_RELEASE_ENABLE").ok().as_deref() == Some("true"),
             systemctl: absolute("HOMELAB_EXECUTOR_SYSTEMCTL")?,
             actuator: absolute("HOMELAB_EXECUTOR_RUST_ACTUATOR")?,
             service_policy_file, deployment_policy_file,
@@ -341,6 +344,9 @@ impl Policy {
                 .ok_or(Error::Denied("replica count must be an integer"))?;
             if replicas > self.max_replicas as u64 {
                 return Err(Error::Denied("replica count exceeds policy"));
+            }
+            if fields.len() == 5 && !fields.contains_key("resource_version") {
+                return Err(Error::Denied("unexpected Kubernetes scale field"));
             }
             let mut args = vec!["deployment".into(),"scale".into(),namespace.into(),deployment.into(),replicas.to_string()];
             if let Some(version) = fields.get("resource_version") {
