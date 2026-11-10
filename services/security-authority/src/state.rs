@@ -12,6 +12,8 @@ use crate::credentials::AuthenticatorState;
 use crate::Error;
 
 const MAX_STATE_BYTES: usize = 16 << 10;
+const MAX_VAULT_BYTES: usize = 8 << 20;
+const VAULT_NAME: &str = "credentials.json";
 const LOCK_NAME: &str = ".securityd.lock";
 const STATE_NAME: &str = "authenticator.json";
 
@@ -30,7 +32,7 @@ fn owner_only(metadata: &fs::Metadata) -> bool {
         && metadata.uid() == unsafe { libc::geteuid() }
 }
 
-fn protected_read(path: &Path) -> Result<Option<Vec<u8>>, Error> {
+fn protected_read(path: &Path, limit: usize) -> Result<Option<Vec<u8>>, Error> {
     let mut file = match OpenOptions::new()
         .read(true)
         .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
@@ -44,10 +46,10 @@ fn protected_read(path: &Path) -> Result<Option<Vec<u8>>, Error> {
         return Err(Error::Storage);
     }
     let mut bytes = Vec::new();
-    file.take((MAX_STATE_BYTES + 1) as u64)
+    file.take((limit + 1) as u64)
         .read_to_end(&mut bytes)
         .map_err(|_| Error::Storage)?;
-    if bytes.len() >= MAX_STATE_BYTES {
+    if bytes.len() > limit {
         return Err(Error::Storage);
     }
     Ok(Some(bytes))
@@ -136,7 +138,7 @@ impl StateStore {
         if self.faulted {
             return Err(Error::Storage);
         }
-        decode_state(protected_read(&self.directory.join(STATE_NAME))?)
+        decode_state(protected_read(&self.directory.join(STATE_NAME), MAX_STATE_BYTES)?)
     }
 
     pub fn persist_authenticator(&mut self, state: &AuthenticatorState) -> Result<(), Error> {
@@ -144,15 +146,33 @@ impl StateStore {
             return Err(Error::Storage);
         }
         let payload = encode_state(state)?;
-        if self.write_atomically(STATE_NAME, &payload).is_err() {
+        if self.write_atomically(STATE_NAME, &payload, MAX_STATE_BYTES).is_err() {
             self.faulted = true;
             return Err(Error::Storage);
         }
         Ok(())
     }
 
-    fn write_atomically(&self, name: &str, payload: &[u8]) -> Result<(), Error> {
-        if payload.len() >= MAX_STATE_BYTES || name.contains('/') {
+    pub(crate) fn load_vault(&self) -> Result<Option<Vec<u8>>, Error> {
+        if self.faulted {
+            return Err(Error::Storage);
+        }
+        protected_read(&self.directory.join(VAULT_NAME), MAX_VAULT_BYTES)
+    }
+
+    pub(crate) fn persist_vault(&mut self, payload: &[u8]) -> Result<(), Error> {
+        if self.faulted {
+            return Err(Error::Storage);
+        }
+        if self.write_atomically(VAULT_NAME, payload, MAX_VAULT_BYTES).is_err() {
+            self.faulted = true;
+            return Err(Error::Storage);
+        }
+        Ok(())
+    }
+
+    fn write_atomically(&self, name: &str, payload: &[u8], limit: usize) -> Result<(), Error> {
+        if payload.len() > limit || name.contains('/') {
             return Err(Error::Storage);
         }
         let mut nonce = [0u8; 16];
