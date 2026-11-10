@@ -215,15 +215,18 @@ pub struct Engine {
 
 impl Engine {
     pub fn open(path: impl AsRef<Path>) -> Result<Self, Error> {
-        let path = path.as_ref();
-        if !path.is_absolute() {
+        let requested = path.as_ref();
+        if !requested.is_absolute() {
             return Err(Error::Invalid("state file must be an absolute path"));
         }
-        let dir = path.parent().ok_or(Error::Invalid("state directory required"))?;
-        if fs::symlink_metadata(dir)?.file_type().is_symlink() || !dir.is_dir() {
-            return Err(Error::Invalid("state directory must not be a symlink"));
-        }
-        if let Ok(meta) = fs::symlink_metadata(path) {
+        // systemd DynamicUser state directories may use root-managed symlinks.
+        // Resolve the directory before constructing the lock and data paths.
+        let parent = requested.parent().ok_or(Error::Invalid("state directory required"))?;
+        let dir = fs::canonicalize(parent)?;
+        if !dir.is_dir() { return Err(Error::Invalid("state directory is invalid")); }
+        let name = requested.file_name().ok_or(Error::Invalid("state filename required"))?;
+        let path = dir.join(name);
+        if let Ok(meta) = fs::symlink_metadata(&path) {
             if !meta.is_file() || meta.file_type().is_symlink() ||
                 meta.permissions().mode() & 0o077 != 0 {
                 return Err(Error::Invalid("state file must be a private regular file"));
@@ -241,7 +244,7 @@ impl Engine {
             .custom_flags(libc::O_NOFOLLOW).open(lock_path)?;
         lock.try_lock_exclusive()?;
         let state = match OpenOptions::new()
-            .read(true).custom_flags(libc::O_NOFOLLOW).open(path) {
+            .read(true).custom_flags(libc::O_NOFOLLOW).open(&path) {
             Ok(mut file) => {
                 if file.metadata()?.len() > MAX_BYTES {
                     return Err(Error::Invalid("state file exceeds the size limit"));
@@ -547,6 +550,20 @@ mod tests {
             proactive_enabled: false, cadence_minutes: 240, holdout_weekday_utc: None,
             quiet_start_utc_hour: 0, quiet_end_utc_hour: 0,
         }).unwrap();
+    }
+    #[test]
+    fn state_directory_alias_uses_canonical_exclusive_lock() {
+        let (engine, dir) = engine();
+        let alias = dir.with_extension("symlink");
+        std::os::unix::fs::symlink(&dir, &alias).unwrap();
+        let alternate = Engine::open(alias.join("state.json"));
+        assert!(alternate.is_err());
+        drop(engine);
+        let reopened = Engine::open(alias.join("state.json")).unwrap();
+        assert_eq!(reopened.snapshot().profile.revision, 0);
+        drop(reopened);
+        fs::remove_file(alias).unwrap();
+        fs::remove_dir_all(dir).unwrap();
     }
     #[test]
     fn opt_in_and_revision_are_enforced() {
