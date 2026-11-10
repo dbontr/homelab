@@ -10,7 +10,32 @@ export GOSUMDB=off
 export CARGO_NET_OFFLINE=true
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-destination=${1:?usage: stage-release.sh ABSOLUTE_OUTPUT_DIRECTORY}
+mode=complete
+component=""
+if [[ $# -eq 3 && "${1:-}" == --component ]]; then
+  mode=component
+  component=$2
+  destination=$3
+elif [[ $# -eq 1 ]]; then
+  destination=$1
+else
+  printf '%s\n' 'usage: stage-release.sh [--component COMPONENT] ABSOLUTE_OUTPUT_DIRECTORY' >&2
+  exit 2
+fi
+
+source_module=""
+case "$component" in
+  "") [[ "$mode" == complete ]] || exit 2 ;;
+  homelab-platform|homelab-calendard|homelab-engineeringd|homelab-approve|homelab-securityd|homelab-executord|homelab-release|homelab-admin)
+    source_module=services/core ;;
+  homelab-compute-controller|homelab-compute-worker)
+    source_module=services/compute ;;
+  homelab-learning) source_module=services/learning ;;
+  homelab-health) source_module=services/health ;;
+  homelab-mcp|homelab-api) source_module=. ;;
+  homelab-console) source_module=ui/console ;;
+  *) printf 'Unknown release component: %s\n' "$component" >&2; exit 2 ;;
+esac
 if [[ "$destination" != /* || "$destination" == "/" || "$destination" == */ ]]; then
   printf 'Provide an unused absolute output directory without a trailing slash\n' >&2
   exit 2
@@ -19,7 +44,17 @@ if [[ -e "$destination" ]]; then
   printf 'Release destination already exists: %s\n' "$destination" >&2
   exit 2
 fi
-for tool in git go dx sha256sum find sort mktemp; do
+for tool in git sha256sum find sort mktemp; do
+  command -v "$tool" >/dev/null || { printf 'Missing build tool: %s\n' "$tool" >&2; exit 1; }
+done
+if [[ "$mode" == complete ]]; then
+  required_tools=(go dx)
+elif [[ "$component" == homelab-console ]]; then
+  required_tools=(cargo dx)
+else
+  required_tools=(go)
+fi
+for tool in "${required_tools[@]}"; do
   command -v "$tool" >/dev/null || { printf 'Missing build tool: %s\n' "$tool" >&2; exit 1; }
 done
 
@@ -44,7 +79,23 @@ if [[ ! "$revision" =~ ^[a-f0-9]{40}$ ||
   exit 1
 fi
 printf 'Verifying locally pinned source at %s\n' "$revision"
-bash "$root/scripts/verify-offline.sh" --all
+if [[ "$mode" == complete ]]; then
+  bash "$root/scripts/verify-offline.sh" --all
+elif [[ "$component" == homelab-console ]]; then
+  (
+    cd "$root/ui/console"
+    cargo fmt --all -- --check
+    cargo test --offline
+    cargo check --offline --target wasm32-unknown-unknown
+  )
+else
+  (
+    cd "$root/$source_module"
+    go test ./...
+    go test -race ./...
+    go vet ./...
+  )
+fi
 
 stage=$(mktemp -d "$parent/.homelab-release.XXXXXXXX")
 cleanup() { [[ -z "$stage" ]] || rm -rf -- "$stage"; }
@@ -60,31 +111,46 @@ build_go() {
   )
 }
 
-build_go services/core ./cmd/homelab-platform homelab-platform
-build_go services/core ./cmd/homelab-calendard homelab-calendard
-build_go . ./mcp homelab-mcp
-build_go . ./api homelab-api
-build_go services/core ./cmd/homelab-engineeringd homelab-engineeringd
-build_go services/core ./cmd/homelab-approve homelab-approve
-build_go services/core ./cmd/homelab-securityd homelab-securityd
-build_go services/core ./cmd/homelab-executord homelab-executord
-build_go services/core ./cmd/homelab-release homelab-release
-build_go services/core ./cmd/homelab-admin homelab-admin
-build_go services/compute ./cmd/project-workspace-controller homelab-compute-controller
-build_go services/compute ./cmd/project-workspace-worker homelab-compute-worker
-build_go services/learning ./cmd/adaptive-teaching homelab-learning
-build_go services/health ./cmd/personal-health-mcp homelab-health
-
-(
-  cd "$root/ui/console"
-  dx bundle --web --release --out-dir "$stage/console-bundle"
-)
-if [[ ! -f "$stage/console-bundle/public/index.html" ]]; then
-  printf 'The Dioxus web bundle did not contain public/index.html\n' >&2
-  exit 1
+if [[ "$mode" == complete ]]; then
+  build_go services/core ./cmd/homelab-platform homelab-platform
+  build_go services/core ./cmd/homelab-calendard homelab-calendard
+  build_go . ./mcp homelab-mcp
+  build_go . ./api homelab-api
+  build_go services/core ./cmd/homelab-engineeringd homelab-engineeringd
+  build_go services/core ./cmd/homelab-approve homelab-approve
+  build_go services/core ./cmd/homelab-securityd homelab-securityd
+  build_go services/core ./cmd/homelab-executord homelab-executord
+  build_go services/core ./cmd/homelab-release homelab-release
+  build_go services/core ./cmd/homelab-admin homelab-admin
+  build_go services/compute ./cmd/project-workspace-controller homelab-compute-controller
+  build_go services/compute ./cmd/project-workspace-worker homelab-compute-worker
+  build_go services/learning ./cmd/adaptive-teaching homelab-learning
+  build_go services/health ./cmd/personal-health-mcp homelab-health
+elif [[ "$component" != homelab-console ]]; then
+  case "$component" in
+    homelab-compute-controller) package=./cmd/project-workspace-controller ;;
+    homelab-compute-worker) package=./cmd/project-workspace-worker ;;
+    homelab-learning) package=./cmd/adaptive-teaching ;;
+    homelab-health) package=./cmd/personal-health-mcp ;;
+    homelab-mcp) package=./mcp ;;
+    homelab-api) package=./api ;;
+    *) package="./cmd/$component" ;;
+  esac
+  build_go "$source_module" "$package" "$component"
 fi
-cp -a "$stage/console-bundle/public/." "$stage/console/"
-rm -rf -- "$stage/console-bundle"
+
+if [[ "$mode" == complete || "$component" == homelab-console ]]; then
+  (
+    cd "$root/ui/console"
+    dx bundle --web --release --out-dir "$stage/console-bundle"
+  )
+  if [[ ! -f "$stage/console-bundle/public/index.html" ]]; then
+    printf 'The Dioxus web bundle did not contain public/index.html\n' >&2
+    exit 1
+  fi
+  cp -a "$stage/console-bundle/public/." "$stage/console/"
+  rm -rf -- "$stage/console-bundle"
+fi
 
 (
   cd "$stage"
@@ -93,6 +159,9 @@ rm -rf -- "$stage/console-bundle"
     xargs -0 -r sha256sum > SHA256SUMS
   printf 'source_revision=%s\n' "$revision" > RELEASE
   printf 'build_utc=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> RELEASE
+  if [[ "$mode" == component ]]; then
+    printf 'component=%s\n' "$component" >> RELEASE
+  fi
 )
 
 # Artifacts contain no runtime credentials. Allow isolated DynamicUser

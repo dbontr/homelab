@@ -43,20 +43,46 @@ if [[ -n "$(find "$release" -perm /022 -print -quit)" ]]; then
 fi
 
 mapfile -t metadata < "$release/RELEASE"
-if [[ ${#metadata[@]} -ne 2 ||
+if [[ ( ${#metadata[@]} -ne 2 && ${#metadata[@]} -ne 3 ) ||
       ! ${metadata[0]} =~ ^source_revision=[a-f0-9]{40}$ ||
       ! ${metadata[1]} =~ ^build_utc=[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]; then
-  printf '%s\n' 'Release provenance requires an exact Git commit and UTC build timestamp' >&2
+  printf '%s\n' 'Release provenance requires an exact Git revision and UTC timestamp' >&2
   exit 1
 fi
 
-# Only the declared native executable set may reside in the binary directory.
-expected=(
+declared=(
   homelab-platform homelab-calendard homelab-engineeringd homelab-approve homelab-securityd
   homelab-executord homelab-release homelab-admin homelab-compute-controller
   homelab-compute-worker homelab-learning homelab-health
   homelab-mcp homelab-api
 )
+expected=( "${declared[@]}" )
+component=""
+if [[ ${#metadata[@]} -eq 3 ]]; then
+  if [[ ${metadata[2]} != component=* ]]; then
+    printf '%s\n' 'Unexpected release metadata' >&2
+    exit 1
+  fi
+  component=${metadata[2]#component=}
+  if [[ "$component" == homelab-console ]]; then
+    expected=()
+  else
+    recognized=false
+    for name in "${declared[@]}"; do
+      if [[ "$name" == "$component" ]]; then
+        recognized=true
+        break
+      fi
+    done
+    if [[ "$recognized" != true ]]; then
+      printf '%s\n' 'Release declares an unsupported component' >&2
+      exit 1
+    fi
+    expected=("$component")
+  fi
+fi
+
+# Only the declared executable set may reside in the binary directory.
 for binary in "${expected[@]}"; do
   if [[ ! -f "$release/bin/$binary" || -L "$release/bin/$binary" ||
         ! -x "$release/bin/$binary" ]]; then
@@ -70,10 +96,17 @@ if [[ "$count" -ne "${#expected[@]}" ||
   printf '%s\n' 'Release contains undeclared native components' >&2
   exit 1
 fi
-if [[ ! -s "$release/console/index.html" ||
-      -L "$release/console/index.html" ]]; then
-  printf '%s\n' 'Release has no verified console entrypoint' >&2
-  exit 1
+if [[ -n "$component" && "$component" != homelab-console ]]; then
+  if [[ -n "$(find "$release/console" -mindepth 1 -print -quit)" ]]; then
+    printf '%s\n' 'Native component release contains undeclared console assets' >&2
+    exit 1
+  fi
+else
+  if [[ ! -s "$release/console/index.html" ||
+        -L "$release/console/index.html" ]]; then
+    printf '%s\n' 'Release has no verified console entrypoint' >&2
+    exit 1
+  fi
 fi
 
 umask 077
