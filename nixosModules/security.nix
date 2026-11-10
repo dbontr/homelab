@@ -95,6 +95,16 @@ in
             alias = lib.mkOption { type = lib.types.str; };
             provider = lib.mkOption { type = lib.types.str; };
             handle = lib.mkOption { type = lib.types.str; };
+            revision = lib.mkOption {
+              type = lib.types.nullOr lib.types.str;
+              default = null;
+              description = "Expected SHA-256 vault record revision; omit only for an implicit process-lifetime snapshot.";
+            };
+            expiresAt = lib.mkOption {
+              type = lib.types.nullOr lib.types.str;
+              default = null;
+              description = "Optional RFC 3339 expiration for this specific client/alias grant.";
+            };
           };
         });
       };
@@ -226,6 +236,8 @@ in
             alias = grant.alias;
             provider = grant.provider;
             handle = grant.handle;
+            revision = grant.revision;
+            expires_at = grant.expiresAt;
           }) cfg.remote.serviceCredentialGrants);
       } // lib.optionalAttrs cfg.oauth.enable {
         HOMELAB_SECURITY_OAUTH_PROVIDERS = builtins.toJSON cfg.oauth.providers;
