@@ -85,9 +85,10 @@ fn decrypt(key: &[u8; 32], record: &EncryptedCredential) -> Result<Vec<u8>, Erro
 
 impl Vault {
     pub(crate) fn open(store: &StateStore, key: [u8; 32]) -> Result<Self, Error> {
+        let protected_key = Zeroizing::new(key);
         let Some(bytes) = store.load_vault()? else {
             return Ok(Self {
-                key,
+                key: *protected_key,
                 records: BTreeMap::new(),
             });
         };
@@ -109,7 +110,7 @@ impl Vault {
             }
             // Authentication tags are checked when the credential is used.
         }
-        Ok(Self { key, records })
+        Ok(Self { key: *protected_key, records })
     }
 
     fn seal(&self, provider: &str, id: &str, secret: &[u8], created_at: String)
