@@ -335,6 +335,8 @@ in
     systemd.services.homelab-executor-recovery = lib.mkIf
       (cfg.implementation == "rust" && cfg.allowReleaseActivation) {
       description = "Recover interrupted NixOS generation from the private release journal";
+      conflicts = [ "homelab-executord.service" ];
+      after = [ "homelab-executord.service" ];
       environment = config.systemd.services.homelab-executord.environment;
       serviceConfig = {
         Type = "oneshot";
