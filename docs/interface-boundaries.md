@@ -26,7 +26,7 @@ The platform acquires nonblocking operating-system file locks for the task store
 
 The independent NixOS UI uses same-origin private resource and owner-session routes. It does not insert a service administrator bearer into browser requests. The MCP and API listeners each authenticate a distinct external bearer and replace it with a separately configured service transport credential when requesting private operations. Caller-controlled authorization cookies and forwarding headers never cross that boundary. The domain runtime enforces separate MCP-only and API-only credentials, checks API write-path scopes again, and rejects tool calls made using the API service identity. Write requests through the optional API are denied unless the specific native path prefix is configured; privileged tool invocation is unavailable through that API.
 
-A service backend address is fixed at process startup and must be a numeric loopback HTTP origin. The public listener also binds loopback. The platform's administrator bearer is not loaded into the MCP or API processes. Explicit ingress configuration, TLS, allowlisted origins and owner authentication remain separate infrastructure responsibilities.
+A service backend address is fixed at process startup and must be a numeric loopback HTTP origin. The public listener also binds loopback. The platform's administrator bearer is not loaded into the MCP or API processes. Without an independent owner-security service, privileged operations are unavailable; administrator-only backend tools cannot be forwarded directly. Explicit ingress configuration, TLS, allowlisted origins and owner authentication remain separate infrastructure responsibilities.
 
 ## Availability
 
