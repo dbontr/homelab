@@ -60,7 +60,7 @@ func usbSysfsPath(devicePath string, info os.FileInfo) (string, error) {
 // The Go implementation is retained for the deployed compatibility path until
 // the native helper is present and selected by the host operator.
 func usbDockerMapping(configured string) (string, uint32, error) {
-    native := os.Getenv("PWM_NATIVE_USB_HELPER")
+    native := os.Getenv("PWM_NATIVE_HARDWARE_HELPER")
     if native == "" {
         return usbDockerMappingGo(configured)
     }

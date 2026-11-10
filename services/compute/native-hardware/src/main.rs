@@ -1,5 +1,7 @@
 //! Validate a leased USB device at the worker's native execution boundary.
 //! The caller controls scheduling; this binary checks the live Linux identity.
+mod char;
+
 use std::env;
 use std::fs;
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
@@ -121,7 +123,8 @@ fn main() {
     let args: Vec<String> = env::args().skip(1).collect();
     let result = match args.as_slice() {
         [verb, alias] if verb == "map-usb" => map_usb(alias),
-        _ => Err("usage: homelab-native-hardware map-usb APPROVED_ALIAS"),
+        [verb, kind, path] if verb == "map-char" => char::map_char(kind, path),
+        _ => Err("usage: homelab-native-hardware <map-usb ALIAS | map-char KIND PATH>"),
     };
     match result {
         Ok((resolved, group)) => println!("{resolved}\n{group}"),

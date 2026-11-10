@@ -22,7 +22,7 @@ func TestNativeUSBMappingUsesConfiguredHelperWithoutGoFallback(t *testing.T) {
             t.Fatal(err)
         }
     }
-    t.Setenv("PWM_NATIVE_USB_HELPER", helper)
+    t.Setenv("PWM_NATIVE_HARDWARE_HELPER", helper)
     write("/dev/ttyUSB0\\n27\\n", true)
     device, group, err := usbDockerMapping("/dev/serial/by-id/usb-operator-approved")
     if err != nil || device != "/dev/ttyUSB0" || group != 27 {
@@ -47,8 +47,16 @@ func TestNativeUSBMappingUsesConfiguredHelperWithoutGoFallback(t *testing.T) {
 }
 
 func TestConfiguredNativeUSBHelperRequiresAbsoluteExecutable(t *testing.T) {
-    t.Setenv("PWM_NATIVE_USB_HELPER", "./unsafe-helper")
+    t.Setenv("PWM_NATIVE_HARDWARE_HELPER", "./unsafe-helper")
     if _, _, err := usbDockerMapping("/dev/bus/usb/001/001"); err == nil {
         t.Fatal("relative native executable accepted")
+    }
+}
+
+func TestNativeCharacterDeviceRequiresOperatorPolicy(t *testing.T) {
+    t.Setenv("PWM_NATIVE_HARDWARE_HELPER", "/bin/false")
+    t.Setenv("PWM_NATIVE_DEVICE_POLICY", "")
+    if err := nativeCharMapping("fpga", "/dev/uio0"); err == nil {
+        t.Fatal("native character device admitted without immutable policy")
     }
 }
