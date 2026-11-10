@@ -52,7 +52,7 @@ fi
 
 # Only the declared native executable set may reside in the binary directory.
 expected=(
-  homelab-platform homelab-engineeringd homelab-approve homelab-securityd
+  homelab-platform homelab-calendard homelab-engineeringd homelab-approve homelab-securityd
   homelab-executord homelab-release homelab-admin homelab-compute-controller
   homelab-compute-worker homelab-learning homelab-health
   homelab-mcp homelab-api
