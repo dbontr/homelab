@@ -86,6 +86,42 @@ pub enum Decision {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct AuthorizationWire {
+    pub allowed: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub confirmation_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub confirmation_expires_at: Option<String>,
+}
+
+impl From<Decision> for AuthorizationWire {
+    fn from(decision: Decision) -> Self {
+        match decision {
+            Decision::Allowed => Self {
+                allowed: true,
+                reason: None,
+                confirmation_id: None,
+                confirmation_expires_at: None,
+            },
+            Decision::Denied(reason) => Self {
+                allowed: false,
+                reason: Some(reason.to_owned()),
+                confirmation_id: None,
+                confirmation_expires_at: None,
+            },
+            Decision::Confirmation { id, expires_at } => Self {
+                allowed: false,
+                reason: Some("confirmation required".into()),
+                confirmation_id: Some(id),
+                confirmation_expires_at: Some(wire_time(expires_at)),
+            },
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct ConfirmationPreview {
     pub id: String,
     pub operation: String,
@@ -817,6 +853,26 @@ mod tests {
             );
         }
         assert!(!authority.status_at("principal-a", 9_000 + ABSOLUTE_SECONDS).active);
+    }
+
+    #[test]
+    fn serialization_matches_client_authorization_contract() {
+        let approved: AuthorizationWire = Decision::Allowed.into();
+        assert_eq!(serde_json::to_string(&approved).unwrap(), r#"{"allowed":true}"#);
+        let rejected: AuthorizationWire =
+            Decision::Denied("owner authentication required").into();
+        assert_eq!(
+            serde_json::to_string(&rejected).unwrap(),
+            r#"{"allowed":false,"reason":"owner authentication required"}"#
+        );
+        let pending: AuthorizationWire = Decision::Confirmation {
+            id: "abc".into(),
+            expires_at: 1_770_000_000,
+        }.into();
+        let response = serde_json::to_value(&pending).unwrap();
+        assert_eq!(response["allowed"], false);
+        assert_eq!(response["confirmation_id"], "abc");
+        assert_eq!(response["confirmation_expires_at"], "2026-02-02T02:40:00Z");
     }
 
     #[test]
