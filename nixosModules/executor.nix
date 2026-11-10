@@ -2,6 +2,8 @@
 let
   cfg = config.services.homelabExecutor;
   package = import ../packages/executor.nix { inherit pkgs; };
+  rustPackage = import ../packages/executor-authority.nix { inherit pkgs; };
+  rustActuatorEnabled = cfg.useRustActuator || cfg.implementation == "rust";
   rustActuator = import ../packages/actuator.nix { inherit pkgs; };
   serviceAllowlist = pkgs.writeText "homelab-rust-service-policy" ((lib.concatStringsSep "\n" cfg.allowedServices) + "\n");
   deploymentNames = lib.concatLists (lib.mapAttrsToList
@@ -12,6 +14,11 @@ in
 {
   options.services.homelabExecutor = {
     enable = lib.mkEnableOption "restricted independent local executor";
+    implementation = lib.mkOption {
+      type = lib.types.enum [ "go" "rust" ];
+      default = "go";
+      description = "Select the independently accepted privileged executor implementation.";
+    };
     package = lib.mkOption {
       type = lib.types.package;
       default = package;
@@ -147,6 +154,8 @@ in
   };
   config = lib.mkIf cfg.enable {
     assertions = [
+      { assertion = cfg.implementation != "rust" || builtins.pathExists ../services/executor/Cargo.lock;
+        message = "Rust executor requires a checked-in reviewed Cargo.lock."; }
       {
         assertion = cfg.authorization.remote.enable ||
           (config.services.homelabSecurity.enable &&
@@ -219,7 +228,7 @@ in
       export HOMELAB_RELEASE_SYSTEMCTL=${lib.escapeShellArg ("${pkgs.systemd}/bin/systemctl")}
       export HOMELAB_RELEASE_HEALTH_FILE=${lib.escapeShellArg (pkgs.writeText "homelab-release-health.json" (builtins.toJSON cfg.healthServices))}
       exec ${cfg.package}/bin/homelab-release "$@"
-    '') ];
+    '') ] ++ lib.optional (cfg.implementation == "rust") rustPackage;
     systemd.services.homelab-executord = {
       description = "Restricted local infrastructure executor";
       wantedBy = [ "multi-user.target" ];
@@ -238,7 +247,7 @@ in
         HOMELAB_EXECUTOR_SYSTEMCTL = "${pkgs.systemd}/bin/systemctl";
         HOMELAB_EXECUTOR_SERVICES_FILE = pkgs.writeText "homelab-executor-services.json" (builtins.toJSON cfg.allowedServices);
         HOMELAB_EXECUTOR_HEALTH_FILE = pkgs.writeText "homelab-executor-health.json" (builtins.toJSON cfg.healthServices);
-      } // lib.optionalAttrs cfg.useRustActuator {
+      } // lib.optionalAttrs rustActuatorEnabled {
         HOMELAB_EXECUTOR_RUST_ACTUATOR = "${rustActuator}/bin/homelab-actuator";
         HOMELAB_EXECUTOR_RUST_SERVICES = serviceAllowlist;
         HOMELAB_EXECUTOR_RUST_KUBERNETES = deploymentAllowlist;
@@ -285,7 +294,9 @@ in
         StateDirectoryMode = "0700";
         RuntimeDirectory = "homelab-executord";
         RuntimeDirectoryMode = "0750";
-        ExecStart = "${cfg.package}/bin/homelab-executord";
+        ExecStart = if cfg.implementation == "rust"
+          then "${rustPackage}/bin/executord"
+          else "${cfg.package}/bin/homelab-executord";
         LoadCredential = lib.optionals cfg.authorization.remote.enable [
           "auth-cert:${cfg.authorization.remote.certificateFile}"
           "auth-key:${cfg.authorization.remote.keyFile}"
@@ -317,6 +328,26 @@ in
         RestrictNamespaces = !cfg.allowReleaseActivation;
         RestrictSUIDSGID = true;
         LockPersonality = true;
+      };
+    };
+    # This unit is not started automatically. It requires the active executor
+    # to stop and release its state lease before recovery can begin.
+    systemd.services.homelab-executor-recovery = lib.mkIf
+      (cfg.implementation == "rust" && cfg.allowReleaseActivation) {
+      description = "Recover interrupted NixOS generation from the private release journal";
+      environment = config.systemd.services.homelab-executord.environment;
+      serviceConfig = {
+        Type = "oneshot";
+        User = "root";
+        Group = "root";
+        StateDirectory = "homelab-releases";
+        StateDirectoryMode = "0700";
+        ExecStart = "${rustPackage}/bin/recovery recover";
+        UMask = "0077";
+        NoNewPrivileges = false;
+        PrivateTmp = true;
+        ProtectHome = true;
+        RestrictAddressFamilies = [ "AF_UNIX" ];
       };
     };
   };
