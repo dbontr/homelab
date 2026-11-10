@@ -57,7 +57,6 @@ impl Default for Profile {
             next_step: String::new(),
             intensity: Intensity::Guided,
             daily_limit: 4,
-            proactive_enabled: false, cadence_minutes: 240, holdout_weekday_utc: None,
             quiet_start_utc_hour: 0,
             quiet_end_utc_hour: 0,
         }
