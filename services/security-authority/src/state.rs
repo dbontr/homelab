@@ -138,6 +138,11 @@ impl StateStore {
         !self.faulted
     }
 
+    #[cfg(test)]
+    pub(crate) fn fault_for_test(&mut self) {
+        self.faulted = true;
+    }
+
     pub fn load_authenticator(&self) -> Result<AuthenticatorState, Error> {
         if self.faulted {
             return Err(Error::Storage);
