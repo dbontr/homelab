@@ -6,7 +6,7 @@ import (
 	"net"
 	"net/http"
 	"path/filepath"
-	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/dbontr/homelab-new/system/privileged"
@@ -19,14 +19,15 @@ func TestPrivilegedToolResponsesPreserveExecutionState(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer listener.Close()
-	outcome := `{"allowed":true,"state":"accepted","audit_id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}`
+	var outcome atomic.Value
+	outcome.Store(`{"allowed":true,"state":"accepted","audit_id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}`)
 	srv := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost || r.URL.Path != "/v1/execute" {
 			http.NotFound(w, r)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(outcome))
+		_, _ = w.Write([]byte(outcome.Load().(string)))
 	})}
 	defer srv.Close()
 	go func() { _ = srv.Serve(listener) }()
@@ -60,17 +61,14 @@ func TestPrivilegedToolResponsesPreserveExecutionState(t *testing.T) {
 	if got["accepted"] != true || got["state"] != "accepted" || got["executed"] != nil {
 		t.Fatalf("submitted action was misreported as completed: %+v", got)
 	}
-	outcome = `{"allowed":true,"state":"completed","audit_id":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}`
+	outcome.Store(`{"allowed":true,"state":"completed","audit_id":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}`)
 	got = decode(call())
 	if got["executed"] != true || got["completed"] != true || got["state"] != "completed" {
 		t.Fatalf("verified execution was not reported: %+v", got)
 	}
-	outcome = `{"allowed":true}`
+	outcome.Store(`{"allowed":true}`)
 	response := call()
 	if failed, _ := response["isError"].(bool); !failed {
 		t.Fatalf("invalid executor response was trusted: %+v", response)
-	}
-	if strings.Contains(outcome, "credential") {
-		t.Fatal("unexpected credential content in fixture")
 	}
 }
