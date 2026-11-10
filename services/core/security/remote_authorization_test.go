@@ -12,6 +12,7 @@ import (
  "net/http"
  "net/http/httptest"
  "strings"
+ "sync/atomic"
  "testing"
  "time"
 )
@@ -92,5 +93,42 @@ func TestSecurityAuthorizationServerRejectsPublicListener(t *testing.T){
  manager:=&AdminSessions{}
  if err:=manager.ServeAuthorizationTLS(context.Background(),"0.0.0.0:443",serverCert,roots,[]string{"jupiter.internal"});err==nil{
   t.Fatal("wildcard security listener accepted")
+ }
+}
+
+func TestRemoteAuthorizationEnforcesEntireResponseBoundary(t *testing.T){
+ var mode atomic.Int32
+ const valid=`{"allowed":true}`
+ cfg,_,_,closeServer:=remoteAuthFixture(t,http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){
+  w.Header().Set("Content-Type","application/json")
+  switch mode.Load(){
+  case 0:
+   _,_=w.Write([]byte(valid+strings.Repeat(" ",8192-len(valid))))
+  case 1:
+   _,_=w.Write([]byte(valid+strings.Repeat(" ",8193-len(valid))))
+  case 2:
+   w.Header().Set("X-Oversized-Authorization-Header",strings.Repeat("x",17<<10))
+   _,_=w.Write([]byte(valid))
+  case 3:
+   _,_=w.Write([]byte(valid+valid))
+  }
+ }))
+ defer closeServer()
+ client,err:=NewRemoteAuthorizationClient(cfg)
+ if err!=nil{t.Fatal(err)}
+ ctx:=WithAccessAssertion(context.Background(),"signed-owner")
+ for _,tc:=range []struct{name string;mode int32;accepted bool}{
+  {"exact bound",0,true},{"oversized valid prefix",1,false},
+  {"oversized upstream header",2,false},{"multiple JSON objects",3,false},
+ }{
+  t.Run(tc.name,func(t *testing.T){
+   mode.Store(tc.mode)
+   decision,err:=client.Authorize(ctx,"infrastructure__service_restart","jupiter",json.RawMessage(`{"host":"jupiter"}`))
+   if tc.accepted{
+    if err!=nil||!decision.Allowed{t.Fatalf("valid bounded response rejected: %+v %v",decision,err)}
+   }else if err==nil||decision.Allowed{
+    t.Fatalf("malformed or oversized response admitted: %+v %v",decision,err)
+   }
+  })
  }
 }

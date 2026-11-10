@@ -33,7 +33,10 @@ func NewRemoteAuthorizationClient(cfg RemoteAuthorizationConfig)(*RemoteAuthoriz
   return nil,errors.New("invalid remote authorizer configuration")
  }
  transport:=&http.Transport{Proxy:nil,DisableKeepAlives:true,
+  DialContext:(&net.Dialer{Timeout:3*time.Second}).DialContext,
   TLSClientConfig:&tls.Config{MinVersion:tls.VersionTLS13,RootCAs:cfg.TrustRoots,ServerName:cfg.ServerName,Certificates:[]tls.Certificate{cfg.Certificate}},
+  TLSHandshakeTimeout:5*time.Second,
+  MaxResponseHeaderBytes:16<<10,
   ResponseHeaderTimeout:5*time.Second}
  client:=&http.Client{Transport:transport,Timeout:10*time.Second,CheckRedirect:func(*http.Request,[]*http.Request)error{return errors.New("authorization redirect denied")}}
  return &RemoteAuthorizationClient{client:client,endpoint:strings.TrimSuffix(u.String(),"/")},nil
@@ -67,8 +70,14 @@ func(c *RemoteAuthorizationClient)requestDecision(ctx context.Context,path,opera
  if err!=nil{return Authorization{},fmt.Errorf("remote security service unavailable: %w",err)}
  defer response.Body.Close()
  if response.StatusCode!=http.StatusOK{return Authorization{},errors.New("remote security service refused authorization")}
+ const maxAuthorizationResponse=8192
+ payload,err:=io.ReadAll(io.LimitReader(response.Body,maxAuthorizationResponse+1))
+ if err!=nil||len(payload)>maxAuthorizationResponse{
+  return Authorization{},errors.New("remote authorization response exceeds size limit")
+ }
  var result Authorization
- decoder:=json.NewDecoder(io.LimitReader(response.Body,8193));decoder.DisallowUnknownFields()
+ decoder:=json.NewDecoder(bytes.NewReader(payload))
+ decoder.DisallowUnknownFields()
  if err:=decoder.Decode(&result);err!=nil{return Authorization{},errors.New("invalid remote authorization result")}
  var extra any
  if err:=decoder.Decode(&extra);err!=io.EOF{return Authorization{},errors.New("invalid remote authorization result")}
