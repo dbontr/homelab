@@ -89,8 +89,8 @@ impl ServiceCredentialPolicy {
             }
             let revision = vault.revision(&grant.handle, &grant.provider)
                 .map_err(|_| Error::InvalidConfiguration)?;
-            if grant.revision.as_deref().is_some_and(|expected| expected != revision)
-                || (grant.revision.is_some() && !valid_revision(&revision))
+            if grant.revision.as_deref().is_some_and(|expected|
+                !valid_revision(expected) || expected != revision)
             {
                 return Err(Error::InvalidConfiguration);
             }
@@ -186,6 +186,12 @@ mod tests {
             expires_at: None,
             }], &vault),
             Err(Error::InvalidConfiguration)
+        ));
+        // Rotation under the same opaque handle invalidates the pinned grant.
+        vault.rotate(&mut state, &handle.id, "research", b"replacement").unwrap();
+        assert!(matches!(
+            policy.use_credential(&allowed, "provider_token", &vault, |_| ()),
+            Err(Error::Unauthorized)
         ));
         drop(vault);
         drop(state);
