@@ -44,6 +44,9 @@ pub struct EngagementSummary {
     pub mean_fascination: f64,
     pub mean_wellbeing: f64,
     pub interventions_with_feedback: usize,
+    pub focus_completed: usize,
+    pub focus_abandoned: usize,
+    pub focus_elapsed_minutes: u64,
 }
 
 // Check-ins are observations made by the owner, not independent evidence of mastery.
@@ -153,6 +156,16 @@ impl Engine {
             interventions_with_feedback: self.state.interventions.iter()
                 .filter(|event| event.feedback.as_ref().is_some_and(|f|
                     f.recorded_at >= start && f.recorded_at <= now)).count(),
+            focus_completed: self.state.focus_sessions.iter().filter(|s|
+                s.started_at >= start && s.started_at <= now &&
+                s.status == crate::FocusStatus::Completed).count(),
+            focus_abandoned: self.state.focus_sessions.iter().filter(|s|
+                s.started_at >= start && s.started_at <= now &&
+                s.status == crate::FocusStatus::Abandoned).count(),
+            focus_elapsed_minutes: self.state.focus_sessions.iter()
+                .filter(|s| s.started_at >= start && s.started_at <= now)
+                .filter_map(|s| s.ended_at.map(|end| end.saturating_sub(s.started_at)/60))
+                .sum(),
         };
         if n != 0 {
             summary.mean_fascination = recent.iter()

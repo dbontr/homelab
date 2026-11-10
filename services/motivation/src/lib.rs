@@ -1,5 +1,7 @@
 mod conditioning;
+mod focus;
 pub use conditioning::{Checkin, CheckinInput, EngagementSummary};
+pub use focus::{FocusSession, FocusStatus, FocusStart, FocusFinish};
 
 use fs2::FileExt;
 use serde::{Deserialize, Serialize};
@@ -162,6 +164,10 @@ pub struct Record {
     pub interventions: Vec<Intervention>,
     #[serde(default)]
     pub checkins: Vec<Checkin>,
+    #[serde(default)]
+    pub focus_sessions: Vec<FocusSession>,
+    #[serde(default = "focus::initial_id")]
+    pub next_focus_id: u64,
     pub next_id: u64,
 }
 
@@ -171,6 +177,8 @@ impl Default for Record {
             profile: Profile::default(),
             interventions: Vec::new(),
             checkins: Vec::new(),
+            focus_sessions: Vec::new(),
+            next_focus_id: focus::initial_id(),
             next_id: 1,
         }
     }
@@ -316,7 +324,11 @@ impl Engine {
         };
         validate_profile(&profile)?;
         let mut next = self.state.clone();
+        let changed_goal = next.profile.identity != profile.identity ||
+            next.profile.outcome != profile.outcome ||
+            next.profile.next_step != profile.next_step;
         next.profile = profile;
+        if changed_goal { focus::supersede_active(&mut next.focus_sessions, unix_seconds()); }
         for event in &mut next.interventions {
             if event.feedback.is_none() { event.cancelled = true; }
         }
@@ -450,6 +462,7 @@ fn validate_record(record: &Record) -> Result<(), Error> {
     if record.interventions.len() > MAX_EVENTS || record.next_id == 0 ||
         record.checkins.len() > MAX_CHECKINS ||
         !conditioning::valid_checkins(&record.checkins, record.next_id) ||
+        !focus::valid_sessions(&record.focus_sessions, record.next_focus_id) ||
         record.interventions.iter().any(|e| e.id >= record.next_id ||
             e.message.chars().count() > 1600 ||
             e.feedback.as_ref().is_some_and(|f| f.engagement > 5 ||
