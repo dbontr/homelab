@@ -12,6 +12,7 @@ use sha2::{Digest, Sha256};
 use crate::credentials::{AuthenticatorState, Factors, PassphraseRecord};
 use crate::state::StateStore;
 use crate::vault::{CredentialHandle, Vault};
+use crate::grants::{ServiceCredentialGrant, ServiceCredentialPolicy, VerifiedServiceIdentity};
 use crate::Error;
 
 const IDLE_SECONDS: i64 = 120 * 60;
@@ -105,6 +106,7 @@ pub struct Authority {
     session: Option<Session>,
     pending: BTreeMap<String, Confirmation>,
     vault: Option<Vault>,
+    service_grants: Option<ServiceCredentialPolicy>,
     access: Option<AccessVerifier>,
     gateway_audience: String,
     browser_audience: Option<String>,
@@ -236,6 +238,7 @@ impl Authority {
             session: None,
             pending: BTreeMap::new(),
             vault: None,
+            service_grants: None,
             access: None,
             gateway_audience: String::new(),
             browser_audience: None,
@@ -328,8 +331,34 @@ impl Authority {
         if self.vault.is_some() {
             return Err(Error::InvalidConfiguration);
         }
-        self.vault = Some(Vault::open(&self.store, key)?);
+        let vault = Vault::open(&self.store, key)?;
+        vault.validate_all()?;
+        self.vault = Some(vault);
         Ok(())
+    }
+
+    /// Service grants must bind a validated TLS identity, alias and vault handle.
+    pub fn configure_service_grants(
+        &mut self,
+        grants: Vec<ServiceCredentialGrant>,
+    ) -> Result<(), Error> {
+        if self.service_grants.is_some() {
+            return Err(Error::InvalidConfiguration);
+        }
+        let vault = self.vault.as_ref().ok_or(Error::InvalidConfiguration)?;
+        self.service_grants = Some(ServiceCredentialPolicy::new(grants, vault)?);
+        Ok(())
+    }
+
+    pub(crate) fn use_service_credential<T>(
+        &self,
+        peer: &VerifiedServiceIdentity,
+        alias: &str,
+        use_secret: impl FnOnce(&[u8]) -> T,
+    ) -> Result<T, Error> {
+        let policy = self.service_grants.as_ref().ok_or(Error::Unauthorized)?;
+        let vault = self.vault.as_ref().ok_or(Error::Unauthorized)?;
+        policy.use_credential(peer, alias, vault, use_secret)
     }
 
     /// Owner-only credential enrollment is gated by an active owner session
