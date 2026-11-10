@@ -52,7 +52,9 @@ func TestOwnerTransportProxiesExactRoutesWithoutCallerHeaders(t *testing.T){
 func TestMotivationAdmitsOnlyDomainOperations(t *testing.T){
  if !admitted("GET","/v1/motivation/metrics") ||
   !admitted("POST","/v1/motivation/checkins") ||
-  !admitted("POST","/v1/motivation/dismiss") {
+  !admitted("POST","/v1/motivation/dismiss") ||
+  !admitted("POST","/v1/motivation/focus") ||
+  !admitted("POST","/v1/motivation/focus/end") {
   t.Fatal("expected motivation operations are not admitted")
  }
  for _,path:=range []string{

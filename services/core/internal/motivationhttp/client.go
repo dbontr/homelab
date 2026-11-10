@@ -59,7 +59,9 @@ func admitted(method,path string)bool{
       "POST /v1/motivation/feedback",
       "POST /v1/motivation/checkins",
       "POST /v1/motivation/dismiss",
-      "GET /v1/motivation/metrics":
+      "GET /v1/motivation/metrics",
+      "POST /v1/motivation/focus",
+      "POST /v1/motivation/focus/end":
   return true
  }
  return false
@@ -114,6 +116,8 @@ func Register(mux *http.ServeMux,client *Client){
   {"POST","/v1/motivation/checkins"},
   {"POST","/v1/motivation/dismiss"},
   {"GET","/v1/motivation/metrics"},
+  {"POST","/v1/motivation/focus"},
+  {"POST","/v1/motivation/focus/end"},
  }
  for _,route:=range routes {
   method,path:=route.method,route.path

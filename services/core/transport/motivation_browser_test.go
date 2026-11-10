@@ -70,6 +70,7 @@ func TestMotivationBrowserRoutesRequireOwnerSessionAndCSRF(t *testing.T) {
         {"PUT","/v1/motivation/profile"},{"POST","/v1/motivation/pause"},
         {"POST","/v1/motivation/interventions"},{"POST","/v1/motivation/feedback"},
         {"POST","/v1/motivation/checkins"},{"POST","/v1/motivation/dismiss"},
+        {"POST","/v1/motivation/focus"},{"POST","/v1/motivation/focus/end"},
     }
     for _,item:=range cases {
         if w:=call(item.method,item.path,"{}",cookie,"");w.Code!=401 {
@@ -79,7 +80,7 @@ func TestMotivationBrowserRoutesRequireOwnerSessionAndCSRF(t *testing.T) {
             t.Fatalf("authorized call %s %s: %d %s",item.method,item.path,w.Code,w.Body.String())
         }
     }
-    if len(calls)!=8 {t.Fatalf("expected eight authorized upstream calls, got %v",calls)}
+    if len(calls)!=10 {t.Fatalf("expected ten authorized upstream calls, got %v",calls)}
     if w:=call("POST","/mcp",`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`,cookie,sessionState.CSRF);w.Code!=401 {
         t.Fatal("browser session reached MCP")
     }

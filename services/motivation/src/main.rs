@@ -7,7 +7,7 @@ use axum::{
     routing::{get, post, put},
 };
 use homelab_motivation::{
-    CheckinInput, EngagementSummary, Engine, Error, FeedbackInput, Intervention,
+    CheckinInput, EngagementSummary, Engine, Error, FeedbackInput, FocusFinish, FocusSession, FocusStart, Intervention,
     ProfileChange, Record, SuggestRequest, unix_seconds,
 };
 use serde_json::{Value, json};
@@ -103,6 +103,16 @@ async fn metrics(State(app): State<App>) -> Result<Json<EngagementSummary>, ApiE
     with_engine(&app, |engine| Ok(engine.metrics(unix_seconds()))).map(Json)
 }
 
+async fn focus_start(
+    State(app): State<App>, Json(request): Json<FocusStart>,
+) -> Result<Json<FocusSession>, ApiError> {
+    with_engine(&app, |engine| engine.start_focus(request, unix_seconds())).map(Json)
+}
+async fn focus_finish(
+    State(app): State<App>, Json(request): Json<FocusFinish>,
+) -> Result<Json<Record>, ApiError> {
+    with_engine(&app, |engine| engine.finish_focus(request, unix_seconds())).map(Json)
+}
 async fn healthz() -> Json<Value> { Json(json!({"status":"ok"})) }
 
 fn read_token(path: &Path) -> Result<String, Box<dyn std::error::Error>> {
@@ -153,6 +163,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/v1/motivation/dismiss", post(dismiss))
         .route("/v1/motivation/checkins", post(checkin))
         .route("/v1/motivation/metrics", get(metrics))
+        .route("/v1/motivation/focus", post(focus_start))
+        .route("/v1/motivation/focus/end", post(focus_finish))
         .route_layer(middleware::from_fn_with_state(app.clone(), authenticate));
     let router = Router::new().merge(protected)
         .route("/healthz", get(healthz))
