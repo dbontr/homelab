@@ -164,7 +164,8 @@ impl Engine {
                 s.status == crate::FocusStatus::Abandoned).count(),
             focus_elapsed_minutes: self.state.focus_sessions.iter()
                 .filter(|s| s.started_at >= start && s.started_at <= now)
-                .filter_map(|s| s.ended_at.map(|end| end.saturating_sub(s.started_at)/60))
+                .filter_map(|s| s.ended_at.map(|end|
+                    (end.saturating_sub(s.started_at) / 60).min(u64::from(s.target_minutes))))
                 .sum(),
         };
         if n != 0 {

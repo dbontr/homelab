@@ -32,4 +32,6 @@ The optional NixOS service module provides process isolation, a private state di
 
 Run Rust formatting, unit tests, Clippy, HTTP integration tests, core Go tests, Dioxus WASM build, NixOS evaluation and isolated recovery checks. Validate revoked permissions, request limits, authentication, state continuity, exclusive file ownership, quiet hours and holdouts. Code availability is not production acceptance.
 
+The owner can additionally start a 10–240 minute focus commitment on the profile's current concrete step. The service records start and end times, self-reported completion or deliberate early exit, and an optional reflection. An early exit ordinarily requests a short reason, with an immediate exit option that requires none. Goal revisions supersede active commitments without recording a false failure. Elapsed focus intervals are capped at the declared duration in summary statistics and must not be interpreted as independently verified work.
+
 Long-term progress is measured by independently demonstrated competence and freely initiated intellectual work, not the number of motivational prompts displayed.
