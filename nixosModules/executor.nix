@@ -2,6 +2,12 @@
 let
   cfg = config.services.homelabExecutor;
   package = import ../packages/executor.nix { inherit pkgs; };
+  rustActuator = import ../packages/actuator.nix { inherit pkgs; };
+  serviceAllowlist = pkgs.writeText "homelab-rust-service-policy" ((lib.concatStringsSep "\n" cfg.allowedServices) + "\n");
+  deploymentNames = lib.concatLists (lib.mapAttrsToList
+    (namespace: names: map (name: "${namespace}/${name}") names)
+    cfg.kubernetes.namespaces);
+  deploymentAllowlist = pkgs.writeText "homelab-rust-deployment-policy" ((lib.concatStringsSep "\n" deploymentNames) + "\n");
 in
 {
   options.services.homelabExecutor = {
@@ -123,6 +129,11 @@ in
         description = "Maximum allowed replica count for a single deployment scale action.";
       };
     };
+    useRustActuator = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "Execute only exact allowlisted systemd and Kubernetes actions through the isolated Rust command runner.";
+    };
     allowedServices = lib.mkOption {
       type = lib.types.listOf lib.types.str;
       default = [];
@@ -227,6 +238,11 @@ in
         HOMELAB_EXECUTOR_SYSTEMCTL = "${pkgs.systemd}/bin/systemctl";
         HOMELAB_EXECUTOR_SERVICES_FILE = pkgs.writeText "homelab-executor-services.json" (builtins.toJSON cfg.allowedServices);
         HOMELAB_EXECUTOR_HEALTH_FILE = pkgs.writeText "homelab-executor-health.json" (builtins.toJSON cfg.healthServices);
+      } // lib.optionalAttrs cfg.useRustActuator {
+        HOMELAB_EXECUTOR_RUST_ACTUATOR = "${rustActuator}/bin/homelab-actuator";
+        HOMELAB_EXECUTOR_RUST_SERVICES = serviceAllowlist;
+        HOMELAB_EXECUTOR_RUST_KUBERNETES = deploymentAllowlist;
+        HOMELAB_EXECUTOR_RUST_MAX_REPLICAS = toString cfg.kubernetes.maxReplicas;
       } // lib.optionalAttrs cfg.authorization.remote.enable {
         HOMELAB_EXECUTOR_AUTH_ENDPOINT = cfg.authorization.remote.endpoint;
         HOMELAB_EXECUTOR_AUTH_SERVER_NAME = cfg.authorization.remote.serverName;

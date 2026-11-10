@@ -127,9 +127,23 @@ func main(){
  audit,err:=privileged.OpenAuditJournal(required("HOMELAB_EXECUTOR_AUDIT_FILE"))
  if err!=nil{log.Fatal("cannot initialize restricted audit journal: ",err)}
  defer audit.Close()
+ runner:=privileged.Run(privileged.FixedRun)
+ if rust:=os.Getenv("HOMELAB_EXECUTOR_RUST_ACTUATOR");rust!=""{
+  maxReplicas,parseErr:=strconv.Atoi(required("HOMELAB_EXECUTOR_RUST_MAX_REPLICAS"))
+  if parseErr!=nil{log.Fatal("invalid Rust actuator replica limit")}
+  runner,err=privileged.NewRustRun(privileged.RustActuatorConfig{
+   Binary:rust,Systemctl:systemctl,
+   Kubectl:os.Getenv("HOMELAB_EXECUTOR_KUBECTL"),
+   Kubeconfig:os.Getenv("HOMELAB_EXECUTOR_KUBECONFIG"),
+   ServicePolicy:required("HOMELAB_EXECUTOR_RUST_SERVICES"),
+   KubernetesPolicy:required("HOMELAB_EXECUTOR_RUST_KUBERNETES"),
+   MaxReplicas:maxReplicas,
+  })
+  if err!=nil{log.Fatal("invalid Rust actuator configuration: ",err)}
+ }
  e,err:=privileged.New(privileged.Config{
   Host:host,Systemctl:systemctl,AllowedServices:services,AllowRelease:os.Getenv("HOMELAB_EXECUTOR_RELEASE_ENABLE")=="true",
-  Kubernetes:kubernetes,Workspace:workspace,Auth:client,Run:privileged.FixedRun,Releases:releases,Audit:audit,
+  Kubernetes:kubernetes,Workspace:workspace,Auth:client,Run:runner,Releases:releases,Audit:audit,
  })
  if err!=nil{log.Fatal(err)}
  group,err:=user.LookupGroup("homelab-executor-client");if err!=nil{log.Fatal(err)}
