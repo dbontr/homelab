@@ -93,3 +93,4 @@
 - [Axum Documentation](https://docs.rs/axum/latest/axum/) — Tokio/Axum project. Used for: the owner-authenticated, loopback-only motivation service HTTP interface.
 - [Rust fs2 Documentation](https://docs.rs/fs2/latest/fs2/) — fs2 maintainers. Used for: process-lifetime exclusive ownership of the motivation state lock.
 - [Finite-time Analysis of the Multiarmed Bandit Problem](https://homes.di.unimi.it/~cesabian/Pubblicazioni/ml-02.pdf) — Auer, Cesa-Bianchi and Fischer, 2002. Used for: an exploratory upper-confidence-bound strategy selector over self-reported results.
+- [gloo-timers Documentation](https://docs.rs/gloo-timers/latest/gloo_timers/) — Rust/WASM Gloo maintainers. Used for: bounded in-app refresh of the scheduled motivation inbox while the console view is active.

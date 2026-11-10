@@ -42,6 +42,14 @@ pub fn Motivation(csrf: String) -> Element {
     let mut metrics = use_resource(|| async {
         api::get::<Value>("/v1/motivation/metrics").await
     });
+    // The service schedules in-app prompts. Refresh only while this view is open.
+    use_future(move || async move {
+        loop {
+            gloo_timers::future::TimeoutFuture::new(60_000).await;
+            state.restart();
+            metrics.restart();
+        }
+    });
     let mut busy = use_signal(|| false);
     let mut error = use_signal(String::new);
     let mut notice = use_signal(String::new);
