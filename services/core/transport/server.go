@@ -208,9 +208,7 @@ func(s *Server) Handler()http.Handler{
   if s.nodeCatalog==nil{writeError(w,http.StatusServiceUnavailable,"node catalog is not configured");return}
   writeJSON(w,http.StatusOK,s.nodeCatalog.List())
  })
- mux.HandleFunc("GET /v1/compute/profiles",s.profileRoutes)
- mux.HandleFunc("GET /v1/compute/profiles/{id}",s.profileRoutes)
- mux.HandleFunc("PUT /v1/compute/profiles/{id}",s.profileRoutes)
+ profiles.Register(mux,s.profiles)
  mux.HandleFunc("POST /v1/compute/profiles/{id}/plan",s.profilePlanRoute)
  bookhttp.Register(mux,s.db,s.bookCatalog)
  mediahttp.Register(mux,s.media)
