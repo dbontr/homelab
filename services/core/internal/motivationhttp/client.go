@@ -75,7 +75,10 @@ func(c *Client) exchange(ctx context.Context,method,path string,payload []byte)(
  defer response.Body.Close()
  content,err:=io.ReadAll(io.LimitReader(response.Body,maxResponse+1))
  if err!=nil||len(content)>maxResponse{return 0,nil,errors.New("motivation response exceeds limit")}
- if !json.Valid(content){return 0,nil,errors.New("motivation service returned invalid JSON")}
+ if !json.Valid(content){
+  if response.StatusCode>=400{return response.StatusCode,[]byte("{\"error\":\"motivation request rejected\"}"),nil}
+  return 0,nil,errors.New("motivation service returned invalid JSON")
+ }
  return response.StatusCode,content,nil
 }
 
@@ -86,6 +89,12 @@ func(c *Client) Call(ctx context.Context,method,path string,payload json.RawMess
  var output any
  if err:=json.Unmarshal(data,&output);err!=nil{return nil,errors.New("invalid motivation response")}
  return output,nil
+}
+
+func errorJSON(w http.ResponseWriter,status int,message string){
+ w.Header().Set("Content-Type","application/json")
+ w.WriteHeader(status)
+ _=json.NewEncoder(w).Encode(map[string]string{"error":message})
 }
 
 // Register attaches only the private service's fixed, admitted routes.
@@ -104,19 +113,19 @@ func Register(mux *http.ServeMux,client *Client){
   mux.HandleFunc(method+" "+path,func(w http.ResponseWriter,r *http.Request){
    w.Header().Set("Content-Type","application/json")
    if client==nil{
-    http.Error(w,"{\"error\":\"motivation service not configured\"}",http.StatusServiceUnavailable)
+    errorJSON(w,http.StatusServiceUnavailable,"motivation service not configured")
     return
    }
    input,err:=io.ReadAll(io.LimitReader(r.Body,maxRequest+1))
    if err!=nil||len(input)>maxRequest{
-    http.Error(w,"{\"error\":\"motivation request exceeds limit\"}",http.StatusRequestEntityTooLarge);return
+    errorJSON(w,http.StatusRequestEntityTooLarge,"motivation request exceeds limit");return
    }
    if len(input)>0&&!json.Valid(input){
-    http.Error(w,"{\"error\":\"invalid motivation JSON\"}",http.StatusBadRequest);return
+    errorJSON(w,http.StatusBadRequest,"invalid motivation JSON");return
    }
    status,data,err:=client.exchange(r.Context(),method,path,input)
    if err!=nil{
-    http.Error(w,"{\"error\":\"motivation service unavailable\"}",http.StatusServiceUnavailable);return
+    errorJSON(w,http.StatusServiceUnavailable,"motivation service unavailable");return
    }
    w.WriteHeader(status)
    _,_=w.Write(data)
