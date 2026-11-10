@@ -176,7 +176,8 @@ func (b *AppBundle) serve(w http.ResponseWriter, r *http.Request) {
         http.Error(w,"method not allowed",http.StatusMethodNotAllowed)
         return
     }
-    name := strings.TrimPrefix(r.URL.Path,"/mcp-assets/")
+    name := strings.TrimPrefix(r.URL.Path,"/")
+    name = strings.TrimPrefix(name,"mcp-assets/")
     if !validAssetName(name) { http.NotFound(w,r); return }
     data, ok := b.assets[name]
     if !ok { http.NotFound(w,r); return }
@@ -189,4 +190,45 @@ func (b *AppBundle) serve(w http.ResponseWriter, r *http.Request) {
     w.Header().Set("Cross-Origin-Resource-Policy","cross-origin")
     w.Header().Set("Cache-Control","public, max-age=3600")
     http.ServeContent(w,r,path.Base(name),time.Time{},bytes.NewReader(data))
+}
+
+
+// SetAppBundle selects a verified release before serving any requests.
+// Native Rust assets are opt-in; legacy self-contained MCP resources remain
+// available while browser and protocol acceptance is incomplete.
+func (s *Server) SetAppBundle(bundle *AppBundle) error {
+    if bundle == nil || bundle.origin == "" || len(bundle.pages) != len(healthAppViews) {
+        return errors.New("Health App bundle is incomplete")
+    }
+    tools := []string{
+        "health_cognitive_test", "health_dashboard",
+        "health_workout_editor", "health_grocery_editor",
+        "health_workout_companion",
+    }
+    for _, name := range tools {
+        entry, exists := s.tools[name]
+        if !exists || entry.Meta == nil {
+            return errors.New("Health App has no declared MCP tool resource")
+        }
+        if _, ok := entry.Meta["ui"].(map[string]any); !ok {
+            return errors.New("Health App has no UI metadata")
+        }
+    }
+    for _, name := range tools {
+        entry := s.tools[name]
+        ui := entry.Meta["ui"].(map[string]any)
+        ui["csp"] = map[string]any{
+            "resourceDomains": []string{bundle.origin},
+            "connectDomains": []string{bundle.origin},
+        }
+        entry.Meta["ui"] = ui
+        s.tools[name] = entry
+    }
+    s.bundle = bundle
+    return nil
+}
+
+func (s *Server) appHTML(view, fallback string) string {
+    if s.bundle == nil { return fallback }
+    return s.bundle.view(view)
 }
