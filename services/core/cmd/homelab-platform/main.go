@@ -14,6 +14,7 @@ import (
 
     "github.com/dbontr/homelab-new/system/agentflow"
     "github.com/dbontr/homelab-new/system/books"
+    "github.com/dbontr/homelab-new/system/internal/calendarhttp"
     "github.com/dbontr/homelab-new/system/devices"
     "github.com/dbontr/homelab-new/system/media"
     "github.com/dbontr/homelab-new/system/observability"
@@ -160,7 +161,18 @@ func main(){
     }else if os.Getenv("HOMELAB_SEERR_API_KEY_FILE")!=""||os.Getenv("HOMELAB_SEERR_VAULT_ALIAS")!=""{
         log.Fatal("Seerr credential requires endpoint")
     }
-    if file:=os.Getenv("HOMELAB_CALENDAR_URL_FILE");file!=""{
+    if endpoint:=os.Getenv("HOMELAB_CALENDAR_SERVICE_URL");endpoint!=""{
+        if os.Getenv("HOMELAB_CALENDAR_URL_FILE")!=""{
+            log.Fatal("calendar service and local calendar feed must not be configured together")
+        }
+        token,e:=secret(os.Getenv("HOMELAB_CALENDAR_SERVICE_TOKEN_FILE"))
+        if e!=nil{log.Fatal("calendar service identity: ",e)}
+        client,e:=calendarhttp.NewClient(endpoint,token)
+        if e!=nil{log.Fatal("calendar service connection: ",e)}
+        if e:=server.SetCalendarService(client.Fetch);e!=nil{log.Fatal(e)}
+    }else if os.Getenv("HOMELAB_CALENDAR_SERVICE_TOKEN_FILE")!=""{
+        log.Fatal("calendar service credential requires an endpoint")
+    }else if file:=os.Getenv("HOMELAB_CALENDAR_URL_FILE");file!=""{
         raw,e:=os.ReadFile(file);if e!=nil{log.Fatal(e)}
         if e:=server.SetCalendarURL(strings.TrimSpace(string(raw)));e!=nil{log.Fatal(e)}
     }
