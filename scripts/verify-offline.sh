@@ -55,6 +55,19 @@ verify_go services/compute
 verify_go services/learning
 verify_go services/health
 
+if ! command -v rustc >/dev/null 2>&1; then
+  printf '%s\n' 'Rust compiler is required to verify the privileged actuator.' >&2
+  exit 1
+fi
+(
+  cd "$root/services/actuator"
+  testdir=$(mktemp -d)
+  trap 'rm -rf -- "$testdir"' EXIT
+  rustc --edition=2021 -D warnings --test src/main.rs -o "$testdir/actuator-tests"
+  "$testdir/actuator-tests"
+  rustc --edition=2021 -D warnings src/main.rs -o "$testdir/homelab-actuator"
+)
+
 if ! command -v cargo >/dev/null 2>&1; then
   printf '%s\n' 'Rust Cargo is required to verify the console source.' >&2
   exit 1
