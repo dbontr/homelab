@@ -1,7 +1,7 @@
 //! Locked, source-pinned NixOS generation staging and rollback.
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
-use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
+use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
 use std::os::unix::process::CommandExt;
 use std::path::Path;
 use std::process::Stdio;
