@@ -1,0 +1,120 @@
+package mcp
+
+import (
+    "crypto/sha256"
+    "fmt"
+    "net/http"
+    "net/http/httptest"
+    "os"
+    "path/filepath"
+    "sort"
+    "strings"
+    "testing"
+)
+
+func sourceBundle(t *testing.T) string {
+    t.Helper()
+    root := t.TempDir()
+    artifacts := map[string][]byte{
+        "index.html": []byte("<!doctype html><html><head></head><body>app</body></html>"),
+        "assets/client.js": []byte("export const app = true;"),
+        "assets/client.wasm": []byte{0, 97, 115, 109, 1, 0, 0, 0},
+        "assets/main.css": []byte("body { color: CanvasText; }"),
+    }
+    for view, filename := range healthAppViews {
+        artifacts[filename] = []byte(
+            "<!doctype html><html><head><meta name=\"homelab-mcp-view\" content=\""+
+            view+"\"></head><body>app</body></html>")
+    }
+    names := make([]string, 0, len(artifacts))
+    for name := range artifacts { names = append(names, name) }
+    sort.Strings(names)
+    var manifest strings.Builder
+    for _, name := range names {
+        file := filepath.Join(root, filepath.FromSlash(name))
+        if err := os.MkdirAll(filepath.Dir(file), 0700); err != nil { t.Fatal(err) }
+        if err := os.WriteFile(file, artifacts[name], 0600); err != nil { t.Fatal(err) }
+        digest := sha256.Sum256(artifacts[name])
+        fmt.Fprintf(&manifest, "%x  ./%s\n", digest, name)
+    }
+    if err := os.WriteFile(filepath.Join(root,"SHA256SUMS"),
+        []byte(manifest.String()), 0600); err != nil { t.Fatal(err) }
+    return root
+}
+
+func TestRustAppBundleHasExactPublicAssetsAndViewIdentity(t *testing.T) {
+    root := sourceBundle(t)
+    bundle, err := LoadAppBundle(root, "https://assets.example.test")
+    if err != nil { t.Fatal(err) }
+    if len(bundle.pages) != 5 { t.Fatalf("missing Rust views: %d",len(bundle.pages)) }
+    for view := range healthAppViews {
+        html := bundle.view(view)
+        if !strings.Contains(html,"<base href=\"https://assets.example.test/mcp-assets/\">") ||
+            !strings.Contains(html,"content=\""+view+"\"") {
+            t.Fatalf("incorrect view identity: %s",view)
+        }
+    }
+    for _, test := range []struct { path string; status int; contentType string }{
+        {"/assets/client.wasm",200,"application/wasm"},
+        {"/mcp-assets/assets/client.wasm",200,"application/wasm"},
+        {"/mcp-assets/assets/client.js",200,"javascript"},
+        {"/mcp-assets/health-cognitive.html",404,""},
+        {"/mcp-assets/SHA256SUMS",404,""},
+        {"/.env",404,""},
+        {"/assets/../index.html",404,""},
+    } {
+        rec := httptest.NewRecorder()
+        bundle.serve(rec,httptest.NewRequest(http.MethodGet,test.path,nil))
+        if rec.Code != test.status { t.Fatalf("%s: expected %d got %d",test.path,test.status,rec.Code) }
+        if test.contentType != "" && !strings.Contains(rec.Header().Get("Content-Type"),test.contentType) {
+            t.Fatalf("%s: MIME type %q",test.path,rec.Header().Get("Content-Type"))
+        }
+    }
+    rec := httptest.NewRecorder()
+    bundle.serve(rec,httptest.NewRequest(http.MethodPost,"/assets/client.wasm",nil))
+    if rec.Code != http.StatusMethodNotAllowed { t.Fatal("public assets accepted a write") }
+    if err := (&Server{tools:map[string]toolEntry{}}).SetAppBundle(bundle); err == nil {
+        t.Fatal("bundle selected without registered MCP resources")
+    }
+}
+
+func TestRustAppBundleRejectsTampering(t *testing.T) {
+    root := sourceBundle(t)
+    target := filepath.Join(root,"assets","client.js")
+    if err := os.WriteFile(target,[]byte("malicious code"),0600); err != nil { t.Fatal(err) }
+    if _, err := LoadAppBundle(root,"https://assets.example.test"); err == nil {
+        t.Fatal("modified JavaScript was accepted without its exact digest")
+    }
+}
+
+func TestRustAppBundleRejectsUndeclaredOrLinkedFiles(t *testing.T) {
+    root := sourceBundle(t)
+    if err := os.WriteFile(filepath.Join(root,"assets","surprise.js"),[]byte("x"),0600); err != nil {
+        t.Fatal(err)
+    }
+    if _, err := LoadAppBundle(root,"https://assets.example.test"); err == nil {
+        t.Fatal("unmanifested public asset accepted")
+    }
+    if err := os.Remove(filepath.Join(root,"assets","surprise.js")); err != nil { t.Fatal(err) }
+    if err := os.Symlink(filepath.Join(root,"index.html"),filepath.Join(root,"assets","linked.js")); err != nil {
+        t.Fatal(err)
+    }
+    if _, err := LoadAppBundle(root,"https://assets.example.test"); err == nil {
+        t.Fatal("symbolic asset substitution accepted")
+    }
+}
+
+func TestRustAppBundleRequiresExactHTTPSOriginAndSafeNames(t *testing.T) {
+    for _, input := range []string{
+        "", "http://example.test", "https://example.test/path",
+        "https://user@example.test", "https://example.test?cache=1",
+        "https://example.test/", "https://example.test\" onclick=\"alert(1)",
+        "https://example.test/#section",
+    } {
+        if validateAppOrigin(input) == nil { t.Errorf("accepted invalid asset origin %q",input) }
+    }
+    if err := validateAppOrigin("https://apps.example.test"); err != nil { t.Fatal(err) }
+    for _, name := range []string{"../etc/passwd","/absolute","assets//client.js",".env","assets/.secret",""} {
+        if validAssetName(name) { t.Errorf("accepted unsafe public asset %q",name) }
+    }
+}
