@@ -159,6 +159,20 @@ pub fn Learning(csrf: String) -> Element {
                     }
                  }
             }
+            if let Some(Ok(value)) = detail.cloned() {
+                crate::learning_route::LearningRoute {
+                    key: "{session_id}",
+                    csrf: csrf(),
+                    session_id: session_id.clone(),
+                    detail: value,
+                    on_saved: move |_| {
+                        detail.restart();
+                        pending.restart();
+                        sessions.restart();
+                        reviews.restart();
+                    }
+                }
+            }
             if let Some(question)=current_question{
                 section{class:"card",
                     div{class:"card-header",
