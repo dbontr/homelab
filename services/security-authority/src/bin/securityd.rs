@@ -3,6 +3,7 @@ use std::ffi::CString;
 use std::path::Path;
 
 use homelab_security_authority::bootstrap;
+use homelab_security_authority::oauth::{self, Broker};
 use homelab_security_authority::remote::Remote;
 use homelab_security_authority::transport::{self, Shared};
 
@@ -23,8 +24,13 @@ fn group_id(name: &str) -> Result<u32, &'static str> {
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let settings = bootstrap::initialize(Path::new("/var/lib/homelab-securityd"))?;
     let remote = Remote::from_environment()?;
+    let broker = Broker::from_environment()?
+        .map(|broker| std::sync::Arc::new(tokio::sync::Mutex::new(broker)));
+    if broker.is_some() {
+        settings.authority.validate_vault()?;
+    }
     let browser_enabled = settings.browser_origin.is_some();
-    let shared = Shared::new(settings.authority, settings.browser_origin)?;
+    let shared = Shared::new(settings.authority, settings.browser_origin, broker.clone())?;
 
     let client_gid = group_id("homelab-security-client")?;
     let mut listeners = tokio::task::JoinSet::new();
@@ -59,6 +65,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     if let Some(remote) = remote {
         let shared = shared.clone();
         listeners.spawn(async move { remote.serve(shared).await });
+    }
+    if let Some(broker) = broker {
+        if broker.lock().await.callback_address().is_some() {
+            let shared = shared.clone();
+            listeners.spawn(async move { oauth::serve_callback(broker, shared).await });
+        }
     }
 
     #[cfg(unix)]
