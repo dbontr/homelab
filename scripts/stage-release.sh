@@ -34,6 +34,7 @@ case "$component" in
   homelab-health) source_module=services/health ;;
   homelab-mcp|homelab-api) source_module=. ;;
   homelab-console) source_module=ui/console ;;
+  homelab-motivation) source_module=services/motivation ;;
   *) printf 'Unknown release component: %s\n' "$component" >&2; exit 2 ;;
 esac
 if [[ "$destination" != /* || "$destination" == "/" || "$destination" == */ ]]; then
@@ -48,9 +49,11 @@ for tool in git sha256sum find sort mktemp; do
   command -v "$tool" >/dev/null || { printf 'Missing build tool: %s\n' "$tool" >&2; exit 1; }
 done
 if [[ "$mode" == complete ]]; then
-  required_tools=(go dx)
+  required_tools=(go cargo dx)
 elif [[ "$component" == homelab-console ]]; then
   required_tools=(cargo dx)
+elif [[ "$component" == homelab-motivation ]]; then
+  required_tools=(cargo)
 else
   required_tools=(go)
 fi
@@ -88,6 +91,13 @@ elif [[ "$component" == homelab-console ]]; then
     cargo test --offline
     cargo check --offline --target wasm32-unknown-unknown
   )
+elif [[ "$component" == homelab-motivation ]]; then
+  (
+    cd "$root/services/motivation"
+    cargo fmt --all -- --check
+    cargo test --locked --offline
+    cargo clippy --locked --offline --all-targets -- -D warnings
+  )
 else
   (
     cd "$root/$source_module"
@@ -118,7 +128,19 @@ build_go() {
   )
 }
 
+build_motivation() {
+  local target="$stage/.motivation-target"
+  printf '%s\n' 'Building homelab-motivation'
+  (
+    cd "$root/services/motivation"
+    CARGO_TARGET_DIR="$target" cargo build --locked --offline --release
+  )
+  install -m 0700 "$target/release/homelab-motivation" "$stage/bin/homelab-motivation"
+  rm -rf -- "$target"
+}
+
 if [[ "$mode" == complete ]]; then
+  build_motivation
   build_go services/core ./cmd/homelab-platform homelab-platform
   build_go services/core ./cmd/homelab-calendard homelab-calendard
   build_go . ./mcp homelab-mcp
@@ -132,6 +154,8 @@ if [[ "$mode" == complete ]]; then
   build_go services/compute ./cmd/project-workspace-worker homelab-compute-worker
   build_go services/learning ./cmd/adaptive-teaching homelab-learning
   build_go services/health ./cmd/personal-health-mcp homelab-health
+elif [[ "$component" == homelab-motivation ]]; then
+  build_motivation
 elif [[ "$component" != homelab-console ]]; then
   case "$component" in
     homelab-compute-controller) package=./cmd/project-workspace-controller ;;

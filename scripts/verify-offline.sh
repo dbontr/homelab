@@ -78,6 +78,12 @@ fi
   cargo test --offline
   cargo check --offline --target wasm32-unknown-unknown
 )
+(
+  cd "$root/services/motivation"
+  cargo fmt --all -- --check
+  cargo test --locked --offline
+  cargo clippy --locked --offline --all-targets -- -D warnings
+)
 
 if ! command -v helm >/dev/null 2>&1; then
   printf "%s\n" "Helm is required to verify Compute controller templates." >&2

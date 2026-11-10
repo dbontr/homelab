@@ -53,7 +53,7 @@ fi
 declared=(
   homelab-platform homelab-calendard homelab-engineeringd homelab-securityd
   homelab-executord homelab-release homelab-admin homelab-compute-controller
-  homelab-compute-worker homelab-learning homelab-health
+  homelab-compute-worker homelab-learning homelab-health homelab-motivation
   homelab-mcp homelab-api
 )
 expected=( "${declared[@]}" )
