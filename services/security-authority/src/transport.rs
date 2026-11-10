@@ -23,7 +23,7 @@ use serde_json::json;
 use tokio::net::UnixListener;
 use zeroize::Zeroizing;
 
-use crate::sessions::{Authority, AuthorizationWire};
+use crate::sessions::{Authority, AuthorizationWire, Decision};
 use crate::Error;
 
 const MAX_JSON_BYTES: usize = 1 << 20;
@@ -98,6 +98,11 @@ fn protected_status(message: &'static str, status: StatusCode) -> Response {
     (status, message).into_response()
 }
 
+fn audit(event: &'static str) {
+    // Only fixed event categories enter the service journal; no secrets or IDs.
+    eprintln!("security audit {event}");
+}
+
 fn json_reply<T: Serialize>(status: StatusCode, value: T) -> Response {
     (status, Json(value)).into_response()
 }
@@ -168,13 +173,14 @@ async fn session_owner_post(State(shared): State<Shared>, headers: HeaderMap, ra
     };
     let password = Zeroizing::new(factors.password);
     match shared.with_authority(|auth| auth.login(LOCAL_OWNER, &password, &factors.totp)) {
-        Ok(status) => json_reply(StatusCode::OK, status),
-        Err(_) => protected_status("authentication denied", StatusCode::UNAUTHORIZED),
+        Ok(status) => { audit("owner_session_opened"); json_reply(StatusCode::OK, status) },
+        Err(_) => { audit("owner_authentication_denied"); protected_status("authentication denied", StatusCode::UNAUTHORIZED) },
     }
 }
 
 async fn session_owner_delete(State(shared): State<Shared>) -> Response {
     shared.with_authority(Authority::local_revoke);
+    audit("owner_session_revoked");
     json_reply(StatusCode::OK, json!({"active":false}))
 }
 
@@ -193,8 +199,8 @@ async fn confirmations_owner_post(
     };
     let password = Zeroizing::new(factors.password);
     match shared.with_authority(|auth| auth.confirm(LOCAL_OWNER, &id, &password, &factors.totp)) {
-        Ok(()) => json_reply(StatusCode::OK, json!({"confirmed":true})),
-        Err(_) => protected_status("confirmation denied", StatusCode::FORBIDDEN),
+        Ok(()) => { audit("owner_confirmation_accepted"); json_reply(StatusCode::OK, json!({"confirmed":true})) },
+        Err(_) => { audit("owner_confirmation_denied"); protected_status("confirmation denied", StatusCode::FORBIDDEN) },
     }
 }
 
@@ -214,8 +220,8 @@ async fn credentials_owner_post(State(shared): State<Shared>, headers: HeaderMap
     let result = shared.with_authority(|auth| auth.store_credential(
         LOCAL_OWNER, &password, &input.totp, &input.provider, secret.as_bytes()));
     match result {
-        Ok(handle) => json_reply(StatusCode::OK, handle),
-        Err(_) => protected_status("credential request denied", StatusCode::FORBIDDEN),
+        Ok(handle) => { audit("credential_stored"); json_reply(StatusCode::OK, handle) },
+        Err(_) => { audit("credential_store_denied"); protected_status("credential request denied", StatusCode::FORBIDDEN) },
     }
 }
 
@@ -233,8 +239,8 @@ async fn credentials_owner_put(
     let result = shared.with_authority(|auth| auth.rotate_credential(
         LOCAL_OWNER, &password, &input.totp, &id, &input.provider, secret.as_bytes()));
     match result {
-        Ok(()) => json_reply(StatusCode::OK, json!({"id":id,"provider":input.provider})),
-        Err(_) => protected_status("credential rotation denied", StatusCode::FORBIDDEN),
+        Ok(()) => { audit("credential_rotated"); json_reply(StatusCode::OK, json!({"id":id,"provider":input.provider})) },
+        Err(_) => { audit("credential_rotation_denied"); protected_status("credential rotation denied", StatusCode::FORBIDDEN) },
     }
 }
 
@@ -249,8 +255,8 @@ async fn credentials_owner_delete(
     };
     let password = Zeroizing::new(input.password);
     match shared.with_authority(|auth| auth.revoke_credential(LOCAL_OWNER, &password, &input.totp, &id)) {
-        Ok(()) => json_reply(StatusCode::OK, json!({"revoked":true})),
-        Err(_) => protected_status("credential revocation denied", StatusCode::FORBIDDEN),
+        Ok(()) => { audit("credential_revoked"); json_reply(StatusCode::OK, json!({"revoked":true})) },
+        Err(_) => { audit("credential_revocation_denied"); protected_status("credential revocation denied", StatusCode::FORBIDDEN) },
     }
 }
 
@@ -290,7 +296,16 @@ async fn operation_response(shared: Shared, headers: HeaderMap, raw: Bytes, cons
         }
     });
     match result {
-        Ok(decision) => json_reply(StatusCode::OK, AuthorizationWire::from(decision)),
+        Ok(decision) => {
+            if consume {
+                audit(match &decision {
+                    Decision::Allowed => "operation_authorized",
+                    Decision::Denied(_) => "operation_denied",
+                    Decision::Confirmation { .. } => "operation_confirmation_required",
+                });
+            }
+            json_reply(StatusCode::OK, AuthorizationWire::from(decision))
+        },
         Err(_) => protected_status("independent owner identity required", StatusCode::FORBIDDEN),
     }
 }
