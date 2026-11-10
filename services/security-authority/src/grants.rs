@@ -9,6 +9,7 @@ use crate::Error;
 const MAX_GRANTS: usize = 128;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct ServiceCredentialGrant {
     pub client_dns: String,
     pub alias: String,
@@ -185,6 +186,30 @@ mod tests {
             revision: None,
             expires_at: None,
             }], &vault),
+            Err(Error::InvalidConfiguration)
+        ));
+        let stale = ServiceCredentialGrant {
+            client_dns: "worker.internal".into(),
+            alias: "provider_token".into(),
+            provider: "research".into(),
+            handle: handle.id.clone(),
+            revision: Some("0".repeat(64)),
+            expires_at: None,
+        };
+        assert!(matches!(
+            ServiceCredentialPolicy::new(vec![stale], &vault),
+            Err(Error::InvalidConfiguration)
+        ));
+        let expired = ServiceCredentialGrant {
+            client_dns: "worker.internal".into(),
+            alias: "provider_token".into(),
+            provider: "research".into(),
+            handle: handle.id.clone(),
+            revision: None,
+            expires_at: Some("2020-01-01T00:00:00Z".into()),
+        };
+        assert!(matches!(
+            ServiceCredentialPolicy::new(vec![expired], &vault),
             Err(Error::InvalidConfiguration)
         ));
         // Rotation under the same opaque handle invalidates the pinned grant.
