@@ -42,6 +42,9 @@ fi
 
 mkdir -- "$stage/export"
 cp -a -- "$bundled/." "$stage/export/"
+# The verified asset host serves original files; precompressed variants are
+# not distributed and must not be included in the immutable manifest.
+find "$stage/export" -type f \( -name '*.br' -o -name '*.gz' \) -delete
 for view in cognitive dashboard workout-editor groceries workout-companion; do
   sed "s|<head>|<head><meta name=\"homelab-mcp-view\" content=\"$view\">|" \
     "$bundled/index.html" > "$stage/export/health-$view.html"
