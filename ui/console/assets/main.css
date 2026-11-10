@@ -501,3 +501,26 @@ main.content { max-width: 94rem; margin: 0 auto; padding: 2rem; }
 .engineering-diff { border: 1px solid var(--border); border-radius: var(--radius); padding: .6rem; min-width: 0; }
 .engineering-diff summary { font-family: ui-monospace,SFMono-Regular,Consolas,monospace; cursor: pointer; overflow-wrap: anywhere; }
 .engineering-diff pre { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--muted); padding: .75rem; border-radius: calc(var(--radius)*.7); max-height: 32rem; overflow-y: auto; }
+
+
+/* Visual response task */
+.reaction-test { display: grid; gap: 1rem; }
+.reaction-target {
+    display: grid; place-items: center; width: 100%; min-height: 12rem;
+    padding: 1.5rem; font: inherit; font-size: 1.35rem; font-weight: 600;
+    background: var(--muted); color: var(--foreground);
+    border: 2px solid var(--border); border-radius: var(--radius);
+    cursor: pointer; touch-action: manipulation; user-select: none;
+}
+.reaction-target:focus-visible { outline: 3px solid var(--ring); outline-offset: 3px; }
+.reaction-target.reaction-ready { background: oklch(0.88 0.09 90); color: oklch(0.22 0.02 90); }
+.reaction-target.reaction-go { background: oklch(0.65 0.15 150); color: oklch(0.15 0.05 150); }
+.reaction-target:disabled { cursor: not-allowed; opacity: .65; }
+.reaction-controls { display: flex; gap: .75rem; flex-wrap: wrap; }
+.reaction-progress { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 1rem; }
+.reaction-progress > div { display: grid; gap: .25rem; }
+.reaction-progress strong { font-size: 1.125rem; font-variant-numeric: tabular-nums; }
+@media (max-width: 600px) {
+    .reaction-progress { grid-template-columns: 1fr; }
+    .reaction-target { min-height: 10rem; }
+}

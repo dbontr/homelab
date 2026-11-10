@@ -112,7 +112,7 @@ pub fn ReactionTime(csrf: String) -> Element {
             description: "Wait for the target to turn green, then respond immediately. Early and out-of-range responses are not counted.".to_owned(),
             div { class: "reaction-test",
                 button {
-                    class,
+                    class: class,
                     r#type: "button",
                     disabled: saving(),
                     aria_label: "Visual reaction target",
@@ -260,7 +260,7 @@ pub fn ReactionTime(csrf: String) -> Element {
                                         for item in records {
                                             tr {
                                                 td { {api::property(&item, &["at"])} }
-                                                td { "{api::property(&item, &["value"])} ms" }
+                                                td { {format!("{} ms", api::property(&item, &["value"]))} }
                                                 td { {api::property(&item, &["method"])} }
                                                 td { {api::property(&item, &["source"])} }
                                             }

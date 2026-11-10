@@ -19,6 +19,7 @@ mod engineering_diff;
 mod knowledge;
 mod workflows;
 mod motivation;
+mod cognitive;
 
 use dioxus::prelude::*;
 use components::Icon;
@@ -41,6 +42,7 @@ enum Page {
     Motivation,
     Learning,
     Health,
+    ReactionTime,
     Recipes,
     Books,
     Activity,
@@ -65,6 +67,7 @@ impl Page {
             Self::Motivation => "Motivation",
             Self::Learning => "Learning",
             Self::Health => "Health",
+            Self::ReactionTime => "Reaction time",
             Self::Recipes => "Recipes",
             Self::Books => "Books",
             Self::Activity => "Activity",
@@ -90,6 +93,7 @@ const PERSONAL: &[(Page, &str, &str)] = &[
     (Page::Planner, "Weekly planner", "planner"),
     (Page::Learning, "Learning", "learning"),
     (Page::Health, "Health", "health"),
+    (Page::ReactionTime, "Reaction time", "activity"),
     (Page::Recipes, "Recipes", "recipes"),
     (Page::Books, "Books", "books"),
     (Page::Activity, "Activity", "activity"),
@@ -312,6 +316,7 @@ fn App() -> Element {
                                 Page::Motivation => rsx! { motivation::Motivation { csrf: csrf.clone() } },
                                 Page::Learning => rsx! { personal::Learning { csrf: csrf.clone() } },
                                 Page::Health => rsx! { personal::Health { csrf: csrf.clone() } },
+                                Page::ReactionTime => rsx! { cognitive::ReactionTime { csrf: csrf.clone() } },
                                 Page::Recipes => rsx! { recipes::Recipes { csrf: csrf.clone() } },
                                 Page::Books => rsx! { books::Books { csrf: csrf.clone() } },
                                 Page::Activity => rsx! { activity::Activity {} },
