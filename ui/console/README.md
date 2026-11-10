@@ -27,3 +27,28 @@ The palette, neutral colors, radius scale, buttons, cards, compact tables, and s
 The original Moonfin client is launched externally; the console does not implement media playback. The console can replace the existing homepage only when the optional `services.homelabConsole` NixOS module is explicitly enabled and `replaceHomepage = true`; neither flag is enabled by default. The Nix module expects a prebuilt Dioxus web output containing `index.html` and assets, not an arbitrary Rust source directory.
 
 See `THIRD_PARTY_NOTICES.md` for the upstream copyright license and `docs/console.md` at repository root for system interaction rules.
+
+
+## Embedded Health MCP Apps
+
+The `embedded-app` Cargo feature selects a Rust-hosted MCP Apps
+entrypoint instead of the owner-session console. Five Dioxus Health views
+share their domain UI with the standalone console but exchange data through
+the MCP host's JSON-RPC `tools/call` surface; they receive no cookie,
+bearer token or CSRF value. The transport validates the parent window,
+correlates responses and limits outstanding calls.
+
+Build source-only assets with:
+
+```sh
+ui/console/build-mcp-apps.sh /absolute/unused/output-directory
+```
+
+This command does not activate any service. It produces five resource HTML
+entrypoints with a shared WASM bundle and a SHA-256 manifest. A trusted
+static HTTPS origin must serve the bundle to the iframe, and the Health
+service must be explicitly configured with the origin and verified bundle
+path. See `docs/ui-resource-inventory.md` and
+`services/health/internal/mcp/app_bundle.go` for the opt-in
+source contracts. The legacy MCP Apps resources remain the default until
+isolated WebAssembly, host and browser acceptance is completed.
