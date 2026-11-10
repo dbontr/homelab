@@ -1,5 +1,9 @@
 # Security and credentials
 
+The process-level privilege inventory, exact mutation classes, state leases, and
+credential ownership contracts are defined in
+[privileged operations and custody boundaries](privileged-boundaries.md).
+
 ## Trust boundaries
 
 The primary MCP and HTTP API operate as a single-user application interface. Application operations use credentials specific to their target service. The presence of a tool does not imply authority to execute it. The target service must enforce its own authorization.

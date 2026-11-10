@@ -6,6 +6,7 @@ import (
  "net/http"
  "regexp"
  "strings"
+ "time"
 )
 
 // ServiceCredentialGrant lets a named, mTLS-verified service read one
@@ -16,6 +17,8 @@ type ServiceCredentialGrant struct {
  Alias string `json:"alias"`
  Provider string `json:"provider"`
  Handle string `json:"handle"`
+ Revision string `json:"revision,omitempty"`
+ ExpiresAt *time.Time `json:"expires_at,omitempty"`
 }
 
 var serviceCredentialName=regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]{0,63}$`)
@@ -24,8 +27,9 @@ var serviceCredentialHandle=regexp.MustCompile(`^[A-Za-z0-9_-]{32}$`)
 func serviceCredentialKey(identity,alias string)string{return identity+"\x00"+alias}
 
 // SetServiceCredentialGrants registers an immutable, explicit service identity
-// to credential binding. A revoked or rotated vault record is used on each
-// request; the daemon does not retain a plaintext credential cache.
+// to credential binding. The grant captures the current encrypted-record
+// revision unless an exact revision was configured. Rotation or deletion
+// invalidates that binding; no plaintext credential is cached.
 func(a *AdminSessions)SetServiceCredentialGrants(grants []ServiceCredentialGrant)error{
  if a==nil||len(grants)>128{return errors.New("invalid service credential policy")}
  a.mu.Lock()
@@ -43,8 +47,19 @@ func(a *AdminSessions)SetServiceCredentialGrants(grants []ServiceCredentialGrant
   }
   key:=serviceCredentialKey(grant.ClientDNS,grant.Alias)
   if _,exists:=policy[key];exists{return errors.New("duplicate service credential grant")}
-  if _,err:=a.vault.Version(grant.Handle,grant.Provider);err!=nil{
+  revision,err:=a.vault.Version(grant.Handle,grant.Provider)
+  if err!=nil{
    return errors.New("service credential handle does not exist in the owner vault")
+  }
+  if grant.Revision!="" {
+   if len(grant.Revision)!=64 || strings.Trim(grant.Revision,"0123456789abcdef")!="" || grant.Revision!=revision{
+    return errors.New("service credential grant revision is invalid or stale")
+   }
+  } else {
+   grant.Revision=revision
+  }
+  if grant.ExpiresAt!=nil && !grant.ExpiresAt.After(time.Now().UTC()){
+   return errors.New("service credential grant has expired")
   }
   policy[key]=grant
  }
@@ -82,12 +97,13 @@ func(a *AdminSessions)ServiceCredentialHandler()http.Handler{
   grant,found:=a.serviceCredentialGrants[serviceCredentialKey(identity,alias)]
   vault:=a.vault
   a.mu.Unlock()
-  if !found||vault==nil{
+  if !found||vault==nil||
+   (grant.ExpiresAt!=nil&&!time.Now().UTC().Before(*grant.ExpiresAt)){
    http.Error(w,"service credential access denied",http.StatusForbidden)
    return
   }
   var secret []byte
-  err:=vault.WithCredential(grant.Handle,grant.Provider,func(raw []byte)error{
+  err:=vault.WithCredentialVersion(grant.Handle,grant.Provider,grant.Revision,func(raw []byte)error{
    if len(raw)==0||len(raw)>32768{return errors.New("invalid protected credential")}
    secret=bytes.Clone(raw)
    return nil

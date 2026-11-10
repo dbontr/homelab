@@ -14,6 +14,81 @@ The Rust authority kernel must validate a private copy of the authentication sta
 
 `services.homelabSecurity.implementation` defaults to `"go"`. The alternative `"rust"` selects the Rust binary inside the same `homelab-securityd.service`; its Nix package requires a committed, resolved `Cargo.lock` and enforces the crate test suite during its build. Do not select it until Go/Rust compatibility, full Rust compilation, adversarial authorization, and isolated rollback acceptance have passed. A source-level kernel and a successful state preflight alone do not establish deployed security correctness. The Go daemon remains active while those checks are incomplete.
 
+## Scoped service credentials
+
+The security authority's optional mTLS credential route binds each grant to
+an exact certificate DNS identity, alias, provider, and opaque vault handle.
+At registration, it pins the encrypted credential's SHA-256 revision. An
+operator can supply that revision explicitly in
+`services.homelabSecurity.remote.serviceCredentialGrants` to reject stale
+configuration. If omitted, the daemon snapshots the existing revision at
+startup. A rotation or deletion invalidates the active grant, even if the
+opaque handle is unchanged. Grant reauthorization requires an operator-owned
+policy update or restart; a gateway request cannot grant itself a new version.
+
+A grant can also specify `expiresAt` as an RFC 3339 timestamp. Expired grants
+are rejected at registration and on each credential read, independently of
+the owner's administrative-session lifetime. Grant policies never contain
+the plaintext credential. The service's mTLS certificate and private vault
+remain outside MCP and application process custody.
+
+## Restricted Rust executor
+
+The privileged host executor has one implementation selector:
+`services.homelabExecutor.implementation = "go" | "rust"`. The default is
+`"go"`, and either selection owns the same
+`/var/lib/homelab-releases/.executord.lock` for the daemon lifetime.
+Only one owner may append to `executor-actions.jsonl` or change the NixOS
+release journal. Rust uses the existing audited JSON event fields and durable
+`started` → `accepted`/`succeeded`/`failed` transitions. A request
+acknowledged by Kubernetes or Workspace is `accepted`, not a completed job.
+An unpaired `started` audit record remains unresolved when a process crashes
+or an executor loses custody. It is never silently labeled failed or retried.
+A separately authorized coordinator may read `GET /v1/audit/status`; a trusted
+root console can run `audit-inspect unresolved` after the active executor
+releases its state lease.
+A NixOS activation/reversion is `completed` only after host-local health
+checks.
+
+The Rust daemon owns the same
+`/run/homelab-executord/execute.sock` contract as the Go daemon. Requests
+must carry a signed owner assertion. The independently authenticated security
+service must admit the exact operation, host and canonical arguments before
+an audit start entry is written and a command is launched. The gateway cannot
+select binaries, shell strings, an arbitrary Workspace tool name, or external
+URLs. Service and Kubernetes operations pass through the separately allowlisted
+Rust actuator. Workspace operations use fixed MCP calls and a scoped, protected
+credential read at the point of use. Credential access never crosses the
+gateway boundary.
+
+An optional private TLS listener accepts only one configured coordinator
+certificate DNS identity from a trusted client CA. It exposes exact-commit
+release staging, staged-generation preflight, independently authorized
+operation dispatch and read-only journal observation. Owner-factor login,
+credential enrollment and the general vault are never offered by the executor.
+Staging accepts a clean exact Git commit and an offline Nix build. Release
+activation records the prior NixOS generation before switching; failed health
+checks trigger rollback. The host journal preserves interrupted release state
+for explicit recovery.
+
+The Rust package is `homelab-executor-authority`. Its code resides under
+`services/executor`, and Nix packages the separate `executord`,
+`recovery` and copied-state `preflight` binaries. The preflight accepts an
+independent owner-only directory, rejects live directory/inode aliases,
+replays the protected audit transitions and validates staged manifests and
+any release journal before a change of implementation. A reviewed `Cargo.lock` is required before Rust can
+be selected in the NixOS module. The root-only
+`homelab-executor-recovery.service` is not enabled automatically. It can
+be started deliberately after stopping the active executor, and it must
+acquire the same lifetime lease before restoring the previous generation.
+The Go release CLI remains a separate root-controlled recovery option and
+cannot run concurrently with an executor that owns that lease.
+
+The implementation is distinct from release acceptance. The Rust source,
+Go/Rust wire compatibility, dependency resolution, state-copy admission,
+failure recovery and NixOS expressions must pass their independent checks
+before changing the selected service or operating on host credentials.
+
 ## Session policy
 
 The owner authenticates with a PBKDF2-HMAC-SHA256 password verifier and a six-digit RFC 6238 authenticator code. TOTP counters cannot be reused, including across security-service restarts; the verifier records accepted counters and failed-attempt lockout in an owner-only state file. Five failures trigger a five-minute lockout.

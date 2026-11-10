@@ -1055,6 +1055,8 @@ mod tests {
             alias: "service_token".into(),
             provider: "research".into(),
             handle: handle.id,
+            revision: None,
+            expires_at: None,
         }]).unwrap();
         let peer = VerifiedServiceIdentity::from_authenticated_peer(
             "worker.internal".into()
