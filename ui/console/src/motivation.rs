@@ -23,12 +23,22 @@ pub fn Motivation(csrf: String) -> Element {
     let mut enabled = use_signal(|| false);
     let mut intensity = use_signal(|| "guided".to_owned());
     let mut daily_limit = use_signal(|| 4u8);
+    let mut proactive_enabled = use_signal(|| false);
+    let mut cadence_minutes = use_signal(|| 240u16);
     let mut quiet_start = use_signal(|| 0u8);
     let mut quiet_end = use_signal(|| 0u8);
     let mut engagement = use_signal(|| 3u8);
     let mut progress = use_signal(|| 3u8);
     let mut wellbeing = use_signal(|| 3u8);
     let mut notes = use_signal(String::new);
+    let mut session_minutes = use_signal(|| 45u16);
+    let mut self_initiated = use_signal(|| true);
+    let mut fascination = use_signal(|| 3u8);
+    let mut session_wellbeing = use_signal(|| 3u8);
+    let mut evidence_ref = use_signal(String::new);
+    let mut metrics = use_resource(|| async {
+        api::get::<Value>("/v1/motivation/metrics").await
+    });
     let mut busy = use_signal(|| false);
     let mut error = use_signal(String::new);
     let mut notice = use_signal(String::new);
@@ -44,6 +54,8 @@ pub fn Motivation(csrf: String) -> Element {
                 enabled.set(profile.get("enabled").and_then(Value::as_bool).unwrap_or(false));
                 intensity.set(field(profile, "intensity"));
                 daily_limit.set(profile.get("daily_limit").and_then(Value::as_u64).unwrap_or(4) as u8);
+                proactive_enabled.set(profile.get("proactive_enabled").and_then(Value::as_bool).unwrap_or(false));
+                cadence_minutes.set(profile.get("cadence_minutes").and_then(Value::as_u64).unwrap_or(240) as u16);
                 quiet_start.set(profile.get("quiet_start_utc_hour").and_then(Value::as_u64).unwrap_or(0) as u8);
                 quiet_end.set(profile.get("quiet_end_utc_hour").and_then(Value::as_u64).unwrap_or(0) as u8);
                 initialized.set(true);
@@ -69,7 +81,7 @@ pub fn Motivation(csrf: String) -> Element {
             description: "Cultivate deliberate intellectual interests through owner-defined goals and measured interventions.".to_owned(),
             button {
                 class: "btn btn-outline",
-                onclick: move |_| { initialized.set(false); state.restart(); },
+                onclick: move |_| { initialized.set(false); state.restart(); metrics.restart(); },
                 "Refresh"
             }
         }
@@ -98,6 +110,8 @@ pub fn Motivation(csrf: String) -> Element {
                                 "enabled": enabled(),
                                 "intensity": intensity(),
                                 "daily_limit": daily_limit(),
+                                "proactive_enabled": proactive_enabled(),
+                                "cadence_minutes": cadence_minutes(),
                                 "quiet_start_utc_hour": quiet_start(),
                                 "quiet_end_utc_hour": quiet_end()
                             });
@@ -178,8 +192,21 @@ pub fn Motivation(csrf: String) -> Element {
                                 onchange: move |event| enabled.set(event.checked()) }
                             span { class: "label", "Enable owner-requested motivational interventions" }
                         }
+                        label { class: "form-row",
+                            input { type: "checkbox", checked: proactive_enabled(),
+                                onchange: move |event| proactive_enabled.set(event.checked()) }
+                            span { class: "label", "Schedule prompts to the private in-app inbox" }
+                        }
+                        label { class: "form-row",
+                            span { class: "label", "Scheduled prompt interval (60–1440 minutes)" }
+                            input { class: "field", type: "number", min: "60", max: "1440",
+                                value: "{cadence_minutes()}",
+                                oninput: move |event| {
+                                    if let Ok(value) = event.value().parse::<u16>() { cadence_minutes.set(value); }
+                                } }
+                        }
                         p { class: "card-description",
-                            "The default is off. Equal quiet-hour values disable quiet hours. No automatic messages or device restrictions are installed."
+                            "Defaults are off. Quiet hours use UTC; identical start and end disables quiet hours. Scheduled prompts stay in the private inbox until reviewed or dismissed. External messages and device restrictions are not enabled."
                         }
                         div { class: "inline-row",
                             button { class: "btn btn-primary", disabled: busy(), "Save profile" }
@@ -230,6 +257,28 @@ pub fn Motivation(csrf: String) -> Element {
                         }
                     }
                     if let Some(event) = pending {
+                        button {
+                            class: "btn btn-outline",
+                            disabled: busy(),
+                            onclick: move |_| {
+                                let Some(id) = pending_id else { return; };
+                                let token = csrf();
+                                busy.set(true);
+                                error.set(String::new());
+                                spawn(async move {
+                                    match api::write::<Value, _>(Method::POST,
+                                        "/v1/motivation/dismiss", &token, &json!({"id":id})).await {
+                                        Ok(_) => {
+                                            notice.set("Intervention dismissed without feedback".to_owned());
+                                            state.restart();
+                                        }
+                                        Err(message) => error.set(message),
+                                    }
+                                    busy.set(false);
+                                });
+                            },
+                            "Dismiss without rating"
+                        }
                         div { class: "card",
                             div { class: "card-body",
                                 p { {field(&event, "message")} }
@@ -302,6 +351,96 @@ pub fn Motivation(csrf: String) -> Element {
                         Empty {
                             title: "No outstanding intervention".to_owned(),
                             description: "Request one when you wish to pursue a chosen goal.".to_owned()
+                        }
+                    }
+                }
+                Card {
+                    title: "Independent intellectual engagement".to_owned(),
+                    description: "Record genuine intellectual work, including days without any intervention. These are self-reports, not verified learning achievements.".to_owned(),
+                    form {
+                        class: "task-editor-fields",
+                        onsubmit: move |event| {
+                            event.prevent_default();
+                            if busy() { return; }
+                            let payload = json!({
+                                "minutes": session_minutes(),
+                                "self_initiated": self_initiated(),
+                                "fascination": fascination(),
+                                "wellbeing": session_wellbeing(),
+                                "intervention_id": if self_initiated() { None } else { pending_id },
+                                "evidence_ref": evidence_ref()
+                            });
+                            let token = csrf();
+                            busy.set(true);
+                            error.set(String::new());
+                            spawn(async move {
+                                match api::write::<Value, _>(Method::POST,
+                                    "/v1/motivation/checkins", &token, &payload).await {
+                                    Ok(_) => {
+                                        notice.set("Engagement record saved".to_owned());
+                                        evidence_ref.set(String::new());
+                                        state.restart();
+                                        metrics.restart();
+                                    }
+                                    Err(message) => error.set(message),
+                                }
+                                busy.set(false);
+                            });
+                        },
+                        div { class: "task-field-grid",
+                            label { class: "form-row",
+                                span { class: "label", "Intellectual work (minutes)" }
+                                input { class: "field", type: "number", min: "1", max: "720",
+                                    value: "{session_minutes()}",
+                                    oninput: move |event| {
+                                        if let Ok(value) = event.value().parse::<u16>() { session_minutes.set(value); }
+                                    } }
+                            }
+                            label { class: "form-row",
+                                span { class: "label", "Fascination (0–5)" }
+                                input { class: "field", type: "number", min: "0", max: "5",
+                                    value: "{fascination()}",
+                                    oninput: move |event| {
+                                        if let Ok(value) = event.value().parse::<u8>() { fascination.set(value); }
+                                    } }
+                            }
+                            label { class: "form-row",
+                                span { class: "label", "Well-being (0–5)" }
+                                input { class: "field", type: "number", min: "0", max: "5",
+                                    value: "{session_wellbeing()}",
+                                    oninput: move |event| {
+                                        if let Ok(value) = event.value().parse::<u8>() { session_wellbeing.set(value); }
+                                    } }
+                            }
+                        }
+                        label { class: "form-row",
+                            input { type: "checkbox", checked: self_initiated(),
+                                onchange: move |event| self_initiated.set(event.checked()) }
+                            span { class: "label", "I chose to begin this work independently" }
+                        }
+                        label { class: "form-row",
+                            span { class: "label", "Evidence reference (optional)" }
+                            input { class: "field", maxlength: "128", value: "{evidence_ref()}",
+                                placeholder: "research:proof-note-17",
+                                oninput: move |event| evidence_ref.set(event.value()) }
+                        }
+                        button { class: "btn btn-primary", disabled: busy(), "Record engagement" }
+                    }
+                }
+                Card {
+                    title: "Last 28 days".to_owned(),
+                    description: "A longitudinal view of voluntary effort and fascination. These observations are not causal proof of a motivational intervention's effectiveness.".to_owned(),
+                    match metrics.cloned() {
+                        None => rsx! { Loading {} },
+                        Some(Err(message)) => rsx! { Notice { message } },
+                        Some(Ok(value)) => rsx! {
+                            p { {format!("Sessions: {} · Minutes: {} · Self-initiated minutes: {}",
+                                api::property(&value, &["sessions"]),
+                                api::property(&value, &["minutes"]),
+                                api::property(&value, &["self_initiated_minutes"]))} }
+                            p { {format!("Average fascination: {} / 5 · Average well-being: {} / 5",
+                                api::property(&value, &["mean_fascination"]),
+                                api::property(&value, &["mean_wellbeing"]))} }
                         }
                     }
                 }
