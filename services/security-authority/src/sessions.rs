@@ -318,6 +318,11 @@ impl Authority {
         self.revoke(&principal)
     }
 
+    /// Validate all persisted credential authentication tags before activation.
+    pub fn validate_vault(&self) -> Result<(), Error> {
+        self.vault.as_ref().ok_or(Error::InvalidConfiguration)?.validate_all()
+    }
+
     /// The vault and authenticator share a process-lifetime ownership lease.
     pub fn attach_vault(&mut self, key: [u8; 32]) -> Result<(), Error> {
         if self.vault.is_some() {
