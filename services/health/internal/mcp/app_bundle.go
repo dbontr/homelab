@@ -174,7 +174,7 @@ func (b *AppBundle) view(name string) string {
         `href="/`, `href="`+root,
     ).Replace(html)
     return strings.Replace(html, "<head>",
-        "<head><base href=""+root+"">", 1)
+        `<head><base href="`+root+`">`, 1)
 }
 
 func (b *AppBundle) serve(w http.ResponseWriter, r *http.Request) {
