@@ -106,3 +106,5 @@
 - [Tokio Process API](https://docs.rs/tokio/1.47.1/tokio/process/index.html) — Tokio project. Used for: shell-free bounded privileged subprocesses and termination during cancellation or timeouts.
 - [Rust Standard Library: CommandExt::process_group](https://doc.rust-lang.org/std/os/unix/process/trait.CommandExt.html#tymethod.process_group) — Rust project. Used for: separate Linux process groups for restricted actuator and NixOS release commands.
 - [RFC 3339: Date and Time on the Internet](https://www.rfc-editor.org/rfc/rfc3339) — IETF. Used for: bounded, explicit expiration of pinned service credential grants and audit timestamps.
+- [Linux sysfs device model](https://docs.kernel.org/driver-api/driver-model/overview.html) — Linux kernel documentation. Used for: independently validating actual USB device ancestry before passthrough.
+- [util-linux lsblk](https://man7.org/linux/man-pages/man8/lsblk.8.html) — util-linux project. Used for: conservative whole-disk, holder and mounted-partition checks before USB access.
