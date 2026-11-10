@@ -57,7 +57,7 @@ func (s *Server) invoke(ctx context.Context,name string,args json.RawMessage,id 
    if strings.HasPrefix(name,prefix) {
      toolName:=strings.TrimPrefix(name,prefix)
      if !s.backendHasTool(ctx,b,toolName){return toolError("backend tool unavailable or not advertised")}
-     if s.privilegeClient!=nil && approval.ScopeFor(name)!="" {
+     if approval.ScopeFor(name)!="" {
       return toolError("privileged backend operations require executor-side authorization and are not available through direct gateway forwarding")
      }
      if output,allowed:=s.checkPrivilegeContext(ctx,name,args);!allowed{return output}
