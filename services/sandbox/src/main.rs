@@ -91,6 +91,10 @@ fn wait_bounded(child: &mut Child, deadline: Instant) -> Result<(), &'static str
 }
 
 fn execute(id: &str, revision: &str, action: &str) -> Result<(), &'static str> {
+    unsafe extern "C" { fn geteuid() -> u32; }
+    if unsafe { geteuid() } == 0 {
+        return Err("engineering sandbox must not run with root authority");
+    }
     if !hex(revision, &[40, 64]) { return Err("invalid revision"); }
     let root = workspace(id)?;
     if current_revision(&root)? != revision { return Err("workspace revision is stale"); }
