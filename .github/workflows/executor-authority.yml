@@ -1,0 +1,64 @@
+name: Privileged executor acceptance
+
+on:
+  push:
+    branches:
+      - feature/rust-executor-authority
+    paths:
+      - services/executor/**
+      - services/core/privileged/**
+      - services/core/security/service_credentials*
+      - packages/executor-authority.nix
+      - nixosModules/executor.nix
+      - nixosModules/security.nix
+      - .github/workflows/executor-authority.yml
+  pull_request:
+    paths:
+      - services/executor/**
+      - services/core/privileged/**
+      - services/core/security/service_credentials*
+      - services/security-authority/src/grants.rs
+      - packages/executor-authority.nix
+      - nixosModules/executor.nix
+      - nixosModules/security.nix
+      - .github/workflows/executor-authority.yml
+
+permissions:
+  contents: read
+
+jobs:
+  rust-executor:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Confirm pinned executor dependencies
+        run: test -s services/executor/Cargo.lock
+      - name: Rust formatting
+        working-directory: services/executor
+        run: cargo fmt --all -- --check
+      - name: Rust executable and policy contracts
+        working-directory: services/executor
+        run: cargo test --locked --all-targets
+      - name: Rust static analysis
+        working-directory: services/executor
+        run: cargo clippy --locked --all-targets -- -D warnings
+      - name: Rust release artifacts
+        working-directory: services/executor
+        run: cargo build --locked --release --bins
+
+  go-compatibility:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/core/go.mod
+          cache-dependency-path: services/core/go.sum
+      - name: Security and executor policy contracts
+        working-directory: services/core
+        run: go test -race -count=1 ./security ./privileged ./release ./statelease
