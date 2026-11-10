@@ -16,12 +16,13 @@ use web_sys::{MessageEvent, Window};
 use crate::components::{Loading, Notice};
 
 const PROTOCOL: &str = "2026-01-26";
-const MAX_MESSAGE: usize = 256 * 1024;
+const MAX_REQUEST: usize = 256 * 1024;
+const MAX_REPLY: usize = 4 * 1024 * 1024;
 const MAX_PENDING: usize = 32;
 
 
 fn decode_response(raw: &str) -> Option<(u32, Result<Value, String>)> {
-    if raw.len() > MAX_MESSAGE { return None; }
+    if raw.len() > MAX_REPLY { return None; }
     let message: Value = serde_json::from_str(raw).ok()?;
     if message.get("jsonrpc").and_then(Value::as_str) != Some("2.0") {
         return None;
@@ -89,7 +90,7 @@ impl Bridge {
             .ok_or_else(|| "MCP Apps request limit reached".to_owned())?;
         let request = json!({"jsonrpc":"2.0","id":id,"method":method,"params":params});
         let text = request.to_string();
-        if text.len() > MAX_MESSAGE { return Err("MCP Apps request is too large".to_owned()); }
+        if text.len() > MAX_REQUEST { return Err("MCP Apps request is too large".to_owned()); }
         let payload = JSON::parse(&text)
             .map_err(|_| "Unable to encode MCP Apps request")?;
         let (sender, receiver) = oneshot::channel();
@@ -173,7 +174,7 @@ pub async fn call_tool<T: DeserializeOwned>(name: &str, arguments: Value) -> Res
     } else {
         let text = result.pointer("/content/0/text").and_then(Value::as_str)
             .ok_or("Health tool returned no data")?;
-        if text.len() > MAX_MESSAGE {
+        if text.len() > MAX_REPLY {
             return Err("Health tool response is too large".to_owned());
         }
         serde_json::from_str(text).map_err(|_| "Health returned invalid JSON")?
@@ -225,7 +226,8 @@ mod tests {
     fn host_requests_are_bounded() {
         assert_eq!(PROTOCOL, "2026-01-26");
         assert!(MAX_PENDING <= 32);
-        assert!(MAX_MESSAGE <= 256 * 1024);
+        assert!(MAX_REQUEST <= 256 * 1024);
+        assert!(MAX_REPLY <= 4 * 1024 * 1024);
     }
 
 
