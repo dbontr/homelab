@@ -8,7 +8,6 @@ use axum::Router;
 use hyper::server::conn::http1;
 use hyper_util::rt::TokioIo;
 use hyper_util::service::TowerToHyperService;
-use serde::Deserialize;
 use tokio::net::TcpListener;
 use tokio_rustls::rustls::pki_types::CertificateDer;
 use tokio_rustls::rustls::server::WebPkiClientVerifier;
@@ -111,7 +110,9 @@ impl Remote {
         }
         let verifier = WebPkiClientVerifier::builder(Arc::new(trusted))
             .build().map_err(|_| Error::InvalidConfiguration)?;
-        let mut config = ServerConfig::builder()
+        let mut config = ServerConfig::builder_with_protocol_versions(
+            &[&tokio_rustls::rustls::version::TLS13]
+        )
             .with_client_cert_verifier(verifier)
             .with_single_cert(server_chain, server_key)
             .map_err(|_| Error::InvalidConfiguration)?;
