@@ -200,6 +200,7 @@ func(s *Server) Handler()http.Handler{
  })
  mux.HandleFunc("POST /v1/tools/{name}/call",s.nativeToolCall)
  mux.HandleFunc("POST /v1/health/app-tools/{name}/call",s.uiHealthAppToolCall)
+ mux.HandleFunc("POST /v1/learning/app-tools/{name}/call",s.uiLearningReadTool)
  mux.HandleFunc("GET /v1/tasks/delegations",s.uiTaskDelegations)
  mux.HandleFunc("POST /v1/tasks/{id}/decomposition-preview",s.uiTaskDecompositionPreview)
  mux.HandleFunc("GET /v1/tasks/conflicts",s.taskConflicts)

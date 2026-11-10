@@ -38,28 +38,31 @@ func ownerHealthAppToolPathAllowed(path string) bool {
 }
 
 func (s *Server) uiHealthAppToolCall(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
-	if !ownerHealthAppToolAllowed(name) {
-		http.NotFound(w, r)
+	s.ownerDomainToolCall(w,r,"health__",ownerHealthAppTools)
+}
+
+// Domain tool routes have distinct, exact browser allowlists. A session
+// cannot acquire general MCP authority through this internal transport.
+func (s *Server) ownerDomainToolCall(
+	w http.ResponseWriter,r *http.Request,namespace string,allowlist map[string]struct{},
+) {
+	name:=r.PathValue("name")
+	if _,allowed:=allowlist[name];!allowed{
+		http.NotFound(w,r)
 		return
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
-	var request struct {
+	r.Body=http.MaxBytesReader(w,r.Body,1<<20)
+	var input struct{
 		Arguments json.RawMessage `json:"arguments"`
 	}
-	if err := decode(r, &request); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid Health tool arguments")
+	if err:=decode(r,&input);err!=nil||len(input.Arguments)==0{
+		writeError(w,http.StatusBadRequest,"invalid domain tool arguments")
 		return
 	}
-	if len(request.Arguments) == 0 {
-		writeError(w, http.StatusBadRequest, "Health tool arguments must be a JSON object")
+	output:=s.invoke(r.Context(),namespace+name,input.Arguments,json.RawMessage("1"))
+	if failed,_:=output["isError"].(bool);failed{
+		writeError(w,http.StatusBadGateway,"domain operation unavailable or rejected")
 		return
 	}
-	// invoke verifies canonical object arguments before forwarding to Health.
-	response := s.invoke(r.Context(), "health__"+name, request.Arguments, json.RawMessage("1"))
-	if failed, _ := response["isError"].(bool); failed {
-		writeError(w, http.StatusBadGateway, "Health operation is unavailable or was rejected")
-		return
-	}
-	writeJSON(w, http.StatusOK, response)
+	writeJSON(w,http.StatusOK,output)
 }
