@@ -558,7 +558,7 @@ impl Authority {
         id: &str,
         provider: &str,
         secret: &[u8],
-    ) -> Result<(), Error> {
+    ) -> Result<CredentialHandle, Error> {
         let now = unix_now()?;
         if !self.live(now)
             || self.session.as_ref().is_none_or(|s| s.principal != principal)
@@ -567,7 +567,8 @@ impl Authority {
         }
         self.authenticate_factors(password, otp, now)?;
         let vault = self.vault.as_mut().ok_or(Error::InvalidConfiguration)?;
-        vault.rotate(&mut self.store, id, provider, secret)
+        vault.rotate(&mut self.store, id, provider, secret)?;
+        vault.handle(id, provider)
     }
 
     pub(crate) fn revoke_credential(
