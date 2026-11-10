@@ -557,6 +557,20 @@ async fn oauth_device_poll(
     }
 }
 
+fn merge_refreshed_credential(previous: &Value, response: &[u8]) -> Result<Value, Error> {
+    let mut merged = previous.as_object().cloned().ok_or(Error::Unauthorized)?;
+    let new_values: Value = serde_json::from_slice(response).map_err(|_| Error::Unauthorized)?;
+    let updates = new_values.as_object().ok_or(Error::Unauthorized)?;
+    for (name, value) in updates {
+        if name == "refresh_token" && value.as_str().is_some_and(str::is_empty) {
+            continue;
+        }
+        merged.insert(name.clone(), value.clone());
+    }
+    merged.remove("error");
+    Ok(Value::Object(merged))
+}
+
 async fn oauth_refresh(
     State(shared): State<Shared>,
     RoutePath(provider): RoutePath<String>,
@@ -609,19 +623,12 @@ async fn oauth_refresh(
     let Ok(token) = replacement else {
         return failure("OAuth refresh failed", StatusCode::SERVICE_UNAVAILABLE);
     };
-    // Providers may rotate only the access token. Keep the previous refresh
-    // credential if the response does not include a replacement.
-    let mut response: Value = match serde_json::from_slice(&token) {
+    // RFC 6749 permits refresh responses without a replacement refresh
+    // token. Retain existing provider metadata unless explicitly replaced.
+    let response = match merge_refreshed_credential(&existing, &token) {
         Ok(value) => value,
         Err(_) => return failure("invalid OAuth refresh response", StatusCode::SERVICE_UNAVAILABLE),
     };
-    if response.get("refresh_token").and_then(Value::as_str).is_none() {
-        if let Some(fields) = response.as_object_mut() {
-            fields.insert("refresh_token".into(), Value::String(refresh.into()));
-        } else {
-            return failure("invalid OAuth refresh response", StatusCode::SERVICE_UNAVAILABLE);
-        }
-    }
     let secured = match serde_json::to_vec(&response) {
         Ok(raw) => Zeroizing::new(raw),
         Err(_) => return failure("invalid OAuth refresh response", StatusCode::SERVICE_UNAVAILABLE),
@@ -720,6 +727,27 @@ pub async fn serve_callback(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn retains_refresh_grant_and_provider_metadata() {
+        let stored = json!({
+            "access_token":"old", "refresh_token":"refresh-a",
+            "token_type":"Bearer", "scope":"read", "error":"stale"
+        });
+        let refreshed = merge_refreshed_credential(
+            &stored, br#"{"access_token":"new","token_type":"Bearer"}"#
+        ).unwrap();
+        assert_eq!(refreshed["access_token"], "new");
+        assert_eq!(refreshed["refresh_token"], "refresh-a");
+        assert_eq!(refreshed["scope"], "read");
+        assert!(refreshed.get("error").is_none());
+
+        let changed = merge_refreshed_credential(
+            &refreshed,
+            br#"{"access_token":"newer","refresh_token":"refresh-b","token_type":"Bearer"}"#
+        ).unwrap();
+        assert_eq!(changed["refresh_token"], "refresh-b");
+    }
+
     #[test]
     fn provider_policy_rejects_nonloopback_callbacks_and_untrusted_endpoints() {
         let normal = Provider {
