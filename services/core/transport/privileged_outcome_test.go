@@ -47,12 +47,18 @@ func TestPrivilegedToolResponsesPreserveExecutionState(t *testing.T) {
 		if !ok || len(parts) != 1 {
 			t.Fatalf("unexpected tool response: %+v", response)
 		}
-		text, ok := parts[0].(map[string]any)["text"].(string)
-		if !ok {
+		var content string
+		switch part := parts[0].(type) {
+		case map[string]string:
+			content = part["text"]
+		case map[string]any:
+			content, _ = part["text"].(string)
+		}
+		if content == "" {
 			t.Fatalf("missing tool text: %+v", response)
 		}
 		var decoded map[string]any
-		if err := json.Unmarshal([]byte(text), &decoded); err != nil {
+		if err := json.Unmarshal([]byte(content), &decoded); err != nil {
 			t.Fatal(err)
 		}
 		return decoded
