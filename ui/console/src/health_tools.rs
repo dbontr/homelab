@@ -16,6 +16,9 @@ pub enum Tool {
     GroceryList,
     GrocerySave,
     GroceryFromPlan,
+    TrainingSetList,
+    TrainingSetLog,
+    WorkoutLog,
 }
 
 impl Tool {
@@ -29,6 +32,9 @@ impl Tool {
             Self::GroceryList => "/v1/tools/health__health_grocery_list/call",
             Self::GrocerySave => "/v1/tools/health__health_grocery_save/call",
             Self::GroceryFromPlan => "/v1/tools/health__health_grocery_from_plan/call",
+            Self::TrainingSetList => "/v1/tools/health__health_training_set_list/call",
+            Self::TrainingSetLog => "/v1/tools/health__health_training_set_log/call",
+            Self::WorkoutLog => "/v1/tools/health__health_workout_log/call",
         }
     }
 }
@@ -65,7 +71,7 @@ mod tests {
 
     #[test]
     fn health_tools_have_fixed_owner_session_routes() {
-        for tool in [Tool::MetricSeries, Tool::NutrientDaily, Tool::GoalSet, Tool::PlanList, Tool::PlanSave, Tool::GroceryList, Tool::GrocerySave, Tool::GroceryFromPlan] {
+        for tool in [Tool::MetricSeries, Tool::NutrientDaily, Tool::GoalSet, Tool::PlanList, Tool::PlanSave, Tool::GroceryList, Tool::GrocerySave, Tool::GroceryFromPlan, Tool::TrainingSetList, Tool::TrainingSetLog, Tool::WorkoutLog] {
             assert!(tool.route().starts_with("/v1/tools/health__"));
             assert!(tool.route().ends_with("/call"));
         }
