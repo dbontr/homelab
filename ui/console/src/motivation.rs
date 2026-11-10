@@ -188,7 +188,7 @@ pub fn Motivation(csrf: String) -> Element {
                             }
                             label { class: "form-row",
                                 span { class: "label", "Daily maximum" }
-                                input { class: "field", type: "number", min: "1", max: "8",
+                                input { class: "field", r#type: "number", min: "1", max: "8",
                                     value: "{daily_limit()}",
                                     oninput: move |event| {
                                         if let Ok(value) = event.value().parse::<u8>() { daily_limit.set(value); }
@@ -196,7 +196,7 @@ pub fn Motivation(csrf: String) -> Element {
                             }
                             label { class: "form-row",
                                 span { class: "label", "Quiet start (UTC hour)" }
-                                input { class: "field", type: "number", min: "0", max: "23",
+                                input { class: "field", r#type: "number", min: "0", max: "23",
                                     value: "{quiet_start()}",
                                     oninput: move |event| {
                                         if let Ok(value) = event.value().parse::<u8>() { quiet_start.set(value); }
@@ -204,7 +204,7 @@ pub fn Motivation(csrf: String) -> Element {
                             }
                             label { class: "form-row",
                                 span { class: "label", "Quiet end (UTC hour)" }
-                                input { class: "field", type: "number", min: "0", max: "23",
+                                input { class: "field", r#type: "number", min: "0", max: "23",
                                     value: "{quiet_end()}",
                                     oninput: move |event| {
                                         if let Ok(value) = event.value().parse::<u8>() { quiet_end.set(value); }
@@ -212,18 +212,18 @@ pub fn Motivation(csrf: String) -> Element {
                             }
                         }
                         label { class: "form-row",
-                            input { type: "checkbox", checked: enabled(),
+                            input { r#type: "checkbox", checked: enabled(),
                                 onchange: move |event| enabled.set(event.checked()) }
                             span { class: "label", "Enable owner-requested motivational interventions" }
                         }
                         label { class: "form-row",
-                            input { type: "checkbox", checked: proactive_enabled(),
+                            input { r#type: "checkbox", checked: proactive_enabled(),
                                 onchange: move |event| proactive_enabled.set(event.checked()) }
                             span { class: "label", "Schedule prompts to the private in-app inbox" }
                         }
                         label { class: "form-row",
                             span { class: "label", "Scheduled prompt interval (60–1440 minutes)" }
-                            input { class: "field", type: "number", min: "60", max: "1440",
+                            input { class: "field", r#type: "number", min: "60", max: "1440",
                                 value: "{cadence_minutes()}",
                                 oninput: move |event| {
                                     if let Ok(value) = event.value().parse::<u16>() { cadence_minutes.set(value); }
@@ -249,7 +249,7 @@ pub fn Motivation(csrf: String) -> Element {
                         div { class: "inline-row",
                             button { class: "btn btn-primary", disabled: busy(), "Save profile" }
                             button {
-                                type: "button",
+                                r#type: "button",
                                 class: "btn btn-outline",
                                 disabled: busy() || !service_enabled,
                                 onclick: move |_| {
@@ -372,7 +372,7 @@ pub fn Motivation(csrf: String) -> Element {
                             div { class: "task-field-grid",
                                 label { class: "form-row",
                                     span { class: "label", "Engagement (0–5)" }
-                                    input { class: "field", type: "number", min: "0", max: "5",
+                                    input { class: "field", r#type: "number", min: "0", max: "5",
                                         value: "{engagement()}",
                                         oninput: move |event| {
                                             if let Ok(value) = event.value().parse::<u8>() { engagement.set(value); }
@@ -380,7 +380,7 @@ pub fn Motivation(csrf: String) -> Element {
                                 }
                                 label { class: "form-row",
                                     span { class: "label", "Actual progress (0–5)" }
-                                    input { class: "field", type: "number", min: "0", max: "5",
+                                    input { class: "field", r#type: "number", min: "0", max: "5",
                                         value: "{progress()}",
                                         oninput: move |event| {
                                             if let Ok(value) = event.value().parse::<u8>() { progress.set(value); }
@@ -388,7 +388,7 @@ pub fn Motivation(csrf: String) -> Element {
                                 }
                                 label { class: "form-row",
                                     span { class: "label", "Well-being (0–5)" }
-                                    input { class: "field", type: "number", min: "0", max: "5",
+                                    input { class: "field", r#type: "number", min: "0", max: "5",
                                         value: "{wellbeing()}",
                                         oninput: move |event| {
                                             if let Ok(value) = event.value().parse::<u8>() { wellbeing.set(value); }
@@ -530,7 +530,7 @@ pub fn Motivation(csrf: String) -> Element {
                             },
                             label { class: "form-row",
                                 span { class: "label", "Intended focus interval (10–240 minutes)" }
-                                input { class: "field", type: "number", min: "10", max: "240",
+                                input { class: "field", r#type: "number", min: "10", max: "240",
                                     value: "{focus_duration()}",
                                     oninput: move |event| {
                                         if let Ok(value)=event.value().parse::<u16>() {
@@ -581,7 +581,7 @@ pub fn Motivation(csrf: String) -> Element {
                         div { class: "task-field-grid",
                             label { class: "form-row",
                                 span { class: "label", "Intellectual work (minutes)" }
-                                input { class: "field", type: "number", min: "1", max: "720",
+                                input { class: "field", r#type: "number", min: "1", max: "720",
                                     value: "{session_minutes()}",
                                     oninput: move |event| {
                                         if let Ok(value) = event.value().parse::<u16>() { session_minutes.set(value); }
@@ -589,7 +589,7 @@ pub fn Motivation(csrf: String) -> Element {
                             }
                             label { class: "form-row",
                                 span { class: "label", "Fascination (0–5)" }
-                                input { class: "field", type: "number", min: "0", max: "5",
+                                input { class: "field", r#type: "number", min: "0", max: "5",
                                     value: "{fascination()}",
                                     oninput: move |event| {
                                         if let Ok(value) = event.value().parse::<u8>() { fascination.set(value); }
@@ -597,7 +597,7 @@ pub fn Motivation(csrf: String) -> Element {
                             }
                             label { class: "form-row",
                                 span { class: "label", "Well-being (0–5)" }
-                                input { class: "field", type: "number", min: "0", max: "5",
+                                input { class: "field", r#type: "number", min: "0", max: "5",
                                     value: "{session_wellbeing()}",
                                     oninput: move |event| {
                                         if let Ok(value) = event.value().parse::<u8>() { session_wellbeing.set(value); }
@@ -605,7 +605,7 @@ pub fn Motivation(csrf: String) -> Element {
                             }
                         }
                         label { class: "form-row",
-                            input { type: "checkbox", checked: self_initiated(),
+                            input { r#type: "checkbox", checked: self_initiated(),
                                 onchange: move |event| self_initiated.set(event.checked()) }
                             span { class: "label", "I chose to begin this work independently" }
                         }
