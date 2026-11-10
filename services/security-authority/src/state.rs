@@ -134,6 +134,10 @@ impl StateStore {
         })
     }
 
+    pub(crate) fn healthy(&self) -> bool {
+        !self.faulted
+    }
+
     pub fn load_authenticator(&self) -> Result<AuthenticatorState, Error> {
         if self.faulted {
             return Err(Error::Storage);
@@ -243,6 +247,26 @@ mod tests {
         assert!(matches!(store.load_authenticator(), Err(Error::Storage)));
         drop(store);
         fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn failed_persistence_permanently_disables_the_state_owner() {
+        let directory = dir();
+        let moved = directory.with_extension("moved");
+        let mut store = StateStore::acquire(&directory).unwrap();
+        fs::rename(&directory, &moved).unwrap();
+        assert_eq!(
+            store.persist_authenticator(&AuthenticatorState::default()),
+            Err(Error::Storage)
+        );
+        assert!(!store.healthy());
+        assert_eq!(store.load_authenticator(), Err(Error::Storage));
+        assert_eq!(
+            store.persist_authenticator(&AuthenticatorState::default()),
+            Err(Error::Storage)
+        );
+        drop(store);
+        fs::remove_dir_all(moved).unwrap();
     }
 
     #[test]
