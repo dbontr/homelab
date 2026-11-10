@@ -182,6 +182,16 @@ impl Vault {
         self.persist(storage, records)
     }
 
+    pub(crate) fn handle(&self, id: &str, provider: &str) -> Result<CredentialHandle, Error> {
+        let record = self.records.get(id).ok_or(Error::Unauthorized)?;
+        if record.provider != provider { return Err(Error::Unauthorized); }
+        Ok(CredentialHandle {
+            id: record.id.clone(),
+            provider: record.provider.clone(),
+            created_at: record.created_at.clone(),
+        })
+    }
+
     pub(crate) fn delete(&mut self, storage: &mut StateStore, id: &str) -> Result<(), Error> {
         if !self.records.contains_key(id) {
             return Err(Error::Unauthorized);
