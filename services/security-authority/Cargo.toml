@@ -6,6 +6,7 @@ license = "MIT"
 description = "Independent owner authentication and authorization kernel"
 
 [dependencies]
+aes-gcm = "0.10.3"
 base64 = "0.22.1"
 chrono = { version = "0.4.40", default-features = false, features = ["std", "serde"] }
 data-encoding = "2.6.0"
