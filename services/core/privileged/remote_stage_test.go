@@ -30,7 +30,7 @@ func TestStageHandlerRejectsUnverifiedTLSAndUnauthorizedStage(t *testing.T){
  revision:=strings.Repeat("b",40)
  auth:=&testStageAuth{}
  stage:=&testStageActuator{}
- auditPath:=filepath.Join(t.TempDir(),"audit.jsonl")
+ auditPath:=filepath.Join(privateAuditDir(t),"audit.jsonl")
  audit,err:=OpenAuditJournal(auditPath)
  if err!=nil{t.Fatal(err)}
  executor:=&Executor{cfg:Config{Host:"jupiter",AllowRelease:true,Auth:auth,Releases:stage,Audit:audit}}
