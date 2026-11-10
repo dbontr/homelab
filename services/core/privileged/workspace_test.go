@@ -103,7 +103,7 @@ func TestWorkspaceExecutorReauthorizesEveryMutation(t *testing.T){
  calls:=0
  policy,done:=testWorkspacePolicy(t,http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){
   calls++;w.Header().Set("Content-Type","application/json")
-  _,_=w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"isError":false}}`))
+  _,_=w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"isError":false,"content":[]}}`))
  }))
  defer done()
  auth:=&fakeAuth{decision:security.Authorization{Reason:"owner confirmation required"}}
