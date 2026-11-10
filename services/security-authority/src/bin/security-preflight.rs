@@ -135,7 +135,17 @@ fn run() -> Result<(), &'static str> {
             browser,
         ).map_err(|_| "invalid Access audience configuration")?;
     }
-    println!("Security state, policies and supplied credentials validated.");
+    // Preflight cannot certify interfaces that this kernel does not yet serve.
+    for unsupported in [
+        "HOMELAB_SECURITY_REMOTE_LISTEN",
+        "HOMELAB_SECURITY_OAUTH_PROVIDERS",
+        "HOMELAB_SECURITY_BROWSER_ORIGIN",
+    ] {
+        if env::var(unsupported).ok().is_some_and(|v| !v.is_empty()) {
+            return Err("requested security interface has no Rust runtime acceptance");
+        }
+    }
+    println!("Copied security state and supported policy contracts validated.");
     Ok(())
 }
 
