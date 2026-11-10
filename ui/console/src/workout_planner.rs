@@ -9,36 +9,36 @@ use crate::health_tools::{self, Tool};
 
 #[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
-struct Exercise {
-    name: String,
-    sets: i32,
-    repetitions: i32,
-    target: String,
+pub(crate) struct Exercise {
+    pub(crate) name: String,
+    pub(crate) sets: i32,
+    pub(crate) repetitions: i32,
+    pub(crate) target: String,
     #[serde(flatten)]
     extra: BTreeMap<String, Value>,
 }
 
 #[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
-struct Session {
-    id: String,
-    date: String,
-    title: String,
-    exercises: Vec<Exercise>,
-    items: Vec<Value>,
+pub(crate) struct Session {
+    pub(crate) id: String,
+    pub(crate) date: String,
+    pub(crate) title: String,
+    pub(crate) exercises: Vec<Exercise>,
+    pub(crate) items: Vec<Value>,
     #[serde(flatten)]
     extra: BTreeMap<String, Value>,
 }
 
 #[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
-struct Plan {
-    id: String,
-    kind: String,
-    title: String,
-    revision: i32,
+pub(crate) struct Plan {
+    pub(crate) id: String,
+    pub(crate) kind: String,
+    pub(crate) title: String,
+    pub(crate) revision: i32,
     updated_at: String,
-    sessions: Vec<Session>,
+    pub(crate) sessions: Vec<Session>,
     #[serde(flatten)]
     extra: BTreeMap<String, Value>,
 }
