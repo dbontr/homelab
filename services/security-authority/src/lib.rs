@@ -7,6 +7,7 @@
 pub mod access;
 pub mod canonical;
 pub mod credentials;
+pub mod grants;
 pub mod sessions;
 pub mod state;
 pub mod vault;
