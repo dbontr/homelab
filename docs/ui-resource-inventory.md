@@ -106,6 +106,11 @@ obligations. Its Go
 owner-session route allows only a fixed set of read operations and requires
 the normal origin, session and CSRF checks. Grading, source modification,
 attachment upload, answer-key disclosure and arbitrary MCP calls remain
-unavailable through this route. The richer embedded Learning App continues
-to serve source uploads, interactive grading and adaptive-session tools
+unavailable through this route. The Learning console also presents the next action and diagnostic
+recommendation for the selected learning session. An owner-session view can
+build a revision-fenced prerequisite plan or request a phase transition.
+The Learning store checks pending grading, permitted transitions, plan
+availability, revisions and completion evidence. These operations cannot
+grade answers or award mastery. The richer embedded Learning App continues
+to serve source uploads, interactive grading and model-mediated assessment
 until equivalent native flows satisfy permission and behavior parity.
