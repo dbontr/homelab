@@ -62,7 +62,7 @@ func TestMotivationHasOnePrivateBackendAndOwnerAuthorization(t *testing.T){
   t.Fatal("MCP must not alter aspirational identity or forge self-reported feedback")
  }
  pause:=request(h,"POST","/mcp",`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"motivation_pause","arguments":{}}}`,authorized)
- if !strings.Contains(pause.Body.String(),`"enabled":false`){
+ if !strings.Contains(pause.Body.String(),`\"enabled\":false`){
   t.Fatalf("pause tool failed: %s",pause.Body.String())
  }
 }
