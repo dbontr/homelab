@@ -132,7 +132,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let token_path = env::var("HOMELAB_MOTIVATION_TOKEN_FILE")?;
     let token = read_token(Path::new(&token_path))?;
     let state_path = env::var("HOMELAB_MOTIVATION_STATE_FILE")
-        .unwrap_or_else(|_| "/var/lib/homelab-motivation/state.json".to_owned());
+        .unwrap_or_else(|_| {
+            let directory = env::var("STATE_DIRECTORY")
+                .unwrap_or_else(|_| "/var/lib/homelab-motivation".to_owned());
+            format!("{directory}/state.json")
+        });
     let engine = Engine::open(state_path)?;
     let listen: SocketAddr = env::var("HOMELAB_MOTIVATION_LISTEN_ADDR")
         .unwrap_or_else(|_| "127.0.0.1:8341".to_owned()).parse()?;

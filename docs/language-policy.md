@@ -21,7 +21,7 @@ HTML and CSS remain the browser's presentation formats. Generated JavaScript req
 
 - `services/core/` is the Go application module and owns personal planning, recipes, core coordination, the domain state store and the internal capability router.
 - `services/compute/`, `services/health/` and `services/learning/` are separate Go modules with independent state and deployment boundaries.
-- `services/motivation/` is an independent Rust domain process; it owns owner-approved aspirational profiles, intervention selection and privately recorded self-reports. Go forwards only its admitted operations.
+- `services/motivation/` is an independent Rust domain process; it owns owner-approved aspirational profiles, intervention selection, in-app scheduling and privately recorded self-reports. Go forwards only its admitted operations.
 - `services/bridge/` is a restricted internal transport. It owns neither domain records nor privileged credentials.
 - `ui/` contains Rust/WASM presentation code and the private owner-session ingress.
 - `mcp/` and `api/` contain optional Go entry points; neither can own application state, privileged execution, background schedulers or another service's credentials.
