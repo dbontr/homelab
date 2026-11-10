@@ -8,6 +8,7 @@
 - [Linux kill(2)](https://man7.org/linux/man-pages/man2/kill.2.html) — Linux man-pages project. Used for: sending SIGKILL to the actuator's process group when administrative execution is cancelled.
 - [Go ReverseProxy](https://pkg.go.dev/net/http/httputil#ReverseProxy) — Go project. Used for: response-header policy in the optional MCP and API interfaces.
 - [Go HTTP Transport](https://pkg.go.dev/net/http#Transport) — Go project. Used for: private upstream connection timeouts and response-header size limits.
+- [Go tls.X509KeyPair](https://pkg.go.dev/crypto/tls#X509KeyPair) — Go project. Used for: parsing validated PEM key pairs after enforcing private-key file permissions.
 - [Linux flock(2)](https://man7.org/linux/man-pages/man2/flock.2.html) — Linux man-pages project. Used for: nonblocking, process-lifetime advisory locks on state resources before opening service stores.
 - [Linux open(2)](https://man7.org/linux/man-pages/man2/open.2.html) — Linux man-pages project. Used for: O_NOFOLLOW descriptor-bound reads of protected interface and executor credential files.
 - [Rust Standard Library: Command](https://doc.rust-lang.org/std/process/struct.Command.html) — Rust project. Used for: shell-free, explicit-argument privileged command dispatch in the Rust actuator.
