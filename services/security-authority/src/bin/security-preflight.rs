@@ -83,7 +83,7 @@ fn run() -> Result<(), &'static str> {
     let verifier: PassphraseRecord =
         serde_json::from_slice(&verifier).map_err(|_| "invalid passphrase verifier")?;
     let mut totp = read_file("HOMELAB_SECURITY_TOTP_FILE", true)?;
-    let totp_code = std::str::from_utf8(&totp)
+    let mut totp_code = std::str::from_utf8(&totp)
         .map_err(|_| "invalid TOTP configuration")?
         .trim()
         .to_owned();
@@ -91,15 +91,16 @@ fn run() -> Result<(), &'static str> {
     let policies = read_file("HOMELAB_SECURITY_POLICY_FILE", false)?;
     let policies: Vec<OperationPolicy> =
         serde_json::from_slice(&policies).map_err(|_| "invalid operation policy")?;
-    let mut authority = Authority::open(
+    let opened = Authority::open(
         &directory,
         required("HOMELAB_SECURITY_OWNER")?,
         "platform-gateway".into(),
         verifier,
         &totp_code,
         policies,
-    )
-    .map_err(|_| "authentication state validation failed")?;
+    );
+    totp_code.zeroize();
+    let mut authority = opened.map_err(|_| "authentication state validation failed")?;
 
     if env::var("HOMELAB_SECURITY_VAULT_KEY_FILE").is_ok() {
         let credential_path = directory.join("credentials.json");
@@ -116,8 +117,9 @@ fn run() -> Result<(), &'static str> {
         let mut secret = [0u8; 32];
         secret.copy_from_slice(&key);
         key.zeroize();
-        authority.attach_vault(secret)
-            .map_err(|_| "encrypted vault structure invalid")?;
+        let attached = authority.attach_vault(secret);
+        secret.zeroize();
+        attached.map_err(|_| "encrypted vault structure invalid")?;
         authority.validate_vault()
             .map_err(|_| "encrypted vault authentication failed")?;
     } else if directory.join("credentials.json").exists() {
