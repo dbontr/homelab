@@ -96,7 +96,10 @@ impl Engine {
             wellbeing: input.wellbeing,
             intervention_id: input.intervention_id,
             evidence_ref: input.evidence_ref.trim().to_owned(),
-            holdout: self.state.profile.holdout_weekday_utc == Some(utc_weekday(now)),
+            holdout: self.state.profile.holdout_weekday_utc == Some(utc_weekday(now)) &&
+                !self.state.interventions.iter().any(|i|
+                    (i.created_at / 86400 == now / 86400) ||
+                    (!i.cancelled && i.feedback.is_none() && i.created_at < now)),
         };
         if !valid_checkins(std::slice::from_ref(&proposed), self.state.next_id) {
             return Err(Error::Invalid("invalid engagement check-in"));
@@ -218,6 +221,7 @@ mod tests {
         }).unwrap();
         let friday = 86400 + 12 * 3600;
         assert!(e.tick(friday).unwrap().is_none());
+        assert!(matches!(e.suggest(friday), Err(Error::Limited(_))));
         e.checkin(CheckinInput {
             minutes: 50, self_initiated: true, fascination: 4, wellbeing: 4,
             intervention_id: None, evidence_ref: String::new(),

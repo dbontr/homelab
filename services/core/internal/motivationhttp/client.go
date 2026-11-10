@@ -16,7 +16,7 @@ import (
 
 const (
  maxRequest = 16 << 10
- maxResponse = 256 << 10
+ maxResponse = 2 << 20
 )
 
 // Client is a private transport for an independently owned Rust domain
@@ -69,6 +69,7 @@ func(c *Client) exchange(ctx context.Context,method,path string,payload []byte)(
  if c==nil{return 0,nil,errors.New("motivation service not configured")}
  if !admitted(method,path){return 0,nil,errors.New("motivation operation is not allowed")}
  if len(payload)>maxRequest{return 0,nil,errors.New("motivation request exceeds limit")}
+ if method==http.MethodPost && path=="/v1/motivation/interventions" && len(payload)==0{payload=[]byte("{}")}
  req,err:=http.NewRequestWithContext(ctx,method,c.origin+path,bytes.NewReader(payload))
  if err!=nil{return 0,nil,err}
  req.Header.Set("Authorization","Bearer "+c.token)

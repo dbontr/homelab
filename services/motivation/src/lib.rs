@@ -326,6 +326,7 @@ impl Engine {
     pub fn pause(&mut self) -> Result<Record, Error> {
         let mut next = self.state.clone();
         next.profile.enabled = false;
+        next.profile.proactive_enabled = false;
         for event in &mut next.interventions {
             if event.feedback.is_none() { event.cancelled = true; }
         }
@@ -347,6 +348,9 @@ impl Engine {
         let p = &self.state.profile;
         if !p.enabled {
             return Err(Error::Conflict("motivation interventions are paused"));
+        }
+        if p.holdout_weekday_utc == Some(((now / 86400 + 4) % 7) as u8) {
+            return Err(Error::Limited("intervention-free day is active"));
         }
         if let Some(pending) = self.state.interventions.iter().rev()
             .find(|event| event.feedback.is_none() && !event.cancelled) {
@@ -413,6 +417,7 @@ impl Engine {
         });
         if input.wellbeing <= 1 {
             next.profile.enabled = false;
+            next.profile.proactive_enabled = false;
             next.profile.revision = next.profile.revision.checked_add(1)
                 .ok_or(Error::Invalid("profile revision exhausted"))?;
         }

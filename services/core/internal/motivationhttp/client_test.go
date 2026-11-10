@@ -63,6 +63,21 @@ func TestMotivationAdmitsOnlyDomainOperations(t *testing.T){
  }
 }
 
+func TestAbsentSuggestionArgumentsBecomeDefaultContext(t *testing.T) {
+ token:=strings.Repeat("x",40)
+ upstream:=httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){
+  if r.Header.Get("Content-Type")!="application/json"{t.Error("missing content type")}
+  var payload map[string]any
+  if err:=json.NewDecoder(r.Body).Decode(&payload);err!=nil{t.Errorf("invalid default context: %v",err)}
+  w.Header().Set("Content-Type","application/json")
+  _,_=w.Write([]byte(`{"id":1}`))
+ }))
+ defer upstream.Close()
+ client,err:=New(upstream.URL,token)
+ if err!=nil{t.Fatal(err)}
+ if _,err:=client.Call(context.Background(),"POST","/v1/motivation/interventions",nil);err!=nil{t.Fatal(err)}
+}
+
 func TestMissingServiceIsUnavailable(t *testing.T){
  mux:=http.NewServeMux()
  Register(mux,nil)
