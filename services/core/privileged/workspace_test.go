@@ -126,3 +126,16 @@ func TestWorkspaceExecutorReauthorizesEveryMutation(t *testing.T){
  result,err=executor.Execute(context.Background(),"infrastructure__workspace_stop","saturn",args)
  if err!=nil||!result.Allowed||calls!=1||auth.calls!=2{t.Fatal("approved Workspace operation not delegated",result,err)}
 }
+
+
+func TestWorkspaceBridgeAcceptsToolResultWithoutExplicitIsError(t *testing.T) {
+    policy, done := testWorkspacePolicy(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        w.Header().Set("Content-Type", "application/json")
+        _, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"content":[]}}`))
+    }))
+    defer done()
+    args := map[string]any{"host":"saturn","project_id":"research","workspace_id":"ws1"}
+    if err := policy.Call(context.Background(), "infrastructure__workspace_stop", args); err != nil {
+        t.Fatalf("valid MCP tool result was rejected: %v", err)
+    }
+}
