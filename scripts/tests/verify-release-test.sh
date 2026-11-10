@@ -4,7 +4,7 @@ set -euo pipefail
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 verify="$root/scripts/verify-release.sh"
 temporary=$(mktemp -d)
-trap 'rm -rf -- "$temporary"' EXIT
+trap 'chmod -R u+w -- "$temporary"; rm -rf -- "$temporary"' EXIT
 counter=0
 
 make_release() {
