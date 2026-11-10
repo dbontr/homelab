@@ -41,11 +41,33 @@ case "${1-}" in
   *) exit 2 ;;
 esac
 GO
-chmod 0700 "$scratch/bin/git" "$scratch/bin/go"
+cat > "$scratch/bin/cargo" <<'CARGO'
+#!/bin/sh
+case "${1-}" in
+  fmt|test|clippy) exit 0 ;;
+  build)
+    [ -n "${CARGO_TARGET_DIR:-}" ] || exit 2
+    mkdir -p "$CARGO_TARGET_DIR/release"
+    printf '#!/bin/sh\nexit 0\n' > "$CARGO_TARGET_DIR/release/homelab-motivation"
+    chmod 0700 "$CARGO_TARGET_DIR/release/homelab-motivation"
+    exit 0 ;;
+  *) exit 2 ;;
+esac
+CARGO
+chmod 0700 "$scratch/bin/git" "$scratch/bin/go" "$scratch/bin/cargo"
 
 PATH="$scratch/bin:$PATH" bash "$root/scripts/stage-release.sh" \
   --component homelab-api "$scratch/api-release" >/dev/null
 bash "$root/scripts/verify-release.sh" "$scratch/api-release" >/dev/null
+
+PATH="$scratch/bin:$PATH" bash "$root/scripts/stage-release.sh" \
+  --component homelab-motivation "$scratch/motivation-release" >/dev/null
+bash "$root/scripts/verify-release.sh" "$scratch/motivation-release" >/dev/null
+if [[ ! -x "$scratch/motivation-release/bin/homelab-motivation" ||
+      -n "$(find "$scratch/motivation-release/bin" -mindepth 1 -type f ! -name homelab-motivation -print -quit)" ]]; then
+  printf '%s\n' 'Rust component stage did not publish the declared executable' >&2
+  exit 1
+fi
 if [[ ! -x "$scratch/api-release/bin/homelab-api" ||
       -n "$(find "$scratch/api-release/bin" -mindepth 1 -type f ! -name homelab-api -print -quit)" ]] ||
     ! grep -qx 'component=homelab-api' "$scratch/api-release/RELEASE"; then

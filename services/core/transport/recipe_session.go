@@ -28,6 +28,13 @@ func (s *Server) sessionOwnerWriteAllowed(r *http.Request) bool {
             len(parts)==7 && parts[4]=="alerts" && parts[5]!="" && parts[6]=="ack")
     case r.Method == http.MethodPost && (path=="/v1/research/learning/preview" || path=="/v1/research/learning/import"):
         allowed=true
+    case r.Method == http.MethodPut && path == "/v1/motivation/profile":
+        allowed=true
+    case r.Method == http.MethodPost && (path == "/v1/motivation/pause" ||
+        path == "/v1/motivation/interventions" || path == "/v1/motivation/feedback" ||
+        path == "/v1/motivation/dismiss" || path == "/v1/motivation/checkins" ||
+        path == "/v1/motivation/focus" || path == "/v1/motivation/focus/end"):
+        allowed=true
     case r.Method == http.MethodPut && path == "/v1/pantry":
         allowed=true
     case r.Method == http.MethodDelete && strings.HasPrefix(path,"/v1/pantry/items/"):

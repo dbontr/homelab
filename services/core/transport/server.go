@@ -20,6 +20,7 @@ import (
  "github.com/dbontr/homelab-new/system/devices"
  "github.com/dbontr/homelab-new/system/media"
  "github.com/dbontr/homelab-new/system/internal/personal"
+ "github.com/dbontr/homelab-new/system/internal/motivationhttp"
  "github.com/dbontr/homelab-new/system/internal/monitoring"
  "github.com/dbontr/homelab-new/system/internal/mediahttp"
  "github.com/dbontr/homelab-new/system/internal/httpjson"
@@ -35,7 +36,7 @@ import (
  "github.com/dbontr/homelab-new/system/store"
 )
 type Backend struct { Name string; URL string; Token string; TokenSource func()(string,error) }
-type Server struct { db *store.Store; token string; mcpInterfaceToken string; apiInterfaceToken string; apiInterfaceWritePaths map[string]bool; backend []Backend; client *http.Client; calendarSource func(context.Context)(calendar.Feed,error); privilegeClient *security.AdminClient; executorClient *privileged.Client; fleetClient *release.FleetClient; securityLoginURL string; allowedOrigins map[string]struct{}; media *media.Client; deviceCatalog *devices.Catalog; nodeCatalog *devices.NodeCatalog; profiles *profiles.Registry; recipes *recipes.Store; sessions *session.Manager; observability *observability.Client; bookCatalog *books.Catalog; engineering agentflow.Manager; workflows *agentflow.Store; capabilityPlanner agentflow.CapabilityPlanner; inflight chan struct{} }
+type Server struct { db *store.Store; token string; mcpInterfaceToken string; apiInterfaceToken string; apiInterfaceWritePaths map[string]bool; backend []Backend; client *http.Client; calendarSource func(context.Context)(calendar.Feed,error); privilegeClient *security.AdminClient; executorClient *privileged.Client; fleetClient *release.FleetClient; securityLoginURL string; allowedOrigins map[string]struct{}; media *media.Client; deviceCatalog *devices.Catalog; nodeCatalog *devices.NodeCatalog; profiles *profiles.Registry; recipes *recipes.Store; sessions *session.Manager; observability *observability.Client; bookCatalog *books.Catalog; motivation *motivationhttp.Client; engineering agentflow.Manager; workflows *agentflow.Store; capabilityPlanner agentflow.CapabilityPlanner; inflight chan struct{} }
 
 func New(db *store.Store,token string,backends []Backend)(*Server,error){
  if db==nil||len(token)<32||strings.ContainsAny(token,"\r\n\t"){return nil,errors.New("store and a strong access token are required")}
@@ -56,6 +57,7 @@ func(s *Server) SetNodeCatalog(catalog *devices.NodeCatalog) { s.nodeCatalog = c
 func(s *Server) SetProfiles(registry *profiles.Registry) { s.profiles = registry }
 func(s *Server) SetBookCatalog(catalog *books.Catalog) { s.bookCatalog = catalog }
 func(s *Server) SetSessions(manager *session.Manager) { s.sessions = manager }
+func(s *Server) SetMotivation(client *motivationhttp.Client) { s.motivation = client }
 func(s *Server) SetPrivilegeClient(client *security.AdminClient) { s.privilegeClient = client }
 func(s *Server) SetExecutorClient(client *privileged.Client) {s.executorClient=client}
 func(s *Server) SetFleetClient(client *release.FleetClient) {s.fleetClient=client}
@@ -93,6 +95,7 @@ func(s *Server) fetchCalendar(ctx context.Context)(calendar.Feed,error){
 func(s *Server) Handler()http.Handler{
  mux:=http.NewServeMux()
  personal.Register(mux,s.db)
+ motivationhttp.Register(mux,s.motivation)
  mux.HandleFunc("GET /healthz",func(w http.ResponseWriter,_ *http.Request){writeJSON(w,200,map[string]string{"status":"ok"})})
  mux.HandleFunc("GET /ui/session",s.uiSession)
  mux.HandleFunc("POST /ui/session",s.uiSession)
@@ -407,6 +410,16 @@ func(s *Server)localTools()[]map[string]any{
   tool("resource_resolve","Resolve a homelab:kind:id reference without copying the owning service's data",map[string]any{"ref":prop("string")},"ref"),
   tool("system_status","List configured integrations",map[string]any{}),
  }
+ if s.motivation!=nil{
+  tools=append(tools,
+   tool("motivation_status","Read the owner-defined identity, opt-in status and self-reported intervention history",map[string]any{}),
+   tool("motivation_metrics","Summarize recent self-reported voluntary intellectual work and well-being",map[string]any{}),
+   tool("motivation_suggest","Request one context-aware, consented motivational intervention; no external notifications are sent",map[string]any{
+    "trigger":map[string]any{"type":"string","enum":[]string{"session_start","resistance","distraction","uncertainty","milestone"}},
+    "question":map[string]any{"type":"string","maxLength":320},
+   }),
+   tool("motivation_pause","Immediately pause the opt-in motivation service",map[string]any{}))
+ }
  if s.deviceCatalog!=nil{
   tools=append(tools,tool("device_inventory","List declared hardware access and constraints; this is not an online device probe",map[string]any{}))
  }
@@ -605,6 +618,14 @@ func(s *Server)toolList(r *http.Request)[]map[string]any{
  return out
 }
 func(s *Server)localTool(ctx context.Context,name string,raw json.RawMessage)(any,error){
+ if s.motivation!=nil{
+  switch name{
+  case "motivation_status":return s.motivation.Call(ctx,http.MethodGet,"/v1/motivation/state",nil)
+  case "motivation_metrics":return s.motivation.Call(ctx,http.MethodGet,"/v1/motivation/metrics",nil)
+  case "motivation_suggest":return s.motivation.Call(ctx,http.MethodPost,"/v1/motivation/interventions",raw)
+  case "motivation_pause":return s.motivation.Call(ctx,http.MethodPost,"/v1/motivation/pause",nil)
+  }
+ }
  if name=="task_decomposition_preview"{
   var request struct{
    ParentID string `json:"parent_id"`

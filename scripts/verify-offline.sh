@@ -78,6 +78,12 @@ fi
   cargo test --offline
   cargo check --offline --target wasm32-unknown-unknown
 )
+(
+  cd "$root/services/motivation"
+  cargo fmt --all -- --check
+  cargo test --locked --offline
+  cargo clippy --locked --offline --all-targets -- -D warnings
+)
 
 printf '%s\n' 'Checking Rust security authority'
 (

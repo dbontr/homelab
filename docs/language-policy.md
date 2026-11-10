@@ -49,6 +49,7 @@ Source development may implement a preferred design without activating it. A che
 
 - `services/core/` owns the Go platform, personal records, recipes, coordination and canonical capability dispatch.
 - `services/compute/`, `services/learning/` and `services/health/` remain independent domain and persistence boundaries. Their Go controllers and APIs can call specialized Rust components without sharing unrestricted credentials or opening one another's databases.
+- `services/motivation/` owns identity-directed interventions, opt-in scheduling and self-reported engagement in an independent Rust service. The Go platform forwards allowlisted operations without owning those records.
 - `services/security-authority/` implements the Rust owner security authority and its protected state and interface contracts. The Go authority remains the selected service until compilation, cross-language security tests, Nix packaging and isolated rollback acceptance pass.
 - `services/bridge/` owns restricted internal transport; `mcp/` and `api/` are optional Go entry points. None owns domain state or privileged execution authority.
 - `services/actuator/` provides a typed Rust privileged action mechanism. Additional trusted execution components belong to separately enforced security or execution boundaries.

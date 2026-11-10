@@ -18,6 +18,7 @@ import (
     "github.com/dbontr/homelab-new/system/devices"
     "github.com/dbontr/homelab-new/system/media"
     "github.com/dbontr/homelab-new/system/observability"
+    "github.com/dbontr/homelab-new/system/internal/motivationhttp"
     "github.com/dbontr/homelab-new/system/profiles"
     "github.com/dbontr/homelab-new/system/recipes"
     "github.com/dbontr/homelab-new/system/store"
@@ -93,6 +94,20 @@ func main(){
     if e:=server.SetInterfaceTokens(mcpInterfaceToken,apiInterfaceToken,apiWritePaths);e!=nil{
         log.Fatal("interface service policy: ",e)
     }
+    motivationURL:=os.Getenv("HOMELAB_MOTIVATION_SERVICE_URL")
+    motivationTokenPath:=os.Getenv("HOMELAB_MOTIVATION_SERVICE_TOKEN_FILE")
+    if motivationURL!=""{
+        if motivationTokenPath==""{log.Fatal("motivation service requires dedicated token file")}
+        info,err:=os.Lstat(motivationTokenPath)
+        if err!=nil||!info.Mode().IsRegular()||info.Mode().Perm()&0077!=0{
+            log.Fatal("motivation service token must be a private regular file")
+        }
+        identity,err:=secret(motivationTokenPath)
+        if err!=nil{log.Fatal("motivation service token: ",err)}
+        client,err:=motivationhttp.New(motivationURL,identity)
+        if err!=nil{log.Fatal("motivation service: ",err)}
+        server.SetMotivation(client)
+    }else if motivationTokenPath!=""{log.Fatal("motivation service token requires endpoint")}
     workflows,err:=agentflow.Open(workflowDir)
     if err!=nil{log.Fatal(err)}
     server.SetWorkflows(workflows)

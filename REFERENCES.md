@@ -108,3 +108,7 @@
 - [RFC 3339: Date and Time on the Internet](https://www.rfc-editor.org/rfc/rfc3339) — IETF. Used for: bounded, explicit expiration of pinned service credential grants and audit timestamps.
 - [Linux sysfs device model](https://docs.kernel.org/driver-api/driver-model/overview.html) — Linux kernel documentation. Used for: independently validating actual USB device ancestry before passthrough.
 - [util-linux lsblk](https://man7.org/linux/man-pages/man8/lsblk.8.html) — util-linux project. Used for: conservative whole-disk, holder and mounted-partition checks before USB access.
+- [Axum Documentation](https://docs.rs/axum/latest/axum/) — Tokio/Axum project. Used for: the owner-authenticated, loopback-only motivation service HTTP interface.
+- [Rust fs2 Documentation](https://docs.rs/fs2/latest/fs2/) — fs2 maintainers. Used for: process-lifetime exclusive ownership of the motivation state lock.
+- [Finite-time Analysis of the Multiarmed Bandit Problem](https://homes.di.unimi.it/~cesabian/Pubblicazioni/ml-02.pdf) — Auer, Cesa-Bianchi and Fischer, 2002. Used for: an exploratory upper-confidence-bound strategy selector over self-reported results.
+- [gloo-timers Documentation](https://docs.rs/gloo-timers/latest/gloo_timers/) — Rust/WASM Gloo maintainers. Used for: bounded in-app refresh of the scheduled motivation inbox while the console view is active.

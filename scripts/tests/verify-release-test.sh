@@ -14,7 +14,7 @@ make_release() {
   for binary in \
     homelab-platform homelab-calendard homelab-engineeringd homelab-securityd \
     homelab-executord homelab-release homelab-admin homelab-compute-controller \
-    homelab-compute-worker homelab-learning homelab-health \
+    homelab-compute-worker homelab-learning homelab-health homelab-motivation \
     homelab-mcp homelab-api; do
     printf '#!/bin/sh\nprintf "version"\n' > "$release/bin/$binary"
     chmod 0700 "$release/bin/$binary"
@@ -105,7 +105,7 @@ chmod 0444 "$release/RELEASE" "$release/SHA256SUMS"
 chmod 0555 "$release"
 bash "$verify" "$release" >/dev/null
 
-for component in homelab-platform homelab-calendard homelab-api homelab-compute-worker homelab-console; do
+for component in homelab-platform homelab-calendard homelab-api homelab-compute-worker homelab-motivation homelab-console; do
   make_component_release "$component"
   bash "$verify" "$release" >/dev/null
 done
