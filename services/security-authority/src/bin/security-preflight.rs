@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 
 use homelab_security_authority::access::AccessVerifier;
 use homelab_security_authority::credentials::PassphraseRecord;
+use homelab_security_authority::grants::ServiceCredentialGrant;
 use homelab_security_authority::sessions::{Authority, OperationPolicy};
 use zeroize::Zeroize;
 
@@ -28,7 +29,7 @@ fn read_file(name: &str, private: bool) -> Result<Vec<u8>, &'static str> {
         .map_err(|_| "configured file unavailable")?;
     let md = file.metadata().map_err(|_| "cannot inspect configured file")?;
     if !md.is_file()
-        || md.mode() & if private { 0o077 } else { 0o022 } != 0
+        || (md.mode() & if private { 0o077 } else { 0o022 }) != 0
         || (private && md.uid() != unsafe { libc::geteuid() })
     {
         return Err("configured file has unsafe permissions");
@@ -101,6 +102,16 @@ fn run() -> Result<(), &'static str> {
             .map_err(|_| "encrypted vault authentication failed")?;
     } else if directory.join("credentials.json").exists() {
         return Err("encrypted vault requires its owner key");
+    }
+
+    if let Ok(raw_grants) = env::var("HOMELAB_SECURITY_SERVICE_CREDENTIAL_GRANTS") {
+        if raw_grants.len() > (128 << 10) {
+            return Err("service credential policy exceeds size limit");
+        }
+        let grants: Vec<ServiceCredentialGrant> =
+            serde_json::from_str(&raw_grants).map_err(|_| "invalid service grants")?;
+        authority.configure_service_grants(grants)
+            .map_err(|_| "invalid service credential scope")?;
     }
 
     if env::var("HOMELAB_SECURITY_ACCESS_GATEWAY_AUD").is_ok() {
