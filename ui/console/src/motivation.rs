@@ -17,6 +17,9 @@ pub fn Motivation(csrf: String) -> Element {
     });
     let mut initialized = use_signal(|| false);
     let mut goal_id = use_signal(String::new);
+    let goals = use_resource(|| async {
+        api::get::<Vec<Value>>("/v1/goals").await
+    });
     let mut identity = use_signal(String::new);
     let mut outcome = use_signal(String::new);
     let mut next_step = use_signal(String::new);
@@ -153,6 +156,21 @@ pub fn Motivation(csrf: String) -> Element {
                                 busy.set(false);
                             });
                         },
+                        if let Some(Ok(known_goals)) = goals.cloned() {
+                            label { class: "form-row",
+                                span { class: "label", "Link to an existing personal goal (optional)" }
+                                select { class: "field", value: "{goal_id()}",
+                                    onchange: move |event| goal_id.set(event.value()),
+                                    option { value: "", "No linked goal" }
+                                    for known in known_goals {
+                                        option {
+                                            value: "{field(&known, "id")}",
+                                            {field(&known, "title")}
+                                        }
+                                    }
+                                }
+                            }
+                        }
                         label { class: "form-row",
                             span { class: "label", "Linked goal ID (optional)" }
                             input { class: "field", value: "{goal_id()}",
@@ -663,6 +681,9 @@ pub fn Motivation(csrf: String) -> Element {
                                                 api::property(feedback, &["progress"]),
                                                 api::property(feedback, &["wellbeing"]))}
                                         }
+                                    } else if event.get("cancelled").and_then(Value::as_bool)
+                                            .unwrap_or(false) {
+                                        p { class: "card-description", "Closed without feedback" }
                                     } else {
                                         p { class: "card-description", "Awaiting feedback" }
                                     }
