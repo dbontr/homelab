@@ -181,8 +181,13 @@ impl AuthorizationClient {
         if status != StatusCode::OK || !mime.as_deref().is_some_and(|v| v.starts_with("application/json")) {
             return Err(Error::Denied("independent authorization rejected the operation"));
         }
-        serde_json::from_slice(&result)
-            .map_err(|_| Error::Protocol("invalid authorization decision"))
+        let decision: Decision = serde_json::from_slice(&result)
+            .map_err(|_| Error::Protocol("invalid authorization decision"))?;
+        if decision.allowed && (!decision.reason.is_empty() ||
+            !decision.confirmation_id.is_empty()) {
+            return Err(Error::Protocol("contradictory authorization decision"));
+        }
+        Ok(decision)
     }
 
     /// Secret retrieval additionally requires the pinned mTLS executor identity.
