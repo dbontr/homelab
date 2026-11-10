@@ -61,6 +61,7 @@ build_go() {
 }
 
 build_go services/core ./cmd/homelab-platform homelab-platform
+build_go services/core ./cmd/homelab-calendard homelab-calendard
 build_go . ./mcp homelab-mcp
 build_go . ./api homelab-api
 build_go services/core ./cmd/homelab-engineeringd homelab-engineeringd
