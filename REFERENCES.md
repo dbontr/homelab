@@ -4,6 +4,8 @@
 - [Nix Flake Reference](https://nixos.org/manual/nix/stable/command-ref/new-cli/nix3-flake) — Nix project. Used for: pinned, reproducible host composition.
 - [SQLite Foreign Key Support](https://www.sqlite.org/foreignkeys.html) — SQLite project. Used for: transactional research claim and source-evidence ownership constraints.
 - [Go Documentation](https://go.dev/doc/) — Go project. Used for: Go services, HTTP handling, and file persistence.
+- [Go ReverseProxy](https://pkg.go.dev/net/http/httputil#ReverseProxy) — Go project. Used for: response-header policy in the optional MCP and API interfaces.
+- [Go HTTP Transport](https://pkg.go.dev/net/http#Transport) — Go project. Used for: private upstream connection timeouts and response-header size limits.
 - [Linux flock(2)](https://man7.org/linux/man-pages/man2/flock.2.html) — Linux man-pages project. Used for: nonblocking, process-lifetime advisory locks on state resources before opening service stores.
 - [Go archive/zip Package](https://pkg.go.dev/archive/zip) — Go project. Used for: portable recipe bundle generation and bounded ZIP entry reading.
 - [Model Context Protocol Specification](https://modelcontextprotocol.io/specification/2025-06-18) — MCP project; 2025-06-18. Used for: stateless JSON-RPC transport, tool discovery, and tool calls.
