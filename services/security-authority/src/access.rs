@@ -81,7 +81,8 @@ impl AccessVerifier {
     pub fn new(issuer: &str, owner_email: &str, jwks: &[u8]) -> Result<Self, Error> {
         let owner_email = owner_email.trim().to_ascii_lowercase();
         if !issuer.starts_with("https://")
-            || issuer.contains(['?', '#'])
+            || issuer.contains('?')
+            || issuer.contains('#')
             || owner_email.len() < 3
             || owner_email.len() > 320
             || owner_email.bytes().filter(|b| *b == b'@').count() != 1
