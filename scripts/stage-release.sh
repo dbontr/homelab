@@ -98,7 +98,14 @@ else
 fi
 
 stage=$(mktemp -d "$parent/.homelab-release.XXXXXXXX")
-cleanup() { [[ -z "$stage" ]] || rm -rf -- "$stage"; }
+cleanup() {
+  if [[ -z "$stage" || ! -d "$stage" || -L "$stage" ]]; then
+    return
+  fi
+  # Verification can fail after the staged release becomes read-only.
+  chmod -R u+w -- "$stage" 2>/dev/null || true
+  rm -rf -- "$stage"
+}
 trap cleanup EXIT
 mkdir -p "$stage/bin" "$stage/console"
 
