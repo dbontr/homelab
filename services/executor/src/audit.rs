@@ -195,3 +195,62 @@ impl AuditJournal {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn event(id: &str, outcome: &str) -> Event {
+        Event {
+            id: id.into(),
+            operation: "infrastructure__service_restart".into(),
+            target: "jupiter".into(),
+            arguments_sha256: "a".repeat(64),
+            outcome: outcome.into(),
+            at: "2026-11-10T18:00:00Z".into(),
+        }
+    }
+
+    #[test]
+    fn complete_outcome_requires_one_matching_start() {
+        let id = "b".repeat(32);
+        let mut seen = BTreeMap::new();
+        let started = event(&id, "started");
+        let completed = event(&id, "accepted");
+        assert!(started.valid());
+        assert!(transition(&seen, &completed).is_err());
+        assert!(transition(&seen, &started).is_ok());
+        seen.insert(id.clone(), started);
+        assert!(transition(&seen, &completed).is_ok());
+        seen.insert(id.clone(), completed);
+        assert!(transition(&seen, &event(&id, "failed")).is_err());
+        assert!(transition(&seen, &event(&id, "started")).is_err());
+    }
+
+    #[test]
+    fn refuses_substituted_targets_and_argument_digests() {
+        let id = "c".repeat(32);
+        let mut seen = BTreeMap::new();
+        seen.insert(id.clone(), event(&id, "started"));
+
+        let mut wrong_target = event(&id, "succeeded");
+        wrong_target.target = "venus".into();
+        assert!(transition(&seen, &wrong_target).is_err());
+
+        let mut wrong_args = event(&id, "succeeded");
+        wrong_args.arguments_sha256 = "d".repeat(64);
+        assert!(transition(&seen, &wrong_args).is_err());
+        assert!(transition(&seen, &event(&id, "succeeded")).is_ok());
+    }
+
+    #[test]
+    fn invalid_events_fail_closed() {
+        let mut event = event(&"a".repeat(32), "started");
+        assert!(event.valid());
+        event.at = "0001-01-01T00:00:00Z".into();
+        assert!(!event.valid());
+        event.at = "2026-11-10T18:00:00Z".into();
+        event.outcome = "unknown".into();
+        assert!(!event.valid());
+    }
+}
