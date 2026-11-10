@@ -57,8 +57,22 @@ fn copied_state_directory() -> Result<PathBuf, &'static str> {
     {
         return Err("preflight requires an independent copied state directory");
     }
-    if !fs::symlink_metadata(&directory).map_err(|_| "state copy missing")?.is_dir() {
-        return Err("state copy must be a directory");
+    let copy = fs::symlink_metadata(&directory).map_err(|_| "state copy missing")?;
+    if !copy.is_dir() || copy.file_type().is_symlink() {
+        return Err("state copy must be a real directory");
+    }
+    // A bind mount of the live state directory is not an independent copy.
+    if let Ok(live) = fs::metadata("/var/lib/homelab-securityd") {
+        if copy.dev() == live.dev() && copy.ino() == live.ino() {
+            return Err("preflight cannot open the live state inode");
+        }
+    }
+    for name in ["authenticator.json"] {
+        let metadata = fs::symlink_metadata(directory.join(name))
+            .map_err(|_| "copied authentication replay state missing")?;
+        if !metadata.is_file() || metadata.file_type().is_symlink() {
+            return Err("copied authentication replay state invalid");
+        }
     }
     Ok(directory)
 }
@@ -88,6 +102,12 @@ fn run() -> Result<(), &'static str> {
     .map_err(|_| "authentication state validation failed")?;
 
     if env::var("HOMELAB_SECURITY_VAULT_KEY_FILE").is_ok() {
+        let credential_path = directory.join("credentials.json");
+        let md = fs::symlink_metadata(&credential_path)
+            .map_err(|_| "copied encrypted credential store missing")?;
+        if !md.is_file() || md.file_type().is_symlink() {
+            return Err("copied encrypted credential store invalid");
+        }
         let mut key = read_file("HOMELAB_SECURITY_VAULT_KEY_FILE", true)?;
         if key.len() != 32 {
             key.zeroize();
