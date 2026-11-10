@@ -9,6 +9,7 @@ use crate::canonical::canonical_arguments;
 use sha2::{Digest, Sha256};
 use crate::credentials::{AuthenticatorState, Factors, PassphraseRecord};
 use crate::state::StateStore;
+use crate::vault::{CredentialHandle, Vault};
 use crate::Error;
 
 const IDLE_SECONDS: i64 = 120 * 60;
@@ -96,6 +97,7 @@ pub struct Authority {
     policy: BTreeMap<String, OperationPolicy>,
     session: Option<Session>,
     pending: BTreeMap<String, Confirmation>,
+    vault: Option<Vault>,
 }
 
 fn valid_identifier(id: &str) -> bool {
@@ -217,7 +219,38 @@ impl Authority {
             policy,
             session: None,
             pending: BTreeMap::new(),
+            vault: None,
         })
+    }
+
+    /// The vault and authenticator share a process-lifetime ownership lease.
+    pub fn attach_vault(&mut self, key: [u8; 32]) -> Result<(), Error> {
+        if self.vault.is_some() {
+            return Err(Error::InvalidConfiguration);
+        }
+        self.vault = Some(Vault::open(&self.store, key)?);
+        Ok(())
+    }
+
+    /// Owner-only credential enrollment is gated by an active owner session
+    /// and a fresh password/TOTP verification.
+    pub fn store_credential(
+        &mut self,
+        principal: &str,
+        password: &str,
+        otp: &str,
+        provider: &str,
+        secret: &[u8],
+    ) -> Result<CredentialHandle, Error> {
+        let now = unix_now()?;
+        if !self.live(now)
+            || self.session.as_ref().is_none_or(|s| s.principal != principal)
+        {
+            return Err(Error::Unauthorized);
+        }
+        self.authenticate_factors(password, otp, now)?;
+        let vault = self.vault.as_mut().ok_or(Error::InvalidConfiguration)?;
+        vault.store(&mut self.store, provider, secret)
     }
 
     fn authenticate_factors(
