@@ -10,7 +10,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         return Err("recovery requires a trusted local root terminal".into());
     }
     let requested: Vec<String> = std::env::args().skip(1).collect();
-    if requested.as_slice() != ["recover"] {
+    if requested.len() != 1 || requested[0] != "recover" {
         return Err("expected exact local recovery operation".into());
     }
     let policy = Arc::new(Policy::load()?);
