@@ -14,6 +14,7 @@ import (
  "os"
  "path/filepath"
  "strings"
+ "syscall"
  "time"
 )
 
@@ -100,8 +101,23 @@ func New(cfg Config)(http.Handler,error){
    out.Set("Authorization","Bearer "+cfg.ServiceToken)
    pr.Out.Host=target.Host
   },
-  Transport:&http.Transport{Proxy:nil,MaxIdleConnsPerHost:8,
-   ResponseHeaderTimeout:120*time.Second},
+  Transport:&http.Transport{
+   Proxy:nil,
+   DialContext:(&net.Dialer{Timeout:5*time.Second,KeepAlive:30*time.Second}).DialContext,
+   MaxIdleConnsPerHost:8,
+   MaxResponseHeaderBytes:64<<10,
+   ResponseHeaderTimeout:120*time.Second,
+  },
+  // Internal services cannot grant browser state or relax the interface's
+  // cache and framing policy through response headers.
+  ModifyResponse:func(resp *http.Response)error{
+   resp.Header.Del("Set-Cookie")
+   resp.Header.Set("Cache-Control","no-store")
+   resp.Header.Set("X-Content-Type-Options","nosniff")
+   resp.Header.Set("Referrer-Policy","no-referrer")
+   resp.Header.Set("X-Frame-Options","DENY")
+   return nil
+  },
   FlushInterval:-1,
   ErrorHandler:func(w http.ResponseWriter,_ *http.Request,_ error){
    http.Error(w,"service unavailable",http.StatusServiceUnavailable)
@@ -111,6 +127,7 @@ func New(cfg Config)(http.Handler,error){
   w.Header().Set("Cache-Control","no-store")
   w.Header().Set("X-Content-Type-Options","nosniff")
   w.Header().Set("Referrer-Policy","no-referrer")
+  w.Header().Set("X-Frame-Options","DENY")
   if r.Method==http.MethodGet&&r.URL.Path=="/healthz"{
    w.Header().Set("Content-Type","application/json")
    _,_=io.WriteString(w,`{"status":"ok"}`)
@@ -210,13 +227,17 @@ func writable(allowed map[string]bool,path string)bool{
 
 func protectedToken(path string)(string,error){
  if !filepath.IsAbs(path){return "",errors.New("credential path must be absolute")}
- info,err:=os.Lstat(path)
+ // Validate the open descriptor, not a path inspected before opening it.
+ file,err:=os.OpenFile(path,os.O_RDONLY|syscall.O_NOFOLLOW,0)
+ if err!=nil{return "",errors.New("interface credential file is unavailable or has unsafe access")}
+ defer file.Close()
+ info,err:=file.Stat()
  if err!=nil||!info.Mode().IsRegular()||info.Mode().Perm()&0077!=0||
   info.Size()<32||info.Size()>4097{
   return "",errors.New("interface credential file is unavailable or has unsafe access")
  }
- data,err:=os.ReadFile(path)
- if err!=nil{return "",errors.New("interface credential unreadable")}
+ data,err:=io.ReadAll(io.LimitReader(file,4098))
+ if err!=nil||len(data)>4097{return "",errors.New("interface credential unreadable")}
  token:=strings.TrimSuffix(string(data),"\n")
  if !validToken(token){return "",errors.New("invalid interface credential")}
  return token,nil
