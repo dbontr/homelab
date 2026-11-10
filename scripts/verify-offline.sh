@@ -24,6 +24,12 @@ verify_go() {
   )
 }
 
+if ! command -v bash >/dev/null 2>&1; then
+  printf '%s\n' 'Bash is required for release contract tests.' >&2
+  exit 1
+fi
+bash "$root/scripts/tests/verify-release-test.sh"
+
 if ! command -v go >/dev/null 2>&1; then
   printf "%s\n" "Go is required for the selected verification mode." >&2
   exit 1
@@ -65,8 +71,8 @@ if ! command -v helm >/dev/null 2>&1; then
 fi
 chart="$root/services/compute/deploy/helm/project-workspace"
 helm lint "$chart"
-pinned_controller="ghcr.io/dbontr/eminence/controller@sha256:$(printf '%064d' 0)"
-pinned_worker="ghcr.io/dbontr/eminence/worker@sha256:$(printf '%064d' 0)"
+pinned_controller="ghcr.io/dbontr/homelab/controller@sha256:$(printf '%064d' 0)"
+pinned_worker="ghcr.io/dbontr/homelab/worker@sha256:$(printf '%064d' 0)"
 render=$(helm template homelab-acceptance "$chart" \
   --set controller.enabled=true \
   --set-string controller.image="$pinned_controller" \
@@ -85,7 +91,7 @@ fi
 
 # Neither a mutable image tag nor an unspecified image may create a
 # controller or worker Deployment in the self-hosted release chart.
-for image in "ghcr.io/dbontr/eminence/controller:main" ""; do
+for image in "ghcr.io/dbontr/homelab/controller:main" ""; do
   if helm template homelab-acceptance "$chart" \
     --set controller.enabled=true \
     --set-string controller.image="$image" >/dev/null 2>&1; then
@@ -93,7 +99,7 @@ for image in "ghcr.io/dbontr/eminence/controller:main" ""; do
     exit 1
   fi
 done
-for image in "ghcr.io/dbontr/eminence/worker:main" ""; do
+for image in "ghcr.io/dbontr/homelab/worker:main" ""; do
   if helm template homelab-acceptance "$chart" \
     --set controller.enabled=false \
     --set worker.enabled=true \
@@ -126,5 +132,4 @@ done
 for package in homelab-platform homelab-calendar homelab-engineering homelab-security homelab-executor homelab-fleet; do
   nix --extra-experimental-features 'nix-command flakes' build --offline --no-link ".#packages.x86_64-linux.$package"
 done
-bash "$root/scripts/tests/verify-release-test.sh"
 printf '%s\n' 'All local source checks succeeded. No NixOS configuration was activated.'
