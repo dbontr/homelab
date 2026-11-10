@@ -2,18 +2,19 @@ package worker
 
 import (
     "context"
+    "crypto/sha256"
+    "encoding/hex"
+    "errors"
+    "fmt"
+    "os"
+    "os/exec"
+    "path/filepath"
+    "regexp"
     "strconv"
+    "strings"
+    "syscall"
     "time"
-	"crypto/sha256"
-	"encoding/hex"
-	"errors"
-	"fmt"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"regexp"
-	"strings"
-	"syscall"
+
 )
 
 // USB disk access is disabled unless the worker operator and workspace request
@@ -80,8 +81,7 @@ func usbDockerMapping(configured string) (string, uint32, error) {
     if err != nil || len(output) > 512 {
         return "", 0, errors.New("native USB identity validation failed")
     }
-    lines := strings.Split(strings.TrimSpace(string(output)), "
-")
+    lines := strings.Split(strings.TrimSpace(string(output)), "\n")
     if len(lines) != 2 || !strings.HasPrefix(lines[0], "/dev/") ||
         strings.ContainsAny(lines[0], "
 	 ") {
