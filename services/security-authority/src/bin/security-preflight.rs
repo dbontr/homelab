@@ -28,8 +28,9 @@ fn read_file(name: &str, private: bool) -> Result<Vec<u8>, &'static str> {
         .open(path)
         .map_err(|_| "configured file unavailable")?;
     let md = file.metadata().map_err(|_| "cannot inspect configured file")?;
+    let forbidden_permissions = if private { 0o077 } else { 0o022 };
     if !md.is_file()
-        || (md.mode() & if private { 0o077 } else { 0o022 }) != 0
+        || md.mode() & forbidden_permissions != 0
         || (private && md.uid() != unsafe { libc::geteuid() })
     {
         return Err("configured file has unsafe permissions");
