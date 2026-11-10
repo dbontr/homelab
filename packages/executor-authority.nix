@@ -7,12 +7,13 @@ pkgs.rustPlatform.buildRustPackage {
   # Privileged code is not eligible for a Nix release without reviewed dependency resolution.
   cargoLock.lockFile = ../services/executor/Cargo.lock;
 
-  cargoBuildFlags = [ "--bin" "executord" "--bin" "recovery" ];
+  cargoBuildFlags = [ "--bin" "executord" "--bin" "recovery" "--bin" "preflight" ];
   doCheck = true;
   cargoTestFlags = [ "--all-targets" ];
   postInstall = ''
     test -x "$out/bin/executord"
     test -x "$out/bin/recovery"
+    test -x "$out/bin/preflight"
   '';
 
   meta = with pkgs.lib; {
