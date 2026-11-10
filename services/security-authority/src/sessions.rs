@@ -392,6 +392,11 @@ impl Authority {
         alias: &str,
         use_secret: impl FnOnce(&[u8]) -> T,
     ) -> Result<T, Error> {
+        // A failed vault mutation invalidates credential access until
+        // persistent state has been reconciled by the exclusive owner.
+        if !self.store.healthy() {
+            return Err(Error::Storage);
+        }
         let policy = self.service_grants.as_ref().ok_or(Error::Unauthorized)?;
         let vault = self.vault.as_ref().ok_or(Error::Unauthorized)?;
         policy.use_credential(peer, alias, vault, use_secret)
