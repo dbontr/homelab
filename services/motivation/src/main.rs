@@ -166,10 +166,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/v1/motivation/focus", post(focus_start))
         .route("/v1/motivation/focus/end", post(focus_finish))
         .route_layer(middleware::from_fn_with_state(app.clone(), authenticate));
+    let scheduler_state = app.engine.clone();
     let router = Router::new().merge(protected)
         .route("/healthz", get(healthz))
         .with_state(app);
-    let scheduler_state = app.engine.clone();
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(Duration::from_secs(60));
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
