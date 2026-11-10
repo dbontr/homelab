@@ -227,6 +227,35 @@ mod tests {
         assert_eq!(state, old);
     }
     #[test]
+    fn five_failed_attempts_lock_authentication_for_five_minutes() {
+        let factors = fixture();
+        let mut state = AuthenticatorState::default();
+        let code = factors.totp_for(100);
+        for index in 1..=5 {
+            assert_eq!(
+                factors.verify(&mut state, "not-the-passphrase", &code, 3_000, |_| Ok(())),
+                Err(Error::AuthenticationDenied)
+            );
+            if index < 5 {
+                assert_eq!(state.failures, index);
+            }
+        }
+        assert_eq!(state.failures, 0);
+        assert_eq!(state.locked_until, 3_300);
+        assert_eq!(
+            factors.verify(&mut state, PASSPHRASE, &code, 3_299, |_| Ok(())),
+            Err(Error::AuthenticationDenied)
+        );
+        let later = factors.totp_for(110);
+        assert_eq!(
+            factors.verify(&mut state, PASSPHRASE, &later, 3_300, |_| Ok(())),
+            Ok(())
+        );
+        assert_eq!(state.locked_until, 0);
+        assert_eq!(state.last_totp_step, 110);
+    }
+
+    #[test]
     fn rejects_invalid_configurations() {
         let record = PassphraseRecord {
             version: 1,
