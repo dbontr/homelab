@@ -20,6 +20,7 @@ HTML and CSS remain the browser's presentation formats. Generated JavaScript req
 
 - `services/core/` is the Go application module and owns personal planning, recipes, core coordination, the domain state store and the internal capability router.
 - `services/compute/`, `services/health/` and `services/learning/` are separate Go modules with independent state and deployment boundaries.
+- `services/security-authority/` contains the Rust owner authentication and authorization kernel, including password/TOTP verification, canonical request policy, exclusive authenticator state and encrypted credential handling. The active authority remains the Go security service until the Rust runtime implements the approved owner, browser, client, remote authorization and credential-broker interfaces and passes the security acceptance gate.
 - `services/bridge/` is a restricted internal transport. It owns neither domain records nor privileged credentials.
 - `ui/` contains Rust/WASM presentation code and the private owner-session ingress.
 - `mcp/` and `api/` contain optional Go entry points; neither can own application state, privileged execution, background schedulers or another service's credentials.
