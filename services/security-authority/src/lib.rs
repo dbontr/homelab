@@ -5,6 +5,7 @@
 //! without invoking the cryptographic verifier in this crate.
 
 pub mod access;
+pub mod bootstrap;
 pub mod canonical;
 pub mod credentials;
 pub mod grants;
