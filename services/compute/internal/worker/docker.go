@@ -754,7 +754,8 @@ func (r *Runner) importArchive(ctx context.Context, op Operation, c *Client) (ma
 		return nil, err
 	}
 	repoName := regexp.MustCompile(`^(local:)?[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)
-	if !repoName.MatchString(p.Repository) || !workspaceID.MatchString(p.ArtifactID) {
+	if !repoName.MatchString(p.Repository) || !regexp.MustCompile("^[a-f0-9]{40}$").MatchString(p.Revision) ||
+		!workspaceID.MatchString(p.ArtifactID) {
 		return nil, errors.New("invalid imported repository")
 	}
 	temp, err := os.CreateTemp("", "pwm-repository-*")
@@ -798,6 +799,9 @@ func (r *Runner) importArchive(ctx context.Context, op Operation, c *Client) (ma
 		if !safeArchiveEntry(relative) || relative == "." {
 			return nil, errors.New("unsafe repository archive entry")
 		}
+		if relative == ".pwm-source-revision" {
+			return nil, errors.New("repository archive contains reserved source receipt")
+		}
 		if header.Typeflag == tar.TypeDir {
 			continue
 		}
@@ -819,6 +823,15 @@ func (r *Runner) importArchive(ctx context.Context, op Operation, c *Client) (ma
 		if _, err := io.CopyN(dest, source, header.Size); err != nil {
 			return nil, err
 		}
+	}
+	sourceRef := []byte(p.Repository + "\n" + p.Revision + "\n")
+	markerPath := "repos/" + strings.NewReplacer("/", "__", ":", "__").Replace(p.Repository) + "/.pwm-source-revision"
+	if err := dest.WriteHeader(&tar.Header{Name: markerPath, Mode: 0444,
+		Typeflag: tar.TypeReg, Size: int64(len(sourceRef)), Uid: 65534, Gid: 65534}); err != nil {
+		return nil, err
+	}
+	if _, err := dest.Write(sourceRef); err != nil {
+		return nil, err
 	}
 	if err := dest.Close(); err != nil {
 		return nil, err

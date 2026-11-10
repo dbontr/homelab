@@ -48,19 +48,19 @@ fn valid_revision(value: &str) -> bool {
         && value.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
-fn git_head(source: &Path) -> Result<String, &'static str> {
-    let output = Command::new("/usr/bin/git").args(["--no-optional-locks", "-C"])
-        .arg(source).args(["rev-parse", "--verify", "HEAD"])
-        .env_clear().env("HOME", "/tmp").env("GIT_CONFIG_NOSYSTEM", "1")
-        .stdin(Stdio::null()).stderr(Stdio::null()).output()
-        .map_err(|_| "Git revision inspection unavailable")?;
-    if !output.status.success() || output.stdout.len() > 100 {
-        return Err("Git revision inspection failed");
+fn source_revision(source: &Path, repository: &str, expected: &str) -> Result<(), &'static str> {
+    // GitHub tarballs have no .git directory; the worker records the exact
+    // controller-approved reference in a reserved import receipt.
+    let marker = source.join(".pwm-source-revision");
+    let meta = fs::symlink_metadata(&marker).map_err(|_| "source import receipt unavailable")?;
+    if !meta.is_file() || meta.file_type().is_symlink() || meta.len() > 256 {
+        return Err("invalid source import receipt");
     }
-    let text = String::from_utf8(output.stdout).map_err(|_| "invalid Git output")?;
-    let revision = text.trim();
-    if !valid_revision(revision) { return Err("invalid Git revision"); }
-    Ok(revision.to_owned())
+    let receipt = fs::read_to_string(&marker).map_err(|_| "source receipt unreadable")?;
+    if receipt.len() > 256 || receipt != format!("{repository}\n{expected}\n") {
+        return Err("source does not match the approved archive reference");
+    }
+    Ok(())
 }
 
 fn approved_tool(action: &str) -> Result<(&'static str, &'static [&'static str]), &'static str> {
@@ -97,7 +97,7 @@ pub(crate) fn run(repository: &str, revision: &str, action: &str) -> Result<(), 
     if unsafe { geteuid() } == 0 { return Err("verification must not run as root"); }
     if !valid_revision(revision) { return Err("invalid expected Git revision"); }
     let source = checkout(repository)?;
-    if git_head(&source)? != revision { return Err("checkout is not at expected revision"); }
+    source_revision(&source, repository, revision)?;
     let (binary, args) = approved_tool(action)?;
     let before = fs::metadata(&source).map_err(|_| "checkout unavailable")?;
     let mut child = Command::new(binary);
@@ -116,7 +116,7 @@ pub(crate) fn run(repository: &str, revision: &str, action: &str) -> Result<(), 
         return Err("checkout was replaced before verification");
     }
     wait(child.spawn().map_err(|_| "verification command could not start")?)?;
-    if git_head(&source)? != revision { return Err("checkout revision changed during verification"); }
+    source_revision(&source, repository, revision)?;
     println!("completed");
     Ok(())
 }
