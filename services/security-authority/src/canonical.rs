@@ -162,6 +162,23 @@ mod tests {
     }
 
     #[test]
+    fn matches_go_encoding_json_number_and_string_vectors() {
+        let cases: &[(&[u8], &[u8])] = &[
+            (
+                br#"{"numbers":[1.0,1e+30,-0,0.0000001],"slash":"a/b","quotes":"\\\""}"#,
+                br#"{"numbers":[1.0,1e+30,-0,0.0000001],"quotes":"\\\"","slash":"a/b"}"#,
+            ),
+            (
+                br#"{"unicode":"\u2028\u2029\u003c"}"#,
+                br#"{"unicode":"\u2028\u2029\u003c"}"#,
+            ),
+        ];
+        for (input, expected) in cases {
+            assert_eq!(canonical_arguments(input).unwrap().as_slice(), *expected);
+        }
+    }
+
+    #[test]
     fn uses_go_html_escaping() {
         assert_eq!(
             canonical_arguments(br#"{"operator":"<owner>&"}"#).unwrap(),
