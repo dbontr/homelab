@@ -14,6 +14,24 @@ The Rust authority kernel must validate a private copy of the authentication sta
 
 `services.homelabSecurity.implementation` defaults to `"go"`. The alternative `"rust"` selects the Rust binary inside the same `homelab-securityd.service`; its Nix package requires a committed, resolved `Cargo.lock` and enforces the crate test suite during its build. Do not select it until Go/Rust compatibility, full Rust compilation, adversarial authorization, and isolated rollback acceptance have passed. A source-level kernel and a successful state preflight alone do not establish deployed security correctness. The Go daemon remains active while those checks are incomplete.
 
+## Scoped service credentials
+
+The security authority's optional mTLS credential route binds each grant to
+an exact certificate DNS identity, alias, provider, and opaque vault handle.
+At registration, it pins the encrypted credential's SHA-256 revision. An
+operator can supply that revision explicitly in
+`services.homelabSecurity.remote.serviceCredentialGrants` to reject stale
+configuration. If omitted, the daemon snapshots the existing revision at
+startup. A rotation or deletion invalidates the active grant, even if the
+opaque handle is unchanged. Grant reauthorization requires an operator-owned
+policy update or restart; a gateway request cannot grant itself a new version.
+
+A grant can also specify `expiresAt` as an RFC 3339 timestamp. Expired grants
+are rejected at registration and on each credential read, independently of
+the owner's administrative-session lifetime. Grant policies never contain
+the plaintext credential. The service's mTLS certificate and private vault
+remain outside MCP and application process custody.
+
 ## Restricted Rust executor
 
 The privileged host executor has one implementation selector:
@@ -24,6 +42,11 @@ Only one owner may append to `executor-actions.jsonl` or change the NixOS
 release journal. Rust uses the existing audited JSON event fields and durable
 `started` → `accepted`/`succeeded`/`failed` transitions. A request
 acknowledged by Kubernetes or Workspace is `accepted`, not a completed job.
+An unpaired `started` audit record remains unresolved when a process crashes
+or an executor loses custody. It is never silently labeled failed or retried.
+A separately authorized coordinator may read `GET /v1/audit/status`; a trusted
+root console can run `audit-inspect unresolved` after the active executor
+releases its state lease.
 A NixOS activation/reversion is `completed` only after host-local health
 checks.
 
