@@ -139,6 +139,14 @@ impl ReleaseController {
         serde_json::from_slice(&content).map_err(|_| Error::Storage("invalid release record"))
     }
 
+    fn optional_journal(&self) -> Result<Option<Journal>, Error> {
+        match fs::symlink_metadata(self.policy.state_dir.join("journal.json")) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(_) => Err(Error::Storage("cannot inspect release journal")),
+            Ok(_) => self.read("journal.json").map(Some),
+        }
+    }
+
     fn atomic<T: Serialize>(&self, name: &str, record: &T) -> Result<(), Error> {
         let content = serde_json::to_vec(record).map_err(|_| Error::Storage("cannot encode release record"))?;
         if content.len() > MAX_RECORD || name.contains('/') || name.contains("..") {
@@ -218,7 +226,7 @@ impl ReleaseController {
         let _guard = self.operation.lock().await;
         let _file = self.state_lock()?;
         require_root_owned_path(&self.policy.source)?;
-        if self.read::<Journal>("journal.json").is_ok_and(|j| j.interrupted()) {
+        if self.optional_journal()?.is_some_and(|j| j.interrupted()) {
             return Err(Error::Denied("incomplete release requires recovery"));
         }
         let root = self.policy.source.to_str().ok_or(Error::Configuration("source path must be UTF-8"))?;
@@ -251,7 +259,7 @@ impl ReleaseController {
         let _guard = self.operation.lock().await;
         let _file = self.state_lock()?;
         let manifest = self.load_stage(id)?;
-        if self.read::<Journal>("journal.json").is_ok_and(|j| j.interrupted()) {
+        if self.optional_journal()?.is_some_and(|j| j.interrupted()) {
             return Err(Error::Denied("interrupted release must be recovered first"));
         }
         let previous = self.current_system()?;
