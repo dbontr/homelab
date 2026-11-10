@@ -2,6 +2,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use chrono::{DateTime, SecondsFormat, Utc};
 use serde::Serialize;
 use serde_json::Value;
 
@@ -48,11 +49,16 @@ struct Confirmation {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct SessionStatus {
     pub active: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub owner: Option<String>,
-    pub authenticated_at: Option<i64>,
-    pub last_activity_at: Option<i64>,
-    pub idle_expires_at: Option<i64>,
-    pub absolute_expires_at: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub authenticated_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_activity_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub idle_expires_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub absolute_expires_at: Option<String>,
 }
 
 impl SessionStatus {
@@ -85,7 +91,7 @@ pub struct ConfirmationPreview {
     pub target: String,
     pub arguments_sha256: String,
     pub arguments: String,
-    pub expires_at: i64,
+    pub expires_at: String,
     pub confirmed: bool,
 }
 
@@ -132,6 +138,12 @@ fn dangerous(name: &str) -> bool {
                     | "grant" | "update" | "patch"
             )
         })
+}
+
+fn wire_time(seconds: i64) -> String {
+    DateTime::<Utc>::from_timestamp(seconds, 0)
+        .expect("session timestamp must be representable")
+        .to_rfc3339_opts(SecondsFormat::Secs, true)
 }
 
 fn unix_now() -> Result<i64, Error> {
@@ -467,10 +479,10 @@ impl Authority {
         SessionStatus {
             active: true,
             owner: Some(self.owner.clone()),
-            authenticated_at: Some(session.created),
-            last_activity_at: Some(session.last_activity),
-            idle_expires_at: Some(session.last_activity + IDLE_SECONDS),
-            absolute_expires_at: Some(session.created + ABSOLUTE_SECONDS),
+            authenticated_at: Some(wire_time(session.created)),
+            last_activity_at: Some(wire_time(session.last_activity)),
+            idle_expires_at: Some(wire_time(session.last_activity + IDLE_SECONDS)),
+            absolute_expires_at: Some(wire_time(session.created + ABSOLUTE_SECONDS)),
         }
     }
 
@@ -512,7 +524,7 @@ impl Authority {
                 target: p.target.clone(),
                 arguments_sha256: hex::encode(p.digest),
                 arguments: p.display_arguments.clone(),
-                expires_at: p.expires,
+                expires_at: wire_time(p.expires),
                 confirmed: p.confirmed,
             })
             .collect()
