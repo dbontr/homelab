@@ -6,6 +6,10 @@ license = "MIT"
 description = "Independent owner authentication and authorization kernel"
 
 [dependencies]
+hyper = { version = "1.7.0", features = ["server", "http1"] }
+tokio-rustls = "0.26.4"
+rustls-pemfile = "2.2.0"
+x509-parser = "0.17.0"
 axum = { version = "0.8.6", features = ["json", "form", "tokio"] }
 hyper-util = { version = "0.1.17", features = ["server", "http1", "http2", "tokio", "service"] }
 tokio = { version = "1.47.1", features = ["rt-multi-thread", "macros", "net", "time", "signal", "sync"] }

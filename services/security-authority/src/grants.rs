@@ -37,6 +37,7 @@ fn valid_handle(handle: &str) -> bool {
 
 /// Constructed only by the transport after it validates the peer TLS chain,
 /// hostname and exact single DNS SAN against the trusted service allowlist.
+#[derive(Clone)]
 pub(crate) struct VerifiedServiceIdentity {
     dns: String,
 }
