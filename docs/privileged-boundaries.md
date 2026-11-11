@@ -61,6 +61,42 @@ Before cutover, inspect an independent offline copy with `security-preflight --s
 
 The Go and Rust daemons share `.securityd.lock`, which allows only one process to own the state. Only an authorized NixOS generation switch may select the Rust daemon. Stop the active owner and verify lease release before cutover. Keep the preceding generation and protected state available for rollback; neither sessions nor destructive confirmations survive a restart.
 
+## Execution request identity and replay
+
+Every `POST /v1/execute` request has a required `request_id` containing
+exactly 32 lowercase hexadecimal characters (128 bits). This identity is
+supplied by the initiating caller and must remain unchanged for any retry.
+MCP and native privileged tool schemas require the same field. The gateway
+removes `request_id` before canonicalizing the operation arguments, so the
+owner reviews exactly the target and arguments that the executor will use.
+The executor requires its `audit_id` receipt to equal `request_id`.
+
+The executor checks the protected journal for an existing identity before
+starting a mutation. A recorded identity may be observed only when the
+independent security authority verifies the current signed owner assertion,
+active session, permitted operation, target and canonical argument object
+through the read-only `POST /v1/replay` policy route. This route does not
+consume another destructive confirmation, change session activity or issue
+credential tickets. Identity reuse with a different operation, target or
+argument digest is denied.
+
+After a consuming authorization, the executor durably appends the request
+identity as the journal's `started` event before touching any external
+resource. The journal append serializes competing requests. Once recorded,
+that identity cannot authorize another side effect. A repeated
+`accepted` or `succeeded` request returns the recorded `accepted` or
+`completed` state, the same `audit_id`, and `replayed: true`. A
+`started`, `failed`, `indeterminate` or `reconciled` request cannot be
+executed again under the same ID. Started and indeterminate outcomes require
+reconciliation before any deliberate independent follow-up action; use a
+different ID only for a genuinely new owner-reviewed operation.
+
+A durable fleet transaction derives a distinct 128-bit executor request
+identity for each host, release and activation/reversion action from its
+persisted transaction ID. The fleet requires host agents that accept and
+preserve these identities. A coordinator restart therefore cannot silently
+invent another host execution identity for an interrupted step.
+
 ## Unresolved execution reconciliation
 
 The Go and Rust executors share the same owner-only `executor-actions.jsonl`
