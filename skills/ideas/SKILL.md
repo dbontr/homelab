@@ -28,6 +28,18 @@ Search for intellectually coherent directions that are difficult to notice from 
 
 For deeper methodological details, disciplinary variants, and adversarial checks, read [ideation-protocol.md](references/ideation-protocol.md).
 
+## Research continuity
+
+For extended hypothesis or prior-art searches, preserve the candidate
+identities, mechanisms, source citations, negative findings, experimental
+constraints and unresolved uncertainties with the unified MCP's revisioned
+`continuity_checkpoint` when connected. On another conversation, read
+`continuity_handoff` and recheck primary sources before making novelty
+claims. Keep conjectures distinct from verified results and preserve
+the same candidate-pool boundary when comparing ranking scores. The MCP
+does not know the model's exact remaining context; do not manufacture a
+token count to trigger a handoff.
+
 ## Comparison and scoring
 
 Use a **0-5 heuristic rubric** for each candidate when comparison adds value:
