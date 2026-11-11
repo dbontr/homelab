@@ -126,3 +126,38 @@ func TestServiceCredentialPolicyRejectsUnknownAndDuplicateGrants(t *testing.T){
   t.Fatal("expired service credential grant was accepted")
  }
 }
+
+func TestServiceCredentialDNSIdentityMustBeCanonical(t *testing.T) {
+ for _,name:=range []string{"jupiter","worker.internal","executor-01.saturn.internal"} {
+  if !ValidServiceDNS(name){t.Fatalf("valid service identity rejected: %q",name)}
+ }
+ for _,name:=range []string{"", ".", "worker.", ".worker", "worker..internal",
+  "-worker.internal", "worker-.internal", "*.internal", "worker.*",
+  "Worker.internal", "worker_internal", "worker/internal", "worker.internal:443",
+  "https://worker.internal", "worker internal", "worker\n.internal",
+  strings.Repeat("a",64)+".internal", strings.Repeat("a",251)+".internal"} {
+  if ValidServiceDNS(name){t.Fatalf("invalid service identity accepted: %q",name)}
+ }
+ peer:=&x509.Certificate{DNSNames:[]string{"jupiter.internal"}}
+ state:=&tls.ConnectionState{
+  PeerCertificates:[]*x509.Certificate{peer},
+  VerifiedChains:[][]*x509.Certificate{{peer}},
+ }
+ if dns,ok:=verifiedServiceDNS(state);!ok||dns!="jupiter.internal"{
+  t.Fatalf("valid certificate identity rejected: %q %v",dns,ok)
+ }
+ for _,names:=range [][]string{
+  {"*.internal"}, {"jupiter.internal","other.internal"}, {"JUPITER.internal"},
+  {"jupiter.internal."}, {""},
+ } {
+  state.PeerCertificates[0]=&x509.Certificate{DNSNames:names}
+  if dns,ok:=verifiedServiceDNS(state);ok{
+   t.Fatalf("malformed certificate DNS admitted: %q",dns)
+  }
+ }
+ state.PeerCertificates[0]=peer
+ state.VerifiedChains=nil
+ if dns,ok:=verifiedServiceDNS(state);ok{
+  t.Fatalf("unverified certificate accepted: %q",dns)
+ }
+}
