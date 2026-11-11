@@ -173,6 +173,12 @@ pub fn Learning(csrf: String) -> Element {
                     }
                 }
             }
+            crate::learning_attachments::LearningAttachments {
+                key: "{session_id}",
+                csrf: csrf(),
+                owner_kind: "session".to_owned(),
+                owner_id: session_id.clone(),
+            }
             if let Some(question)=current_question{
                 section{class:"card",
                     div{class:"card-header",
