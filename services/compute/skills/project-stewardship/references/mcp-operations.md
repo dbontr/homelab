@@ -37,6 +37,19 @@ To consume it, use `library_link` in each authorized consuming project, then `li
 5. Publish code to the designated Git authority and collect output through `list_project_artifacts`, `artifact_info`, `workspace_snapshot`, or `environment_export` as appropriate. A saved file tree does not preserve live RAM, connected peripherals or running processes.
 6. Before release, verify the artifact hash and external publication. Use `workspace_checkpoint_stop` and `workspace_checkpoint_stop_status` when mutable files require preservation. Use `workspace_destroy` only when destructive consequences are understood, then verify actual teardown; uncertain hardware leases remain occupied.
 
+For native Docker hardware leases, the Rust boundary records both the
+operator-approved device alias and the kernel block/character device number.
+Different aliases referring to the same device cannot be separately leased by
+cooperating workers. Durable USB custody uses stable by-id aliases, not
+reusable bus numbers. Before releasing a device record, the Rust helper
+independently checks the specific workspace container against the pinned
+local Docker daemon. Failed inspection, incomplete teardown, missing identity
+or uncertainty must leave the resource reserved; do not retry a hardware
+claim as though a reservation had expired. Raw device records cannot exclude
+a privileged host process that bypasses the custodian. Full physical
+exclusivity still requires a suitable device isolation mechanism and
+hardware-dependent acceptance.
+
 For smaller files, `artifact_send_base64`, `artifact_read_base64` and `workspace_import_artifact` use authenticated transfer and SHA-256 validation. Large binary files require the separately authorized streaming endpoint. A file mentioned in a chat is **not** automatically available to the MCP; a file-capable client must explicitly deliver the actual bytes.
 
 ## Cooperative project claims
