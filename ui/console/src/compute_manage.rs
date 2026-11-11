@@ -49,7 +49,7 @@ fn allocation_request(selection: &Allocation) -> Result<Value,String> {
         .map_err(|_| "Minimum GPU memory must be a whole number of MiB.")?;
     if selection.project_id.is_empty() || !cpu.is_finite() || !(0.1..=32.0).contains(&cpu) ||
         !(64..=131072).contains(&memory) || !(1..=1440).contains(&duration) ||
-        gpu > 8 || npu > 8 || fpga > 8 || gpu_memory > 1000000 ||
+        gpu > 2 || npu > 2 || fpga > 2 || gpu_memory > 1000000 ||
         gpu_memory > 0 && gpu == 0 ||
         selection.usb_passthrough && (selection.usb_node.is_empty()
             || selection.usb_device_id.is_empty()) {
@@ -186,21 +186,21 @@ pub fn ComputeManagement(csrf: String) -> Element {
                         }
                         label { class:"form-row",
                             span { class:"label","GPU count" }
-                            input { class:"field", r#type:"number", min:"0", max:"8",
+                            input { class:"field", r#type:"number", min:"0", max:"2",
                                 value:"{draft().gpu}",
                                 oninput:move |e|{let mut d=draft();d.gpu=e.value();draft.set(d)}
                             }
                         }
                         label { class:"form-row",
                             span { class:"label","NPU count" }
-                            input { class:"field", r#type:"number", min:"0", max:"8",
+                            input { class:"field", r#type:"number", min:"0", max:"2",
                                 value:"{draft().npu}",
                                 oninput:move |e|{let mut d=draft();d.npu=e.value();draft.set(d)}
                             }
                         }
                         label { class:"form-row",
                             span { class:"label","FPGA count" }
-                            input { class:"field", r#type:"number", min:"0", max:"8",
+                            input { class:"field", r#type:"number", min:"0", max:"2",
                                 value:"{draft().fpga}",
                                 oninput:move |e|{let mut d=draft();d.fpga=e.value();draft.set(d)}
                             }
