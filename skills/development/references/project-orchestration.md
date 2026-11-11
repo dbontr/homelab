@@ -12,7 +12,18 @@ Projects are intentional units of work and knowledge, independent of their code 
 4. Assign file-level write ownership if running cooperative development agents. Avoid overlapping edits and reconcile artifacts by digest and source revision.
 5. Execute the smallest correct source change; preserve repository contracts, security boundaries, data owners and backward-compatibility requirements.
 6. Verify with actual build/test/lint/static-analysis runs; identify what remains unexecuted. Treat workspace closure, save and publishing as independently verifiable operations.
-7. Submit an exact-commit draft for review; do not merge, publish, deploy or mutate live infrastructure without authorization.
+7. Persist material decisions, exact commits, observed tests, pending work and nonsecret audit references with `continuity_checkpoint` when the connected unified MCP supports it. Preserve the current `expected_revision`; do not claim exact context-window usage without host-provided evidence. On resumption, read `continuity_handoff` and verify source state before continuing. See [conversation-continuity.md](conversation-continuity.md).
+8. Submit an exact-commit draft for review; do not merge, publish, deploy or mutate live infrastructure without authorization.
+
+## Credential ownership
+
+Provider integration must not use ambient vault alias reads. An interactive
+provider call requires the independently verified owner assertion and a
+one-use ticket bound to the exact operation, target, argument object and
+service certificate. Unattended workers, federated service discovery and
+scheduled tasks require separately scoped service identities unless a
+supported delegated authorization contract exists. Never invent an owner
+assertion or retain plaintext provider credentials in a handoff.
 
 ## Autonomous and personal operations
 
