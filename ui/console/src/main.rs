@@ -13,6 +13,7 @@ mod books;
 mod activity;
 mod engineering;
 mod engineering_create;
+mod compute_manage;
 mod engineering_orchestration;
 mod engineering_knowledge;
 mod engineering_diff;
@@ -338,7 +339,7 @@ fn App() -> Element {
                                 Page::EngineeringRuns => rsx! { engineering::EngineeringRuns { csrf: csrf.clone() } },
                                 Page::Workflows => rsx! { workflows::Workflows { csrf: csrf.clone() } },
                                 Page::Knowledge => rsx! { knowledge::ProjectKnowledge {} },
-                                Page::Compute => rsx! { views::Compute {} },
+                                Page::Compute => rsx! { views::Compute { csrf: csrf.clone() } },
                                 Page::Software => rsx! { views::Software {} },
                                 Page::Monitoring => rsx! { monitoring::Monitoring {} },
                                 Page::Calendar => rsx! { calendar::Calendar {} },
