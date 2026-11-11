@@ -5,7 +5,7 @@ use reqwest::{header, redirect::Policy as RedirectPolicy, Client, StatusCode};
 use serde_json::{json, Value};
 use zeroize::Zeroizing;
 
-use crate::authorization::AuthorizationClient;
+use crate::authorization::{AuthorizationClient, CredentialTicket};
 use crate::policy::{bounded_file, Policy};
 use crate::Error;
 
@@ -33,13 +33,20 @@ fn validate_tool_response(raw: &[u8]) -> Result<(), Error> {
     Ok(())
 }
 
-pub async fn call(policy: &Policy, authorization: &AuthorizationClient,
-    tool: &str, arguments: Value) -> Result<(), Error>
-{
+pub async fn call(
+    policy: &Policy, authorization: &AuthorizationClient,
+    tool: &str, arguments: Value, operation: &str, target: &str,
+    canonical: &[u8], tickets: &[CredentialTicket],
+) -> Result<(), Error> {
+
     let workspace = policy.workspace.as_ref()
         .ok_or(Error::Denied("Workspace administration disabled"))?;
     let token = if let Some(alias) = &policy.workspace_vault_alias {
-        authorization.vault_credential(alias).await?
+        let ticket = tickets.iter().find(|item| &item.alias == alias)
+            .ok_or(Error::Denied("Workspace credential lacks an authorized operation ticket"))?;
+        authorization.vault_credential(
+            alias, &ticket.ticket, operation, target, canonical
+        ).await?
     } else {
         let path = policy.workspace_token.as_ref()
             .ok_or(Error::Configuration("Workspace credential source missing"))?;
