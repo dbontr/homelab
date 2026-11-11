@@ -351,7 +351,8 @@ func(s *Server)mcp(w http.ResponseWriter,r *http.Request){
  case "initialize":
   caps:=map[string]any{"tools":map[string]any{"listChanged":false}}
   if s.privilegeClient!=nil&&s.securityLoginURL!="" {caps["resources"]=map[string]any{"listChanged":false}}
-  s.rpc(w,req.ID,map[string]any{"protocolVersion":"2025-06-18","capabilities":caps,"serverInfo":map[string]string{"name":"homelab","version":"0.1.0"}},nil)
+  s.rpc(w,req.ID,map[string]any{"protocolVersion":"2025-06-18","capabilities":caps,"serverInfo":map[string]string{"name":"homelab","version":"0.1.0"},
+   "instructions":"For long-running project work, persist factual progress with continuity_checkpoint before context loss or a substantial handoff. Use continuity_status to inspect caller-reported context pressure and continuity_handoff for a portable continuation. An MCP server cannot measure ChatGPT's hidden context or open another chat automatically."},nil)
  case "ping":s.rpc(w,req.ID,map[string]any{},nil)
  case "tools/list":s.rpc(w,req.ID,map[string]any{"tools":s.toolList(r)},nil)
  case "resources/list":
@@ -398,6 +399,20 @@ func tool(name,description string,properties map[string]any,required ...string)m
 func prop(kind string)map[string]any{return map[string]any{"type":kind}}
 func(s *Server)localTools()[]map[string]any{
  tools:=[]map[string]any{
+  tool("continuity_checkpoint","Store a version-fenced work checkpoint. Token measurements, when supplied, are caller-reported and not the hidden ChatGPT context.",map[string]any{
+   "key":prop("string"),"project_id":prop("string"),"objective":prop("string"),"summary":prop("string"),
+   "next_steps":map[string]any{"type":"array","items":prop("string")},
+   "evidence":map[string]any{"type":"array","items":prop("string")},
+   "expected_revision":prop("integer"),
+   "reported_input_tokens":prop("integer"),"context_window_tokens":prop("integer"),
+   "reserved_output_tokens":prop("integer"),
+  },"key","objective","summary","expected_revision"),
+  tool("continuity_status","Inspect the latest durable checkpoint and qualified context-pressure estimate; exact ChatGPT context usage is not observable.",map[string]any{
+   "key":prop("string"),
+  },"key"),
+  tool("continuity_handoff","Return a portable, evidence-linked project handoff for starting a new chat. Does not create or switch conversations.",map[string]any{
+   "key":prop("string"),
+  },"key"),
   tool("task_add","Create a personal task",map[string]any{"links":map[string]any{"type":"array","items":prop("string")},"parent_id":prop("string"),"depends_on":map[string]any{"type":"array","items":prop("string")},"title":prop("string"),"notes":prop("string"),"goal_id":prop("string"),"due":prop("string"),"minutes":prop("integer"),"energy":prop("string"),"location":prop("string"),"priority":prop("integer")},"title"),
   tool("task_complete","Mark a task complete",map[string]any{"id":prop("string")},"id"),
   tool("task_decompose","Atomically split an open parent task into actionable subtasks, with prerequisites referencing earlier step indices",map[string]any{
@@ -652,6 +667,7 @@ func(s *Server)toolList(r *http.Request)[]map[string]any{
  return out
 }
 func(s *Server)localTool(ctx context.Context,name string,raw json.RawMessage)(any,error){
+ if strings.HasPrefix(name,"continuity_"){return s.continuityTool(name,raw)}
  if s.motivation!=nil{
   switch name{
   case "motivation_status":return s.motivation.Call(ctx,http.MethodGet,"/v1/motivation/state",nil)
