@@ -61,7 +61,7 @@ fn RunDetail(run: Value, csrf: String) -> Element {
                         h3 { "Engineering plan" }
                         ol {
                             for item in plan {
-                                li { "{item.as_str().unwrap_or("Unspecified step")}" }
+                                li { {item.as_str().unwrap_or("Unspecified step").to_string()} }
                             }
                         }
                     }
