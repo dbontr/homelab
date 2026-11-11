@@ -398,7 +398,7 @@ impl Broker {
             }, None));
         }
         let mut flow = self.device.remove(id).ok_or(Error::Unauthorized)?;
-        let form = vec![
+        let form: Vec<(String, String)> = vec![
             ("grant_type".into(), "urn:ietf:params:oauth:grant-type:device_code".into()),
             ("device_code".into(), flow.device_code.to_string()),
             ("client_id".into(), flow.provider.client_id.clone()),
