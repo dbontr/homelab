@@ -36,7 +36,7 @@ Use a **0-5 heuristic rubric** for each candidate when comparison adds value:
 - **Distinctiveness (D):** How different is the proposed mechanism from the closest *inspected* work? Distinctiveness is not proof of global novelty.
 - **Tractability (T):** Can the user undertake a meaningful experiment, implementation, counterexample search, or proof attempt with the stated resources?
 
-Keep ratings provisional and explain important reasons. When the user wants repeatable ranking across three or more candidates, use `scripts/rank_candidates.py` with the JSON schema and formula in [scoring.md](references/scoring.md). The default blend favors distinctiveness but reserves weight for tractability. Ratings made by reasoning are **not** outputs from a trained cognitive-availability model, nor calibrated probabilities of discovery. Apply evidence checks and hard constraints independently of the ranking.
+Keep ratings provisional and explain important reasons. When the user wants repeatable ranking across three or more candidates, use `go run scripts/rank_candidates.go` with the JSON schema and formula in [scoring.md](references/scoring.md). The default blend favors distinctiveness but reserves weight for tractability. Ratings made by reasoning are **not** outputs from a trained cognitive-availability model, nor calibrated probabilities of discovery. Apply evidence checks and hard constraints independently of the ranking.
 
 For a substantial search, track each candidate's evidence status: `existing`, `related`, `no-close-match-found`, or `unchecked`. Never equate `unchecked` with novel. Cite retrieved sources in the final answer, using the available citation mechanism.
 
