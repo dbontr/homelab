@@ -88,6 +88,9 @@ func (k *Kubernetes) verificationManifest(op Operation, repository, revision, ac
 // A separate read-only Job executes only fixed, revision-bound build/test tools.
 // The worker holds the project lease; no credential or host device is mounted.
 func (k *Kubernetes) VerifyNativeCheck(ctx context.Context, op Operation, data map[string]any) (output map[string]any, resultErr error) {
+    if !k.verificationReady() {
+        return nil, errors.New("worker quarantined pending verification Job cleanup")
+    }
     if len(data) != 4 || data["sandbox_check"] != true {
         return nil, errors.New("native verification requires an exact request")
     }
@@ -122,6 +125,9 @@ func (k *Kubernetes) VerifyNativeCheck(ctx context.Context, op Operation, data m
         if _, cleanupErr := k.checked(cleanup, nil, "delete", "job", name,
             "--cascade=foreground", "--wait=true", "--timeout=25s",
             "--ignore-not-found=true"); cleanupErr != nil {
+            k.verificationMu.Lock()
+            k.verificationQuarantined = true
+            k.verificationMu.Unlock()
             output = nil
             resultErr = errors.Join(resultErr,
                 fmt.Errorf("native verification job cleanup is unconfirmed: %w", cleanupErr))
