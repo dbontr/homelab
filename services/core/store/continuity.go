@@ -67,7 +67,10 @@ func validContinuityText(value string,limit int)bool{
 }
 
 func contextPressure(c ContinuityCheckpoint)ContextPressure{
- if c.ContextWindowTokens<=0{
+ // A declared window alone is not a usage observation. Treat an all-zero
+ // report as unknown rather than claiming the full window is available.
+ if c.ContextWindowTokens<=0||
+  c.ReportedInputTokens==0&&c.ReservedOutputTokens==0{
   return ContextPressure{
    Source:"unavailable",Status:"unknown",
    Advisory:"The MCP cannot inspect ChatGPT's full context or exact remaining tokens. Record a checkpoint before a long operation.",
