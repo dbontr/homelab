@@ -131,7 +131,7 @@ pub fn DependencyGraph(members: Vec<Value>) -> Element {
                         }
                     }
                     span { class:"engineering-graph-state",
-                        "{member.get("run").map(|run|api::property(run,&["status"])).unwrap_or_default()}"
+                        {member.get("run").map(|run|api::property(run,&["status"])).unwrap_or_default()}
                     }
                 }
             }
@@ -139,7 +139,7 @@ pub fn DependencyGraph(members: Vec<Value>) -> Element {
         if let Some(chosen) = chosen {
             div { class:"engineering-graph-detail",
                 strong { {api::property(&chosen,&["role"])} }
-                span { class:"muted", "Run: {chosen.get("run").map(|run|api::property(run,&["id"])).unwrap_or_default()}" }
+                span { class:"muted", {format!("Run: {}", chosen.get("run").map(|run|api::property(run,&["id"])).unwrap_or_default())} }
                 span { class:"muted", "Dependencies must complete before this member begins." }
             }
         }
