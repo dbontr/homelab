@@ -176,6 +176,35 @@ impl AuditJournal {
             .cloned().collect())
     }
 
+    /// Look up a caller request identity under the same protected journal
+    /// lease. Identity reuse with a different operation, target or argument
+    /// digest is rejected, including after an operator reconciliation.
+    pub fn request_outcome(
+        &self, id: &str, operation: &str, target: &str, digest: &str,
+    ) -> Result<Option<String>, Error> {
+        if !valid_hex(id, 32) || !valid_hex(digest, 64) {
+            return Err(Error::Denied("invalid execution request identity"));
+        }
+        let journal = self.inner.lock().unwrap_or_else(|_| std::process::abort());
+        if journal.faulted {
+            return Err(Error::Storage("audit journal is in an uncertain state"));
+        }
+        let path_meta = fs::symlink_metadata(&self.path)
+            .map_err(|_| Error::Storage("audit path missing"))?;
+        let fd_meta = journal.file.metadata()
+            .map_err(|_| Error::Storage("audit descriptor unavailable"))?;
+        if !owner_only(&fd_meta) || path_meta.dev() != self.dev ||
+            path_meta.ino() != self.ino || fd_meta.dev() != self.dev || fd_meta.ino() != self.ino {
+            return Err(Error::Storage("audit journal was replaced"));
+        }
+        match journal.seen.get(id) {
+            None => Ok(None),
+            Some(previous) if previous.operation == operation && previous.target == target
+                && previous.arguments_sha256 == digest => Ok(Some(previous.outcome.clone())),
+            Some(_) => Err(Error::Denied("execution request identity used for different arguments")),
+        }
+    }
+
     pub fn record(&self, id: &str, operation: &str, target: &str, digest: &str,
         outcome: &str) -> Result<(), Error>
     {
