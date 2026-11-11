@@ -4,6 +4,7 @@ import (
  "bytes"
  "context"
  "crypto/rand"
+ "crypto/sha256"
  "encoding/hex"
  "encoding/json"
  "errors"
@@ -117,10 +118,27 @@ func(d *DurableFleet)Start(ctx context.Context,targets []FleetTarget)(FleetTrans
  return tx,err
 }
 
+// Derive one stable host request identity from a durable transaction. The
+// domain prefix separates executor identities from other transaction digests.
+func fleetExecutionRequestID(transactionID,operation,host,releaseID string)string{
+ digest:=sha256.Sum256([]byte("homelab:executor-request:v1\x00"+
+  transactionID+"\x00"+operation+"\x00"+host+"\x00"+releaseID))
+ return hex.EncodeToString(digest[:16])
+}
+
+func(d *DurableFleet) identifiedAgent(host string)(RequestIdentifiedReleaseAgent,error){
+ agent,ok:=d.Agents[host].(RequestIdentifiedReleaseAgent)
+ if !ok{return nil,errors.New("durable fleet host requires request-identified execution")}
+ return agent,nil
+}
+
 // startLocked is called only while the exclusive fleet state lock is held.
 func(d *DurableFleet)startLocked(ctx context.Context,targets []FleetTarget)(FleetTransaction,error){
  var tx FleetTransaction
  if err:=validateFleet(targets,d.Agents);err!=nil{return tx,err}
+ for _,target:=range targets{
+  if _,err:=d.identifiedAgent(target.Host);err!=nil{return tx,err}
+ }
  if _,err:=os.Lstat(d.StateFile);err==nil{return tx,errors.New("existing fleet transaction requires explicit resolution")}else if !errors.Is(err,os.ErrNotExist){return tx,err}
  token:=make([]byte,24);if _,err:=rand.Read(token);err!=nil{return tx,err}
  tx=FleetTransaction{ID:hex.EncodeToString(token),Phase:"activating",Targets:append([]FleetTarget(nil),targets...)}
@@ -134,7 +152,11 @@ func(d *DurableFleet)activate(ctx context.Context,tx *FleetTransaction)error{
   if err:=ctx.Err();err!=nil{return d.fail(tx,fmt.Errorf("rollout cancelled: %w",err))}
   tx.Steps[i].State="activating"
   if err:=d.write(tx);err!=nil{return err}
-  if err:=d.Agents[target.Host].Activate(ctx,target.ReleaseID);err!=nil{
+  agent,err:=d.identifiedAgent(target.Host)
+  if err!=nil{return err}
+  requestID:=fleetExecutionRequestID(tx.ID,"infrastructure__release_activate",
+   target.Host,target.ReleaseID)
+  if err:=agent.ActivateWithID(ctx,requestID,target.ReleaseID);err!=nil{
    tx.Steps[i].State="unknown";tx.Steps[i].Error="activation outcome unknown; check the host journal"
    if writeErr:=d.write(tx);writeErr!=nil{return errors.Join(err,writeErr)}
    return d.fail(tx,fmt.Errorf("host %s activation unverified: %w",target.Host,err))
@@ -165,7 +187,11 @@ func(d *DurableFleet)rollback(ctx context.Context,tx *FleetTransaction)error{
   }
   step.State="reverting"
   if err:=d.write(tx);err!=nil{return err}
-  if err:=d.Agents[step.Host].Revert(ctx,step.ReleaseID);err!=nil{
+  agent,err:=d.identifiedAgent(step.Host)
+  if err!=nil{return err}
+  requestID:=fleetExecutionRequestID(tx.ID,"infrastructure__release_revert",
+   step.Host,step.ReleaseID)
+  if err:=agent.RevertWithID(ctx,requestID,step.ReleaseID);err!=nil{
    step.State="revert-unknown";step.Error="rollback outcome unknown; check the host journal";unresolved=true
   }else{step.State="reverted";step.Error=""}
   if err:=d.write(tx);err!=nil{return err}
