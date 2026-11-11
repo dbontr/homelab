@@ -74,3 +74,34 @@ func TestRemoteExecutorCannotBindPublicInterfaces(t *testing.T){
   }
  }
 }
+
+func TestCoordinatorIdentityMatchesOneVerifiedExactName(t *testing.T) {
+ peer:=&x509.Certificate{DNSNames:[]string{"release.internal"}}
+ state:=tls.ConnectionState{
+  VerifiedChains:[][]*x509.Certificate{{peer}},
+  PeerCertificates:[]*x509.Certificate{peer},
+ }
+ if !coordinatorIdentityMatches(state,"release.internal") {
+  t.Fatal("single verified coordinator identity rejected")
+ }
+ if coordinatorIdentityMatches(state,"other.internal") {
+  t.Fatal("unapproved coordinator identity accepted")
+ }
+ if coordinatorIdentityMatches(state,"*.internal") {
+  t.Fatal("wildcard coordinator policy accepted")
+ }
+ for _,names:=range [][]string{
+  {"*.internal"}, {"release.internal","other.internal"},
+  {"release.internal."}, {"RELEASE.internal"},
+ } {
+  state.PeerCertificates[0]=&x509.Certificate{DNSNames:names}
+  if coordinatorIdentityMatches(state,"release.internal") {
+   t.Fatalf("ambiguous or wildcard coordinator SAN accepted: %v",names)
+  }
+ }
+ state.PeerCertificates[0]=peer
+ state.VerifiedChains=nil
+ if coordinatorIdentityMatches(state,"release.internal") {
+  t.Fatal("unverified coordinator identity accepted")
+ }
+}
