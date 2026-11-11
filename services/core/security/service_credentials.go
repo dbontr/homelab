@@ -24,31 +24,7 @@ type ServiceCredentialGrant struct {
 }
 
 var serviceCredentialName=regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]{0,63}$`)
-var serviceCredentialHandle=regexp.MustCompile(`^[A-Za-z0-9_-]{32}package security
-
-import (
- "bytes"
- "errors"
- "net/http"
- "regexp"
- "strings"
- "time"
-)
-
-// ServiceCredentialGrant lets a named, mTLS-verified service read one
-// credential from the owner vault. The handle and policy are trusted Nix
-// configuration, never parameters accepted from MCP or a remote request.
-type ServiceCredentialGrant struct {
- ClientDNS string `json:"client_dns"`
- Alias string `json:"alias"`
- Provider string `json:"provider"`
- Handle string `json:"handle"`
- Revision string `json:"revision,omitempty"`
- ExpiresAt *time.Time `json:"expires_at,omitempty"`
-}
-
-var serviceCredentialName=regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]{0,63}$`)
-)
+var serviceCredentialHandle=regexp.MustCompile(`^[A-Za-z0-9_-]{32}$`)
 
 // ValidServiceDNS accepts one canonical ASCII host identity, never a wildcard,
 // URL, or DNS name with an ambiguous spelling.
@@ -112,7 +88,8 @@ func verifiedServiceDNS(state *tls.ConnectionState)(string,bool){
  if state==nil||len(state.VerifiedChains)==0||
   len(state.PeerCertificates)==0{return "",false}
  peer:=state.PeerCertificates[0]
- if peer==nil||len(peer.DNSNames)!=1{return "",false}
+ if peer==nil||len(peer.DNSNames)!=1||len(peer.IPAddresses)!=0||
+  len(peer.EmailAddresses)!=0||len(peer.URIs)!=0{return "",false}
  dns:=peer.DNSNames[0]
  if !ValidServiceDNS(dns)||peer.VerifyHostname(dns)!=nil{return "",false}
  return dns,true
