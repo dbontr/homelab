@@ -35,7 +35,13 @@ import (
  "github.com/dbontr/homelab-new/system/release"
  "github.com/dbontr/homelab-new/system/store"
 )
-type Backend struct { Name string; URL string; Token string; TokenSource func()(string,error) }
+type Backend struct {
+ Name string
+ URL string
+ Token string
+ TokenSource func()(string,error)
+ ForwardOwnerAssertion bool
+}
 type Server struct { db *store.Store; token string; mcpInterfaceToken string; apiInterfaceToken string; apiInterfaceWritePaths map[string]bool; backend []Backend; client *http.Client; calendarSource func(context.Context)(calendar.Feed,error); privilegeClient *security.AdminClient; executorClient *privileged.Client; fleetClient *release.FleetClient; securityLoginURL string; allowedOrigins map[string]struct{}; media *media.Client; deviceCatalog *devices.Catalog; nodeCatalog *devices.NodeCatalog; profiles *profiles.Registry; recipes *recipes.Store; sessions *session.Manager; observability *observability.Client; bookCatalog *books.Catalog; motivation *motivationhttp.Client; engineering agentflow.Manager; workflows *agentflow.Store; capabilityPlanner agentflow.CapabilityPlanner; inflight chan struct{} }
 
 func New(db *store.Store,token string,backends []Backend)(*Server,error){
@@ -44,6 +50,9 @@ func New(db *store.Store,token string,backends []Backend)(*Server,error){
  for _,b:=range backends{
   if !validIntegrationName(b.Name)||used[b.Name]{return nil,errors.New("invalid backend name")}
   if b.Token!=""&&b.TokenSource!=nil{return nil,errors.New("backend has conflicting credential authorities")}
+  if b.ForwardOwnerAssertion&&b.Name!="workspace"{
+   return nil,errors.New("owner assertion forwarding is limited to the trusted Workspace backend")
+  }
   used[b.Name]=true
   u,e:=url.Parse(b.URL);if e!=nil{return nil,errors.New("invalid backend URL")}
   if u.Hostname()==""||u.Opaque!=""{return nil,errors.New("backend URL requires a host")}
