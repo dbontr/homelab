@@ -781,7 +781,8 @@ mod tests {
         invalid.devices = vec!["/dev/bus/usb".into()];
         assert!(invalid.validate().is_err());
         invalid.devices=policy.devices.clone();
-        for name in ["a","A-device","not_valid",&"x".repeat(64)] {
+        let too_long="x".repeat(64);
+        for name in ["a","A-device","not_valid",too_long.as_str()] {
             assert!(!valid_workspace_resource_id(name));
             invalid.projects=vec![name.to_owned()];
             assert!(invalid.validate().is_err());
