@@ -64,7 +64,6 @@ func verifyEvidence(raw []byte,id,operation,target,digest string,started time.Ti
   "finding","verified_by","inspected_at","explanation"}{
   if _,ok:=fields[name];!ok{return "",errors.New("reconciliation evidence field missing")}
  }
- }
  var note evidence
  if err:=json.Unmarshal(encoded,&note);err!=nil{
   return "",errors.New("invalid reconciliation evidence")
