@@ -34,6 +34,8 @@ mod mcp_app;
 #[cfg(feature = "embedded-app")]
 mod embedded_learning;
 #[cfg(feature = "embedded-app")]
+mod embedded_learning_graph;
+#[cfg(feature = "embedded-app")]
 mod embedded_learning_attachments;
 
 use dioxus::prelude::*;
