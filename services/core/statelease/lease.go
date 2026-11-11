@@ -41,11 +41,18 @@ func Acquire(dir,name string)(*Lease,error){
  stat,err:=file.Stat()
  if err!=nil{return fail(err)}
  id,ok:=stat.Sys().(*syscall.Stat_t)
- if !ok||!stat.Mode().IsRegular()||stat.Mode().Perm()&0077!=0||id.Uid!=uint32(os.Geteuid()){
+ if !ok||!stat.Mode().IsRegular()||stat.Mode().Perm()&0077!=0||
+  id.Uid!=uint32(os.Geteuid())||id.Nlink!=1{
   return fail(errors.New("state lease lock must be an owner-only regular file"))
  }
  if err:=syscall.Flock(int(file.Fd()),syscall.LOCK_EX|syscall.LOCK_NB);err!=nil{
   return fail(fmt.Errorf("state lease is already held or unavailable: %w",err))
+ }
+ // Verify path identity after taking the lock: a swapped lock filename
+ // could otherwise let independent processes own different lock inodes.
+ current,err:=os.Lstat(path)
+ if err!=nil||!os.SameFile(current,stat){
+  return fail(errors.New("state lease lock inode changed during acquisition"))
  }
  return &Lease{file:file},nil
 }
