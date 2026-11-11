@@ -77,6 +77,7 @@ func TestContinuityRejectsUnboundedOrInventedUsage(t *testing.T){
 func TestContextPressureThresholdsAreReportedNotClaimedMeasured(t *testing.T){
  examples:=[]struct{input,limit,reserve int;want string}{
   {0,0,0,"unknown"},
+  {0,1024,0,"unknown"},
   {600,1024,0,"normal"},
   {725,1024,0,"checkpoint_recommended"},
   {900,1024,0,"handoff_recommended"},
