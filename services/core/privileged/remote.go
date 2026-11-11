@@ -62,7 +62,7 @@ func releaseJournalID(id string)bool{
 // ServeMutualTLS is bound only on an operator-selected private interface.
 // A verified coordinator client certificate must match the configured DNS SAN.
 func(e *Executor)ServeMutualTLS(ctx context.Context,address string,cert tls.Certificate,clientCA *x509.CertPool,coordinatorDNS string)error{
- if e==nil||clientCA==nil||coordinatorDNS==""||len(cert.Certificate)==0||cert.PrivateKey==nil{
+ if e==nil||clientCA==nil||!security.ValidServiceDNS(coordinatorDNS)||len(cert.Certificate)==0||cert.PrivateKey==nil{
   return errors.New("remote executor requires TLS identity and client CA")
  }
  host,_,err:=net.SplitHostPort(address)
@@ -76,7 +76,11 @@ func(e *Executor)ServeMutualTLS(ctx context.Context,address string,cert tls.Cert
   Certificates:[]tls.Certificate{cert},
   VerifyConnection:func(state tls.ConnectionState)error{
    if len(state.VerifiedChains)==0||len(state.PeerCertificates)==0{return errors.New("unverified coordinator certificate")}
-   return state.PeerCertificates[0].VerifyHostname(coordinatorDNS)
+   peer:=state.PeerCertificates[0]
+   if peer==nil||len(peer.DNSNames)!=1||peer.DNSNames[0]!=coordinatorDNS {
+    return errors.New("ambiguous or unapproved coordinator DNS identity")
+   }
+   return peer.VerifyHostname(coordinatorDNS)
   },
  }
  server:=&http.Server{Handler:e.RemoteHandler(),ReadHeaderTimeout:5*time.Second,ReadTimeout:15*time.Second,WriteTimeout:2*time.Hour}
