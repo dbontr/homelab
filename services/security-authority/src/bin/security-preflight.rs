@@ -140,7 +140,7 @@ fn run() -> Result<(), &'static str> {
     let policies = read_file("HOMELAB_SECURITY_POLICY_FILE", false)?;
     let policies: Vec<OperationPolicy> =
         serde_json::from_slice(&policies).map_err(|_| "invalid operation policy")?;
-    let opened = Authority::open(
+    let opened = Authority::inspect(
         &directory,
         required("HOMELAB_SECURITY_OWNER")?,
         "platform-gateway".into(),
@@ -300,6 +300,11 @@ mod tests {
             br#"{"version":1,"last_totp_step":-1,"failures":0,"locked_until":"0001-01-01T00:00:00Z"}"#).unwrap();
         fs::set_permissions(path.join("authenticator.json"), fs::Permissions::from_mode(0o600)).unwrap();
         assert_eq!(validate_copy_directory(path.clone()).unwrap(), path);
+        assert!(!path.join(".securityd.lock").exists());
+        let store = homelab_security_authority::state::StateStore::inspect(&path).unwrap();
+        assert!(store.load_authenticator().is_ok());
+        drop(store);
+        assert!(!path.join(".securityd.lock").exists());
         let link = path.with_extension("link");
         std::os::unix::fs::symlink(&path, &link).unwrap();
         assert!(validate_copy_directory(link.clone()).is_err());
