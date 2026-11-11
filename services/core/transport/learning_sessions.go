@@ -66,13 +66,20 @@ func (s *Server) uiLearningAnswer(w http.ResponseWriter,r *http.Request){
  var in struct{
   LearnerResponse string `json:"learner_response"`
   LearnerReasoning string `json:"learner_reasoning"`
+  SelfConfidence *float64 `json:"self_confidence,omitempty"`
   Assisted bool `json:"assisted"`
  }
  if err:=decode(r,&in);err!=nil{writeError(w,400,err.Error());return}
  if strings.TrimSpace(in.LearnerResponse)==""||len(in.LearnerResponse)>12000||len(in.LearnerReasoning)>16000{
   writeError(w,400,"response and reasoning must be within accepted bounds");return
  }
- s.learningCall(w,r,"answer_learning_question",map[string]any{
+ if in.SelfConfidence!=nil && (*in.SelfConfidence<0||*in.SelfConfidence>1){
+  writeError(w,400,"self-confidence must be between 0 and 1");return
+ }
+ args:=map[string]any{
   "question_id":id,"learner_response":in.LearnerResponse,
-  "learner_reasoning":in.LearnerReasoning,"assisted":in.Assisted},200)
+  "learner_reasoning":in.LearnerReasoning,"assisted":in.Assisted,
+ }
+ if in.SelfConfidence!=nil{args["self_confidence"]=*in.SelfConfidence}
+ s.learningCall(w,r,"answer_learning_question",args,200)
 }
