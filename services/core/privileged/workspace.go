@@ -26,6 +26,7 @@ type WorkspacePolicy struct {
  TokenSource func()(string,error) `json:"-"`
  Projects []string
  Workers []string
+ Devices []string
  Images []string
  ImageReferences []string
  Software []string
@@ -59,7 +60,7 @@ func(p *WorkspacePolicy)validate()error{
    return errors.New("Workspace credential file must be a protected regular file")
   }
  }
- all:=[][]string{p.Projects,p.Workers,p.Images,p.Software,p.Packages,p.Programs}
+ all:=[][]string{p.Projects,p.Workers,p.Images,p.Software,p.Packages,p.Programs,p.Devices}
  enabled:=false
  for i,values:=range all{
   if len(values)>64{return errors.New("Workspace resource policy exceeds limit")}
