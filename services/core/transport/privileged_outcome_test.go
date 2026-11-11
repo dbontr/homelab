@@ -86,6 +86,18 @@ func TestPrivilegedToolResponsesPreserveExecutionState(t *testing.T) {
 	if failed, _ := response["isError"].(bool); !failed {
 		t.Fatalf("invalid executor response was trusted: %+v", response)
 	}
+    outcome.Store(`{"allowed":false,"reason":"execution request outcome requires independent reconciliation"}`)
+    got=decode(call())
+    if got["reconciliation_required"]!=true||got["authorization_required"]!=nil||
+        got["accepted"]!=false{
+        t.Fatalf("uncertain outcome was treated as a fresh confirmation request: %+v",got)
+    }
+    outcome.Store(`{"allowed":false,"reason":"execution request identity was reconciled and cannot be executed again"}`)
+    got=decode(call())
+    if got["reconciliation_required"]!=nil||got["authorization_required"]!=nil||
+        got["accepted"]!=false{
+        t.Fatalf("reconciled identity was treated as repeatable: %+v",got)
+    }
 }
 
 func TestPrivilegedToolSchemasRequireStableRequestIdentity(t *testing.T){
