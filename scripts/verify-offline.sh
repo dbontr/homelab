@@ -176,14 +176,18 @@ for host in $hosts; do
   printf 'Evaluating %s\n' "$host"
   nix --extra-experimental-features 'nix-command flakes' eval --offline --raw ".#nixosConfigurations.$host.config.system.build.toplevel.drvPath"
 done
-# Every supported source-defined release artifact must be independently buildable.
-# Include disabled-by-default Rust authorities: their Nix derivations cannot be
-# silently excluded from source acceptance merely because Go remains active.
-for package in \
-  homelab-platform homelab-calendar homelab-engineering homelab-security \
-  homelab-security-authority homelab-executor homelab-executor-authority \
-  homelab-actuator homelab-native-hardware homelab-engineering-sandbox \
-  homelab-motivation homelab-interfaces homelab-fleet; do
+# Build every flake-declared package, including disabled-by-default Rust
+# authorities. New packages automatically enter the source acceptance gate.
+packages=$(nix --extra-experimental-features 'nix-command flakes' eval --offline --json \
+  '.#packages.x86_64-linux' --apply builtins.attrNames | jq -r '.[]')
+if [ -z "$packages" ]; then
+  printf '%s\n' 'Flake declares no x86_64-linux release packages' >&2
+  exit 1
+fi
+for package in $packages; do
+  case "$package" in
+    ""|*[!a-z0-9-]*) printf '%s\n' 'Unsafe release package attribute' >&2; exit 1 ;;
+  esac
   nix --extra-experimental-features 'nix-command flakes' build --offline --no-link ".#packages.x86_64-linux.$package"
 done
 printf '%s\n' 'All local source checks succeeded. No NixOS configuration was activated.'
