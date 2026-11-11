@@ -67,6 +67,22 @@ func TestRejectsWritableOrMismatchedLockFile(t *testing.T){
  if _,err:=os.Lstat(path);err!=nil{t.Fatal("lock inode unexpectedly removed")}
 }
 
+func TestLeaseRejectsSharedInodes(t *testing.T){
+ dir:=privateDir(t)
+ path:=filepath.Join(dir,".securityd.lock")
+ if err:=os.WriteFile(path,nil,0600);err!=nil{t.Fatal(err)}
+ second:=filepath.Join(dir,"shared-lock-inode")
+ if err:=os.Link(path,second);err!=nil{t.Fatal(err)}
+ if lease,err:=Acquire(dir,"securityd");err==nil{
+  lease.Close()
+  t.Fatal("security owner accepted a multiply-linked lock inode")
+ }
+ if err:=os.Remove(second);err!=nil{t.Fatal(err)}
+ lease,err:=Acquire(dir,"securityd")
+ if err!=nil{t.Fatal(err)}
+ if err:=lease.Close();err!=nil{t.Fatal(err)}
+}
+
 func privateDir(t *testing.T)string{
  t.Helper()
  dir:=t.TempDir()
