@@ -83,6 +83,11 @@ func TestRemoteAuthorizerRequiresVerifiedIdentityAndExactArguments(t *testing.T)
  client,err=NewRemoteAuthorizationClient(cfg);if err!=nil{t.Fatal(err)}
  if decision,err:=client.Authorize(WithAccessAssertion(context.Background(),"signed-owner"),operation,"jupiter",args);
   err==nil||decision.Allowed{t.Fatal("untrusted security service accepted")}
+ cfg.ServerName="*.internal"
+ if _,err:=NewRemoteAuthorizationClient(cfg);err==nil{t.Fatal("wildcard authorization server identity accepted")}
+ cfg.ServerName="127.0.0.1"
+ if _,err:=NewRemoteAuthorizationClient(cfg);err==nil{t.Fatal("IP-literal authorization server identity accepted")}
+ cfg.ServerName="security.internal"
  cfg.Endpoint="http://127.0.0.1:1234"
  if _,err:=NewRemoteAuthorizationClient(cfg);err==nil{t.Fatal("insecure authorization transport accepted")}
 }
