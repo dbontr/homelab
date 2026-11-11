@@ -2,12 +2,9 @@ package security
 
 import (
  "context"
- "crypto/tls"
- "crypto/x509"
  "errors"
  "io"
  "net/http"
- "os"
  "regexp"
  "strings"
  "time"
@@ -23,11 +20,9 @@ func NewVaultClientFromFiles(endpoint,serverName,caFile,certFile,keyFile string)
  if endpoint==""||serverName==""||caFile==""||certFile==""||keyFile==""{
   return nil,errors.New("incomplete trusted vault client configuration")
  }
- rootPEM,err:=os.ReadFile(caFile)
- if err!=nil||len(rootPEM)>128<<10{return nil,errors.New("vault trust roots unavailable")}
- roots:=x509.NewCertPool()
- if !roots.AppendCertsFromPEM(rootPEM){return nil,errors.New("invalid vault trust roots")}
- certificate,err:=tls.LoadX509KeyPair(certFile,keyFile)
+ roots,err:=LoadTLSRoots(caFile)
+ if err!=nil{return nil,errors.New("vault trust roots unavailable")}
+ certificate,err:=LoadTLSIdentity(certFile,keyFile)
  if err!=nil{return nil,errors.New("vault client identity unavailable")}
  return NewRemoteAuthorizationClient(RemoteAuthorizationConfig{
   Endpoint:endpoint,ServerName:serverName,TrustRoots:roots,Certificate:certificate,
