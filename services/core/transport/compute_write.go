@@ -80,7 +80,10 @@ func validConsoleWorkspace(req consoleWorkspaceRequest) bool {
         req.CPU<0.1||req.CPU>32||req.MemoryMB<64||req.MemoryMB>131072||
         req.DurationMinutes<1||req.DurationMinutes>1440||
         len(req.Image)>256||len(req.Environment)>80||len(req.ImagePoolID)>80||
-        len(req.NodeID)>80||len(req.Architecture)>12||
+        (req.NodeID!=""&&!consoleProjectID.MatchString(req.NodeID))||
+        (req.ImagePoolID!=""&&!consoleProjectID.MatchString(req.ImagePoolID))||
+        (req.Environment!=""&&!consoleProjectID.MatchString(req.Environment))||
+        (req.Architecture!=""&&req.Architecture!="amd64"&&req.Architecture!="arm64")||
         len(req.USBNode)>80||len(req.USBDeviceID)>128||
         req.MinGPUMemoryMB<0||req.MinGPUMemoryMB>1000000||
         len(req.Hardware)>4 {
@@ -104,7 +107,8 @@ func validConsoleWorkspace(req consoleWorkspaceRequest) bool {
     }
     if req.MinGPUMemoryMB>0&&req.Hardware["gpu"]<1{return false}
     if req.Display&&(req.DisplayWidth<320||req.DisplayWidth>3840||
-        req.DisplayHeight<240||req.DisplayHeight>2160) {
+        req.DisplayHeight<240||req.DisplayHeight>2160||
+        req.DisplayWidth*req.DisplayHeight>8_000_000) {
         return false
     }
     if !req.Display&&(req.DisplayWidth>0||req.DisplayHeight>0){return false}
@@ -182,6 +186,20 @@ type consoleCatalogRequest struct{
     PoolID string `json:"pool_id,omitempty"`
     ExpectedRevision int `json:"expected_revision,omitempty"`
 }
+// An OCI catalog entry must identify exactly one immutable content digest.
+func validImmutableImage(image string) bool {
+    prefix,digest,found:=strings.Cut(image,"@sha256:")
+    if !found||len(prefix)==0||len(digest)!=64{
+        return false
+    }
+    for _,r:=range digest{
+        if r<'0'||r>'9'&&r<'a'||r>'f'{
+            return false
+        }
+    }
+    return true
+}
+
 func catalogID(id string) bool {
     return id!=""&&len(id)<=80&&id[0]>='a'&&id[0]<='z'&&
         strings.IndexFunc(id,func(r rune)bool{
@@ -200,7 +218,7 @@ func (s *Server) uiComputeCatalog(w http.ResponseWriter,r *http.Request){
     switch operation{
     case "register-image":
         if !catalogID(in.ID)||len(in.Image)>256||in.Image==""||len(in.Description)>2000||
-            !strings.Contains(in.Image,"@sha256:"){
+            !validImmutableImage(in.Image){
             writeError(w,400,"register an immutable image digest and valid catalog ID");return
         }
         tool="pool_register_image"
