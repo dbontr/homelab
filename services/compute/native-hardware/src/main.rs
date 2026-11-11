@@ -1,6 +1,7 @@
 //! Validate a leased USB device at the worker's native execution boundary.
 //! The caller controls scheduling; this binary checks the live Linux identity.
 mod char;
+mod custody;
 
 use std::env;
 use std::fs;
@@ -121,10 +122,26 @@ fn map_usb(alias: &str) -> Result<(String, u32), &'static str> {
 
 fn main() {
     let args: Vec<String> = env::args().skip(1).collect();
+    if let [verb, workspace] = args.as_slice() {
+        if verb == "release-workspace" {
+            match custody::release_workspace(workspace) {
+                Ok(count) => println!("{count}"),
+                Err(message) => {
+                    eprintln!("{message}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+    }
     let result = match args.as_slice() {
         [verb, alias] if verb == "map-usb" => map_usb(alias),
         [verb, kind, path] if verb == "map-char" => char::map_char(kind, path),
-        _ => Err("usage: homelab-native-hardware <map-usb ALIAS | map-char KIND PATH>"),
+        [verb, kind, alias, workspace] if verb == "acquire-device" =>
+            custody::acquire(kind, alias, workspace),
+        [verb, kind, alias, workspace] if verb == "verify-device" =>
+            custody::verify(kind, alias, workspace),
+        _ => Err("usage: homelab-native-hardware <map-usb ALIAS | map-char KIND PATH | acquire-device KIND PATH WORKSPACE | verify-device KIND PATH WORKSPACE | release-workspace WORKSPACE>"),
     };
     match result {
         Ok((resolved, group)) => println!("{resolved}\n{group}"),
