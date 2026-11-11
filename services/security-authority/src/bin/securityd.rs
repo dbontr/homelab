@@ -2,7 +2,7 @@
 use std::ffi::CString;
 use std::path::Path;
 
-use homelab_security_authority::bootstrap;
+use homelab_security_authority::{bootstrap, migration};
 use homelab_security_authority::oauth::{self, Broker};
 use homelab_security_authority::remote::Remote;
 use homelab_security_authority::transport::{self, Shared};
@@ -26,9 +26,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let remote = Remote::from_environment()?;
     let broker = Broker::from_environment()?
         .map(|broker| std::sync::Arc::new(tokio::sync::Mutex::new(broker)));
-    if broker.is_some() {
+    if broker.is_some() || std::env::var_os("HOMELAB_SECURITY_VAULT_KEY_FILE").is_some() {
         settings.authority.validate_vault()?;
     }
+    // The authority already owns the shared Go/Rust state lease. Publish a
+    // selection marker only after all protected runtime inputs are validated
+    // and before any network or Unix listener can accept a request.
+    let receipt = if std::env::var_os("HOMELAB_SECURITY_MIGRATION_RECEIPT_FILE").is_some() {
+        Some(bootstrap::configured_file("HOMELAB_SECURITY_MIGRATION_RECEIPT_FILE", true)?)
+    } else {
+        None
+    };
+    migration::admit(
+        Path::new("/var/lib/homelab-securityd"), "rust", receipt.as_deref()
+    )?;
     let browser_enabled = settings.browser_origin.is_some();
     let shared = Shared::new(settings.authority, settings.browser_origin, broker.clone())?;
 
