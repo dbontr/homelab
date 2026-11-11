@@ -28,6 +28,33 @@ func TestVaultClientRejectsIncompleteMutualTLSConfiguration(t *testing.T){
  }
 }
 
+func TestVaultClientPinsCanonicalDNSAndProtectedFiles(t *testing.T){
+ for _,name:=range []string{"","*.internal","SECURITY.internal","127.0.0.1",
+  "security.",".internal","security..internal","security_internal","https://security.internal"}{
+  if validVaultServerDNS(name){t.Fatalf("invalid vault TLS name accepted: %q",name)}
+ }
+ if !validVaultServerDNS("security.internal"){t.Fatal("canonical identity refused")}
+ dir:=t.TempDir()
+ path:=filepath.Join(dir,"client-key")
+ if err:=os.WriteFile(path,[]byte("test-private-material"),0600);err!=nil{t.Fatal(err)}
+ if _,err:=protectedVaultTLSFile(path,true);err!=nil{t.Fatal(err)}
+ link:=filepath.Join(dir,"client-key-link")
+ if err:=os.Symlink(path,link);err!=nil{t.Fatal(err)}
+ if _,err:=protectedVaultTLSFile(link,true);err==nil{
+  t.Fatal("symlinked private client key accepted")
+ }
+ if err:=os.Chmod(path,0644);err!=nil{t.Fatal(err)}
+ if _,err:=protectedVaultTLSFile(path,true);err==nil{
+  t.Fatal("world-readable vault private key accepted")
+ }
+ if err:=os.Chmod(path,0600);err!=nil{t.Fatal(err)}
+ hard:=filepath.Join(dir,"client-key-hardlink")
+ if err:=os.Link(path,hard);err!=nil{t.Fatal(err)}
+ if _,err:=protectedVaultTLSFile(path,true);err==nil{
+  t.Fatal("shared-inode vault private key accepted")
+ }
+}
+
 func TestVaultClientReceivesOnlyExactScopedCredential(t *testing.T){
  response:=struct{status int;kind,secret string}{
   status:200,kind:"application/octet-stream",
