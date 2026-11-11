@@ -199,7 +199,7 @@ func(c *VaultSecretClient)AuthorizeOperation(
   Allowed bool `json:"allowed"`
   Reason string `json:"reason"`
   ConfirmationID string `json:"confirmation_id"`
-  ConfirmationExpiresAt string `json:"confirmation_expires_at"`
+  ConfirmationExpiresAt time.Time `json:"confirmation_expires_at"`
   CredentialTickets []struct{
    Alias string `json:"alias"`
    Ticket string `json:"ticket"`
@@ -224,7 +224,7 @@ func(c *VaultSecretClient)AuthorizeOperation(
   return nil,errors.New("independent owner operation authorization denied")
  }
  if decision.Reason!=""||decision.ConfirmationID!=""||
-  decision.ConfirmationExpiresAt!=""||len(decision.CredentialTickets)>8{
+  !decision.ConfirmationExpiresAt.IsZero()||len(decision.CredentialTickets)>8{
   return nil,errors.New("contradictory owner authorization decision")
  }
  tickets:=make(map[string]VaultCredentialTicket,len(decision.CredentialTickets))
