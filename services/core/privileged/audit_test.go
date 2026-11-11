@@ -230,3 +230,34 @@ func TestGoAuditReconciliationRequiresEvidenceAndUnresolvedAttempt(t *testing.T)
   t.Fatal("valid independently reauthorized attempt was still blocked:",err)
  }
 }
+
+func TestAuditJournalRejectsAmbiguousWireRecords(t *testing.T){
+ directory:=privateAuditDir(t)
+ path:=filepath.Join(directory,"executor-actions.jsonl")
+ start:=auditEntry{
+  ID:strings.Repeat("a",32),Operation:"infrastructure__service_restart",
+  Target:"saturn",ArgumentsSHA256:strings.Repeat("b",64),
+  Outcome:"started",At:time.Now().UTC(),
+ }
+ raw,err:=json.Marshal(start)
+ if err!=nil{t.Fatal(err)}
+ cases:=map[string]string{
+  "duplicate identity":strings.Replace(string(raw),
+    `"id":"`+start.ID+`"`,`"id":"`+start.ID+`","id":"`+strings.Repeat("c",32)+`"`,1),
+  "unknown field":strings.Replace(string(raw),
+    `"outcome":"started"`,`"outcome":"started","extra":"privileged"`,1),
+  "uppercase digest":strings.Replace(string(raw),
+    `"arguments_sha256":"`+start.ArgumentsSHA256+`"`,
+    `"arguments_sha256":"`+strings.Repeat("A",64)+`"`,1),
+ }
+ for name,record:=range cases{
+  t.Run(name,func(t *testing.T){
+   if err:=os.WriteFile(path,[]byte(record+"\n"),0600);err!=nil{t.Fatal(err)}
+   journal,err:=OpenAuditJournal(path)
+   if err==nil{
+    journal.Close()
+    t.Fatal("ambiguous or Rust-incompatible audit record admitted")
+   }
+  })
+ }
+}
