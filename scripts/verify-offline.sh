@@ -85,9 +85,9 @@ fi
 (
   cd "$root/ui/console"
   cargo fmt --all -- --check
-  cargo test --offline
-  cargo check --offline --target wasm32-unknown-unknown
-  cargo check --offline --features embedded-app --target wasm32-unknown-unknown
+  cargo test --locked --offline
+  cargo check --locked --offline --target wasm32-unknown-unknown
+  cargo check --locked --offline --features embedded-app --target wasm32-unknown-unknown
 )
 (
   cd "$root/services/motivation"
