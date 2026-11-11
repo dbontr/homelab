@@ -11,7 +11,8 @@ use serde::{Deserialize, Serialize};
 use crate::credentials::AuthenticatorState;
 use crate::Error;
 
-const MAX_STATE_BYTES: usize = 16 << 10;
+// The Go authority rejects authentication files at or above 16 KiB.
+const MAX_STATE_BYTES: usize = (16 << 10) - 1;
 const MAX_VAULT_BYTES: usize = 8 << 20;
 const VAULT_NAME: &str = "credentials.json";
 const LOCK_NAME: &str = ".securityd.lock";
@@ -325,6 +326,20 @@ mod tests {
         );
         drop(store);
         fs::remove_dir_all(moved).unwrap();
+    }
+
+    #[test]
+    fn rejects_state_at_the_go_size_limit() {
+        let directory = dir();
+        let record = directory.join(STATE_NAME);
+        let mut bytes = br#"{"version":1,"last_totp_step":-1,"failures":0,"locked_until":"0001-01-01T00:00:00Z"}"#.to_vec();
+        bytes.resize(16 << 10, b' ');
+        fs::write(&record, bytes).unwrap();
+        fs::set_permissions(&record, fs::Permissions::from_mode(0o600)).unwrap();
+        let inspector = StateStore::inspect(&directory).unwrap();
+        assert_eq!(inspector.load_authenticator(), Err(Error::Storage));
+        drop(inspector);
+        fs::remove_dir_all(directory).unwrap();
     }
 
     #[test]
