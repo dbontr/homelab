@@ -29,7 +29,10 @@ The Docker compatibility worker can enable the Rust custody boundary with
 private, persistent `/var/lib/homelab-device-leases` directory. The helper
 enforces exact workspace IDs and creates synchronized, owner-only records for
 each approved device alias **and its kernel device number** before any
-container is created. Two aliases for the same kernel device cannot acquire
+container is created. The version-two record also binds the device node's
+filesystem and inode numbers, so a replacement node cannot inherit an earlier
+reservation merely by reusing its major/minor number. Legacy version-one
+records remain fenced until independent container-absence reconciliation. Two aliases for the same kernel device cannot acquire
 separate reservations. The physical record is written first; interrupted
 acquisition or incomplete release leaves it reserved until reconciliation.
 Kernel identity and both matching records are checked before and after
