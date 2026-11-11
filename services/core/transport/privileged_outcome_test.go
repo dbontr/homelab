@@ -87,3 +87,23 @@ func TestPrivilegedToolResponsesPreserveExecutionState(t *testing.T) {
 		t.Fatalf("invalid executor response was trusted: %+v", response)
 	}
 }
+
+func TestPrivilegedToolSchemasRequireStableRequestIdentity(t *testing.T){
+ schema:=tool("infrastructure__service_restart","Restart service",
+  map[string]any{"host":prop("string"),"service":prop("string")},
+  "host","service")["inputSchema"].(map[string]any)
+ properties:=schema["properties"].(map[string]any)
+ identity,ok:=properties["request_id"].(map[string]any)
+ if !ok||identity["pattern"]!="^[0-9a-f]{32}$"{
+  t.Fatal("executor tool has no bounded request identity schema")
+ }
+ required:=schema["required"].([]string)
+ found:=false
+ for _,item:=range required{if item=="request_id"{found=true}}
+ if !found{t.Fatal("privileged tool did not require request_id")}
+ ordinary:=tool("recipe_list","List recipes",map[string]any{"query":prop("string")})
+ schema=ordinary["inputSchema"].(map[string]any)
+ if _,ok:=schema["properties"].(map[string]any)["request_id"];ok{
+  t.Fatal("read-only tools acquired an unrelated executor identity")
+ }
+}
