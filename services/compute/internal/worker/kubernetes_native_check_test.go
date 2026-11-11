@@ -95,7 +95,7 @@ func TestNativeVerifierJobSeparatesCredentialsAndMutableSource(t *testing.T) {
 func TestNativeVerifierCleanupMustCompleteBeforeSuccess(t *testing.T) {
 	// A local executable emulates Kubernetes replies, not a cluster API.
 	binary := filepath.Join(t.TempDir(), "kubectl")
-	mock := "#!/bin/sh\ncase \" $* \" in\n  *\" get networkpolicy pwm-isolate-workloads -o json \"*)\n    printf '%s\\n' '{\"spec\":{\"podSelector\":{},\"policyTypes\":[\"Ingress\",\"Egress\"],\"ingress\":[],\"egress\":[]}}' ;;\n  *\" get pod pwm-0123456789abcdef0123456789abcdef -o json \"*)\n    printf '%s\\n' '{\"metadata\":{\"labels\":{\"app.kubernetes.io/managed-by\":\"project-workspace\",\"pwm.dev/project\":\"engineering\",\"pwm.dev/worker\":\"jupiter\",\"pwm.dev/workspace\":\"0123456789abcdef0123456789abcdef\",\"pwm.dev/kind\":\"workspace\"}},\"spec\":{\"nodeName\":\"jupiter\"}}' ;;\n  *\" create -f - \"*)\n    cat >/dev/null ;;\n  *\" get job pwm-verify-0123456789abcdef0123456789abcdef -o json \"*)\n    printf '%s\\n' '{\"status\":{\"succeeded\":1}}' ;;\n  *\" logs job/pwm-verify-0123456789abcdef0123456789abcdef --all-containers=true \"*)\n    printf 'completed\\n' ;;\n  *\" delete job pwm-verify-0123456789abcdef0123456789abcdef \"*)\n    [ \"$FAIL_JOB_DELETE\" = \"0\" ] ;;\n  *)\n    printf 'unexpected mock kubectl invocation: %s\\n' \"$*\" >&2\n    exit 1 ;;\nesac\n"
+	mock := "#!/bin/sh\ncase \" $* \" in\n  *\" get networkpolicy pwm-isolate-workloads -o json \"*)\n    printf '%s\\n' '{\"spec\":{\"podSelector\":{},\"policyTypes\":[\"Ingress\",\"Egress\"],\"ingress\":[],\"egress\":[]}}' ;;\n  *\" get pod pwm-0123456789abcdef0123456789abcdef -o json \"*)\n    printf '%s\\n' '{\"metadata\":{\"labels\":{\"app.kubernetes.io/managed-by\":\"project-workspace\",\"pwm.dev/project\":\"engineering\",\"pwm.dev/worker\":\"jupiter\",\"pwm.dev/workspace\":\"0123456789abcdef0123456789abcdef\",\"pwm.dev/kind\":\"workspace\"}},\"spec\":{\"nodeName\":\"jupiter\"}}' ;;\n  *\" get jobs -l \"*)\n    printf '%s\\n' '{\"items\":[]}' ;;\n  *\" create -f - \"*)\n    cat >/dev/null ;;\n  *\" get job pwm-verify-0123456789abcdef0123456789abcdef -o json \"*)\n    printf '%s\\n' '{\"status\":{\"succeeded\":1}}' ;;\n  *\" logs job/pwm-verify-0123456789abcdef0123456789abcdef --all-containers=true \"*)\n    printf 'completed\\n' ;;\n  *\" delete job pwm-verify-0123456789abcdef0123456789abcdef \"*)\n    [ \"$FAIL_JOB_DELETE\" = \"0\" ] ;;\n  *)\n    printf 'unexpected mock kubectl invocation: %s\\n' \"$*\" >&2\n    exit 1 ;;\nesac\n"
 	if err := os.WriteFile(binary, []byte(mock), 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -120,5 +120,33 @@ func TestNativeVerifierCleanupMustCompleteBeforeSuccess(t *testing.T) {
 	unknown, err := k.VerifyNativeCheck(context.Background(), op, payload)
 	if err == nil || unknown != nil || !strings.Contains(err.Error(), "cleanup is unconfirmed") {
 		t.Fatalf("unconfirmed Job cleanup was reported as success: %v, %v", unknown, err)
+	}
+	if k.verificationReady() {
+		t.Fatal("cleanup failure did not quarantine the worker")
+	}
+	_, err = k.Handle(context.Background(), nil, Operation{
+		Workspace: op.Workspace, Action: "start",
+	}, nil)
+	if err == nil || !strings.Contains(err.Error(), "quarantined") {
+		t.Fatalf("quarantined worker accepted a workspace operation: %v", err)
+	}
+	state, reason := k.ExecuteJob(context.Background(), nil, Job{})
+	if state != "failed" || !strings.Contains(reason, "quarantined") {
+		t.Fatalf("quarantined worker accepted an ordinary Job: %s %s", state, reason)
+	}
+	_, err = k.VerifyNativeCheck(context.Background(), op, payload)
+	if err == nil || !strings.Contains(err.Error(), "quarantined") {
+		t.Fatalf("quarantined worker accepted another verifier: %v", err)
+	}
+	t.Setenv("FAIL_JOB_DELETE", "0")
+	if err := k.ReconcileStaleJobs(context.Background()); err != nil {
+		t.Fatalf("verified Job cleanup could not clear quarantine: %v", err)
+	}
+	if !k.verificationReady() {
+		t.Fatal("successful reconciliation left worker quarantined")
+	}
+	verified, err := k.VerifyNativeCheck(context.Background(), op, payload)
+	if err != nil || verified["stdout"] != "completed" {
+		t.Fatalf("reconciled worker cannot resume verification: %v, %v", verified, err)
 	}
 }
