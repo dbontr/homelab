@@ -96,7 +96,7 @@ func TestSecurityAuthorizationServerRejectsPublicListener(t *testing.T){
  _,serverCert,roots,closeServer:=remoteAuthFixture(t,http.HandlerFunc(func(http.ResponseWriter,*http.Request){}))
  defer closeServer()
  manager:=&AdminSessions{}
- if err:=manager.ServeAuthorizationTLS(context.Background(),"0.0.0.0:443",serverCert,roots,[]string{"jupiter.internal"});err==nil{
+ if err:=manager.ServeAuthorizationTLS(context.Background(),"0.0.0.0:443",serverCert,roots,[]string{"jupiter.internal"},nil);err==nil{
   t.Fatal("wildcard security listener accepted")
  }
 }
@@ -133,6 +133,34 @@ func TestRemoteAuthorizationEnforcesEntireResponseBoundary(t *testing.T){
     if err!=nil||!decision.Allowed{t.Fatalf("valid bounded response rejected: %+v %v",decision,err)}
    }else if err==nil||decision.Allowed{
     t.Fatalf("malformed or oversized response admitted: %+v %v",decision,err)
+   }
+  })
+ }
+}
+
+func TestRemoteTLSClientRolesAreDisjoint(t *testing.T){
+ allowed,authorizers,err:=remotePeerRoles(
+  []string{"executor.internal"},
+  []string{"media.internal","compute.internal"},
+ )
+ if err!=nil{t.Fatal(err)}
+ if len(allowed)!=3||len(authorizers)!=1{
+  t.Fatal("remote TLS role sets have incorrect membership")
+ }
+ if _,ok:=allowed["media.internal"];!ok{t.Fatal("credential-only client denied TLS access")}
+ if _,ok:=authorizers["media.internal"];ok{t.Fatal("credential-only client admitted as an authorizer")}
+ if _,ok:=authorizers["executor.internal"];!ok{t.Fatal("executor lost operation authorization")}
+ for _,tc:=range []struct{name string;auth,credentials []string}{
+  {"missing authorizer",nil,[]string{"media.internal"}},
+  {"overlapping role",[]string{"executor.internal"},[]string{"executor.internal"}},
+  {"duplicate authorizer",[]string{"executor.internal","executor.internal"},nil},
+  {"duplicate credential",[]string{"executor.internal"},[]string{"media.internal","media.internal"}},
+  {"wildcard credential",[]string{"executor.internal"},[]string{"*.internal"}},
+  {"unbounded peers",[]string{"executor.internal"},[]string{"a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p"}},
+ }{
+  t.Run(tc.name,func(t *testing.T){
+   if _,_,err:=remotePeerRoles(tc.auth,tc.credentials);err==nil{
+    t.Fatal("invalid remote TLS role policy accepted")
    }
   })
  }
