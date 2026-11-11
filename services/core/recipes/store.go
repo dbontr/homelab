@@ -133,8 +133,19 @@ func Open(path string) (*Store, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return nil, err
 	}
-	dirInfo, err := os.Lstat(filepath.Dir(path))
+	directory := filepath.Dir(path)
+	dirInfo, err := os.Lstat(directory)
 	if err != nil { return nil, err }
+	if dirInfo.Mode()&os.ModeSymlink != 0 {
+		// DynamicUser StateDirectory is a root-owned link into /var/lib/private.
+		// Only the exact directory assigned by systemd may use this mapping.
+		stateDirectory := os.Getenv("STATE_DIRECTORY")
+		if stateDirectory == "" || filepath.Clean(directory) != filepath.Clean(stateDirectory) {
+			return nil, errors.New("recipe database directory must be private")
+		}
+		dirInfo, err = os.Stat(directory)
+		if err != nil { return nil, err }
+	}
 	if !dirInfo.IsDir() || dirInfo.Mode().Perm()&0077 != 0 {
 		return nil, errors.New("recipe database directory must be private")
 	}
