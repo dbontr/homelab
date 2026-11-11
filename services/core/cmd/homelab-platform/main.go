@@ -56,7 +56,11 @@ func configuredBackend(name,upper string,vault *security.RemoteAuthorizationClie
  }
  token:=""
  if path!=""{token,err=secret(path);if err!=nil{return transport.Backend{},false,err}}
- return transport.Backend{Name:name,URL:u,Token:token,TokenSource:source},true,nil
+ forward:=name=="workspace"&&os.Getenv("HOMELAB_WORKSPACE_MCP_FORWARD_OWNER_ASSERTION")=="1"
+ return transport.Backend{
+  Name:name,URL:u,Token:token,TokenSource:source,
+  ForwardOwnerAssertion:forward,
+ },true,nil
 }
 
 func main(){
