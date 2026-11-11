@@ -147,18 +147,14 @@ func (a *AdminSessions) pruneCredentialTickets(now time.Time) {
     }
 }
 
-// issueServiceTickets is called only after an independently verified,
-// consuming owner authorization for exactly this operation and resource.
-func (a *AdminSessions) issueServiceTickets(principal,peer,operation,target string,args json.RawMessage) ([]CredentialTicket,error) {
-    canonical,_,err:=canonicaljson.Object(args)
-    if err!=nil { return nil,errors.New("invalid credential authorization arguments") }
-    digest:=sha256.Sum256(canonical)
-    argumentsSHA:=hex.EncodeToString(digest[:])
-    a.mu.Lock()
-    defer a.mu.Unlock()
-    now:=a.now().UTC()
-    if !ValidServiceDNS(peer) || !a.validSession(now) || principal=="" ||
-        a.session.principal!=principal {
+// issueServiceTicketsLocked is called only while holding the authority
+// mutex and following an independent owner decision in the same critical
+// section. A session transition cannot separate approval from issuance.
+func (a *AdminSessions) issueServiceTicketsLocked(
+    principal,peer,operation,target,argumentsSHA string,now time.Time,
+) ([]CredentialTicket,error) {
+    if !ValidServiceDNS(peer) || a.session==nil || a.faulted ||
+        principal=="" || a.session.principal!=principal {
         return nil,errors.New("owner session or credential policy unavailable")
     }
     a.pruneCredentialTickets(now)
