@@ -152,12 +152,14 @@ fn sync_directory(root: &Path) -> Result<(), &'static str> {
 fn physical_from_record(kind: &str, alias: &str, body: &str)
     -> Result<String, &'static str> {
     let rows: Vec<&str> = body.lines().collect();
-    if rows.len() != 6 || rows[0] != "v1" ||
+    if rows.len() != 8 || rows[0] != "v2" ||
         rows[2] != kind || rows[3] != alias {
         return Err("device custody record has an incompatible identity");
     }
     let number = rows[5].parse::<u64>()
         .map_err(|_| "device custody record has an invalid device number")?;
+    rows[6].parse::<u64>().map_err(|_| "invalid device filesystem number")?;
+    rows[7].parse::<u64>().map_err(|_| "invalid device inode number")?;
     Ok(physical_key(kind, alias, number))
 }
 
@@ -181,13 +183,20 @@ pub(crate) fn acquire(kind: &str, alias: &str, workspace: &str)
     let root = directory()?;
     let record = root.join(key(kind,alias));
     let physical = root.join(physical_key(kind, alias, meta.rdev()));
-    let contents = format!("v1\n{workspace}\n{kind}\n{alias}\n{resolved}\n{}\n",meta.rdev());
+    let contents = format!("v2\n{workspace}\n{kind}\n{alias}\n{resolved}\n{}\n{}\n{}\n",
+        meta.rdev(), meta.dev(), meta.ino());
     // Reserve the physical identity first. An interrupted allocation cannot
     // abandon a reusable alias while another process owns the same device.
     reserve_record(&physical, &contents)?;
     sync_directory(&root)?;
     reserve_record(&record, &contents)?;
     sync_directory(&root)?;
+    let current = fs::metadata(&resolved)
+        .map_err(|_| "leased device disappeared during admission")?;
+    if current.rdev() != meta.rdev() || current.dev() != meta.dev()
+        || current.ino() != meta.ino() {
+        return Err("device node was replaced during custody acquisition");
+    }
     Ok((resolved, group))
 }
 
@@ -208,7 +217,8 @@ pub(crate) fn verify(kind: &str, alias: &str, workspace: &str)
     let root = directory()?;
     let record = root.join(key(kind,alias));
     let content = private_record(&record)?;
-    let expected = format!("v1\n{workspace}\n{kind}\n{alias}\n{resolved}\n{}\n", current.rdev());
+    let expected = format!("v2\n{workspace}\n{kind}\n{alias}\n{resolved}\n{}\n{}\n{}\n",
+        current.rdev(), current.dev(), current.ino());
     if content != expected ||
         private_record(&root.join(physical_key(kind,alias,current.rdev())))? != expected {
         return Err("kernel device identity differs from its exclusive lease");
@@ -219,11 +229,11 @@ pub(crate) fn verify(kind: &str, alias: &str, workspace: &str)
 fn read_owner(path: &Path) -> Result<String, &'static str> {
     let data = private_record(path)?;
     let mut lines = data.lines();
-    if lines.next() != Some("v1") {
+    if lines.next() != Some("v2") {
         return Err("unsupported custody record version");
     }
     let owner = lines.next().ok_or("custody record is incomplete")?;
-    if !valid_workspace(owner) || lines.count() != 4 {
+    if !valid_workspace(owner) || lines.count() != 6 {
         return Err("custody record has invalid identity or contents");
     }
     Ok(owner.to_owned())
@@ -278,7 +288,7 @@ pub(crate) fn verify_workspace(workspace: &str) -> Result<usize, &'static str> {
         if suffix == Some("physical") {
             let body = private_record(&path)?;
             let rows: Vec<&str> = body.lines().collect();
-            if rows.len() != 6 ||
+            if rows.len() != 8 ||
                 physical_from_record(rows[2], rows[3], &body)? !=
                     path.file_name().and_then(|name| name.to_str()).unwrap_or("") ||
                 private_record(&root.join(key(rows[2], rows[3])))? != body {
@@ -287,10 +297,9 @@ pub(crate) fn verify_workspace(workspace: &str) -> Result<usize, &'static str> {
             continue;
         }
         if owner != workspace { continue; }
-        let contents = fs::read_to_string(&path)
-            .map_err(|_| "cannot read device custody record")?;
+        let contents = private_record(&path)?;
         let rows: Vec<&str> = contents.lines().collect();
-        if rows.len() != 6 {
+        if rows.len() != 8 {
             return Err("device custody record is incomplete");
         }
         let kind = rows[2];
