@@ -166,3 +166,55 @@ func TestOwnerEngineeringReadAllowlistDoesNotPermitExecutions(t *testing.T) {
         t.Fatal("owner browser session gained engineering execution privileges")
     }
 }
+
+func TestOwnerCurriculumSourceRoutesRequireExactCSRFAndPath(t *testing.T) {
+ db, err := store.Open(filepath.Join(t.TempDir(),"state.json"),"UTC")
+ if err!=nil{t.Fatal(err)}
+ service,err:=New(db,strings.Repeat("o",40),nil)
+ if err!=nil{t.Fatal(err)}
+ passphrase:=[]byte("separate-owner-learning-password")
+ secret,err:=security.HashPassphrase(passphrase)
+ if err!=nil{t.Fatal(err)}
+ sessions,err:=session.New(secret)
+ if err!=nil{t.Fatal(err)}
+ service.SetSessions(sessions)
+ token,csrf,_,err:=sessions.Login(passphrase)
+ if err!=nil{t.Fatal(err)}
+ allowed:=[]string{
+  "/v1/learning/sources/source_1/curriculum/preview",
+  "/v1/learning/sources/source_1/curriculum/import",
+ }
+ check:=func(method,path,origin,csrfToken,mimeType string)bool{
+  req:=httptest.NewRequest(method,path,strings.NewReader(`{"limit":80}`))
+  req.AddCookie(&http.Cookie{Name:uiCookie,Value:token})
+  req.Header.Set("Origin",origin)
+  req.Header.Set("Content-Type",mimeType)
+  req.Header.Set("X-CSRF-Token",csrfToken)
+  return service.sessionOwnerWriteAllowed(req)
+ }
+ for _,path:=range allowed{
+  if !check("POST",path,"https://console.example",csrf,"application/json"){
+   t.Errorf("Authenticated curriculum route rejected: %s",path)
+  }
+  if check("POST",path,"https://console.example","","application/json"){
+   t.Errorf("Curriculum route allowed without CSRF: %s",path)
+  }
+  if check("POST",path,"",csrf,"application/json"){
+   t.Errorf("Curriculum route allowed without Origin: %s",path)
+  }
+  if check("POST",path,"https://console.example",csrf,"text/plain"){
+   t.Errorf("Curriculum route accepted wrong content type: %s",path)
+  }
+ }
+ for _,path:=range []string{
+  "/v1/learning/sources/source_1/curriculum/delete",
+  "/v1/learning/sources/source_1/curriculum/import/more",
+  "/v1/learning/sources/invalid.id/curriculum/import",
+  "/v1/learning/sources/source_1/assessment/grade",
+  "/v1/learning/sources/source_1/curriculum",
+ }{
+  if check("POST",path,"https://console.example",csrf,"application/json"){
+   t.Errorf("Owner browser session admitted an unauthorized Learning route: %s",path)
+  }
+ }
+}
