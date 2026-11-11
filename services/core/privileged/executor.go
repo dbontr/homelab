@@ -217,7 +217,9 @@ func (e *Executor) Execute(ctx context.Context, operation, target string, args j
         "infrastructure__workspace_review_program", "infrastructure__workspace_update_entry",
         "infrastructure__workspace_build_environment",
 		"infrastructure__workspace_register_software", "infrastructure__workspace_revoke_worker":
-		err = e.cfg.Workspace.Call(ctx, operation, fields)
+		err = e.cfg.Workspace.Call(ctx, operation, fields, CredentialAuthorization{
+            Operation:operation,Target:target,Arguments:canonical,Tickets:decision.CredentialTickets,
+        })
 	case "infrastructure__release_activate":
 		err = e.cfg.Releases.Activate(ctx, fields["release_id"].(string))
 	case "infrastructure__release_revert":
