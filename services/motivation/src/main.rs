@@ -115,16 +115,26 @@ async fn focus_finish(
 }
 async fn healthz() -> Json<Value> { Json(json!({"status":"ok"})) }
 
+fn private_credential_mode(path: &Path, mode: u32) -> bool {
+    if mode & 0o077 == 0 {
+        return true;
+    }
+    let Ok(directory) = env::var("CREDENTIALS_DIRECTORY") else {
+        return false;
+    };
+    path.parent() == Some(Path::new(&directory)) && mode & 0o037 == 0
+}
+
 fn read_token(path: &Path) -> Result<String, Box<dyn std::error::Error>> {
     if !path.is_absolute() { return Err("token file must be absolute".into()); }
     let metadata = fs::symlink_metadata(path)?;
     if !metadata.is_file() || metadata.file_type().is_symlink() ||
-        metadata.permissions().mode() & 0o077 != 0 {
+        !private_credential_mode(path, metadata.permissions().mode()) {
         return Err("token file must be a private regular file".into());
     }
     let file = fs::OpenOptions::new().read(true)
         .custom_flags(libc::O_NOFOLLOW).open(path)?;
-    if !file.metadata()?.is_file() || file.metadata()?.permissions().mode() & 0o077 != 0 {
+    if !file.metadata()?.is_file() || !private_credential_mode(path, file.metadata()?.permissions().mode()) {
         return Err("token descriptor is not a private regular file".into());
     }
     let mut raw = String::new();
@@ -184,4 +194,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let listener = tokio::net::TcpListener::bind(listen).await?;
     axum::serve(listener, router).await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod credential_mode_tests {
+    use super::*;
+
+    #[test]
+    fn world_readable_credential_is_rejected() {
+        assert!(private_credential_mode(Path::new("/tmp/private-token"), 0o400));
+        assert!(!private_credential_mode(Path::new("/tmp/private-token"), 0o444));
+    }
 }
