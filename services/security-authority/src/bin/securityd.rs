@@ -29,9 +29,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     if broker.is_some() || std::env::var_os("HOMELAB_SECURITY_VAULT_KEY_FILE").is_some() {
         settings.authority.validate_vault()?;
     }
-    // The authority already owns the shared Go/Rust state lease. Publish a
-    // selection marker only after all protected runtime inputs are validated
-    // and before any network or Unix listener can accept a request.
+    let browser_enabled = settings.browser_origin.is_some();
+    let client_gid = group_id("homelab-security-client")?;
+    let browser_gid = if browser_enabled {
+        Some(group_id("homelab-security-browser")?)
+    } else {
+        None
+    };
+    let shared = Shared::new(settings.authority, settings.browser_origin, broker.clone())?;
+    // The shared authority retains the exclusive state lease. Commit the
+    // selection only after configuration validation and before binding sockets.
     let receipt = if std::env::var_os("HOMELAB_SECURITY_MIGRATION_RECEIPT_FILE").is_some() {
         Some(bootstrap::configured_file("HOMELAB_SECURITY_MIGRATION_RECEIPT_FILE", true)?)
     } else {
@@ -40,10 +47,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     migration::admit(
         Path::new("/var/lib/homelab-securityd"), "rust", receipt.as_deref()
     )?;
-    let browser_enabled = settings.browser_origin.is_some();
-    let shared = Shared::new(settings.authority, settings.browser_origin, broker.clone())?;
 
-    let client_gid = group_id("homelab-security-client")?;
     let mut listeners = tokio::task::JoinSet::new();
     {
         let shared = shared.clone();
@@ -63,8 +67,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             ).await
         });
     }
-    if browser_enabled {
-        let browser_gid = group_id("homelab-security-browser")?;
+    if let Some(browser_gid) = browser_gid {
         let shared_browser = shared.clone();
         listeners.spawn(async move {
             transport::serve_unix(
