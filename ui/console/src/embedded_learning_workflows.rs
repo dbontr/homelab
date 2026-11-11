@@ -239,6 +239,31 @@ pub fn DiagnosticWorkflow(session:Value,on_question:EventHandler<String>)->Eleme
                     h3{"Diagnostic recommendation"}
                     p{{text(&value,&["reason","title"])}}
                     pre{class:"mono small","{serde_json::to_string_pretty(&value).unwrap_or_default()}"}
+                    if enabled&&value.get("action").and_then(Value::as_str)==Some("teach"){
+                        button{class:"btn btn-outline",r#type:"button",disabled:busy(),
+                            onclick:{
+                                let id=session_id.clone();
+                                let evidence=value.clone();
+                                move |_|{
+                                    if busy(){return}
+                                    let instruction="Teach the specific observed prerequisite gap using an explanation and a novel example. Ask the learner to reconstruct the inference before recording any further diagnostic outcome; do not repeatedly probe the same unsupported concept.";
+                                    let request=match bounded_host_request(
+                                        instruction,"learning session",&id,Some(&evidence)){
+                                        Ok(v)=>v,Err(msg)=>{error.set(msg);return}
+                                    };
+                                    busy.set(true);error.set(String::new());
+                                    spawn(async move{
+                                        match mcp_app::request("ui/message",request).await{
+                                            Ok(_)=>status.set("Teaching request sent to the host.".to_owned()),
+                                            Err(message)=>error.set(message),
+                                        }
+                                        busy.set(false);
+                                    });
+                                }
+                            },
+                            "Teach the identified prerequisite"
+                        }
+                    }
                     if enabled&&value.get("action").and_then(Value::as_str)==Some("probe"){
                         button{class:"btn btn-primary",r#type:"button",disabled:busy(),
                             onclick:{
@@ -361,7 +386,8 @@ pub fn PracticeWorkflow(session:Value,on_problem:EventHandler<String>)->Element{
                                     },"Continue active problem"}
                             }
                         }
-                    }else if active{
+                    }else if active &&
+                        plan.get("action").and_then(Value::as_str)==Some("pose"){
                         button{class:"btn btn-outline",r#type:"button",disabled:busy(),
                             onclick:{
                                 let id=id.clone();
