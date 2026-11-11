@@ -411,7 +411,7 @@ async fn remote_service_credential(
     let Ok(bytes) = credential else {
         return protected_status("service credential access denied", StatusCode::FORBIDDEN);
     };
-    if bytes.is_empty() || bytes.len() > 32_768 {
+    if bytes.is_empty() || bytes.len() > 8192 {
         return protected_status("service credential unavailable", StatusCode::FORBIDDEN);
     }
     let mut response = axum::body::Body::from(Bytes::from_owner(ProtectedBody(bytes))).into_response();
