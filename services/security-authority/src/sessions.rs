@@ -618,6 +618,30 @@ impl Authority {
         Ok(issued)
     }
 
+    /// Replay observation checks the current signed owner, session and exact
+    /// operation policy without consuming a destructive confirmation or
+    /// issuing credentials. Only the executor may apply this to a journaled ID.
+    pub(crate) fn replay_gateway(
+        &mut self, assertion: &str, operation: &str, target: &str, args: &[u8],
+    ) -> Result<Decision, Error> {
+        let principal = self.verified_principal(assertion, &self.gateway_audience)?;
+        let now = unix_now()?;
+        if !self.live(now) || self.session.as_ref()
+            .is_none_or(|session| session.principal != principal) {
+            return Ok(Decision::Denied("owner authentication required"));
+        }
+        let Some(rule) = self.policy.get(operation) else {
+            return Ok(Decision::Denied("operation not permitted"));
+        };
+        if !rule.targets.iter().any(|allowed| allowed == target) {
+            return Ok(Decision::Denied("resource not permitted"));
+        }
+        if canonical_arguments(args).is_err() {
+            return Ok(Decision::Denied("invalid operation arguments"));
+        }
+        Ok(Decision::Allowed)
+    }
+
     pub fn preview_gateway(
         &mut self,
         assertion: &str,
