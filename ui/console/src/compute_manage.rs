@@ -7,6 +7,7 @@ use crate::components::{Card, Notice};
 
 #[derive(Clone, PartialEq)]
 struct Allocation {
+    host: String,
     project_id: String,
     image_pool_id: String,
     node_id: String,
@@ -26,7 +27,7 @@ struct Allocation {
 impl Default for Allocation {
     fn default() -> Self {
         Self {
-            project_id:String::new(),image_pool_id:String::new(),node_id:String::new(),
+            host:String::new(),project_id:String::new(),image_pool_id:String::new(),node_id:String::new(),
             architecture:String::new(),cpu:"1".to_owned(),memory_mb:"2048".to_owned(),
             duration_minutes:"120".to_owned(),gpu:"0".to_owned(),npu:"0".to_owned(),
             fpga:"0".to_owned(),min_gpu_memory_mb:"0".to_owned(),usb_passthrough:false,
@@ -60,6 +61,7 @@ fn allocation_request(selection: &Allocation) -> Result<Value,String> {
     if fpga > 0 {hardware.insert("fpga".to_owned(),json!(fpga));}
     if selection.usb_passthrough {hardware.insert("usb".to_owned(),json!(1));}
     Ok(json!({
+        "host":selection.host,
         "project_id":selection.project_id,
         "image_pool_id":selection.image_pool_id,
         "node_id":selection.node_id,
@@ -102,7 +104,12 @@ pub fn ComputeManagement(csrf: String) -> Element {
                         move |event| {
                             event.prevent_default();
                             if busy() || !confirm(){return;}
-                            let request=match allocation_request(&draft()){
+                            let selection=draft();
+                            if selection.host.is_empty() || selection.image_pool_id.is_empty(){
+                                error.set("Choose the approved executor host and image pool.".to_owned());
+                                return;
+                            }
+                            let request=match allocation_request(&selection){
                                 Ok(value)=>value,
                                 Err(msg)=>{error.set(msg);return}
                             };
@@ -119,6 +126,14 @@ pub fn ComputeManagement(csrf: String) -> Element {
                         }
                     },
                     label { class:"form-row",
+                        span { class:"label","Independent executor host" }
+                        input { class:"field", required:true, maxlength:"63",
+                            placeholder:"Configured NixOS host identity",
+                            value:"{draft().host}",
+                            oninput:move |e|{let mut d=draft();d.host=e.value();draft.set(d)}
+                        }
+                    }
+                    label { class:"form-row",
                         span { class:"label","Project ID" }
                         input { class:"field", required:true, maxlength:"80",
                             value:"{draft().project_id}",
@@ -126,8 +141,8 @@ pub fn ComputeManagement(csrf: String) -> Element {
                         }
                     }
                     label { class:"form-row",
-                        span { class:"label","Approved image pool (optional)" }
-                        input { class:"field", maxlength:"80",
+                        span { class:"label","Approved image pool" }
+                        input { class:"field", required:true, maxlength:"80",
                             value:"{draft().image_pool_id}",
                             oninput:move |e|{let mut d=draft();d.image_pool_id=e.value();draft.set(d)}
                         }
