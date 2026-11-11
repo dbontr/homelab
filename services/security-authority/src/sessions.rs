@@ -396,6 +396,7 @@ impl Authority {
     pub(crate) fn local_revoke(&mut self) {
         self.session = None;
         self.pending.clear();
+        self.credential_tickets.clear();
     }
 
     pub(crate) fn verify_owner_factors(
@@ -1232,6 +1233,78 @@ mod tests {
     }
 
     #[test]
+    fn credential_tickets_require_one_exact_live_approval() {
+        let mut authority = fixture();
+        authority.attach_vault([b'k'; 32]).unwrap();
+        let handle = authority.vault.as_mut().unwrap()
+            .store(&mut authority.store, "research", b"protected").unwrap();
+        authority.configure_service_grants(vec![ServiceCredentialGrant {
+            client_dns: "worker.internal".into(),
+            alias: "service_token".into(),
+            provider: "research".into(),
+            handle: handle.id,
+            operation: "workspace__status".into(),
+            target: "jupiter".into(),
+            arguments_sha256: None,
+            revision: None,
+            expires_at: None,
+        }]).unwrap();
+        let now = unix_now().unwrap();
+        authority.login_at("principal-a", PASSWORD, &otp(now / 30), now).unwrap();
+        let peer = VerifiedServiceIdentity::from_authenticated_peer(
+            "worker.internal".into()
+        ).unwrap();
+        let other = VerifiedServiceIdentity::from_authenticated_peer(
+            "other.internal".into()
+        ).unwrap();
+        let exact = br#"{"host":"jupiter"}"#;
+        let tickets = authority.issue_credential_tickets(
+            "principal-a", &peer, "workspace__status", "jupiter", exact
+        ).unwrap();
+        assert_eq!(tickets.len(), 1);
+        assert!(matches!(
+            authority.use_service_credential(&other, "service_token", &tickets[0].ticket,
+                "workspace__status", "jupiter", exact, |_| ()),
+            Err(Error::Unauthorized)
+        ));
+        assert!(matches!(
+            authority.use_service_credential(&peer, "service_token", &tickets[0].ticket,
+                "workspace__status", "jupiter", exact, |_| ()),
+            Err(Error::Unauthorized)
+        ));
+        let tickets = authority.issue_credential_tickets(
+            "principal-a", &peer, "workspace__status", "jupiter", exact
+        ).unwrap();
+        assert!(matches!(
+            authority.use_service_credential(&peer, "service_token", &tickets[0].ticket,
+                "workspace__status", "jupiter", br#"{"host":"venus"}"#, |_| ()),
+            Err(Error::Unauthorized)
+        ));
+        let tickets = authority.issue_credential_tickets(
+            "principal-a", &peer, "workspace__status", "jupiter", exact
+        ).unwrap();
+        assert_eq!(
+            authority.use_service_credential(&peer, "service_token", &tickets[0].ticket,
+                "workspace__status", "jupiter", exact, |secret| secret.to_vec()).unwrap(),
+            b"protected"
+        );
+        assert!(matches!(
+            authority.use_service_credential(&peer, "service_token", &tickets[0].ticket,
+                "workspace__status", "jupiter", exact, |_| ()),
+            Err(Error::Unauthorized)
+        ));
+        let tickets = authority.issue_credential_tickets(
+            "principal-a", &peer, "workspace__status", "jupiter", exact
+        ).unwrap();
+        authority.revoke_at("principal-a", now + 1);
+        assert!(matches!(
+            authority.use_service_credential(&peer, "service_token", &tickets[0].ticket,
+                "workspace__status", "jupiter", exact, |_| ()),
+            Err(Error::Unauthorized)
+        ));
+    }
+
+    #[test]
     fn credential_grants_fail_closed_after_persistence_fault() {
         let mut authority = fixture();
         authority.attach_vault([b'k'; 32]).unwrap();
@@ -1242,22 +1315,25 @@ mod tests {
             alias: "service_token".into(),
             provider: "research".into(),
             handle: handle.id,
+            operation: "workspace__status".into(),
+            target: "jupiter".into(),
+            arguments_sha256: None,
             revision: None,
             expires_at: None,
         }]).unwrap();
+        let now = unix_now().unwrap();
+        authority.login_at("principal-a", PASSWORD, &otp(now / 30), now).unwrap();
         let peer = VerifiedServiceIdentity::from_authenticated_peer(
             "worker.internal".into()
         ).unwrap();
-        assert_eq!(
-            authority.use_service_credential(&peer, "service_token",
-                |secret| secret.to_vec()).unwrap(),
-            b"protected"
-        );
+        let tickets = authority.issue_credential_tickets(
+            "principal-a", &peer, "workspace__status", "jupiter", b"{}"
+        ).unwrap();
         authority.store.fault_for_test();
         assert_eq!(
-            authority.use_service_credential(&peer, "service_token",
-                |secret| secret.to_vec()),
-            Err(Error::Storage)
+            authority.use_service_credential(&peer, "service_token", &tickets[0].ticket,
+                "workspace__status", "jupiter", b"{}", |secret| secret.to_vec()),
+            Err(Error::Unauthorized)
         );
     }
 
