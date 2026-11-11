@@ -104,6 +104,9 @@ fn read_receipt(raw: &[u8], target: &str) -> Result<Receipt, Error> {
 }
 
 fn current_hashes(state: &Path) -> Result<(String, Option<String>), Error> {
+    // Parse the version-one replay record as well as hashing it. An invalid
+    // snapshot cannot obtain approval merely by matching its own digest.
+    StateStore::inspect(state)?.load_authenticator()?;
     let replay = required_file(state, AUTH_NAME, AUTH_LIMIT)?;
     let vault = protected(&state.join(VAULT_NAME), VAULT_LIMIT)?;
     Ok((sha(&replay), vault.map(|bytes| sha(&bytes))))
@@ -339,7 +342,8 @@ mod tests {
         let initial = receipt(&dir, "rust", None);
         fs::write(dir.join(AUTH_NAME), b"{}").unwrap();
         assert!(admit(&dir, "rust", Some(&initial)).is_err());
-        fs::write(dir.join(AUTH_NAME), br#"{"version":1}"#).unwrap();
+        fs::write(dir.join(AUTH_NAME),
+            br#"{"version":1,"last_totp_step":13,"failures":0,"locked_until":"0001-01-01T00:00:00Z"}"#).unwrap();
         let current = receipt(&dir, "rust", None);
         admit(&dir, "rust", Some(&current)).unwrap();
         assert!(admit(&dir, "rust", Some(&current)).is_ok());
