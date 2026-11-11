@@ -90,6 +90,8 @@ pub fn LearningApp() -> Element {
     let mut loading=use_signal(||false);
     let mut error=use_signal(String::new);
     let mut notice=use_signal(String::new);
+    let mut target_level=use_signal(||3_i64);
+    let mut target_busy=use_signal(||false);
     rsx!{
         Heading {
             title:"Learning workspace".to_owned(),
@@ -106,6 +108,44 @@ pub fn LearningApp() -> Element {
                         panel.set(section);result.set(None);error.set(String::new());
                     },
                     "{section.label()}"
+                }
+            }
+        }
+        if panel()==Panel::Graph {
+            div{class:"inline-row",
+                label{class:"form-row",
+                    span{class:"label","Verified mastery target"}
+                    select{class:"field",disabled:target_busy(),
+                        value:"{target_level()}",
+                        onchange:move |event|{
+                            if let Ok(level)=event.value().parse::<i64>(){
+                                if (1..=5).contains(&level){target_level.set(level)}
+                            }
+                        },
+                        for level in 1..=5 {
+                            option{value:"{level}","Level {level}"}
+                        }
+                    }
+                }
+                button{class:"btn btn-outline",r#type:"button",
+                    disabled:target_busy(),
+                    onclick:move |_|{
+                        let level=target_level();
+                        if target_busy()||!(1..=5).contains(&level){return}
+                        target_busy.set(true);error.set(String::new());
+                        spawn(async move{
+                            match mcp_app::call_learning_tool::<Value>(
+                                "set_learning_target",json!({"level":level})).await{
+                                Ok(_)=>{
+                                    result.set(None);
+                                    notice.set("Mastery target saved; earlier evidence remains unchanged.".to_owned());
+                                }
+                                Err(message)=>error.set(message),
+                            }
+                            target_busy.set(false);
+                        });
+                    },
+                    "Save mastery target"
                 }
             }
         }
