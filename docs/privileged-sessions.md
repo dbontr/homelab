@@ -75,12 +75,26 @@ within the initiating request, never in the persistent server or worker state.
 Background jobs and scheduled callbacks cannot borrow that credential or
 mint their own owner approval.
 
+The platform's model-planning and Seerr clients use the same one-operation
+contract. A model request binds `model__completion` to the exact selected
+model and a SHA-256 digest of the encoded prompt. Seerr binds
+`media__seerr_request` to the configured service and the actual method,
+path, and request-body digest. The independently verified owner identity
+must be present on the caller context at the time of use. Every outbound
+request receives a newly approved one-use ticket; neither model input nor a
+provider token enters MCP tool arguments. An automatic model continuation
+cannot claim this authority merely because a preceding interactive step
+had it.
+
 The same constraint applies to other applications and service credentials:
 an ambient `TokenSource(alias)` without an authenticated operation cannot
 read the vault. Fixed service-to-service credentials required for health
-checks, tool discovery or unattended jobs use separately restricted
-service identities and protected file custody, not a fabricated human
-authorization ticket.
+checks, federated MCP discovery, or autonomous engineering jobs use separately
+restricted service identities and protected file custody, not a fabricated
+human authorization ticket. NixOS rejects owner-vault aliases for these
+unattended service identities. A future delegated service-capability
+mechanism must independently authenticate and bound each unattended job
+before such aliases can be supported.
 
 ## Restricted Rust executor
 
