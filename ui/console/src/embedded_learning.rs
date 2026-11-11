@@ -54,7 +54,6 @@ impl Panel {
             Self::Reviews => Ok(("get_review_queue",json!({"limit":80,"include_upcoming":true}))),
             Self::Practice if valid => Ok(("get_practice_session",json!({"session_id":id}))),
             Self::Practice => Ok(("list_practice_sessions",json!({"limit":50}))),
-            Self::Reasoning if valid => Ok(("get_reasoning_chain",json!({"chain_id":id}))),
             Self::Reasoning => Ok(("get_reasoning_graph",json!({"limit":160}))),
             Self::Calibration => Ok(("get_confidence_calibration",json!({"limit":250}))),
         }
@@ -153,6 +152,19 @@ pub fn LearningApp() -> Element {
                 }
             }
         }
+        button{class:"btn btn-outline",r#type:"button",
+            onclick:move |_|{
+                error.set(String::new());
+                spawn(async move{
+                    match mcp_app::request("ui/request-display-mode",
+                        json!({"mode":"fullscreen"})).await{
+                        Ok(_)=>notice.set("Fullscreen mode requested from the host.".to_owned()),
+                        Err(message)=>error.set(message),
+                    }
+                });
+            },
+            "Expand learning workspace"
+        }
         button{
             class:"btn btn-outline",r#type:"button",
             onclick:move |_|{
@@ -182,7 +194,12 @@ pub fn LearningApp() -> Element {
                 if !error().is_empty(){ Notice { message:error() } }
                 if !notice().is_empty(){p{class:"small muted",role:"status","{notice()}"}}
                 label { class:"form-row",
-                    span { class:"label","Record identifier or optional graph focus" }
+                    span { class:"label",
+                        if panel()==Panel::Graph{"Optional concept focus"}
+                        else if panel()==Panel::Reasoning{"Selected proposition or chain"}
+                        else if panel()==Panel::Calibration{"Calibration uses recorded outcomes"}
+                        else{"Selected record identifier"}
+                    }
                     input {
                         class:"field",maxlength:"128",value:"{selected_id()}",
                         placeholder:"Leave empty to browse the collection",
@@ -1196,6 +1213,9 @@ mod tests{
         assert_eq!(Panel::Sessions.read("").unwrap().0,"list_learning_sessions");
         assert_eq!(Panel::from_view("learning_question"),Some(Panel::Question));
         assert_eq!(Panel::from_view("reasoning"),Some(Panel::Reasoning));
+        assert_eq!(Panel::from_view("calibration"),Some(Panel::Calibration));
+        assert_eq!(Panel::Reasoning.read("proposition_12").unwrap().0,"get_reasoning_graph");
+        assert_eq!(Panel::Calibration.read("").unwrap().0,"get_confidence_calibration");
         assert_eq!(Panel::Sources.read("../oops").unwrap().0,"list_learning_sources");
         assert!(!valid_identity("../../etc/passwd"));
     }
