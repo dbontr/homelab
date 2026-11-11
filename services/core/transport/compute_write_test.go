@@ -31,12 +31,14 @@ func TestComputeBrowserWritesRequireIndependentAuthorization(t *testing.T) {
 
     for _,tc:=range []struct{path,body string;want int}{
         {"/v1/compute/catalog/register-image",
-         `{"id":"go-build","image":"registry.example/go@sha256:`+strings.Repeat("a",64)+`","architecture":"amd64"}`,http.StatusForbidden},
+         `{"id":"go-build","image":"registry.example/go@sha256:`+strings.Repeat("a",64)+`","architecture":"amd64"}`,http.StatusNotImplemented},
         {"/v1/compute/catalog/update-entry",
-         `{"id":"go-build","kind":"image","status":"disabled","reason":"retired","expected_revision":2}`,http.StatusForbidden},
+         `{"id":"go-build","kind":"image","status":"disabled","reason":"retired","expected_revision":2}`,http.StatusNotImplemented},
         {"/v1/compute/workspaces/0123456789abcdef0123456789abcdef/stop",
-         `{"project_id":"research","confirm":true}`,http.StatusForbidden},
-        {"/v1/compute/workspaces",`{"project_id":"research","cpu":2,"memory_mb":2048,"duration_minutes":90}`,http.StatusForbidden},
+         `{"host":"saturn","project_id":"research","confirm":true}`,http.StatusServiceUnavailable},
+        {"/v1/compute/workspaces",`{"host":"saturn","project_id":"research","image_pool_id":"approved","cpu":2,"memory_mb":2048,"duration_minutes":90}`,http.StatusServiceUnavailable},
+        {"/v1/compute/catalog/register-software",
+         `{"host":"saturn","id":"software","image_id":"approved","packages":["git"]}`,http.StatusServiceUnavailable},
         {"/v1/compute/catalog/register-image",`{"id":"go-build","image":"registry.example/go:latest"}`,http.StatusBadRequest},
         {"/v1/compute/catalog/update-entry",`{"id":"go-build","kind":"image","status":"disabled","expected_revision":0}`,http.StatusBadRequest},
         {"/v1/compute/catalog/unknown",`{"id":"go-build"}`,http.StatusNotFound},
