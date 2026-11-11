@@ -82,6 +82,10 @@ func(p *WorkspacePolicy)operationArgs(operation string,fields map[string]any)(st
   return field
  }
  switch operation{
+ case "infrastructure__workspace_create":
+  args,err:=p.allocationArgs(fields)
+  if err!=nil{return "",nil,err}
+  return "workspace_create",args,nil
  case "infrastructure__workspace_stop":
   project,workspace:=value("project_id"),value("workspace_id")
   if len(fields)!=3||project==""||workspace==""||!containsID(p.Projects,project){
