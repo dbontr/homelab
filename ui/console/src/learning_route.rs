@@ -80,9 +80,7 @@ pub fn LearningRoute(
     let choices = next_phases(&phase);
     let has_ungraded_question = detail.get("pending_question")
         .filter(|question| !question.is_null())
-        .and_then(|question| question.get("status"))
-        .and_then(Value::as_str)
-        .is_some_and(|status| status != "graded");
+        .is_some_and(|question| question.get("status").and_then(Value::as_str) != Some("graded"));
     let steps = api::list(&detail, &["steps"]);
     let build_allowed = permits_plan(&phase) && !has_ungraded_question && revision.is_some();
     let transition_allowed = choices.contains(&target_phase().as_str())
