@@ -24,12 +24,14 @@ use crate::Error;
 #[derive(Clone)]
 pub struct VerifiedPeer {
     pub(crate) identity: VerifiedServiceIdentity,
+    pub(crate) may_authorize: bool,
 }
 
 pub struct Remote {
     address: SocketAddr,
     config: Arc<ServerConfig>,
     allowed: BTreeSet<String>,
+    authorizers: BTreeSet<String>,
 }
 
 fn private_address(address: SocketAddr) -> bool {
@@ -55,6 +57,30 @@ fn certificate_identity(certificate: &CertificateDer<'_>) -> Result<String, Erro
     single_dns_identity(&san.value.general_names)
 }
 
+fn peer_roles(authorization_clients: Vec<String>, credential_clients: Vec<String>)
+    -> Result<(BTreeSet<String>, BTreeSet<String>), Error>
+{
+    if authorization_clients.is_empty()
+        || authorization_clients.len() + credential_clients.len() > 16
+    {
+        return Err(Error::InvalidConfiguration);
+    }
+    let mut allowed = BTreeSet::new();
+    let mut authorizers = BTreeSet::new();
+    for client in authorization_clients {
+        if !valid_service_dns(&client) || !allowed.insert(client.clone()) {
+            return Err(Error::InvalidConfiguration);
+        }
+        authorizers.insert(client);
+    }
+    for client in credential_clients {
+        if !valid_service_dns(&client) || !allowed.insert(client) {
+            return Err(Error::InvalidConfiguration);
+        }
+    }
+    Ok((allowed, authorizers))
+}
+
 impl Remote {
     pub fn from_environment() -> Result<Option<Self>, Error> {
         let Ok(listen) = std::env::var("HOMELAB_SECURITY_REMOTE_LISTEN") else {
@@ -70,16 +96,14 @@ impl Remote {
         let identities = required("HOMELAB_SECURITY_REMOTE_CLIENT_IDENTITIES")?;
         let clients: Vec<String> =
             serde_json::from_str(&identities).map_err(|_| Error::InvalidConfiguration)?;
-        if clients.is_empty() || clients.len() > 16 {
-            return Err(Error::InvalidConfiguration);
-        }
-        let mut allowed = BTreeSet::new();
-        for client in clients {
-            if !valid_service_dns(&client) || !allowed.insert(client)
-            {
-                return Err(Error::InvalidConfiguration);
-            }
-        }
+        let credential_clients: Vec<String> =
+            match std::env::var("HOMELAB_SECURITY_REMOTE_CREDENTIAL_CLIENT_IDENTITIES") {
+                Ok(raw) => serde_json::from_str(&raw)
+                    .map_err(|_| Error::InvalidConfiguration)?,
+                Err(std::env::VarError::NotPresent) => Vec::new(),
+                Err(_) => return Err(Error::InvalidConfiguration),
+            };
+        let (allowed, authorizers) = peer_roles(clients, credential_clients)?;
 
         let certificate = configured_file("HOMELAB_SECURITY_REMOTE_CERT", false)?;
         let private_key = zeroize::Zeroizing::new(
@@ -112,17 +136,19 @@ impl Remote {
             .with_single_cert(server_chain, server_key)
             .map_err(|_| Error::InvalidConfiguration)?;
         config.alpn_protocols = vec![b"http/1.1".to_vec()];
-        Ok(Some(Self { address, config: Arc::new(config), allowed }))
+        Ok(Some(Self { address, config: Arc::new(config), allowed, authorizers }))
     }
 
     pub async fn serve(self, shared: Shared) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let listener = TcpListener::bind(self.address).await?;
         let acceptor = TlsAcceptor::from(self.config);
         let allowed = Arc::new(self.allowed);
+        let authorizers = Arc::new(self.authorizers);
         loop {
             let (socket, _) = listener.accept().await?;
             let acceptor = acceptor.clone();
             let allowed = allowed.clone();
+            let authorizers = authorizers.clone();
             let shared = shared.clone();
             tokio::spawn(async move {
                 let Ok(Ok(stream)) =
@@ -139,13 +165,14 @@ impl Remote {
                 if !allowed.contains(&identity) {
                     return;
                 }
+                let may_authorize = authorizers.contains(&identity);
                 let Ok(identity) = VerifiedServiceIdentity::from_authenticated_peer(identity)
                 else {
                     return;
                 };
                 // The verified peer is injected by the TLS listener, never an HTTP header.
                 let router: Router = remote_router(shared)
-                    .layer(axum::Extension(VerifiedPeer { identity }));
+                    .layer(axum::Extension(VerifiedPeer { identity, may_authorize }));
                 let connection = http1::Builder::new().serve_connection(
                     TokioIo::new(stream), TowerToHyperService::new(router)
                 );
@@ -179,6 +206,28 @@ mod tests {
         ]).is_err());
         assert!(single_dns_identity(&[GeneralName::DNSName("*.internal")]).is_err());
     }
+    #[test]
+    fn credential_only_peers_cannot_authorize_operations() {
+        let (allowed, authorizers) = peer_roles(
+            vec!["executor.internal".into()],
+            vec!["media.internal".into(), "compute.internal".into()],
+        ).unwrap();
+        assert!(allowed.contains("executor.internal"));
+        assert!(allowed.contains("media.internal"));
+        assert!(authorizers.contains("executor.internal"));
+        assert!(!authorizers.contains("media.internal"));
+
+        for (auth, credentials) in [
+            (vec![], vec!["media.internal".into()]),
+            (vec!["executor.internal".into()], vec!["executor.internal".into()]),
+            (vec!["executor.internal".into(), "executor.internal".into()], vec![]),
+            (vec!["executor.internal".into()], vec!["media.internal".into(), "media.internal".into()]),
+            (vec!["executor.internal".into()], vec!["*.internal".into()]),
+        ] {
+            assert!(peer_roles(auth, credentials).is_err());
+        }
+    }
+
     #[test]
     fn only_explicit_private_bind_addresses_are_valid() {
         assert!(private_address("10.77.30.1:8443".parse().unwrap()));
