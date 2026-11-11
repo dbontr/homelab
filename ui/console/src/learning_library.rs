@@ -657,6 +657,204 @@ fn SourceList(csrf: String) -> Element {
     }
 }
 
+fn valid_curriculum_source_id(id: &str) -> bool {
+    !id.is_empty() && id.len() <= 128
+        && id.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+}
+
+fn importable_curriculum(plan: &Value) -> Option<&str> {
+    if plan.get("ready").and_then(Value::as_bool) != Some(true) {
+        return None;
+    }
+    let sha = plan.get("sha256").and_then(Value::as_str)?;
+    if sha.len() != 64 || !sha.bytes().all(|byte|
+        byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)) {
+        return None;
+    }
+    Some(sha)
+}
+
+#[component]
+fn SourceCurriculum(csrf: String, source_id: String, on_imported: EventHandler<()>) -> Element {
+    let mut preview = use_signal(|| None::<Value>);
+    let mut receipt = use_signal(|| None::<Value>);
+    let mut confirmed = use_signal(|| false);
+    let mut busy = use_signal(|| false);
+    let mut error = use_signal(String::new);
+
+    let plan = preview().and_then(|value| value.get("curriculum").cloned());
+    let digest = plan.as_ref().and_then(importable_curriculum).map(str::to_owned);
+    let steps = plan.as_ref().map(|value| records(value, &["steps"]))
+        .unwrap_or_default();
+
+    rsx! {
+        Card {
+            title: "Source curriculum".to_owned(),
+            description: "Review source-grounded concepts and prerequisites before importing. Import does not award mastery.".to_owned(),
+            div { class: "card-body stack",
+                p { class: "small muted", "Source: {source_id}" }
+                if !error().is_empty() { Notice { message: error() } }
+                button {
+                    class: "btn btn-outline", r#type: "button",
+                    disabled: busy() || !valid_curriculum_source_id(&source_id),
+                    onclick: {
+                        let token = csrf.clone();
+                        let id = source_id.clone();
+                        move |_| {
+                            if busy() || !valid_curriculum_source_id(&id) { return; }
+                            let path = format!("/v1/learning/sources/{id}/curriculum/preview");
+                            let token = token.clone();
+                            preview.set(None);
+                            receipt.set(None);
+                            confirmed.set(false);
+                            error.set(String::new());
+                            busy.set(true);
+                            spawn(async move {
+                                match api::write::<Value,_>(
+                                    Method::POST, &path, &token, &json!({"limit":80})
+                                ).await {
+                                    Ok(value) => preview.set(Some(value)),
+                                    Err(message) => error.set(format!(
+                                        "Cannot preview the source curriculum: {message}"
+                                    )),
+                                }
+                                busy.set(false);
+                            });
+                        }
+                    },
+                    "Preview reviewed curriculum"
+                }
+                if let Some(value) = plan.as_ref() {
+                    div { class: "kv-list",
+                        div { class: "kv-entry",
+                            span { class: "small muted", "Unprocessed spans" }
+                            strong { {label(value, &["remaining_spans"])} }
+                        }
+                        div { class: "kv-entry",
+                            span { class: "small muted", "Unreviewed claims" }
+                            strong { {label(value, &["unreviewed_claims"])} }
+                        }
+                        div { class: "kv-entry",
+                            span { class: "small muted", "Reviewed concepts" }
+                            strong { "{steps.len()}" }
+                        }
+                    }
+                    if let Some(blockers) = value.get("blockers").and_then(Value::as_array) {
+                        if !blockers.is_empty() {
+                            div { class: "alert", role: "status",
+                                strong { "Import is blocked." }
+                                for blocker in blockers {
+                                    p { {blocker.as_str().unwrap_or("Unknown source-review blocker")} }
+                                }
+                            }
+                        }
+                    }
+                    if steps.is_empty() {
+                        Empty {
+                            title: "No audited curriculum".to_owned(),
+                            description: "Extract, audit and review source claims before importing.".to_owned(),
+                        }
+                    } else {
+                        div { class: "task-items",
+                            for (index, step) in steps.iter().enumerate() {
+                                div { class: "task-item", key: "{index}",
+                                    div { class: "task-information",
+                                        strong { {label(step, &["title","statement"])} }
+                                        span { class: "small muted", {label(step, &["domain"])} }
+                                        if let Some(quote) = step.get("quote").and_then(Value::as_str) {
+                                            p { class: "small muted", "{quote}" }
+                                        }
+                                        p { class: "small muted",
+                                            "Prerequisites: {records(step,&["dependencies"]).len()}"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if let Some(sha) = digest.as_ref() {
+                        label { class: "inline-row",
+                            input {
+                                r#type: "checkbox",
+                                disabled: busy(),
+                                checked: confirmed(),
+                                onchange: move |event| confirmed.set(event.checked()),
+                            }
+                            span { "Import this audited prerequisite route without awarding learner mastery." }
+                        }
+                        button {
+                            class: "btn btn-primary", r#type: "button",
+                            disabled: busy() || !confirmed(),
+                            onclick: {
+                                let token = csrf.clone();
+                                let id = source_id.clone();
+                                let sha = sha.clone();
+                                move |_| {
+                                    if busy() || !confirmed() || !valid_curriculum_source_id(&id) {
+                                        return;
+                                    }
+                                    let token = token.clone();
+                                    let path = format!("/v1/learning/sources/{id}/curriculum/import");
+                                    let payload = json!({"limit":80,"expected_sha256":sha,"confirm":true});
+                                    busy.set(true);
+                                    error.set(String::new());
+                                    spawn(async move {
+                                        match api::write::<Value,_>(
+                                            Method::POST, &path, &token, &payload
+                                        ).await {
+                                            Ok(value) if value.get("mastery_awarded")
+                                                .and_then(Value::as_bool)==Some(false) => {
+                                                receipt.set(Some(value));
+                                                confirmed.set(false);
+                                                on_imported.call(());
+                                            }
+                                            Ok(_) => error.set(
+                                                "The Learning service returned an unexpected import receipt.".to_owned()
+                                            ),
+                                            Err(message) => error.set(format!(
+                                                "Import was not confirmed: {message}. Preview again before retrying."
+                                            )),
+                                        }
+                                        busy.set(false);
+                                    });
+                                }
+                            },
+                            "Import confirmed curriculum"
+                        }
+                        p { class: "small muted",
+                            "Import uses the exact preview digest. Source changes invalidate the confirmation."
+                        }
+                    }
+                }
+                if let Some(result) = receipt() {
+                    div { class: "alert", role: "status",
+                        strong { "Curriculum recorded" }
+                        p { "Concepts created: {label(&result, &["concepts_created"])}" }
+                        p { "Prerequisites linked: {label(&result, &["prerequisites_linked"])}" }
+                        p { "No mastery was awarded." }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod curriculum_tests {
+    use super::*;
+
+    #[test]
+    fn curriculum_requires_completed_review_and_exact_evidence_digest() {
+        let accepted = json!({"ready":true,"sha256":"a".repeat(64)});
+        assert!(importable_curriculum(&accepted).is_some());
+        assert!(importable_curriculum(&json!({"ready":false,"sha256":"a".repeat(64)})).is_none());
+        assert!(importable_curriculum(&json!({"ready":true,"sha256":"a".repeat(63)})).is_none());
+        assert!(importable_curriculum(&json!({"ready":true,"sha256":"A".repeat(64)})).is_none());
+        assert!(valid_curriculum_source_id("source-01_example"));
+        assert!(!valid_curriculum_source_id("../outside"));
+    }
+}
+
 #[component]
 fn PracticeHistory(csrf: String) -> Element {
     let mut selected=use_signal(String::new);
