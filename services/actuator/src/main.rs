@@ -297,7 +297,7 @@ mod tests {
         assert!(request(&["deployment", "scale", "apps", "workspace", "1.5"], &p).is_err());
         assert!(request(&["deployment", "scale", "kube-system", "workspace", "1"], &p).is_err());
         assert!(request(&["deployment", "scale", "apps", "unknown", "1"], &p).is_err());
-        assert!(request(&["deployment", "scale", "apps", "workspace", "2", "other"], &p).is_err());
+        assert!(request(&["deployment", "scale", "apps", "workspace", "2", "other/unsafe"], &p).is_err());
         assert!(matches!(
             request(&["deployment", "scale", "apps", "workspace", "2", "v_123"], &p),
             Ok(Action::Scale { version: Some(_), .. })
