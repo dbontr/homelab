@@ -14,6 +14,8 @@ import (
  "sync"
  "syscall"
  "time"
+
+ "github.com/dbontr/homelab-new/system/canonicaljson"
 )
 
 const maxAuditBytes int64 = 64 << 20
@@ -40,8 +42,10 @@ type auditEntry struct {
 func validAuditEntry(e auditEntry)bool{
  if len(e.ID)!=32||len(e.ArgumentsSHA256)!=64||len(e.Operation)==0||len(e.Operation)>128||
   !nodePattern.MatchString(e.Target)||len(e.Target)>63||e.At.IsZero(){return false}
- if _,err:=hex.DecodeString(e.ID);err!=nil{return false}
- if _,err:=hex.DecodeString(e.ArgumentsSHA256);err!=nil{return false}
+ if _,err:=hex.DecodeString(e.ID);err!=nil||e.ID!=strings.ToLower(e.ID){return false}
+ if _,err:=hex.DecodeString(e.ArgumentsSHA256);err!=nil||
+  e.ArgumentsSHA256!=strings.ToLower(e.ArgumentsSHA256){return false}
+ if e.At.Year()<=1{return false}
  if e.Outcome=="reconciled"{
   if len(e.ReconciliationSHA256)!=64{return false}
   _,err:=hex.DecodeString(e.ReconciliationSHA256)
@@ -72,8 +76,19 @@ func validateAuditHistory(file *os.File)(map[string]auditEntry,error){
  seen:=make(map[string]auditEntry)
  for scanner.Scan(){
   line:=scanner.Bytes()
+  if len(line)==0{return nil,errors.New("audit journal contains an empty record")}
+  canonical,fields,parseErr:=canonicaljson.Object(line)
+  if parseErr!=nil||len(fields)<6||len(fields)>7{
+   return nil,errors.New("audit journal contains invalid JSON")
+  }
+  for key:=range fields{
+   switch key{
+   case "id","operation","target","arguments_sha256","outcome","at","reconciliation_sha256":
+   default:return nil,errors.New("audit journal contains an unknown field")
+   }
+  }
   var event auditEntry
-  if len(line)==0||json.Unmarshal(line,&event)!=nil||!validAuditEntry(event){
+  if json.Unmarshal(canonical,&event)!=nil||!validAuditEntry(event){
    return nil,errors.New("audit journal contains an invalid record")
   }
   previous,exists:=seen[event.ID]
