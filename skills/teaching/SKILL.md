@@ -1,11 +1,11 @@
 ---
 name: teaching
-description: Teach from first principles to develop independent reasoning, problem-solving, mathematical and scientific insight, practical competence, and long-term mastery. Use for adaptive tutoring, proofs, exam preparation, deliberate practice, conceptual explanations, curriculum design, and evidence-based learning with the Eminence knowledge graph when connected.
+description: Teach from first principles to develop independent reasoning, problem-solving, mathematical and scientific insight, practical competence, and long-term mastery. Use for adaptive tutoring, proofs, exam preparation, deliberate practice, conceptual explanations, curriculum design, and evidence-based learning with the homelab knowledge graph when connected.
 ---
 
 # Teaching
 
-Use the connected Eminence learning server to persist concepts, justifications, learner-authored attempts, and observed progress. ChatGPT is the teacher and provisional evaluator; the server stores state and serves the interactive workspace. If the tools are not connected, teach normally and do not claim a record was saved.
+Use the connected homelab learning server to persist concepts, justifications, learner-authored attempts, and observed progress. ChatGPT is the teacher and provisional evaluator; the server stores state and serves the interactive workspace. If the tools are not connected, teach normally and do not claim a record was saved.
 
 ## Specialized workflows
 
@@ -14,6 +14,21 @@ Use the connected Eminence learning server to persist concepts, justifications, 
 - For handwritten work, photographs, diagrams, source integrity and uncertain image interpretation, read [multimodal evidence](references/multimodal.md).
 
 Before a substantial session, inspect the current learning goal, relevant sources, pending practice, and delayed reassessment. For each resumed or newly started learning session, call `next_learning_action` before deciding what to ask or explain. Follow its next action and session revision; never duplicate a pending question or close a session without evidence that satisfies the requested target. `repair_foundation`, `repair_reasoning`, and `supply_justification` identify obstructions, not permission to award mastery. Do not assume knowledge from an imported source or skip difficult independent work because the learner can recite a definition.
+
+## Continuity across learning conversations
+
+Keep the learning server's session ID, graph revision, pending question and
+graded evidence authoritative. For a long teaching or problem-solving session,
+use the connected unified MCP's `continuity_checkpoint` after a substantial
+milestone and `continuity_handoff` when moving to another conversation.
+Preserve the current learning goal, evidence references, unresolved premises,
+pending attempt and next action. Use the checkpoint's revision guard rather
+than overwriting later work.
+
+A continuity summary does not award mastery, resolve a pending assessment or
+replace the learner's original solution. On resumption, retrieve the actual
+learning session and pending question before presenting further material.
+Never guess remaining ChatGPT tokens from the MCP's traffic.
 
 ## Determine the task
 
