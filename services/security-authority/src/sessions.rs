@@ -577,10 +577,27 @@ impl Authority {
             return Err(Error::Unauthorized);
         }
         let session_id = session.id.clone();
-        let mut issued = Vec::with_capacity(scoped.len());
+        // Prepare the entire batch before mutating the ledger. Entropy
+        // failures and identifier collisions cannot strand partial grants.
+        let mut staged = Vec::with_capacity(scoped.len());
+        let mut reserved = BTreeSet::new();
         for grant in scoped {
-            let token = random_id()?;
-            self.credential_tickets.insert(token.clone(), IssuedCredentialTicket {
+            let mut token = None;
+            for _ in 0..4 {
+                let candidate = random_id()?;
+                if !self.credential_tickets.contains_key(&candidate)
+                    && reserved.insert(candidate.clone())
+                {
+                    token = Some(candidate);
+                    break;
+                }
+            }
+            let token = token.ok_or(Error::Storage)?;
+            let deadline = grant.expires_at.map_or(expires, |end| end.min(expires));
+            if now >= deadline {
+                return Err(Error::Unauthorized);
+            }
+            let ticket = IssuedCredentialTicket {
                 peer: peer.clone(),
                 principal: principal.into(),
                 session_id: session_id.clone(),
@@ -589,9 +606,14 @@ impl Authority {
                 target: target.into(),
                 arguments_sha256: digest.clone(),
                 revision: grant.revision,
-                expires,
-            });
-            issued.push(CredentialTicket {alias: grant.alias, ticket: token});
+                expires: deadline,
+            };
+            staged.push((token, ticket));
+        }
+        let mut issued = Vec::with_capacity(staged.len());
+        for (token, entry) in staged {
+            issued.push(CredentialTicket {alias: entry.alias.clone(), ticket: token.clone()});
+            self.credential_tickets.insert(token, entry);
         }
         Ok(issued)
     }
