@@ -1,8 +1,9 @@
 { pkgs }:
-(pkgs.buildGoModule.override { go = pkgs.go_1_27; }) {
+pkgs.buildGoModule {
   pname = "homelab-interfaces";
   version = "0.1.0";
   src = ../.;
+  GOWORK = "off";
   vendorHash = null;
   subPackages = [ "mcp" "api" ];
   postInstall = ''
