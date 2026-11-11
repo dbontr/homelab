@@ -10,27 +10,45 @@ The Rust authority kernel uses the same owner-only `.securityd.lock`, `authentic
 
 ## Rust authority admission
 
-The Rust authority kernel must validate a private copy of the authentication state and encrypted vault before it can become an operational service. Its offline security-preflight binary acquires the same .securityd.lock used by the Go daemon, reads the stored replay and vault records, verifies each AES-GCM authentication tag, checks the finite operation policy, and validates any configured signing keys and service credential grants. It refuses the default live state path and requires an independent owner-only copy. Run it through Cargo with the same security configuration variables and --state-dir pointing at the copied directory. Do not run two state owners against one directory.
+The Rust authority kernel must validate a private copy of the authentication state and encrypted vault before it can become an operational service. Its offline security-preflight binary inspects an independent state copy without acquiring any writer lock or creating files, reads the stored replay and vault records, verifies each AES-GCM authentication tag, checks the finite operation policy, and validates any configured signing keys and service credential grants. It refuses the default live state path and requires an independent owner-only copy. Run it through Cargo with the same security configuration variables and --state-dir pointing at the copied directory. Do not run two state owners against one directory.
 
 `services.homelabSecurity.implementation` defaults to `"go"`. The alternative `"rust"` selects the Rust binary inside the same `homelab-securityd.service`; its Nix package requires a committed, resolved `Cargo.lock` and enforces the crate test suite during its build. Do not select it until Go/Rust compatibility, full Rust compilation, adversarial authorization, and isolated rollback acceptance have passed. A source-level kernel and a successful state preflight alone do not establish deployed security correctness. The Go daemon remains active while those checks are incomplete.
 
 ## Scoped service credentials
 
-The security authority's optional mTLS credential route binds each grant to
-an exact certificate DNS identity, alias, provider, and opaque vault handle.
-At registration, it pins the encrypted credential's SHA-256 revision. An
-operator can supply that revision explicitly in
-`services.homelabSecurity.remote.serviceCredentialGrants` to reject stale
-configuration. If omitted, the daemon snapshots the existing revision at
-startup. A rotation or deletion invalidates the active grant, even if the
-opaque handle is unchanged. Grant reauthorization requires an operator-owned
-policy update or restart; a gateway request cannot grant itself a new version.
+The independent owner authority binds each vault grant to a single verified
+TLS client DNS identity, credential alias and handle, independently approved
+operation, and exact resource target. The operator can additionally restrict
+a grant to one SHA-256 digest of canonical JSON arguments. Every credential
+ticket is bound to the complete actual canonical arguments, even when the
+operator does not configure an argument digest.
 
-A grant can also specify `expiresAt` as an RFC 3339 timestamp. Expired grants
-are rejected at registration and on each credential read, independently of
-the owner's administrative-session lifetime. Grant policies never contain
-the plaintext credential. The service's mTLS certificate and private vault
-remain outside MCP and application process custody.
+The authority snapshots the encrypted record revision at configuration time.
+The trusted executor must first consume a signed, current, owner-bound
+operation authorization. Only the mutually authenticated authorization
+response can include a credential ticket. The ticket binds the owner principal
+and session ID, TLS client identity, operation, target, argument digest,
+credential alias and revision. Tickets expire after at most 60 seconds, are
+not persisted across restart, and are invalidated by logout, session expiry
+or credential rotation. A ticket can be redeemed exactly once.
+
+The executor redeems a ticket through
+`POST /v1/service-credentials/{alias}` on the mTLS listener. Its JSON body
+contains `ticket`, `operation`, `target` and `arguments`. The authority
+consumes the ticket before comparing its scope and checks the current encrypted
+record revision before returning a bounded credential. An alias, certificate,
+owner assertion or previously successful operation alone never grants a
+credential read. The route is unavailable over the owner, browser and local
+gateway sockets. Credential tickets are never returned by the executor's
+gateway-facing API.
+
+NixOS declares these restrictions through
+`services.homelabSecurity.remote.serviceCredentialGrants` using
+`clientDNS`, `alias`, `provider`, `handle`, `operation`, `target`,
+optional `argumentsSHA256`, optional `revision`, and optional `expiresAt`.
+Only remote identities authorized to request owner operation decisions can
+receive tickets in the current executor contract. Credential-only mTLS peers
+cannot mint their own approval or obtain secrets from an alias alone.
 
 ## Restricted Rust executor
 
