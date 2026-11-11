@@ -118,6 +118,112 @@ pub struct WorkspacePolicy {
     pub packages: Vec<String>,
 }
 
+// The executor accepts an exact, version-independent controller request.
+// Unknown fields cannot broaden resource allocation authority.
+#[derive(serde::Deserialize, serde::Serialize)]
+#[serde(deny_unknown_fields)]
+struct WorkspaceAllocation {
+    host: String,
+    project_id: String,
+    image_pool_id: String,
+    #[serde(default)]
+    node_id: String,
+    #[serde(default)]
+    architecture: String,
+    cpu: f64,
+    memory_mb: u32,
+    duration_minutes: u32,
+    #[serde(default)]
+    hardware: std::collections::BTreeMap<String,u32>,
+    #[serde(default)]
+    min_gpu_memory_mb: u32,
+    #[serde(default)]
+    usb_passthrough: bool,
+    #[serde(default)]
+    usb_node: String,
+    #[serde(default)]
+    usb_device_id: String,
+    #[serde(default)]
+    display: bool,
+    #[serde(default)]
+    display_width: u32,
+    #[serde(default)]
+    display_height: u32,
+}
+
+impl WorkspaceAllocation {
+    fn checked(fields: &Map<String,Value>, policy:&WorkspacePolicy)
+        -> Result<Value,Error>
+    {
+        if serde_json::to_vec(fields).map_err(|_|Error::Denied("invalid workspace JSON"))?
+            .len()>16<<10 {
+            return Err(Error::Denied("workspace allocation exceeds request limit"));
+        }
+        let mut input: Self=serde_json::from_value(Value::Object(fields.clone()))
+            .map_err(|_|Error::Denied("workspace allocation contains invalid fields"))?;
+        if !valid_workspace_name(&input.host,false)
+            || !policy.projects.contains(&input.project_id)
+            || !policy.images.contains(&input.image_pool_id)
+            || !valid_workspace_name(&input.image_pool_id,false)
+            || !input.node_id.is_empty()&&
+                (!valid_workspace_name(&input.node_id,false)
+                    || !policy.workers.contains(&input.node_id))
+            || !input.architecture.is_empty()&&
+                input.architecture!="amd64"&&input.architecture!="arm64"
+            || !input.cpu.is_finite() || !(0.1..=32.0).contains(&input.cpu)
+            || !(64..=131072).contains(&input.memory_mb)
+            || !(1..=1440).contains(&input.duration_minutes)
+            || input.min_gpu_memory_mb>1_000_000
+            || input.hardware.len()>4
+        {
+            return Err(Error::Denied("workspace allocation is outside operator policy"));
+        }
+        for (kind,count) in &input.hardware {
+            if !matches!(kind.as_str(),"gpu"|"npu"|"fpga"|"usb")
+                || !(1..=2).contains(count) {
+                return Err(Error::Denied("unsupported hardware allocation"));
+            }
+        }
+        if input.min_gpu_memory_mb>0&&input.hardware.get("gpu").copied().unwrap_or(0)==0{
+            return Err(Error::Denied("GPU memory requires an approved GPU"));
+        }
+        if input.usb_passthrough {
+            let id=&input.usb_device_id;
+            if input.hardware.get("usb").copied().unwrap_or(0)>1
+                || input.usb_node.is_empty()
+                || !policy.workers.contains(&input.usb_node)
+                || !valid_workspace_name(&input.usb_node,false)
+                || !input.node_id.is_empty()&&input.node_id!=input.usb_node
+                || id.is_empty()||id.len()>128
+                || !id.as_bytes()[0].is_ascii_alphanumeric()
+                || !id.bytes().all(|b|b.is_ascii_alphanumeric()
+                    ||matches!(b,b'.'|b'_'|b':'|b'-'))
+            {
+                return Err(Error::Denied("USB requires an exact approved worker and device"));
+            }
+            input.hardware.insert("usb".into(),1);
+        } else if input.hardware.contains_key("usb")
+            || !input.usb_node.is_empty()||!input.usb_device_id.is_empty() {
+            return Err(Error::Denied("USB passthrough is not enabled"));
+        }
+        if input.display {
+            if !(320..=3840).contains(&input.display_width)
+                || !(240..=2160).contains(&input.display_height)
+                || input.display_width*input.display_height>8_000_000
+            {
+                return Err(Error::Denied("display dimensions are outside policy"));
+            }
+        } else if input.display_width!=0 || input.display_height!=0 {
+            return Err(Error::Denied("display dimensions require explicit opt-in"));
+        }
+        let mut result=serde_json::to_value(input)
+            .map_err(|_|Error::Denied("invalid workspace allocation"))?;
+        result.as_object_mut().ok_or(Error::Denied("invalid allocation record"))?
+            .remove("host");
+        Ok(result)
+    }
+}
+
 impl WorkspacePolicy {
     fn validate(&self) -> Result<(), Error> {
         let url = Url::parse(&self.endpoint).map_err(|_| Error::Configuration("invalid Workspace endpoint"))?;
@@ -154,6 +260,10 @@ impl WorkspacePolicy {
             Ok(value)
         };
         let value = match name {
+            "infrastructure__workspace_create" => {
+                let request = WorkspaceAllocation::checked(fields,self)?;
+                ("workspace_create",request)
+            }
             "infrastructure__workspace_stop" if fields.len() == 3 => {
                 let project = string("project_id")?;
                 if !self.projects.iter().any(|s| s == project) { return Err(Error::Denied("project not permitted")); }
