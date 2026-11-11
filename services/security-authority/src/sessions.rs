@@ -947,6 +947,21 @@ mod tests {
     }
 
     #[test]
+    fn privileged_compute_mutations_require_one_use_confirmation() {
+        for operation in [
+            "infrastructure__workspace_create",
+            "infrastructure__workspace_register_image",
+            "infrastructure__workspace_register_software",
+            "infrastructure__workspace_propose_program",
+            "infrastructure__workspace_review_program",
+            "infrastructure__workspace_update_entry",
+            "infrastructure__workspace_stop",
+        ] {
+            assert!(dangerous(operation),"{operation} must require owner confirmation");
+        }
+    }
+
+    #[test]
     fn destructive_confirmation_is_single_use_and_exact() {
         let mut a = fixture();
         a.login_at("principal-a", PASSWORD, &otp(200), 6_000).unwrap();
