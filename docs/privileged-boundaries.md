@@ -51,6 +51,44 @@ The security service owns `/run/homelab-securityd/client.sock` and the inaccessi
 
 The security service holds `.securityd.lock` for its lifetime. The executor holds `/var/lib/homelab-releases/.executord.lock` while serving requests. A separate release journal lock serializes staging and activation. Both Go and Rust implementations use the same owner lease, so a failed cutover cannot produce two managed writers. A service restart invalidates in-memory approvals. An unfinished audit-start record or an indeterminate result after dispatch remains unresolved and requires owner reconciliation rather than being treated as a failed or safely retriable operation.
 
+## Unresolved execution reconciliation
+
+The Go and Rust executors share the same owner-only `executor-actions.jsonl`
+journal and `.executord.lock`. An attempt that remains `started`, or that
+terminates as `indeterminate`, may have applied its side effect. Both runtimes
+reject another `started` event with the same operation, target, and canonical
+argument digest until the attempt has been reconciled. An independent request
+with a different digest is not automatically denied. The journal also rejects
+duplicate audit IDs and contradictory terminal transitions.
+
+Only a trusted root console may reconcile an attempt. Stop the active Go or
+Rust executor and verify that it released its process-lifetime state lease.
+Inspect the relevant host objects through an independent local channel.
+Never mark an operation `not_applied` merely because the caller timed out or
+a status response was lost. If the result remains uncertain, keep the attempt
+unresolved and do not retry it.
+
+On a host that selected the Rust executor, use
+`homelab-audit-inspect unresolved` to inspect outstanding attempts.
+Prepare an owner-only, root-owned JSON evidence file with these exact fields:
+`attempt_id`, `operation`, `target`, `arguments_sha256`, `finding`,
+`verified_by`, `inspected_at`, and `explanation`. The finding must be
+`applied` or `not_applied`; ambiguous outcomes cannot be reconciled.
+Use the inspected attempt's exact identity, operation, target, and digest, an
+RFC 3339 inspection timestamp, and an explanation of the independently
+verified state. The explanation must contain at least 32 characters.
+The evidence file must have mode 0600 or stricter and belong to root.
+
+After separately retaining the evidence file in protected operator custody,
+invoke `homelab-audit-inspect reconcile AUDIT_ID EVIDENCE_FILE --confirm`.
+This appends an immutable `reconciled` event to the audit journal, containing
+the SHA-256 digest of the supporting evidence rather than plaintext notes.
+The event does not assert that a prior mutation succeeded, cannot rewrite an
+earlier receipt, and does not itself execute or retry anything. The Go
+executor accepts the same event format during rollback to Go. If the audit
+file fails validation or its inode changes, neither runtime may perform
+privileged effects until independent recovery.
+
 ## Source and release boundaries
 
 `nixosModules/security.nix` and `nixosModules/executor.nix` select exactly one implementation per managed service. Go remains the default. Source completion does not authorize state migration, privileged deployment, network-edge changes, credential rotation or host generation activation. The Cargo dependency locks, negative authorization checks, state-copy preflights and isolated cutover and rollback acceptance are separate release requirements.
