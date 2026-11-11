@@ -373,7 +373,8 @@ mod tests {
                 "jupiter", &"e".repeat(64), "started"
             ).is_ok()));
         }
-        assert_eq!(workers.into_iter().filter(|job| job.join().unwrap()).count(), 1);
+        assert_eq!(workers.into_iter().map(|job| job.join().unwrap())
+            .filter(|admitted| *admitted).count(), 1);
         assert_eq!(journal.request_outcome(
             &"d".repeat(32), "infrastructure__service_restart",
             "jupiter", &"e".repeat(64)
