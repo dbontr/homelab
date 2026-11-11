@@ -261,6 +261,8 @@ pub struct WorkspacePolicy {
     pub projects: Vec<String>,
     #[serde(rename = "Workers")]
     pub workers: Vec<String>,
+    #[serde(default, rename = "Devices")]
+    pub devices: Vec<String>,
     #[serde(rename = "Images")]
     pub images: Vec<String>,
     #[serde(default, rename = "ImageReferences")]
@@ -342,11 +344,15 @@ impl WorkspaceAllocation {
         if input.min_gpu_memory_mb>0&&input.hardware.get("gpu").copied().unwrap_or(0)==0{
             return Err(Error::Denied("GPU memory requires an approved GPU"));
         }
+        if input.hardware.get("fpga").copied().unwrap_or(0)>0&&input.node_id.is_empty(){
+            return Err(Error::Denied("FPGA resources require an exact approved worker"));
+        }
         if input.usb_passthrough {
             let id=&input.usb_device_id;
             if input.hardware.get("usb").copied().unwrap_or(0)>1
                 || input.usb_node.is_empty()
                 || !policy.workers.contains(&input.usb_node)
+                || !policy.devices.contains(&input.usb_device_id)
                 || !valid_workspace_name(&input.usb_node,false)
                 || !input.node_id.is_empty()&&input.node_id!=input.usb_node
                 || id.is_empty()||id.len()>128
@@ -390,7 +396,7 @@ impl WorkspacePolicy {
             return Err(Error::Configuration("Workspace must use an exact private MCP endpoint"));
         }
         let all = [&self.projects, &self.workers, &self.images, &self.software, &self.packages,
-            &self.programs];
+            &self.programs, &self.devices];
         if all.iter().all(|names| names.is_empty()) {
             return Err(Error::Configuration("Workspace resource policy is empty"));
         }
@@ -672,6 +678,7 @@ mod tests {
             endpoint:"https://workspace.example/mcp".into(),
             projects:vec!["research".into()],
             workers:vec!["jupiter".into()],
+            devices:vec!["jtag".into()],
             images:vec!["builder-image".into()],
             image_references:vec![reference.clone()],
             software:vec!["toolchain".into()],
@@ -739,6 +746,7 @@ mod tests {
             endpoint: "https://workspace.example/mcp".into(),
             projects: vec!["research".into()],
             workers: vec!["jupiter".into()],
+            devices: vec!["jtag".into()],
             images: vec!["approved-image".into()],
             image_references: Vec::new(),
             software: Vec::new(),
