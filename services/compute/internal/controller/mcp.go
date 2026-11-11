@@ -305,7 +305,17 @@ func (s *Server) handleMCP(w http.ResponseWriter, r *http.Request, who caller) {
 		} else if !who.Root && name == "list_projects" {
 			result, e = s.DB.ProjectsForPrincipal(who.Principal)
 		} else {
-			result, e = s.callToolFor(who, name, args)
+            scopeArguments,marshalErr:=json.Marshal(args)
+            if marshalErr!=nil{
+                e=errors.New("invalid operation argument object")
+            }else{
+                scoped,finish:=s.forProviderOperation(
+                    r.Context(),r.Header.Get("Cf-Access-Jwt-Assertion"),
+                    name,scopeArguments,
+                )
+                defer finish()
+                result,e=scoped.callToolFor(who,name,args)
+            }
 		}
 		if e != nil {
 			response["result"] = map[string]any{"content": []map[string]any{{"type": "text", "text": e.Error()}}, "isError": true}
