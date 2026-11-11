@@ -352,6 +352,35 @@ mod tests {
     }
 
     #[test]
+    fn active_writer_blocks_snapshot_and_leaves_no_copy() {
+        let dir = state();
+        let snapshot = dir.with_extension("snapshot");
+        let writer = StateStore::acquire(&dir).unwrap();
+        assert!(prepare(&dir, &snapshot, "rust").is_err());
+        assert!(!snapshot.exists());
+        drop(writer);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn restart_requires_replay_and_previously_present_vault() {
+        let dir = state();
+        fs::write(dir.join(VAULT_NAME), b"{}").unwrap();
+        fs::set_permissions(dir.join(VAULT_NAME),
+            fs::Permissions::from_mode(0o600)).unwrap();
+        let selected = receipt(&dir, "rust", None);
+        admit(&dir, "rust", Some(&selected)).unwrap();
+        fs::remove_file(dir.join(VAULT_NAME)).unwrap();
+        assert!(admit(&dir, "rust", Some(&selected)).is_err());
+        fs::write(dir.join(VAULT_NAME), b"{}").unwrap();
+        fs::set_permissions(dir.join(VAULT_NAME),
+            fs::Permissions::from_mode(0o600)).unwrap();
+        fs::remove_file(dir.join(AUTH_NAME)).unwrap();
+        assert!(admit(&dir, "rust", Some(&selected)).is_err());
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
     fn rejects_unsafe_receipts_and_symlinked_markers() {
         let dir = state();
         let receipt = receipt(&dir, "rust", None);
