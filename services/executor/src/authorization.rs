@@ -246,7 +246,7 @@ impl AuthorizationClient {
             "arguments": args
         })).map_err(|_| Error::Protocol("invalid credential redemption request"))?;
         let (status, mime, result) = self.request(&format!("/v1/service-credentials/{alias}"),
-            Method::POST, "", body, 32768).await?;
+            Method::POST, "", body, 8192).await?;
         if status != StatusCode::OK || mime.as_deref() != Some("application/octet-stream")
             || result.is_empty() {
             return Err(Error::Denied("service credential capability denied"));
