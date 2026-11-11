@@ -71,7 +71,7 @@ fn valid_handle(handle: &str) -> bool {
 
 /// Constructed only by the transport after it validates the peer TLS chain,
 /// hostname and exact single DNS SAN against the trusted service allowlist.
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub(crate) struct VerifiedServiceIdentity {
     dns: String,
 }
@@ -82,6 +82,9 @@ impl VerifiedServiceIdentity {
             return Err(Error::Unauthorized);
         }
         Ok(Self { dns })
+    }
+    pub(crate) fn dns(&self) -> &str {
+        &self.dns
     }
 }
 
