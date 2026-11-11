@@ -665,6 +665,75 @@ mod tests {
     use serde_json::json;
 
     #[test]
+    fn catalog_mutations_require_exact_operator_resources() {
+        let digest="a".repeat(64);
+        let reference=format!("registry.example/builder@sha256:{digest}");
+        let policy = WorkspacePolicy {
+            endpoint:"https://workspace.example/mcp".into(),
+            projects:vec!["research".into()],
+            workers:vec!["jupiter".into()],
+            images:vec!["builder-image".into()],
+            image_references:vec![reference.clone()],
+            software:vec!["toolchain".into()],
+            programs:vec!["compiler".into()],
+            packages:vec!["git".into()],
+        };
+        assert!(policy.validate().is_ok());
+        let cases = [
+            ("infrastructure__workspace_register_image",json!({
+                "host":"saturn","image_id":"builder-image","image":reference,
+                "description":"Approved image","architecture":"amd64"
+            }),"pool_register_image"),
+            ("infrastructure__workspace_propose_program",json!({
+                "host":"saturn","id":"compiler","name":"Compiler",
+                "platform":"linux-container","distribution":"oci",
+                "source_url":"https://vendor.example/download",
+                "description":"Compiler catalog entry","license_notes":"MIT",
+                "version":"1.0",
+            }),"pool_propose_program"),
+            ("infrastructure__workspace_review_program",json!({
+                "host":"saturn","id":"compiler","status":"reviewed",
+                "review_note":"License accepted","expected_revision":1,
+                "pool_kind":"","pool_id":"",
+            }),"pool_review_program"),
+            ("infrastructure__workspace_review_program",json!({
+                "host":"saturn","id":"compiler","status":"available",
+                "review_note":"Build image approved","expected_revision":2,
+                "pool_kind":"image","pool_id":"builder-image",
+            }),"pool_review_program"),
+            ("infrastructure__workspace_update_entry",json!({
+                "host":"saturn","id":"toolchain","kind":"software",
+                "status":"disabled","reason":"Security hold",
+                "expected_revision":1,
+            }),"pool_update_entry"),
+        ];
+        for (name,args,tool) in &cases {
+            let fields=args.as_object().unwrap();
+            let (selected,result)=policy.operation(name,fields).expect("approved catalog operation");
+            assert_eq!(selected, *tool);
+            assert!(result.get("host").is_none());
+            let mut unexpected=fields.clone();
+            unexpected.insert("unexpected".into(),json!(true));
+            assert!(policy.operation(name,&unexpected).is_err());
+        }
+        let changed=json!({
+            "host":"saturn","image_id":"builder-image",
+            "image":format!("registry.example/builder@sha256:{}", "b".repeat(64))
+        });
+        assert!(policy.operation("infrastructure__workspace_register_image",
+            changed.as_object().unwrap()).is_err());
+        let review=json!({
+            "host":"saturn","id":"compiler","status":"available",
+            "review_note":"Unavailable resource","pool_kind":"software",
+            "pool_id":"unlisted","expected_revision":3,
+        });
+        assert!(policy.operation("infrastructure__workspace_review_program",
+            review.as_object().unwrap()).is_err());
+        assert!(!valid_workspace_image_reference("registry.example/builder:latest"));
+        assert!(!valid_workspace_image_reference("registry.example/builder@sha256:bad"));
+    }
+
+    #[test]
     fn workspace_allocation_is_limited_to_operator_resources() {
         let policy = WorkspacePolicy {
             endpoint: "https://workspace.example/mcp".into(),
