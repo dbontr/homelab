@@ -65,11 +65,19 @@ for view in cognitive dashboard workout-editor groceries workout-companion; do
     exit 1
   fi
 done
+# Learning uses the same verified Rust/WASM binary, but its MCP host
+# publishes a different fixed resource URI and a separately scoped tool set.
+sed 's|<head>|<head><meta name="homelab-mcp-view" content="learning">|' \
+  "$bundled/index.html" > "$stage/export/learning.html"
+if ! grep -Fq 'content="learning"' "$stage/export/learning.html"; then
+  printf '%s\n' 'Missing embedded Learning view marker' >&2
+  exit 1
+fi
 
 (
   cd "$stage/export"
   find . -type f -print0 | sort -z | xargs -0 -r sha256sum > SHA256SUMS
 )
 mv -- "$stage/export" "$output"
-printf 'Built five Rust MCP Apps views and shared WebAssembly assets in %s\n' "$output"
+printf 'Built six Rust MCP Apps views and shared WebAssembly assets in %s\n' "$output"
 printf '%s\n' 'Asset hosting and MCP resource publication require separate operator configuration.'
