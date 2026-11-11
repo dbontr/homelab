@@ -94,6 +94,7 @@ pub fn LearningApp() -> Element {
         Heading {
             title:"Learning workspace".to_owned(),
             description:"Source-grounded reasoning, problems and independent assessments.".to_owned(),
+            div {}
         }
         div { class:"health-plan-list",role:"group",aria_label:"Learning sections",
             for section in [Panel::Graph,Panel::Sessions,Panel::Question,
