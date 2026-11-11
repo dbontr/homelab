@@ -93,8 +93,14 @@ pub fn ComputeManagement(csrf: String) -> Element {
                 if !error().is_empty(){ Notice { message:error() } }
                 if let Some(value)=result(){
                     div { class:"alert", role:"status",
-                        strong { "Workspace request accepted" }
-                        p { {api::property(&value,&["id","workspace_id","status"])} }
+                        strong { "Workspace operation accepted for execution" }
+                        p { {api::property(&value,&["state"])} }
+                        p { class:"small muted",
+                            "Executor audit: " {api::property(&value,&["audit_id"])}
+                        }
+                        p { class:"small muted",
+                            "An accepted request is not proof that the workspace is ready."
+                        }
                     }
                 }
                 form {
@@ -467,7 +473,7 @@ fn ComputeCatalog(csrf: String) -> Element {
                 if !error().is_empty(){ Notice { message:error() } }
                 if let Some(value)=receipt(){
                     p { role:"status",class:"small muted",
-                        "Catalog operation accepted: " {api::property(&value,&["id","status","revision"])}
+                        "Catalog execution receipt: " {api::property(&value,&["audit_id","state"])}
                     }
                 }
                 label { class:"form-row",
