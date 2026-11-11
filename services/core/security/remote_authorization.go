@@ -145,12 +145,13 @@ func(a *AdminSessions)ServeAuthorizationTLS(ctx context.Context,address string,s
    http.Error(w,"remote operation authorization denied",http.StatusForbidden)
    return
   }
-  authorization.ServeHTTP(w,r)
+  authorization.ServeHTTP(w,r.WithContext(context.WithValue(
+   r.Context(),verifiedCredentialPeerContextKey{},identity)))
  })
  mux:=http.NewServeMux()
  mux.Handle("POST /v1/authorize",authorizedOperation)
  mux.Handle("POST /v1/preview",authorizedOperation)
- mux.Handle("GET /v1/service-credentials/{alias}",a.ServiceCredentialHandler())
+ mux.Handle("POST /v1/service-credentials/{alias}",a.ServiceCredentialHandler())
  server:=&http.Server{Handler:mux,ReadHeaderTimeout:5*time.Second,ReadTimeout:10*time.Second,WriteTimeout:10*time.Second}
  stopped:=make(chan struct{})
  go func(){select{case <-ctx.Done():_=server.Close();case <-stopped:}}()
