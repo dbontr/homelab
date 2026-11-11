@@ -86,20 +86,41 @@ func(c *RemoteAuthorizationClient)requestDecision(ctx context.Context,path,opera
 
 // ServeAuthorizationTLS exposes only operation decisions to identified host
 // executors; session login, revocation and credential custody stay local.
-func(a *AdminSessions)ServeAuthorizationTLS(ctx context.Context,address string,serverCert tls.Certificate,clientRoots *x509.CertPool,allowedClients []string)error{
- if a==nil||clientRoots==nil||len(serverCert.Certificate)==0||serverCert.PrivateKey==nil||len(allowedClients)==0||len(allowedClients)>16{
+// remotePeerRoles separates operation authorization identities from
+// credential-only peers. Every accepted TLS peer has exactly one role
+// classification, and credential-only peers cannot invoke operation decisions.
+func remotePeerRoles(authorizationClients,credentialClients []string)(map[string]struct{},map[string]struct{},error){
+ if len(authorizationClients)==0||len(authorizationClients)+len(credentialClients)>16{
+  return nil,nil,errors.New("remote TLS peers require an authorizer and a bounded identity list")
+ }
+ allowed:=make(map[string]struct{},len(authorizationClients)+len(credentialClients))
+ authorizers:=make(map[string]struct{},len(authorizationClients))
+ for _,client:=range authorizationClients{
+  if !ValidServiceDNS(client){return nil,nil,errors.New("invalid authorization client identity")}
+  if _,exists:=allowed[client];exists{return nil,nil,errors.New("duplicate remote TLS identity")}
+  allowed[client]=struct{}{}
+  authorizers[client]=struct{}{}
+ }
+ for _,client:=range credentialClients{
+  if !ValidServiceDNS(client){return nil,nil,errors.New("invalid credential client identity")}
+  if _,exists:=allowed[client];exists{return nil,nil,errors.New("remote TLS identities must have disjoint roles")}
+  allowed[client]=struct{}{}
+ }
+ return allowed,authorizers,nil
+}
+
+// ServeAuthorizationTLS authenticates every peer and independently checks
+// whether its pinned identity may invoke authorization or credential reads.
+func(a *AdminSessions)ServeAuthorizationTLS(ctx context.Context,address string,serverCert tls.Certificate,clientRoots *x509.CertPool,authorizationClients,credentialClients []string)error{
+ if a==nil||clientRoots==nil||len(serverCert.Certificate)==0||serverCert.PrivateKey==nil{
   return errors.New("remote authorization requires a certificate and exact client allowlist")
  }
+ allowed,authorizers,err:=remotePeerRoles(authorizationClients,credentialClients)
+ if err!=nil{return err}
  host,_,err:=net.SplitHostPort(address)
  if err!=nil{return errors.New("invalid remote authorization listener")}
  ip:=net.ParseIP(host)
  if ip==nil||!(ip.IsPrivate()||ip.IsLoopback()){return errors.New("authorization must bind to an explicit private IP")}
- allowed:=make(map[string]struct{},len(allowedClients))
- for _,client:=range allowedClients{
-  if !ValidServiceDNS(client){return errors.New("invalid authorized client identity")}
-  if _,exists:=allowed[client];exists{return errors.New("duplicate authorized client identity")}
-  allowed[client]=struct{}{}
- }
  listen,err:=net.Listen("tcp",address)
  if err!=nil{return err}
  defer listen.Close()
@@ -108,14 +129,27 @@ func(a *AdminSessions)ServeAuthorizationTLS(ctx context.Context,address string,s
   Certificates:[]tls.Certificate{serverCert},
   VerifyConnection:func(state tls.ConnectionState)error{
    dns,verified:=verifiedServiceDNS(&state)
-   if !verified{return errors.New("unverified or ambiguous executor identity")}
+   if !verified{return errors.New("unverified or ambiguous service identity")}
    if _,ok:=allowed[dns];ok{return nil}
-   return errors.New("unapproved executor identity")
+   return errors.New("unapproved remote service identity")
   },
  }
+ authorization:=a.ClientHandler()
+ authorizedOperation:=http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){
+  identity,verified:=verifiedServicePeer(r)
+  if !verified{
+   http.Error(w,"remote service identity not verified",http.StatusForbidden)
+   return
+  }
+  if _,permitted:=authorizers[identity];!permitted{
+   http.Error(w,"remote operation authorization denied",http.StatusForbidden)
+   return
+  }
+  authorization.ServeHTTP(w,r)
+ })
  mux:=http.NewServeMux()
- mux.Handle("POST /v1/authorize",a.ClientHandler())
- mux.Handle("POST /v1/preview",a.ClientHandler())
+ mux.Handle("POST /v1/authorize",authorizedOperation)
+ mux.Handle("POST /v1/preview",authorizedOperation)
  mux.Handle("GET /v1/service-credentials/{alias}",a.ServiceCredentialHandler())
  server:=&http.Server{Handler:mux,ReadHeaderTimeout:5*time.Second,ReadTimeout:10*time.Second,WriteTimeout:10*time.Second}
  stopped:=make(chan struct{})
