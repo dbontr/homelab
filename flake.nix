@@ -43,49 +43,51 @@
       nixosModules.homelabExecutor = import ./nixosModules/executor.nix;
       nixosModules.homelabFleet = import ./nixosModules/fleet.nix;
       nixosModules.homelabInterfaces = import ./nixosModules/interfaces.nix;
-      packages.${defaultSystem}.homelab-engineering = import ./packages/engineering.nix {
-        pkgs = nixpkgs.legacyPackages.${defaultSystem};
-      };
-      packages.${defaultSystem}.homelab-platform = import ./packages/platform.nix {
-        pkgs = nixpkgs.legacyPackages.${defaultSystem};
-      };
-      packages.${defaultSystem}.homelab-calendar = import ./packages/calendar.nix {
-        pkgs = nixpkgs.legacyPackages.${defaultSystem};
-      };
+      packages.${defaultSystem} = {
+        homelab-engineering = import ./packages/engineering.nix {
+          pkgs = nixpkgs.legacyPackages.${defaultSystem};
+        };
+        homelab-platform = import ./packages/platform.nix {
+          pkgs = nixpkgs.legacyPackages.${defaultSystem};
+        };
+        homelab-calendar = import ./packages/calendar.nix {
+          pkgs = nixpkgs.legacyPackages.${defaultSystem};
+        };
 
-      packages.${defaultSystem}.homelab-interfaces = import ./packages/interfaces.nix {
-        pkgs = nixpkgs.legacyPackages.${defaultSystem};
-      };
-      packages.${defaultSystem}.homelab-security = import ./packages/security.nix {
-        pkgs = nixpkgs.legacyPackages.${defaultSystem};
-      };
-      packages.${defaultSystem}.homelab-security-authority = import ./packages/security-authority.nix {
-        pkgs = nixpkgs.legacyPackages.${defaultSystem};
-      };
+        homelab-interfaces = import ./packages/interfaces.nix {
+          pkgs = nixpkgs.legacyPackages.${defaultSystem};
+        };
+        homelab-security = import ./packages/security.nix {
+          pkgs = nixpkgs.legacyPackages.${defaultSystem};
+        };
+        homelab-security-authority = import ./packages/security-authority.nix {
+          pkgs = nixpkgs.legacyPackages.${defaultSystem};
+        };
 
-      packages.${defaultSystem}.homelab-executor = import ./packages/executor.nix {
-        pkgs = nixpkgs.legacyPackages.${defaultSystem};
-      };
-      packages.${defaultSystem}.homelab-executor-authority = import ./packages/executor-authority.nix {
-        pkgs = nixpkgs.legacyPackages.${defaultSystem};
-      };
-      packages.${defaultSystem}.homelab-actuator = import ./packages/actuator.nix {
-        pkgs = nixpkgs.legacyPackages.${defaultSystem};
-      };
-      packages.${defaultSystem}.homelab-native-hardware = import ./packages/hardware-native.nix {
-        pkgs = nixpkgs.legacyPackages.${defaultSystem};
-      };
-      packages.${defaultSystem}.homelab-engineering-sandbox = import ./packages/engineering-sandbox.nix {
-        pkgs = nixpkgs.legacyPackages.${defaultSystem};
-      };
-      packages.${defaultSystem}.homelab-motivation = import ./packages/motivation.nix {
-        pkgs = nixpkgs.legacyPackages.${defaultSystem};
-      };
+        homelab-executor = import ./packages/executor.nix {
+          pkgs = nixpkgs.legacyPackages.${defaultSystem};
+        };
+        homelab-executor-authority = import ./packages/executor-authority.nix {
+          pkgs = nixpkgs.legacyPackages.${defaultSystem};
+        };
+        homelab-actuator = import ./packages/actuator.nix {
+          pkgs = nixpkgs.legacyPackages.${defaultSystem};
+        };
+        homelab-native-hardware = import ./packages/hardware-native.nix {
+          pkgs = nixpkgs.legacyPackages.${defaultSystem};
+        };
+        homelab-engineering-sandbox = import ./packages/engineering-sandbox.nix {
+          pkgs = nixpkgs.legacyPackages.${defaultSystem};
+        };
+        homelab-motivation = import ./packages/motivation.nix {
+          pkgs = nixpkgs.legacyPackages.${defaultSystem};
+        };
 
-      packages.${defaultSystem}.homelab-fleet = import ./packages/fleet.nix {
-        pkgs = nixpkgs.legacyPackages.${defaultSystem};
-      };
+        homelab-fleet = import ./packages/fleet.nix {
+          pkgs = nixpkgs.legacyPackages.${defaultSystem};
+        };
 
+      };
       nixosConfigurations = builtins.listToAttrs
         (map (node: nixpkgs.lib.nameValuePair node.id (hostConfiguration node)) enrolled);
     };
