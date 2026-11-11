@@ -20,6 +20,13 @@ use crate::policy::{absolute, bounded_file, required};
 use crate::transport::valid_coordinator_dns;
 use crate::Error;
 
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CredentialTicket {
+    pub alias: String,
+    pub ticket: String,
+}
+
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Decision {
@@ -30,6 +37,8 @@ pub struct Decision {
     pub confirmation_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub confirmation_expires_at: Option<String>,
+    #[serde(default, skip_serializing)]
+    pub credential_tickets: Vec<CredentialTicket>,
 }
 impl Decision {
     pub fn denied(reason: &str) -> Self {
@@ -191,24 +200,56 @@ impl AuthorizationClient {
             !decision.confirmation_id.is_empty()) {
             return Err(Error::Protocol("contradictory authorization decision"));
         }
+        if (!consume || !decision.allowed) && !decision.credential_tickets.is_empty() {
+            return Err(Error::Protocol("authorization returned unexpected credential tickets"));
+        }
+        if decision.credential_tickets.len() > 8 {
+            return Err(Error::Protocol("credential ticket capacity exceeded"));
+        }
+        let mut aliases = std::collections::BTreeSet::new();
+        for item in &decision.credential_tickets {
+            if item.alias.is_empty() || item.alias.len() > 64
+                || !item.alias.as_bytes()[0].is_ascii_alphabetic()
+                || !item.alias.bytes().all(|c|
+                    c.is_ascii_alphanumeric() || matches!(c, b'_' | b'-'))
+                || item.ticket.len() != 48
+                || !item.ticket.bytes().all(|b| b.is_ascii_hexdigit())
+                || !aliases.insert(&item.alias)
+            {
+                return Err(Error::Protocol("invalid credential ticket"));
+            }
+        }
         Ok(decision)
     }
 
-    /// Secret retrieval additionally requires the pinned mTLS executor identity.
-    pub async fn vault_credential(&self, alias: &str) -> Result<Zeroizing<Vec<u8>>, Error> {
+    /// Ticket redemption is one-use and remains bound to the authorized
+    /// operation and exact original canonical arguments.
+    pub async fn vault_credential(
+        &self, alias: &str, ticket: &str, operation: &str, target: &str,
+        arguments: &[u8],
+    ) -> Result<Zeroizing<Vec<u8>>, Error> {
         if !matches!(self.source.as_ref(), Source::Remote(_)) {
             return Err(Error::Denied("vault credentials require mutual TLS"));
         }
         if alias.is_empty() || alias.len() > 64 ||
             !alias.as_bytes()[0].is_ascii_alphabetic() ||
-            !alias.bytes().all(|c| c.is_ascii_alphanumeric() || matches!(c,b'_'|b'-')) {
-            return Err(Error::Denied("invalid service credential alias"));
+            !alias.bytes().all(|c| c.is_ascii_alphanumeric() || matches!(c, b'_' | b'-'))
+            || ticket.len() != 48 || !ticket.bytes().all(|c| c.is_ascii_hexdigit())
+        {
+            return Err(Error::Denied("invalid service credential capability"));
         }
+        let canonical = crate::canonical::canonical_arguments(arguments)?;
+        let args: serde_json::Value = serde_json::from_slice(&canonical)
+            .map_err(|_| Error::Denied("invalid credential authorization context"))?;
+        let body = serde_json::to_vec(&serde_json::json!({
+            "ticket": ticket, "operation": operation, "target": target,
+            "arguments": args
+        })).map_err(|_| Error::Protocol("invalid credential redemption request"))?;
         let (status, mime, result) = self.request(&format!("/v1/service-credentials/{alias}"),
-            Method::GET, "", Vec::new(), 32768).await?;
+            Method::POST, "", body, 32768).await?;
         if status != StatusCode::OK || mime.as_deref() != Some("application/octet-stream")
             || result.is_empty() {
-            return Err(Error::Denied("service credential grant denied"));
+            return Err(Error::Denied("service credential capability denied"));
         }
         Ok(Zeroizing::new(result))
     }
