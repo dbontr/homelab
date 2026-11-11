@@ -14,16 +14,21 @@ import (
  "strings"
  "syscall"
  "time"
+
+ "github.com/dbontr/homelab-new/system/canonicaljson"
+ "github.com/dbontr/homelab-new/services/core/security"
 )
 
-// WorkspacePolicy delegates explicitly approved mutations to the canonical
-// Workspace controller. The gateway never holds the controller root token.
+// WorkspacePolicy restricts the controller endpoints and resource identities
+// available to the privileged executor.
 type WorkspacePolicy struct {
  Endpoint string
  TokenFile string
- // TokenSource reads a provider token only after the independently authorized
- // operation has an audit-start entry.
+ // TokenSource supports legacy trusted credential injection; the network
+ // vault never constructs an unscoped source.
  TokenSource func()(string,error) `json:"-"`
+ ScopedTokenSource func(context.Context,security.CredentialTicket,string,string,json.RawMessage)(string,error) `json:"-"`
+ CredentialAlias string `json:"-"`
  Projects []string
  Workers []string
  Devices []string
@@ -35,85 +40,17 @@ type WorkspacePolicy struct {
  Client *http.Client `json:"-"`
 }
 
-var workspaceIdentifier=regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,95}package privileged
-
-import (
- "bytes"
- "context"
- "encoding/json"
- "errors"
- "io"
- "net/http"
- "net/url"
- "os"
- "path/filepath"
- "regexp"
- "strings"
- "syscall"
- "time"
-)
-
-// WorkspacePolicy delegates explicitly approved mutations to the canonical
-// Workspace controller. The gateway never holds the controller root token.
-type WorkspacePolicy struct {
- Endpoint string
- TokenFile string
- // TokenSource reads a provider token only after the independently authorized
- // operation has an audit-start entry.
- TokenSource func()(string,error) `json:"-"`
- Projects []string
- Workers []string
- Devices []string
- Images []string
- ImageReferences []string
- Software []string
- Programs []string
- Packages []string
- Client *http.Client `json:"-"`
+type CredentialAuthorization struct {
+ Operation string
+ Target string
+ Arguments json.RawMessage
+ Tickets []security.CredentialTicket
 }
 
-)
-// Controller resource IDs have a narrower namespace than host names and
-// Workspace execution IDs; reject identities the controller cannot store.
-var workspaceResourceID=regexp.MustCompile(`^[a-z][a-z0-9-]{1,62}package privileged
-
-import (
- "bytes"
- "context"
- "encoding/json"
- "errors"
- "io"
- "net/http"
- "net/url"
- "os"
- "path/filepath"
- "regexp"
- "strings"
- "syscall"
- "time"
-)
-
-// WorkspacePolicy delegates explicitly approved mutations to the canonical
-// Workspace controller. The gateway never holds the controller root token.
-type WorkspacePolicy struct {
- Endpoint string
- TokenFile string
- // TokenSource reads a provider token only after the independently authorized
- // operation has an audit-start entry.
- TokenSource func()(string,error) `json:"-"`
- Projects []string
- Workers []string
- Devices []string
- Images []string
- ImageReferences []string
- Software []string
- Programs []string
- Packages []string
- Client *http.Client `json:"-"`
-}
-
-)
+var workspaceIdentifier=regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,95}$`)
+var workspaceResourceID=regexp.MustCompile(`^[a-z][a-z0-9-]{1,62}$`)
 var workspacePackage=regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9+._-]{0,79}$`)
+var workspaceCredentialAlias=regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]{0,63}$`)
 
 func containsID(allowed []string,id string)bool{
  for _,candidate:=range allowed{if candidate==id{return true}}
@@ -127,8 +64,15 @@ func(p *WorkspacePolicy)validate()error{
   !(u.Scheme=="https"||(u.Scheme=="http"&&(u.Hostname()=="127.0.0.1"||u.Hostname()=="::1"||u.Hostname()=="localhost"))){
   return errors.New("Workspace endpoint must be an exact HTTPS or loopback MCP URL")
  }
- if (p.TokenFile=="")==(p.TokenSource==nil){
+ sources:=0
+ if p.TokenFile!=""{sources++}
+ if p.TokenSource!=nil{sources++}
+ if p.ScopedTokenSource!=nil{sources++}
+ if sources!=1{
   return errors.New("Workspace must have exactly one protected credential authority")
+ }
+ if p.ScopedTokenSource!=nil&&!workspaceCredentialAlias.MatchString(p.CredentialAlias){
+  return errors.New("Workspace scoped credential alias is invalid")
  }
  if p.TokenFile!=""{
   if !filepath.IsAbs(p.TokenFile){return errors.New("Workspace credential requires an absolute protected file")}
@@ -249,16 +193,39 @@ func readWorkspaceCredential(path string)(string,error){
 
 // Call sends only validated downstream arguments and a credential sourced from
 // protected systemd storage. The response is never used as a command or URL.
-func(p *WorkspacePolicy)Call(ctx context.Context,operation string,fields map[string]any)error{
+func(p *WorkspacePolicy)Call(ctx context.Context,operation string,fields map[string]any,approvals ...CredentialAuthorization)error{
  name,arguments,err:=p.operationArgs(operation,fields)
  if err!=nil{return err}
- if (p.TokenFile=="")==(p.TokenSource==nil){
-  return errors.New("Workspace credential authority is ambiguous")
- }
+ sources:=0
+ if p.TokenFile!=""{sources++}
+ if p.TokenSource!=nil{sources++}
+ if p.ScopedTokenSource!=nil{sources++}
+ if sources!=1{return errors.New("Workspace credential authority is ambiguous")}
  token:=""
- if p.TokenSource!=nil{
+ if p.ScopedTokenSource!=nil{
+  if len(approvals)!=1 || approvals[0].Operation!=operation ||
+   approvals[0].Target!=fields["host"]{
+   return errors.New("Workspace credential lacks an exact authorized operation")
+  }
+  canonical,_,e:=canonicaljson.Object(approvals[0].Arguments)
+  if e!=nil{return errors.New("invalid Workspace authorized arguments")}
+  encoded,e:=json.Marshal(fields)
+  if e!=nil{return errors.New("invalid Workspace operation arguments")}
+  expected,_,e:=canonicaljson.Object(encoded)
+  if e!=nil||!bytes.Equal(expected,canonical){
+   return errors.New("Workspace operation does not match its credential authorization")
+  }
+  var ticket security.CredentialTicket
+  count:=0
+  for _,candidate:=range approvals[0].Tickets {
+   if candidate.Alias==p.CredentialAlias{ticket=candidate;count++}
+  }
+  if count!=1{return errors.New("Workspace credential capability missing or ambiguous")}
+  token,err=p.ScopedTokenSource(ctx,ticket,operation,approvals[0].Target,canonical)
+  if err!=nil{return errors.New("Workspace scoped credential unavailable")}
+ }else if p.TokenSource!=nil{
   token,err=p.TokenSource()
-  if err!=nil{return errors.New("Workspace vault credential unavailable")}
+  if err!=nil{return errors.New("Workspace trusted credential unavailable")}
  }else{
   token,err=readWorkspaceCredential(p.TokenFile)
   if err!=nil{return err}
