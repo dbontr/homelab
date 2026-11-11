@@ -159,7 +159,7 @@ pub fn LearningRoute(
                                     {api::property(step, &["title", "concept_id", "id"])}
                                 }
                                 span { class: "small muted",
-                                    "{api::property(step, &["kind"])} · "
+                                    {format!("{} · ", api::property(step, &["kind"]))}
                                     if step.get("independently_supported")
                                         .and_then(Value::as_bool) == Some(true) {
                                         "Independently supported"
