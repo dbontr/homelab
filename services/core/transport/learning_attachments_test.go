@@ -2,6 +2,9 @@ package transport
 
 import (
     "net/http"
+    "crypto/sha256"
+    "encoding/hex"
+    "encoding/base64"
     "net/http/httptest"
     "encoding/json"
     "path/filepath"
@@ -145,5 +148,43 @@ func TestLearningOriginalsRequireOwnerSessionCSRFAndApprovedMedia(t *testing.T) 
     }
     if got:=call("GET","/v1/learning/attachment-originals/abc","","",nil,"");got.Code!=401{
         t.Fatalf("anonymous original retrieval accepted: %d",got.Code)
+    }
+}
+
+
+func TestLearningOriginalDownloadVerifiesBytesAndSafeMetadata(t *testing.T) {
+    data:=[]byte("%PDF-1.4\nowned learning source\n")
+    sum:=sha256.Sum256(data)
+    original:=map[string]any{
+        "base64":base64.StdEncoding.EncodeToString(data),
+        "size_bytes":float64(len(data)),
+        "sha256":hex.EncodeToString(sum[:]),
+        "integrity_verified":true,
+        "filename":"research.pdf",
+        "mime_type":"application/pdf",
+    }
+    body,mimeType,filename,err:=checkedLearningOriginal(original)
+    if err!=nil||string(body)!=string(data)||mimeType!="application/pdf"||filename!="research.pdf"{
+        t.Fatalf("valid original was rejected: %v",err)
+    }
+    tests:=[]struct{
+        field string
+        value any
+    }{
+        {"sha256",strings.Repeat("0",64)},
+        {"integrity_verified",false},
+        {"mime_type","text/html"},
+        {"filename","../data.pdf"},
+        {"filename","evil\nresponse.pdf"},
+        {"size_bytes",float64(len(data)+1)},
+        {"base64","%%%%"},
+    }
+    for _,test:=range tests{
+        item:=map[string]any{}
+        for key,value:=range original{item[key]=value}
+        item[test.field]=test.value
+        if _,_,_,err:=checkedLearningOriginal(item);err==nil{
+            t.Errorf("modified %s bypassed integrity checks",test.field)
+        }
     }
 }
