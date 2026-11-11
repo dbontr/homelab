@@ -127,7 +127,8 @@ func (c *Client) request(ctx context.Context, method, path string, body any) (js
   key,err=c.keySource()
   if err!=nil{return nil,errors.New("Seerr credential unavailable")}
  }
- if key==""||strings.ContainsAny(key,"\x00\r\n\t "){
+ if key==""||strings.ContainsAny(key,"\x00\r\n\t ")||
+  (c.keySource!=nil||c.scopedKeySource!=nil)&&len(key)<20{
   return nil,errors.New("invalid Seerr credential")
  }
  req.Header.Set("X-Api-Key",key)
