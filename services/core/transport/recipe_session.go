@@ -49,6 +49,10 @@ func (s *Server) sessionOwnerWriteAllowed(r *http.Request) bool {
         allowed = true
     case r.Method == http.MethodPost && strings.HasPrefix(path, "/v1/learning/questions/"):
         allowed = len(strings.Split(path, "/"))==6 && strings.HasSuffix(path, "/answer")
+    case r.Method == http.MethodPost && strings.HasPrefix(path, "/v1/learning/sources/"):
+        parts := strings.Split(path, "/")
+        allowed = len(parts)==7 && learningID.MatchString(parts[4]) &&
+            parts[5]=="curriculum" && (parts[6]=="preview" || parts[6]=="import")
     case r.Method == http.MethodPut && strings.HasPrefix(path, "/v1/books/requests/"):
         allowed = len(strings.Split(path, "/")) == 5
     case r.Method == http.MethodPost && path == "/v1/health/training-sets":
