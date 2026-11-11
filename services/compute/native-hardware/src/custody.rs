@@ -6,6 +6,9 @@ use std::env;
 use std::fs::{self, OpenOptions};
 use std::io::{Read, Write};
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
+use std::process::{Command, Stdio};
+use std::thread;
+use std::time::{Duration, Instant};
 
 extern "C" { fn geteuid() -> u32; }
 fn owner() -> u32 { unsafe { geteuid() } }
@@ -81,6 +84,64 @@ fn reserve_record(path: &Path, contents: &str) -> Result<(), &'static str> {
         .open(path).map_err(|_| "device is leased or custody is unavailable")?;
     file.write_all(contents.as_bytes()).and_then(|()| file.sync_all())
         .map_err(|_| "cannot persist exclusive device custody")
+}
+
+// The native authority independently checks the exact managed container
+// before freeing any raw device. The Docker executable path is compiled into
+// the Nix release; the caller cannot replace it through environment variables.
+fn container_absent(workspace: &str) -> Result<(), &'static str> {
+    if !valid_workspace(workspace) {
+        return Err("invalid managed workspace identity");
+    }
+    let binary = option_env!("HOMELAB_NATIVE_DOCKER_BIN")
+        .ok_or("Docker absence verification is not packaged")?;
+    if !Path::new(binary).is_absolute() {
+        return Err("Docker inspection executable is not absolute");
+    }
+    let name = format!("name=^/pwm-{workspace}$");
+    let mut child = Command::new(binary)
+        .args([
+            "--host", "unix:///var/run/docker.sock",
+            "ps", "-a", "--filter", &name, "--format", "{{.Names}}",
+        ])
+        .env_clear()
+        .env("LC_ALL", "C")
+        .env("HOME", "/var/empty")
+        .env("DOCKER_HOST", "unix:///var/run/docker.sock")
+        .env("DOCKER_CONTEXT", "")
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|_| "independent Docker custody inspection unavailable")?;
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) if Instant::now() < deadline => {
+                thread::sleep(Duration::from_millis(25));
+            }
+            Ok(None) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err("Docker custody inspection exceeded its deadline");
+            }
+            Err(_) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err("Docker custody inspection failed");
+            }
+        }
+    };
+    let output = child.wait_with_output()
+        .map_err(|_| "Docker custody inspection output unavailable")?;
+    if !status.success() || output.stdout.len() > 1024 {
+        return Err("Docker custody state cannot be verified");
+    }
+    if !output.stdout.iter().all(u8::is_ascii_whitespace) {
+        return Err("managed workspace still exists in Docker");
+    }
+    Ok(())
 }
 
 fn sync_directory(root: &Path) -> Result<(), &'static str> {
@@ -176,6 +237,7 @@ pub(crate) fn release_device(kind: &str, alias: &str, workspace: &str)
         return Err("invalid device custody release identity");
     }
     let root = directory()?;
+    container_absent(workspace)?;
     let record = root.join(key(kind,alias));
     if read_owner(&record)? != workspace {
         return Err("device custody belongs to another workspace");
@@ -249,6 +311,7 @@ pub(crate) fn release_workspace(workspace: &str) -> Result<usize, &'static str> 
         return Err("device custody requires an exact workspace identifier");
     }
     let root = directory()?;
+    container_absent(workspace)?;
     let entries = fs::read_dir(&root).map_err(|_| "cannot inspect device custody")?;
     let mut matches = Vec::new();
     for entry in entries {
@@ -325,6 +388,16 @@ mod tests {
             "npu", "/dev/dri/renderD128",
             "v1\n0123456789abcdef0123456789abcdef\ngpu\n/dev/dri/renderD128\n/dev/dri/renderD128\n259\n"
         ).is_err());
+    }
+
+    #[test]
+    fn native_teardown_requires_a_pinned_independent_docker_inspector() {
+        // A standalone unconfigured source build has no baked-in Docker
+        // executable. It must not release a live resource on that basis.
+        if option_env!("HOMELAB_NATIVE_DOCKER_BIN").is_none() {
+            assert!(container_absent("0123456789abcdef0123456789abcdef").is_err());
+        }
+        assert!(container_absent("../some-other-workspace").is_err());
     }
 
     #[test]
