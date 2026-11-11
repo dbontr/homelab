@@ -50,6 +50,13 @@ Only remote identities authorized to request owner operation decisions can
 receive tickets in the current executor contract. Credential-only mTLS peers
 cannot mint their own approval or obtain secrets from an alias alone.
 
+Trusted application and Compute controller clients can redeem a capability only
+when a separately authorized execution path supplies the original operation,
+target, argument object and ticket. Background provider callbacks and
+`TokenSource(alias)` do not carry that authority and cannot read the owner
+vault. Provider-specific flows must integrate their own owner-approved
+operation before using a vault-backed credential.
+
 ## Restricted Rust executor
 
 The privileged host executor has one implementation selector:
