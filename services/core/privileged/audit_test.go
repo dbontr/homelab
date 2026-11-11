@@ -174,3 +174,27 @@ func TestGoAuditResumesAfterRustEvidenceReconciliation(t *testing.T){
   t.Fatal("substituted target accepted in reconciliation")
  }
 }
+
+func TestLegacyGoFailedReceiptNeedsOperatorInspection(t *testing.T) {
+ dir:=privateAuditDir(t)
+ path:=filepath.Join(dir,"executor-actions.jsonl")
+ journal,err:=OpenAuditJournal(path)
+ if err!=nil{t.Fatal(err)}
+ id:=strings.Repeat("c",32)
+ duplicate:=strings.Repeat("d",32)
+ digest:=strings.Repeat("e",64)
+ operation:="infrastructure__service_restart"
+ if err:=journal.Record(id,operation,"saturn",digest,"started");err!=nil{t.Fatal(err)}
+ if err:=journal.Record(id,operation,"saturn",digest,"failed");err!=nil{t.Fatal(err)}
+ if err:=journal.Close();err!=nil{t.Fatal(err)}
+ journal,err=OpenAuditJournal(path)
+ if err!=nil{t.Fatal(err)}
+ defer journal.Close()
+ unresolved,err:=journal.Unresolved()
+ if err!=nil||len(unresolved)!=1||unresolved[0].Outcome!="failed" {
+  t.Fatalf("historical failed side effect was assumed safe: %+v, %v",unresolved,err)
+ }
+ if err:=journal.Record(duplicate,operation,"saturn",digest,"started");err==nil {
+  t.Fatal("attempt was repeated before inspection of a legacy failure")
+ }
+}
