@@ -1,0 +1,43 @@
+name: Skill utility checks
+
+on:
+  pull_request:
+    paths:
+      - "skills/**"
+      - "services/compute/skills/**"
+      - ".github/workflows/skill-utilities.yml"
+  push:
+    paths:
+      - "skills/**"
+      - "services/compute/skills/**"
+      - ".github/workflows/skill-utilities.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  go-skill-tools:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+      - name: Format temporary skill utility sources
+        run: |
+          gofmt -w skills/development/scripts/*.go skills/ideas/scripts/*.go
+      - name: Test reference checker
+        run: go test skills/development/scripts/references_page_check.go skills/development/scripts/references_page_check_test.go
+      - name: Test source residue checker
+        run: go test skills/development/scripts/ai_residue_check.go skills/development/scripts/ai_residue_check_test.go
+      - name: Test technical prose checker
+        run: go test skills/development/scripts/ste100_check.go skills/development/scripts/ste100_check_test.go
+      - name: Test idea ranking
+        run: go test skills/ideas/scripts/rank_candidates.go skills/ideas/scripts/rank_candidates_test.go
+      - name: Verify root source ledger
+        run: go run skills/development/scripts/references_page_check.go .
+      - name: Verify Go CLI ranking
+        run: |
+          printf '%s\n' '{"candidates":[{"id":"a","title":"Example","coherence":3,"distinctiveness":4,"tractability":5}]}' > /tmp/candidates.json
+          go run skills/ideas/scripts/rank_candidates.go /tmp/candidates.json --top 1 --output /tmp/ranked.json
+          test -s /tmp/ranked.json
