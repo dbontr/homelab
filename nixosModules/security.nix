@@ -12,6 +12,16 @@ in
       default = "go";
       description = "Single authoritative security daemon implementation; Rust requires a locked, verified release.";
     };
+    migration.receiptFile = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = ''
+        Operator-provisioned cutover receipt from an independently validated
+        state snapshot. Required to select Rust and to switch back to Go once
+        a persistent selection marker exists. This is a protected systemd
+        credential, not a file in the Nix store.
+      '';
+    };
     package = lib.mkOption {
       type = lib.types.package;
       default = package;
@@ -176,6 +186,12 @@ in
     assertions = [
       { assertion = cfg.implementation != "rust" || builtins.pathExists ../services/security-authority/Cargo.lock;
         message = "Rust security authority requires a checked-in Cargo.lock before it can be selected."; }
+      { assertion = cfg.implementation != "rust" || cfg.migration.receiptFile != null;
+        message = "Selecting the Rust security authority requires a separately approved migration receipt."; }
+      { assertion = cfg.migration.receiptFile == null ||
+          (lib.hasPrefix "/" cfg.migration.receiptFile &&
+           !(lib.hasPrefix "${toString ../.}" cfg.migration.receiptFile));
+        message = "The migration receipt must be an absolute, protected runtime credential outside the Nix source tree."; }
       { assertion = !cfg.remote.enable ||
           (cfg.remote.listenAddress != null && cfg.remote.certificateFile != null &&
            cfg.remote.keyFile != null && cfg.remote.clientCAFile != null &&
@@ -278,6 +294,8 @@ in
         HOMELAB_SECURITY_ACCESS_BROWSER_AUD = cfg.browser.audience;
       } // lib.optionalAttrs (cfg.vaultKeyFile != null) {
         HOMELAB_SECURITY_VAULT_KEY_FILE = "/run/credentials/homelab-securityd.service/vault-key";
+      } // lib.optionalAttrs (cfg.migration.receiptFile != null) {
+        HOMELAB_SECURITY_MIGRATION_RECEIPT_FILE = "/run/credentials/homelab-securityd.service/migration-receipt";
       } // lib.optionalAttrs (cfg.access.gatewayAudience != "") {
         HOMELAB_SECURITY_ACCESS_ISSUER = cfg.access.issuer;
         HOMELAB_SECURITY_ACCESS_GATEWAY_AUD = cfg.access.gatewayAudience;
@@ -302,6 +320,8 @@ in
           "remote-client-ca:${cfg.remote.clientCAFile}"
         ] ++ lib.optionals (cfg.vaultKeyFile != null) [
           "vault-key:${cfg.vaultKeyFile}"
+        ] ++ lib.optionals (cfg.migration.receiptFile != null) [
+          "migration-receipt:${cfg.migration.receiptFile}"
         ] ++ lib.optionals (cfg.access.gatewayAudience != "") [
           "access-jwks:${cfg.access.jwksFile}"
           "access-owner:${cfg.access.ownerEmailFile}"
