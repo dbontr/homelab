@@ -33,6 +33,22 @@ func TestNativeDeviceCustodyRequiresExactClaims(t *testing.T) {
     if err!=nil||len(granted)!=1{t.Fatalf("explicit USB custody rejected: %+v %v",granted,err)}
 }
 
+func TestNativeDeviceCustodyRejectsUnpinnedDockerExecutable(t *testing.T) {
+    root:=t.TempDir()
+    binary:=filepath.Join(root,"docker")
+    if err:=os.WriteFile(binary,[]byte("#!/bin/sh\nexit 0\n"),0700);err!=nil{t.Fatal(err)}
+    t.Setenv("PATH",root)
+    t.Setenv("PWM_NATIVE_DEVICE_CUSTODY","1")
+    if _,err:=dockerExecutable();err==nil{
+        t.Fatal("a mutable Docker binary was accepted for privileged device custody")
+    }
+    t.Setenv("PWM_NATIVE_DEVICE_CUSTODY","0")
+    executable,err:=dockerExecutable()
+    if err!=nil||executable!=binary{
+        t.Fatal("ordinary compatibility worker unexpectedly rejected its configured Docker CLI")
+    }
+}
+
 func TestNativeDeviceCustodyPinsDockerToLocalDaemon(t *testing.T) {
     t.Setenv("PWM_NATIVE_DEVICE_CUSTODY","1")
     args:=dockerInvocationArgs("ps","-a")
