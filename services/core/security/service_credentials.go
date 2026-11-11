@@ -228,7 +228,7 @@ func (a *AdminSessions) redeemServiceTicket(peer,alias,ticket,operation,target s
     }
     var secret []byte
     err=a.vault.WithCredentialVersion(grant.Handle,grant.Provider,issued.Revision,func(raw []byte)error {
-        if len(raw)==0 || len(raw)>32768 {return errors.New("invalid protected credential")}
+        if len(raw)==0 || len(raw)>8192 {return errors.New("invalid protected credential")}
         secret=bytes.Clone(raw)
         return nil
     })
