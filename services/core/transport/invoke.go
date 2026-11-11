@@ -31,7 +31,11 @@ func (s *Server) invoke(ctx context.Context,name string,args json.RawMessage,id 
   if err:=json.Unmarshal(raw,&value);err!=nil{return toolError("invalid fleet reply")}
   return result(value)
  }
- if name=="infrastructure__workspace_create" || name=="infrastructure__workspace_stop" || name=="infrastructure__workspace_build_environment" || name=="infrastructure__workspace_register_software" || name=="infrastructure__workspace_revoke_worker" || name=="infrastructure__service_start" || name=="infrastructure__service_stop" || name=="infrastructure__service_reload" || name=="infrastructure__service_restart" || name=="infrastructure__release_activate" || name=="infrastructure__release_revert" ||
+ if name=="infrastructure__workspace_register_image" ||
+  name=="infrastructure__workspace_propose_program" ||
+  name=="infrastructure__workspace_review_program" ||
+  name=="infrastructure__workspace_update_entry" ||
+  name=="infrastructure__workspace_create" || name=="infrastructure__workspace_stop" || name=="infrastructure__workspace_build_environment" || name=="infrastructure__workspace_register_software" || name=="infrastructure__workspace_revoke_worker" || name=="infrastructure__service_start" || name=="infrastructure__service_stop" || name=="infrastructure__service_reload" || name=="infrastructure__service_restart" || name=="infrastructure__release_activate" || name=="infrastructure__release_revert" ||
   name=="cluster__deployment_restart" || name=="cluster__deployment_scale" {
   if s.executorClient==nil{return toolError("independent privileged executor not configured")}
   decision,err:=s.executorClient.Execute(ctx,name,privilegeTarget(name,args),args)
