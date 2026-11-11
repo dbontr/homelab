@@ -149,6 +149,12 @@ fn sync_directory(root: &Path) -> Result<(), &'static str> {
         .map_err(|_| "cannot sync device custody directory")
 }
 
+fn record_contents(workspace: &str, kind: &str, alias: &str,
+    resolved: &str, metadata: &fs::Metadata) -> String {
+    format!("v2\\n{workspace}\\n{kind}\\n{alias}\\n{resolved}\\n{}\\n{}\\n{}\\n",
+        metadata.rdev(), metadata.dev(), metadata.ino())
+}
+
 fn physical_from_record(kind: &str, alias: &str, body: &str)
     -> Result<String, &'static str> {
     let rows: Vec<&str> = body.lines().collect();
@@ -183,8 +189,7 @@ pub(crate) fn acquire(kind: &str, alias: &str, workspace: &str)
     let root = directory()?;
     let record = root.join(key(kind,alias));
     let physical = root.join(physical_key(kind, alias, meta.rdev()));
-    let contents = format!("v2\n{workspace}\n{kind}\n{alias}\n{resolved}\n{}\n{}\n{}\n",
-        meta.rdev(), meta.dev(), meta.ino());
+    let contents = record_contents(workspace,kind,alias,&resolved,&meta);
     // Reserve the physical identity first. An interrupted allocation cannot
     // abandon a reusable alias while another process owns the same device.
     reserve_record(&physical, &contents)?;
@@ -217,8 +222,7 @@ pub(crate) fn verify(kind: &str, alias: &str, workspace: &str)
     let root = directory()?;
     let record = root.join(key(kind,alias));
     let content = private_record(&record)?;
-    let expected = format!("v2\n{workspace}\n{kind}\n{alias}\n{resolved}\n{}\n{}\n{}\n",
-        current.rdev(), current.dev(), current.ino());
+    let expected = record_contents(workspace,kind,alias,&resolved,&current);
     if content != expected ||
         private_record(&root.join(physical_key(kind,alias,current.rdev())))? != expected {
         return Err("kernel device identity differs from its exclusive lease");
@@ -407,6 +411,30 @@ mod tests {
         assert!(physical_from_record("gpu", "/dev/dri/renderD128", no_inode).is_err());
         let invalid_inode = "v2\n0123456789abcdef0123456789abcdef\ngpu\n/dev/dri/renderD128\n/dev/dri/renderD128\n259\n22\ninvalid\n";
         assert!(physical_from_record("gpu", "/dev/dri/renderD128", invalid_inode).is_err());
+    }
+
+    #[test]
+    fn replaced_nodes_cannot_reuse_the_same_kernel_device_number() {
+        let root = std::env::temp_dir().join(format!(
+            "native-custody-identity-{}-{:?}",std::process::id(),
+            std::thread::current().id()));
+        fs::create_dir(&root).unwrap();
+        let first = root.join("first");
+        let second = root.join("second");
+        fs::write(&first,b"first").unwrap();
+        fs::write(&second,b"second").unwrap();
+        let old = fs::metadata(&first).unwrap();
+        let current = fs::metadata(&second).unwrap();
+        assert_eq!(old.rdev(),current.rdev());
+        assert_ne!(old.ino(),current.ino());
+        let owned = record_contents(
+            "0123456789abcdef0123456789abcdef","gpu",
+            "/dev/dri/renderD128","/dev/dri/renderD128",&old);
+        let substituted = record_contents(
+            "0123456789abcdef0123456789abcdef","gpu",
+            "/dev/dri/renderD128","/dev/dri/renderD128",&current);
+        assert_ne!(owned,substituted);
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
