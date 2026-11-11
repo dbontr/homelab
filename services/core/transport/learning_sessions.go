@@ -8,6 +8,7 @@ import (
 )
 
 var learningID=regexp.MustCompile("^[a-zA-Z0-9_-]{1,128}$")
+var learningCurriculumDigest=regexp.MustCompile("^[a-f0-9]{64}$")
 
 func (s *Server) learningCall(w http.ResponseWriter,r *http.Request,tool string,payload any,status int){
  raw,err:=json.Marshal(payload)
@@ -82,4 +83,35 @@ func (s *Server) uiLearningAnswer(w http.ResponseWriter,r *http.Request){
  }
  if in.SelfConfidence!=nil{args["self_confidence"]=*in.SelfConfidence}
  s.learningCall(w,r,"answer_learning_question",args,200)
+}
+
+func (s *Server) uiLearningSourceCurriculumPreview(w http.ResponseWriter,r *http.Request){
+ id:=r.PathValue("id")
+ if !learningID.MatchString(id){writeError(w,400,"invalid Learning source ID");return}
+ var in struct{Limit int `json:"limit"`}
+ if err:=decode(r,&in);err!=nil{writeError(w,400,err.Error());return}
+ if in.Limit==0{in.Limit=80}
+ if in.Limit<1||in.Limit>200{
+  writeError(w,400,"curriculum limit must be between 1 and 200");return
+ }
+ s.learningCall(w,r,"preview_source_curriculum",map[string]any{
+  "source_id":id,"limit":in.Limit},200)
+}
+
+func (s *Server) uiLearningSourceCurriculumImport(w http.ResponseWriter,r *http.Request){
+ id:=r.PathValue("id")
+ if !learningID.MatchString(id){writeError(w,400,"invalid Learning source ID");return}
+ var in struct{
+  Limit int `json:"limit"`
+  ExpectedSHA256 string `json:"expected_sha256"`
+  Confirm bool `json:"confirm"`
+ }
+ if err:=decode(r,&in);err!=nil{writeError(w,400,err.Error());return}
+ if in.Limit==0{in.Limit=80}
+ if in.Limit<1||in.Limit>200||!learningCurriculumDigest.MatchString(in.ExpectedSHA256)||!in.Confirm{
+  writeError(w,400,"curriculum import requires a confirmed source digest and valid selection limit");return
+ }
+ s.learningCall(w,r,"import_source_curriculum",map[string]any{
+  "source_id":id,"limit":in.Limit,
+  "expected_sha256":in.ExpectedSHA256,"confirm":true},200)
 }
