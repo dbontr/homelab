@@ -56,7 +56,7 @@ fn validate_evidence(raw: &[u8], attempt: &Event) -> Result<String, &'static str
     if note.attempt_id != attempt.id || note.operation != attempt.operation
         || note.target != attempt.target
         || note.arguments_sha256 != attempt.arguments_sha256
-        || !matches!(attempt.outcome.as_str(), "started"|"indeterminate") {
+        || !matches!(attempt.outcome.as_str(), "started"|"indeterminate"|"failed") {
         return Err("operator evidence does not match unresolved attempt");
     }
     if !matches!(note.finding.as_str(), "applied"|"not_applied")
