@@ -9,6 +9,9 @@ use homelab_security_authority::access::AccessVerifier;
 use homelab_security_authority::credentials::PassphraseRecord;
 use homelab_security_authority::grants::ServiceCredentialGrant;
 use homelab_security_authority::sessions::{Authority, OperationPolicy};
+use homelab_security_authority::oauth::Broker;
+use homelab_security_authority::remote::Remote;
+use homelab_security_authority::transport::Shared;
 use zeroize::Zeroize;
 
 const MAX_CREDENTIAL_BYTES: usize = 1 << 20;
@@ -162,17 +165,31 @@ fn run() -> Result<(), &'static str> {
             browser,
         ).map_err(|_| "invalid Access audience configuration")?;
     }
-    // Preflight cannot certify interfaces that this kernel does not yet serve.
-    for unsupported in [
-        "HOMELAB_SECURITY_REMOTE_LISTEN",
-        "HOMELAB_SECURITY_OAUTH_PROVIDERS",
-        "HOMELAB_SECURITY_BROWSER_ORIGIN",
-    ] {
-        if env::var(unsupported).ok().is_some_and(|v| !v.is_empty()) {
-            return Err("requested security interface has no Rust runtime acceptance");
-        }
+    // Parse the same optional runtime inputs without binding sockets or
+    // exchanging tokens. A migration preview must cover the actual selected
+    // remote, browser, and provider configuration rather than silently
+    // dropping any configured interface.
+    let remote = Remote::from_environment()
+        .map_err(|_| "invalid remote TLS authorization configuration")?;
+    let broker = Broker::from_environment()
+        .map_err(|_| "invalid configured OAuth provider")?;
+    if broker.is_some() {
+        authority.validate_vault()
+            .map_err(|_| "OAuth provider requires a verified credential vault")?;
     }
-    println!("Copied security state and supported policy contracts validated.");
+    let browser_origin = env::var("HOMELAB_SECURITY_BROWSER_ORIGIN").ok()
+        .filter(|origin| !origin.is_empty());
+    if browser_origin.is_some()
+        && env::var("HOMELAB_SECURITY_ACCESS_BROWSER_AUD")
+            .ok().is_none_or(|audience| audience.is_empty())
+    {
+        return Err("browser origin requires a pinned browser assertion audience");
+    }
+    let _shared = Shared::new(authority, browser_origin, None)
+        .map_err(|_| "invalid browser origin or owner authority")?;
+    let _remote = remote;
+    let _broker = broker;
+    println!("Copied security state and selected runtime policy contracts validated.");
     Ok(())
 }
 
