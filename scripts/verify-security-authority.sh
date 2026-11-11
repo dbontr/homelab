@@ -23,12 +23,16 @@ fi
   CARGO_NET_OFFLINE=true cargo test --locked --offline --all-targets
   CARGO_NET_OFFLINE=true cargo clippy --locked --offline --all-targets -- -D warnings
   CARGO_NET_OFFLINE=true cargo build --locked --offline --release --bins
+  test -x target/release/securityd
+  test -x target/release/security-preflight
+  test -x target/release/security-migrate
 )
 
 (
   cd "$root/services/core"
   GOWORK=off GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local go test -race -count=5 ./security -run 'TestSecurityAuthority'
-  GOWORK=off GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local go test -race -count=1 ./security ./privileged
+  GOWORK=off GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local go test -race -count=1 ./security ./privileged ./cmd/homelab-security-preflight
+  GOWORK=off GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local go build ./cmd/homelab-security-preflight
 )
 
 if command -v nix >/dev/null 2>&1; then
