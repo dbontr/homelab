@@ -16,6 +16,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -66,6 +67,15 @@ type Kubernetes struct {
 	CPU             float64
 	MemoryMB        int
 	MaxJobs         int
+
+	verificationMu          sync.RWMutex
+	verificationQuarantined bool
+}
+
+func (k *Kubernetes) verificationReady() bool {
+	k.verificationMu.RLock()
+	defer k.verificationMu.RUnlock()
+	return !k.verificationQuarantined
 }
 
 func NewKubernetes(namespace, project string, cpu float64, memory, jobs int) (*Kubernetes, error) {
@@ -695,6 +705,9 @@ func (k *Kubernetes) jobManifestWithDevices(job Job, worker string) (map[string]
 }
 
 func (k *Kubernetes) ExecuteJob(ctx context.Context, r *Runner, job Job) (string, string) {
+	if !k.verificationReady() {
+		return "failed", "worker quarantined pending verification Job cleanup"
+	}
 	if !workspaceID.MatchString(job.ID) || !k.approvedRuntimeImage(r, job.Image) || job.CPU < 0.1 ||
 		job.CPU > 32 || job.CPU > k.CPU || math.IsNaN(job.CPU) || math.IsInf(job.CPU, 0) ||
 		job.MemoryMB < 64 || job.MemoryMB > 131072 || job.MemoryMB > k.MemoryMB {
@@ -781,5 +794,12 @@ func (k *Kubernetes) ReconcileStaleJobs(ctx context.Context) error {
 			return err
 		}
 	}
-	return k.reconcileVerificationJobs(ctx)
+	if err := k.reconcileVerificationJobs(ctx); err != nil {
+		return err
+	}
+	// Reconciliation is the only operation that clears cleanup quarantine.
+	k.verificationMu.Lock()
+	k.verificationQuarantined = false
+	k.verificationMu.Unlock()
+	return nil
 }
