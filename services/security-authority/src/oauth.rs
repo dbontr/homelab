@@ -603,13 +603,12 @@ async fn oauth_refresh(
         };
         (config, broker.client())
     };
-    let secret = shared.with_authority(|auth| auth.with_broker_credential(
-        &session, &input.handle, &provider, |token| token.to_vec()
+    let snapshot = shared.with_authority(|auth| auth.broker_credential_snapshot(
+        &session, &input.handle, &provider
     ));
-    let Ok(raw) = secret else {
+    let Ok((secret, revision)) = snapshot else {
         return failure("credential unavailable", StatusCode::FORBIDDEN);
     };
-    let secret = Zeroizing::new(raw);
     let Ok(existing) = serde_json::from_slice::<Value>(&secret) else {
         return failure("invalid stored token", StatusCode::FORBIDDEN);
     };
@@ -636,7 +635,7 @@ async fn oauth_refresh(
         Err(_) => return failure("invalid OAuth refresh response", StatusCode::SERVICE_UNAVAILABLE),
     };
     match shared.with_authority(|auth|
-        auth.replace_broker_credential(&session, &input.handle, &provider, &secured)
+        auth.replace_broker_credential(&session, &input.handle, &provider, &revision, &secured)
     ) {
         Ok(()) => Json(json!({"refreshed":true})).into_response(),
         Err(_) => failure("OAuth credential custody unavailable", StatusCode::FORBIDDEN),
