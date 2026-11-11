@@ -30,7 +30,8 @@ fn valid_name(name: &str) -> bool {
 // A peer identity is a canonical ASCII DNS name, not a wildcard or URL.
 // Keep certificate SAN and credential-grant validation identical.
 pub(crate) fn valid_service_dns(name: &str) -> bool {
-    if name.is_empty() || name.len() > 253 {
+    if name.is_empty() || name.len() > 253
+        || name.parse::<std::net::IpAddr>().is_ok() {
         return false;
     }
     name.split('.').all(|label| {
@@ -164,7 +165,7 @@ mod tests {
         }
         for name in ["", ".", ".worker", "worker.", "worker..internal", "-worker.internal",
             "worker-.internal", "worker.*", "*.internal", "WORKER.internal", "worker_internal",
-            "https://worker.internal", "worker.internal:443", "worker/internal",
+            "https://worker.internal", "worker.internal:443", "127.0.0.1", "worker/internal",
             "white space.internal", "worker\\n.internal", "worker\\r.internal"] {
             assert!(!valid_service_dns(name), "invalid peer identity accepted: {name:?}");
         }
