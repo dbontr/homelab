@@ -242,6 +242,31 @@ impl Authority {
         totp_base32: &str,
         policies: Vec<OperationPolicy>,
     ) -> Result<Self, Error> {
+        Self::open_with_mode(directory, owner, client, verifier, totp_base32, policies, false)
+    }
+
+    /// Inspect a protected state copy without acquiring a writer lease or
+    /// creating files. All persistence operations remain disabled.
+    pub fn inspect(
+        directory: &std::path::Path,
+        owner: String,
+        client: String,
+        verifier: PassphraseRecord,
+        totp_base32: &str,
+        policies: Vec<OperationPolicy>,
+    ) -> Result<Self, Error> {
+        Self::open_with_mode(directory, owner, client, verifier, totp_base32, policies, true)
+    }
+
+    fn open_with_mode(
+        directory: &std::path::Path,
+        owner: String,
+        client: String,
+        verifier: PassphraseRecord,
+        totp_base32: &str,
+        policies: Vec<OperationPolicy>,
+        read_only: bool,
+    ) -> Result<Self, Error> {
         if !valid_identifier(&owner) || !valid_identifier(&client)
             || policies.is_empty() || policies.len() > 256
         {
@@ -263,7 +288,11 @@ impl Authority {
             }
         }
         let factors = Factors::new(verifier, totp_base32)?;
-        let store = StateStore::acquire(directory)?;
+        let store = if read_only {
+            StateStore::inspect(directory)?
+        } else {
+            StateStore::acquire(directory)?
+        };
         let replay = store.load_authenticator()?;
         Ok(Self {
             owner,
