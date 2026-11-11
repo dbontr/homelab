@@ -152,7 +152,8 @@ func (e *Executor) Execute(ctx context.Context, operation, target string, args j
 		if !ok || host != target {
 			return deny("host mismatch"), nil
 		}
-	case "infrastructure__workspace_stop", "infrastructure__workspace_build_environment",
+	case "infrastructure__workspace_create", "infrastructure__workspace_stop",
+        "infrastructure__workspace_build_environment",
 		"infrastructure__workspace_register_software", "infrastructure__workspace_revoke_worker":
 		host, ok := fields["host"].(string)
 		if !ok || host != target {
@@ -209,7 +210,8 @@ func (e *Executor) Execute(ctx context.Context, operation, target string, args j
 	switch operation {
 	case "infrastructure__service_start", "infrastructure__service_stop", "infrastructure__service_reload", "infrastructure__service_restart":
 		err = e.cfg.Run(ctx, e.cfg.Systemctl, verb, fields["service"].(string))
-	case "infrastructure__workspace_stop", "infrastructure__workspace_build_environment",
+	case "infrastructure__workspace_create", "infrastructure__workspace_stop",
+        "infrastructure__workspace_build_environment",
 		"infrastructure__workspace_register_software", "infrastructure__workspace_revoke_worker":
 		err = e.cfg.Workspace.Call(ctx, operation, fields)
 	case "infrastructure__release_activate":
