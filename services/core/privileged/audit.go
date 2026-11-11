@@ -130,7 +130,8 @@ func OpenAuditJournal(path string)(*AuditJournal,error){
  stat,err:=file.Stat()
  if err!=nil{return fail(err)}
  id,ok:=stat.Sys().(*syscall.Stat_t)
- if !ok||!stat.Mode().IsRegular()||stat.Mode().Perm()&0077!=0||id.Uid!=uint32(os.Geteuid()){
+ if !ok||!stat.Mode().IsRegular()||stat.Mode().Perm()&0077!=0||
+  id.Uid!=uint32(os.Geteuid())||id.Nlink!=1{
   return fail(errors.New("audit file must be an owner-only regular file"))
  }
  // Durably publish the inode before any later handler is permitted to write.
@@ -152,6 +153,10 @@ func(j *AuditJournal)checkInode()error{
  opened,err:=j.file.Stat()
  if err!=nil||!opened.Mode().IsRegular()||opened.Mode().Perm()&0077!=0||
   !os.SameFile(pathStat,opened){
+  return errors.New("audit journal path was replaced or made unsafe")
+ }
+ inode,ok:=opened.Sys().(*syscall.Stat_t)
+ if !ok||inode.Nlink!=1||inode.Uid!=uint32(os.Geteuid()){
   return errors.New("audit journal path was replaced or made unsafe")
  }
  return nil
