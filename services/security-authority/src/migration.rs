@@ -316,6 +316,16 @@ mod tests {
     }
 
     #[test]
+    fn parses_shared_version_one_receipt_fixture() {
+        let fixture = include_bytes!("../tests/fixtures/migration-receipt.json");
+        let parsed = read_receipt(fixture, "rust").unwrap();
+        assert_eq!(parsed.authenticator_sha256, "a".repeat(64));
+        assert_eq!(parsed.nonce, "b".repeat(32));
+        assert!(parsed.vault_sha256.is_none());
+        assert!(read_receipt(fixture, "go").is_err());
+    }
+
+    #[test]
     fn selection_requires_parent_bound_receipts_and_preserves_live_state() {
         let dir = state();
         assert!(admit(&dir, "rust", None).is_err());
