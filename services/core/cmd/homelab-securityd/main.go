@@ -42,8 +42,11 @@ func readConfiguredFile(name string, private bool) ([]byte,error) {
  info,err:=file.Stat()
  if err!=nil||!info.Mode().IsRegular(){return nil,errors.New("configured file must be regular")}
  mode:=info.Mode().Perm()
- if (private&&mode&0077!=0)||(!private&&mode&0022!=0){
-  return nil,errors.New("configured file permissions are unsafe")
+ inode,ok:=info.Sys().(*syscall.Stat_t)
+ if !ok||inode.Nlink!=1||
+  (private&&(mode&0077!=0||inode.Uid!=uint32(os.Geteuid())))||
+  (!private&&mode&0022!=0){
+  return nil,errors.New("configured file ownership or permissions are unsafe")
  }
  const maxConfiguredFileBytes=1<<20
  raw,err:=io.ReadAll(io.LimitReader(file,maxConfiguredFileBytes+1))
