@@ -73,4 +73,32 @@ func TestComputeWorkspaceAdmissionValidatesResourceBounds(t *testing.T) {
     valid.USBNode="jupiter"
     valid.USBDeviceID="jtag"
     if !validConsoleWorkspace(valid){t.Fatal("explicit USB identity rejected")}
+    valid.Architecture="invalid-arch"
+    if validConsoleWorkspace(valid){t.Fatal("unsupported architecture accepted")}
+    valid.Architecture="arm64"
+    valid.NodeID="../jupiter"
+    if validConsoleWorkspace(valid){t.Fatal("invalid worker identity accepted")}
+    valid.NodeID="jupiter"
+    valid.Display=true
+    valid.DisplayWidth=3840
+    valid.DisplayHeight=2160
+    if validConsoleWorkspace(valid){t.Fatal("excessive display allocation accepted")}
+    valid.DisplayWidth=1440
+    valid.DisplayHeight=900
+    if !validConsoleWorkspace(valid){t.Fatal("valid display request rejected")}
+}
+
+func TestComputeBrowserCatalogRequiresExactImmutableDigest(t *testing.T){
+    if !validImmutableImage("registry.example/go@sha256:"+strings.Repeat("a",64)){
+        t.Fatal("exact OCI digest was rejected")
+    }
+    for _,image:=range []string{
+        "registry.example/go:latest",
+        "registry.example/go@sha256:"+strings.Repeat("a",63),
+        "registry.example/go@sha256:"+strings.Repeat("G",64),
+        "registry.example/go@sha256:"+strings.Repeat("a",64)+"-suffix",
+        "@sha256:"+strings.Repeat("a",64),
+    }{
+        if validImmutableImage(image){t.Fatalf("mutable or invalid image accepted: %q",image)}
+    }
 }
