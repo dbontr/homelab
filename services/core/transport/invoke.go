@@ -68,6 +68,20 @@ func (s *Server) invoke(ctx context.Context,name string,args json.RawMessage,id 
    ctx,requestID,name,privilegeTarget(name,canonicalArgs),canonicalArgs)
   if err!=nil{return toolError("independent privileged executor unavailable; retain request_id for reconciliation")}
   if !decision.Allowed{
+   switch decision.Reason{
+   case "execution request outcome requires independent reconciliation":
+    return result(map[string]any{
+     "accepted":false,"reconciliation_required":true,"request_id":requestID,
+     "reason":decision.Reason,
+     "instructions":"Inspect the protected executor audit journal and reconcile the uncertain outcome out of band. Do not issue another execution request before establishing what occurred.",
+    })
+   case "execution request identity was reconciled and cannot be executed again":
+    return result(map[string]any{
+     "accepted":false,"request_id":requestID,
+     "reason":decision.Reason,
+     "instructions":"This request identity is permanently spent. An additional operation requires a distinct request ID and independent owner approval.",
+    })
+   }
    return result(map[string]any{"authorization_required":true,"reason":decision.Reason,
      "confirmation_id":decision.ConfirmationID,"confirmation_expires_at":decision.ConfirmationExpiresAt,
      "request_id":requestID,"instructions":"Sign in through the protected owner page and confirm destructive changes there. Retry the same request_id and unchanged operation arguments."})
