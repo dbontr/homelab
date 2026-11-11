@@ -231,7 +231,8 @@ func (s *Server) uiComputeCatalog(w http.ResponseWriter,r *http.Request){
             "description":in.Description}
     case "review-program":
         if !catalogID(in.ID)||in.ExpectedRevision<1||
-            (in.Status!="available"&&in.Status!="rejected"&&in.Status!="retired"){
+            (in.Status!="reviewed"&&in.Status!="available"&&in.Status!="disabled"&&
+             in.Status!="rejected"&&in.Status!="retired"){
             writeError(w,400,"invalid versioned program review");return
         }
         tool="pool_review_program"
@@ -240,6 +241,7 @@ func (s *Server) uiComputeCatalog(w http.ResponseWriter,r *http.Request){
             "expected_revision":in.ExpectedRevision}
     case "update-entry":
         if !catalogID(in.ID)||in.ExpectedRevision<1||
+            strings.TrimSpace(in.Reason)==""||len(in.Reason)>512||
             (in.Kind!="image"&&in.Kind!="software")||
             (in.Status!="active"&&in.Status!="disabled"&&in.Status!="retired"){
             writeError(w,400,"invalid versioned catalog state change");return
