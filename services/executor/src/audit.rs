@@ -388,7 +388,12 @@ mod tests {
                 &digest,"started").unwrap();
         }
         let raw = fs::read_to_string(&path).unwrap();
-        assert!(raw.contains(&format!("\\\"reconciliation_sha256\\\":\\\"{evidence}\\\"")));
+        assert!(raw.lines().any(|line| {
+            serde_json::from_str::<serde_json::Value>(line).ok().is_some_and(|value| {
+                value.get("reconciliation_sha256").and_then(serde_json::Value::as_str)
+                    == Some(evidence.as_str())
+            })
+        }));
         fs::remove_dir_all(directory).unwrap();
     }
 
