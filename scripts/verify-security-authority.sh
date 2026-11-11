@@ -33,7 +33,7 @@ fi
 (
   cd "$root/services/core"
   GOWORK=off GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local go test -race -count=5 ./security -run 'TestSecurityAuthority'
-  GOWORK=off GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local go test -race -count=1 ./security ./privileged ./cmd/homelab-security-preflight
+  GOWORK=off GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local go test -race -count=1 ./security ./privileged ./statelease ./cmd/homelab-securityd ./cmd/homelab-security-preflight
   GOWORK=off GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local go build -o "$temporary_dir/homelab-security-preflight" ./cmd/homelab-security-preflight
 )
 
