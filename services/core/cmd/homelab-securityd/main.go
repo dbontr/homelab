@@ -126,16 +126,16 @@ func main() {
    log.Fatal("invalid service credential policy: ",err)
   }
  }
- var verifier *security.AccessVerifier
+ var accessVerifier *security.AccessVerifier
  gatewayAudience:=os.Getenv("HOMELAB_SECURITY_ACCESS_GATEWAY_AUD")
  if gatewayAudience!="" {
   jwks,err:=readRequiredFile("HOMELAB_SECURITY_ACCESS_JWKS_FILE")
   if err!=nil{log.Fatal("Access JWKS unavailable: ",err)}
   email,err:=readPrivateCredential("HOMELAB_SECURITY_ACCESS_OWNER_FILE")
   if err!=nil{log.Fatal("owner identity unavailable: ",err)}
-  verifier,err=security.NewAccessVerifier(os.Getenv("HOMELAB_SECURITY_ACCESS_ISSUER"),strings.TrimSpace(string(email)),jwks)
+  accessVerifier,err=security.NewAccessVerifier(os.Getenv("HOMELAB_SECURITY_ACCESS_ISSUER"),strings.TrimSpace(string(email)),jwks)
   if err!=nil{log.Fatal("invalid verified owner identity configuration: ",err)}
-  if err:=manager.SetAccessVerifier(verifier,gatewayAudience);err!=nil{log.Fatal(err)}
+  if err:=manager.SetAccessVerifier(accessVerifier,gatewayAudience);err!=nil{log.Fatal(err)}
  }
  // All protected interfaces are validated before the selection marker
  // changes or any socket can accept a request.
@@ -146,13 +146,13 @@ func main() {
  var portal *security.BrowserPortal
  var webGroupID int
  if origin:=os.Getenv("HOMELAB_SECURITY_BROWSER_ORIGIN");origin!=""{
-  if verifier==nil{log.Fatal("browser login requires independent Access identity verification")}
+  if accessVerifier==nil{log.Fatal("browser login requires independent Access identity verification" )}
   browserAudience:=os.Getenv("HOMELAB_SECURITY_ACCESS_BROWSER_AUD")
   if browserAudience==""||browserAudience==gatewayAudience{
    log.Fatal("browser login needs a dedicated audience")
   }
   portal,err=security.NewBrowserPortal(manager,origin,func(assertion string)(string,error){
-   return verifier.Verify(assertion,browserAudience)
+   return accessVerifier.Verify(assertion,browserAudience)
   })
   if err!=nil{log.Fatal("invalid protected browser origin: ",err)}
   group,groupErr:=user.LookupGroup("homelab-security-browser")
