@@ -33,6 +33,19 @@ func TestNativeDeviceCustodyRequiresExactClaims(t *testing.T) {
     if err!=nil||len(granted)!=1{t.Fatalf("explicit USB custody rejected: %+v %v",granted,err)}
 }
 
+func TestNativeDeviceCustodyRefusesDuplicatePhysicalPaths(t *testing.T) {
+    devices:=[]Device{
+        {ID:"gpu0",Kind:"gpu",Paths:[]string{"/dev/dri/renderD128"}},
+        {ID:"gpu1",Kind:"gpu",Paths:[]string{"/dev/dri/renderD128"}},
+    }
+    claims:=[]DeviceClaim{
+        {ID:"gpu0",Kind:"gpu"}, {ID:"gpu1",Kind:"gpu"},
+    }
+    if _,err:=approvedDeviceClaims(claims,devices,false);err==nil{
+        t.Fatal("two independent workspace claims acquired the same raw device path")
+    }
+}
+
 func TestNativeDeviceCustodyFailsClosedOnMissingHelper(t *testing.T) {
     t.Setenv("PWM_NATIVE_DEVICE_CUSTODY","1")
     t.Setenv("PWM_NATIVE_HARDWARE_HELPER","")
