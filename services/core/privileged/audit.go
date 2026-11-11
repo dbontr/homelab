@@ -10,6 +10,7 @@ import (
  "os"
  "path/filepath"
  "sort"
+ "strings"
  "sync"
  "syscall"
  "time"
@@ -33,6 +34,7 @@ type auditEntry struct {
  ArgumentsSHA256 string `json:"arguments_sha256"`
  Outcome string `json:"outcome"`
  At time.Time `json:"at"`
+ ReconciliationSHA256 string `json:"reconciliation_sha256,omitempty"`
 }
 
 func validAuditEntry(e auditEntry)bool{
@@ -40,6 +42,12 @@ func validAuditEntry(e auditEntry)bool{
   !nodePattern.MatchString(e.Target)||len(e.Target)>63||e.At.IsZero(){return false}
  if _,err:=hex.DecodeString(e.ID);err!=nil{return false}
  if _,err:=hex.DecodeString(e.ArgumentsSHA256);err!=nil{return false}
+ if e.Outcome=="reconciled"{
+  if len(e.ReconciliationSHA256)!=64{return false}
+  _,err:=hex.DecodeString(e.ReconciliationSHA256)
+  return err==nil&&e.ReconciliationSHA256==strings.ToLower(e.ReconciliationSHA256)
+ }
+ if e.ReconciliationSHA256!=""{return false}
  switch e.Outcome{
  case "started","accepted","succeeded","failed","indeterminate":return true
  default:return false
@@ -72,7 +80,11 @@ func validateAuditHistory(file *os.File)(map[string]auditEntry,error){
   if event.Outcome=="started"{
    if exists{return nil,errors.New("audit journal repeats an operation start")}
   }else{
-   if !exists||previous.Outcome!="started"||previous.Operation!=event.Operation||
+   validPrior:=exists&&previous.Outcome=="started"
+   if event.Outcome=="reconciled"{
+    validPrior=exists&&(previous.Outcome=="started"||previous.Outcome=="indeterminate")
+   }
+   if !validPrior||previous.Operation!=event.Operation||
     previous.Target!=event.Target||previous.ArgumentsSHA256!=event.ArgumentsSHA256||
     event.At.Before(previous.At){
     return nil,errors.New("audit journal contains a contradictory outcome")
