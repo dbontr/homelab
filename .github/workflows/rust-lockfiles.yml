@@ -1,6 +1,15 @@
 name: Resolve Rust release dependencies
 
 on:
+  push:
+    branches:
+      - feature/rust-native-execution-boundaries
+    paths:
+      - ".github/workflows/rust-lockfiles.yml"
+      - "services/security-authority/Cargo.toml"
+      - "services/executor/Cargo.toml"
+      - "services/motivation/Cargo.toml"
+      - "ui/console/Cargo.toml"
   pull_request:
     paths:
       - ".github/workflows/rust-lockfiles.yml"
@@ -19,15 +28,18 @@ concurrency:
 jobs:
   resolve:
     if: >-
-      github.event.pull_request.head.repo.full_name == github.repository &&
-      github.event.pull_request.head.ref == 'feature/rust-native-execution-boundaries'
+      (github.event_name == 'push' &&
+       github.ref == 'refs/heads/feature/rust-native-execution-boundaries') ||
+      (github.event_name == 'pull_request' &&
+       github.event.pull_request.head.repo.full_name == github.repository &&
+       github.event.pull_request.head.ref == 'feature/rust-native-execution-boundaries')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - name: Check out the feature branch
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.ref }}
+          ref: feature/rust-native-execution-boundaries
           persist-credentials: true
       - name: Install pinned Rust toolchain
         uses: dtolnay/rust-toolchain@stable
