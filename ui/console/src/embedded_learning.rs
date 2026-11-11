@@ -391,6 +391,17 @@ fn EmbeddedAnswer(question: Option<Value>,on_saved:EventHandler<()>) -> Element 
     }
 }
 
+fn permitted_session_phases(phase:&str)->&'static [&'static str]{
+    match phase {
+        "diagnose"=>&["plan"],
+        "plan"=>&["diagnose","teach"],
+        "teach"=>&["plan","practice"],
+        "practice"=>&["teach","reassess"],
+        "reassess"=>&["diagnose","practice","complete"],
+        _=>&[],
+    }
+}
+
 #[component]
 fn EmbeddedSession(session:Option<Value>,session_id:String,on_saved:EventHandler<()>) -> Element {
     let mut goal=use_signal(String::new);
@@ -401,6 +412,13 @@ fn EmbeddedSession(session:Option<Value>,session_id:String,on_saved:EventHandler
     let mut step_response=use_signal(String::new);
     let mut step_id=use_signal(String::new);
     let mut feedback=use_signal(||None::<Value>);
+    let mut next_phase=use_signal(String::new);
+    let phase=session.as_ref().and_then(|v|v.get("phase")).and_then(Value::as_str).unwrap_or("");
+    let revision=session.as_ref().and_then(|v|v.get("revision")).and_then(Value::as_i64);
+    let transitions=permitted_session_phases(phase);
+    let can_plan=matches!(phase,"plan"|"teach"|"practice"|"reassess");
+    let on_saved_build=on_saved.clone();
+    let on_saved_advance=on_saved.clone();
     rsx!{
         Card{
             title:"Learning sessions and reasoning".to_owned(),
@@ -437,6 +455,74 @@ fn EmbeddedSession(session:Option<Value>,session_id:String,on_saved:EventHandler
                     button{class:"btn btn-outline",disabled:busy(),"Start learning session"}
                 }
                 if let Some(session)=session{
+                    if let Some(version)=revision{
+                        if can_plan {
+                            button {class:"btn btn-outline",r#type:"button",
+                                disabled:busy()||!valid_identity(&session_id),
+                                onclick:{
+                                    let id=session_id.clone();
+                                    let on_saved=on_saved_build.clone();
+                                    move |_|{
+                                        if busy()||!valid_identity(&id){return}
+                                        let args=json!({"session_id":id,
+                                            "expected_revision":version});
+                                        busy.set(true);error.set(String::new());
+                                        spawn(async move{
+                                            match mcp_app::call_learning_tool::<Value>(
+                                                "build_learning_plan",args).await {
+                                                Ok(_)=>on_saved.call(()),
+                                                Err(message)=>error.set(message),
+                                            }
+                                            busy.set(false);
+                                        });
+                                    }
+                                },
+                                "Build prerequisite plan"
+                            }
+                        }
+                        if !transitions.is_empty(){
+                            label{class:"form-row",
+                                span{class:"label","Next learning phase"}
+                                select{class:"field",disabled:busy(),
+                                    value:"{next_phase()}",
+                                    onchange:move |event|next_phase.set(event.value()),
+                                    option{value:"","Select a phase"}
+                                    for target in transitions {
+                                        option{value:"{target}","{target}"}
+                                    }
+                                }
+                            }
+                            button{class:"btn btn-outline",r#type:"button",
+                                disabled:busy()||!valid_identity(&session_id)
+                                    ||!transitions.contains(&next_phase().as_str()),
+                                onclick:{
+                                    let id=session_id.clone();
+                                    let allowed=transitions.to_vec();
+                                    let on_saved=on_saved_advance.clone();
+                                    move |_|{
+                                        let target=next_phase();
+                                        if busy()||!valid_identity(&id)
+                                            ||!allowed.contains(&target.as_str()){
+                                            return;
+                                        }
+                                        let args=json!({"session_id":id,
+                                            "next_phase":target,
+                                            "expected_revision":version});
+                                        busy.set(true);error.set(String::new());
+                                        spawn(async move{
+                                            match mcp_app::call_learning_tool::<Value>(
+                                                "advance_learning_session",args).await {
+                                                Ok(_)=>{next_phase.set(String::new());on_saved.call(())},
+                                                Err(message)=>error.set(message),
+                                            }
+                                            busy.set(false);
+                                        });
+                                    }
+                                },
+                                "Advance learning phase"
+                            }
+                        }
+                    }
                     if session.get("steps").and_then(Value::as_array).is_some(){
                         p{class:"small muted","Reasoning steps: {list_records(&session).len()}"}
                         if let Some(steps)=session.get("steps").and_then(Value::as_array){
@@ -620,6 +706,16 @@ fn EmbeddedSource(source_id:String)->Element{
 #[cfg(test)]
 mod tests{
     use super::*;
+    #[test]
+    fn learning_phase_controls_retain_legal_routes() {
+        assert_eq!(permitted_session_phases("diagnose"),&["plan"]);
+        assert_eq!(permitted_session_phases("plan"),&["diagnose","teach"]);
+        assert_eq!(permitted_session_phases("practice"),&["teach","reassess"]);
+        assert_eq!(permitted_session_phases("reassess"),&["diagnose","practice","complete"]);
+        assert!(permitted_session_phases("complete").is_empty());
+        assert!(permitted_session_phases("unrecognized").is_empty());
+    }
+
     #[test]
     fn browser_scope_is_defined_by_fixed_learning_panels(){
         assert_eq!(Panel::Question.read(""),Err("Select a question identifier.".to_owned()));
