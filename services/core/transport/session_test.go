@@ -218,3 +218,61 @@ func TestOwnerCurriculumSourceRoutesRequireExactCSRFAndPath(t *testing.T) {
   }
  }
 }
+
+func TestOwnerComputeMutationsAreExactCSRFBoundOperations(t *testing.T) {
+ db,err:=store.Open(filepath.Join(t.TempDir(),"state.json"),"UTC")
+ if err!=nil{t.Fatal(err)}
+ service,err:=New(db,strings.Repeat("c",40),nil)
+ if err!=nil{t.Fatal(err)}
+ password:=[]byte("independent-owner-compute-passphrase")
+ secret,err:=security.HashPassphrase(password)
+ if err!=nil{t.Fatal(err)}
+ sessions,err:=session.New(secret)
+ if err!=nil{t.Fatal(err)}
+ service.SetSessions(sessions)
+ cookie,csrf,_,err:=sessions.Login(password)
+ if err!=nil{t.Fatal(err)}
+ request:=func(method,path,origin,csrfToken string)bool{
+  req:=httptest.NewRequest(method,path,strings.NewReader("{}"))
+  req.AddCookie(&http.Cookie{Name:uiCookie,Value:cookie})
+  req.Header.Set("Origin",origin)
+  req.Header.Set("Content-Type","application/json")
+  req.Header.Set("X-CSRF-Token",csrfToken)
+  return service.sessionOwnerWriteAllowed(req)
+ }
+ allowed:=[]string{
+  "/v1/compute/workspaces/plan",
+  "/v1/compute/workspaces",
+  "/v1/compute/workspaces/0123456789abcdef0123456789abcdef/stop",
+  "/v1/compute/catalog/register-image",
+  "/v1/compute/catalog/register-software",
+  "/v1/compute/catalog/propose-program",
+  "/v1/compute/catalog/review-program",
+  "/v1/compute/catalog/update-entry",
+ }
+ for _,path:=range allowed{
+  if !request("POST",path,"https://console.example",csrf){
+   t.Errorf("Legitimate owner Compute route denied: %s",path)
+  }
+  if request("POST",path,"https://console.example",""){
+   t.Errorf("Compute write accepted without CSRF: %s",path)
+  }
+  if request("POST",path,"",csrf){
+   t.Errorf("Compute write accepted without Origin: %s",path)
+  }
+ }
+ denied:=[]string{
+  "/v1/compute/catalog/delete",
+  "/v1/compute/catalog/update-entry/fallback",
+  "/v1/compute/workspaces/anything/exec",
+  "/v1/compute/workspaces/anything/stop/extra",
+  "/v1/compute/workers/jupiter/revoke",
+  "/v1/compute/credentials",
+  "/mcp",
+ }
+ for _,path:=range denied{
+  if request("POST",path,"https://console.example",csrf){
+   t.Errorf("Browser Compute scope admitted privileged path: %s",path)
+  }
+ }
+}
