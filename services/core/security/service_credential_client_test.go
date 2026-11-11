@@ -3,6 +3,8 @@ package security
 import (
  "context"
  "io"
+ "os"
+ "path/filepath"
  "net/http"
  "net/http/httptest"
  "strings"
@@ -61,4 +63,23 @@ func TestVaultClientRequiresCompleteTrustedTLSConfiguration(t *testing.T){
  if _,err:=client.ServiceCredential(context.Background(),"gitlab");err==nil{
   t.Fatal("nil vault client accepted")
  }
+}
+
+func TestVaultClientRejectsUnsafeCredentialAndTrustPaths(t *testing.T){
+ cert,key:=certificateMaterialFixture(t)
+ create:=func(caPath,certPath,keyPath string)error{
+  _,err:=NewVaultClientFromFiles("https://security.internal","security.internal",caPath,certPath,keyPath)
+  return err
+ }
+ if err:=create(cert,cert,key);err!=nil{t.Fatalf("valid vault TLS materials refused: %v",err)}
+ if err:=os.Chmod(key,0644);err!=nil{t.Fatal(err)}
+ if err:=create(cert,cert,key);err==nil{t.Fatal("world-readable vault client key accepted")}
+ if err:=os.Chmod(key,0600);err!=nil{t.Fatal(err)}
+ link:=filepath.Join(filepath.Dir(key),"vault-key-link")
+ if err:=os.Symlink(key,link);err!=nil{t.Fatal(err)}
+ if err:=create(cert,cert,link);err==nil{t.Fatal("symlinked vault client key accepted")}
+ if err:=os.Remove(link);err!=nil{t.Fatal(err)}
+ if err:=os.Symlink(cert,link);err!=nil{t.Fatal(err)}
+ if err:=create(link,cert,key);err==nil{t.Fatal("symlinked trust roots accepted")}
+ if err:=create(cert,link,key);err==nil{t.Fatal("symlinked vault client certificate accepted")}
 }
