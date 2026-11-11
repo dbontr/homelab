@@ -66,6 +66,36 @@ pub(crate) fn acquire(kind: &str, alias: &str, workspace: &str)
     Ok((resolved, group))
 }
 
+// Revalidate the exact kernel device identity immediately before and after
+// container allocation. A changed path or a stolen lease is denied.
+pub(crate) fn verify(kind: &str, alias: &str, workspace: &str)
+    -> Result<(String,u32), &'static str> {
+    if !valid_workspace(workspace) {
+        return Err("device custody requires an exact workspace identifier");
+    }
+    let (resolved, group) = match kind {
+        "usb" => super::map_usb(alias)?,
+        "gpu" | "npu" | "fpga" => super::char::map_char(kind, alias)?,
+        _ => return Err("unsupported device custody class"),
+    };
+    let current = fs::metadata(&resolved)
+        .map_err(|_| "leased device is missing")?;
+    let record = directory()?.join(key(kind,alias));
+    let meta = fs::symlink_metadata(&record)
+        .map_err(|_| "device lease record is missing")?;
+    if !meta.file_type().is_file() || meta.permissions().mode() & 0o077 != 0 ||
+        meta.len() > 4096 {
+        return Err("device lease record is unsafe");
+    }
+    let content = fs::read_to_string(record)
+        .map_err(|_| "cannot read device custody record")?;
+    let expected = format!("v1\n{workspace}\n{kind}\n{alias}\n{resolved}\n{}\n", current.rdev());
+    if content != expected {
+        return Err("device identity differs from its leased identity");
+    }
+    Ok((resolved, group))
+}
+
 fn read_owner(path: &Path) -> Result<String, &'static str> {
     let meta = fs::symlink_metadata(path).map_err(|_| "device custody record unavailable")?;
     if !meta.file_type().is_file() || meta.permissions().mode() & 0o077 != 0 ||
