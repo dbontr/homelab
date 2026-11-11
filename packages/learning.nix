@@ -4,8 +4,7 @@
   version = "0.1.0";
   src = ../services/learning;
   vendorHash = "sha256-NbuvbsmNbz3aKdjyyfpkbi52yRhXl473j3LvAUDn3L8=";
-  CGO_ENABLED = 1;
-  buildInputs = [ pkgs.sqlite ];
+  buildInputs = [ pkgs.sqlite.dev ];
   nativeBuildInputs = [ pkgs.pkg-config ];
   subPackages = [ "cmd/adaptive-teaching" ];
 }
