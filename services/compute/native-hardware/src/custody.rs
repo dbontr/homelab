@@ -105,6 +105,12 @@ pub(crate) fn acquire(kind: &str, alias: &str, workspace: &str)
     if !valid_workspace(workspace) {
         return Err("device custody requires an exact workspace identifier");
     }
+    if kind == "usb" && alias.starts_with("/dev/bus/usb/") {
+        // Kernel USB bus addresses can be reassigned to another physical
+        // device after unplug. They remain eligible for inspection, never
+        // for durable raw-device allocation.
+        return Err("durable USB custody requires a stable by-id alias");
+    }
     let (resolved, group) = match kind {
         "usb" => super::map_usb(alias)?,
         "gpu" | "npu" | "fpga" => super::char::map_char(kind, alias)?,
@@ -318,6 +324,14 @@ mod tests {
         assert!(physical_from_record(
             "npu", "/dev/dri/renderD128",
             "v1\n0123456789abcdef0123456789abcdef\ngpu\n/dev/dri/renderD128\n/dev/dri/renderD128\n259\n"
+        ).is_err());
+    }
+
+    #[test]
+    fn bus_addresses_do_not_establish_durable_usb_device_identity() {
+        assert!(acquire(
+            "usb", "/dev/bus/usb/002/013",
+            "0123456789abcdef0123456789abcdef"
         ).is_err());
     }
 
