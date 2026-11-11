@@ -52,12 +52,12 @@ func TestNativeDeviceCustodyRollbackAndVerificationReceipts(t *testing.T) {
     logPath:=filepath.Join(root,"operations")
     helper:=filepath.Join(root,"native-helper")
     script:="#!/bin/sh\n"+
-        "printf '%s\\n' \"$1 $2 $3 $4\" >> '"+logPath+"'\n"+
-        "case \"$1\" in\n"+
-        "  acquire-device) [ \"$3\" = /dev/fail ] && exit 1; printf '/dev/null\\n0\\n' ;;\n"+
-        "  release-device) printf 'released\\n' ;;\n"+
-        "  verify-device) printf '/dev/null\\n0\\n' ;;\n"+
-        "  verify-workspace|release-workspace) printf '1\\n' ;;\n"+
+        "printf '%s\\n' \"$2 $3 $4 $5\" >> '"+logPath+"'\n"+
+        "case \"$2\" in\n"+
+        "  acquire-device) [ \"$4\" = /dev/fail ] && exit 1; printf 'custody-v1\\n/dev/null\\n0\\n' ;;\n"+
+        "  release-device) printf 'custody-v1\\nreleased\\n' ;;\n"+
+        "  verify-device) printf 'custody-v1\\n/dev/null\\n0\\n' ;;\n"+
+        "  verify-workspace|release-workspace) printf 'custody-v1\\n1\\n' ;;\n"+
         "  *) exit 2 ;;\n"+
         "esac\n"
     if err:=os.WriteFile(helper,[]byte(script),0700);err!=nil{t.Fatal(err)}
