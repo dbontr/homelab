@@ -47,6 +47,18 @@ func readBearerCredential() (string, error) {
 	return token, nil
 }
 
+func configureLearningApp(svc *mcpsvc.Service) error {
+    directory:=os.Getenv("ADAPTIVE_TEACHING_APP_BUNDLE_DIRECTORY")
+    origin:=os.Getenv("ADAPTIVE_TEACHING_APP_BUNDLE_ORIGIN")
+    if directory==""&&origin==""{return nil}
+    if directory==""||origin==""{
+        return errors.New("Learning App requires both verified assets and their public HTTPS origin")
+    }
+    bundle,err:=mcpsvc.LoadLearningAppBundle(directory,origin)
+    if err!=nil{return err}
+    return svc.SetLearningAppBundle(bundle)
+}
+
 // configureLearningModel permits disclosure only to a host-authorized endpoint.
 // The provider is disabled unless both endpoint and model are configured.
 func configureLearningModel(svc *mcpsvc.Service) error {
@@ -125,6 +137,9 @@ func main() {
 	svc := mcpsvc.NewService(db)
     if err := configureLearningModel(svc); err != nil {
         log.Fatal("model configuration: ",err)
+    }
+    if err := configureLearningApp(svc); err != nil {
+        log.Fatal("Learning App configuration: ",err)
     }
 	addr := getenv("ADAPTIVE_TEACHING_LISTEN_ADDR", "127.0.0.1:8000")
 	token, err := readBearerCredential()
