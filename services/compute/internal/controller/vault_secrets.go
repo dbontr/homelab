@@ -157,6 +157,91 @@ func (c *VaultSecretClient) CredentialForOperation(
  return token,nil
 }
 
+// AuthorizeOperation obtains a bounded set of one-use credential tickets from
+// the owner authority. The signed owner assertion is never synthesized from
+// controller-local OAuth or bearer credentials. The authority independently
+// checks the owner, operation, target, arguments and mTLS service identity.
+func(c *VaultSecretClient)AuthorizeOperation(
+ ctx context.Context,assertion,operation,target string,arguments json.RawMessage,
+)(map[string]VaultCredentialTicket,error){
+ if c==nil||assertion==""||len(assertion)>16<<10||
+  operation==""||len(operation)>128||target==""||len(target)>128||
+  len(arguments)==0||len(arguments)>16<<10{
+  return nil,errors.New("signed owner operation authorization required")
+ }
+ var value map[string]json.RawMessage
+ if err:=json.Unmarshal(arguments,&value);err!=nil||value==nil{
+  return nil,errors.New("invalid owner authorization arguments")
+ }
+ body,err:=json.Marshal(struct{
+  Operation string `json:"operation"`
+  Target string `json:"target"`
+  Arguments json.RawMessage `json:"arguments"`
+ }{operation,target,arguments})
+ if err!=nil{return nil,errors.New("invalid owner authorization request")}
+ request,err:=http.NewRequestWithContext(ctx,http.MethodPost,
+  c.endpoint+"/v1/authorize",bytes.NewReader(body))
+ if err!=nil{return nil,errors.New("invalid owner authorization request")}
+ request.Header.Set("Content-Type","application/json")
+ request.Header.Set("Cf-Access-Jwt-Assertion",assertion)
+ response,err:=c.client.Do(request)
+ if err!=nil{return nil,errors.New("independent owner authorization unavailable")}
+ defer response.Body.Close()
+ if response.StatusCode!=http.StatusOK ||
+  !strings.HasPrefix(response.Header.Get("Content-Type"),"application/json"){
+  return nil,errors.New("independent owner authorization refused")
+ }
+ raw,err:=io.ReadAll(io.LimitReader(response.Body,8193))
+ if err!=nil||len(raw)>8192{
+  return nil,errors.New("owner authorization response exceeds limit")
+ }
+ var decision struct{
+  Allowed bool `json:"allowed"`
+  Reason string `json:"reason"`
+  ConfirmationID string `json:"confirmation_id"`
+  CredentialTickets []struct{
+   Alias string `json:"alias"`
+   Ticket string `json:"ticket"`
+  } `json:"credential_tickets"`
+ }
+ decoder:=json.NewDecoder(bytes.NewReader(raw))
+ decoder.DisallowUnknownFields()
+ if err:=decoder.Decode(&decision);err!=nil{
+  return nil,errors.New("invalid owner authorization decision")
+ }
+ var extra any
+ if err:=decoder.Decode(&extra);err!=io.EOF{
+  return nil,errors.New("owner authorization response has trailing data")
+ }
+ if !decision.Allowed{
+  if len(decision.CredentialTickets)!=0{
+   return nil,errors.New("denied operation returned credential capabilities")
+  }
+  if decision.ConfirmationID!=""{
+   return nil,errors.New("owner confirmation required for this provider operation")
+  }
+  return nil,errors.New("independent owner operation authorization denied")
+ }
+ if decision.Reason!=""||decision.ConfirmationID!=""||
+  len(decision.CredentialTickets)>8{
+  return nil,errors.New("contradictory owner authorization decision")
+ }
+ tickets:=make(map[string]VaultCredentialTicket,len(decision.CredentialTickets))
+ for _,candidate:=range decision.CredentialTickets{
+  if !vaultSecretAlias.MatchString(candidate.Alias)||
+   !vaultTicketID.MatchString(candidate.Ticket){
+   return nil,errors.New("invalid owner credential capability")
+  }
+  if _,exists:=tickets[candidate.Alias];exists{
+   return nil,errors.New("duplicate owner credential capability")
+  }
+  tickets[candidate.Alias]=VaultCredentialTicket{
+   Alias:candidate.Alias,Ticket:candidate.Ticket,
+  }
+ }
+ return tickets,nil
+}
+
 // Ambient provider callbacks have no independently authorized request or
 // one-use ticket. They must not retrieve protected vault credentials.
 func (c *VaultSecretClient) Credential(alias string)(string,error){
