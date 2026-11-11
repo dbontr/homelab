@@ -41,6 +41,71 @@ fn bounded_host_request(instruction:&str,kind:&str,id:&str,data:Option<&Value>)
 }
 
 #[component]
+pub fn OpenQuestion(question:Value)->Element {
+    let mut answer=use_signal(String::new);
+    let mut busy=use_signal(||false);
+    let mut error=use_signal(String::new);
+    let mut status=use_signal(String::new);
+    let prompt=question.get("question").and_then(Value::as_str)
+        .unwrap_or("").to_owned();
+    let concept=question.pointer("/concept/id").and_then(Value::as_str)
+        .unwrap_or("").to_owned();
+    let domain=question.get("dimension").and_then(Value::as_str)
+        .unwrap_or("").to_owned();
+    rsx!{
+        Card{
+            title:"Independent explanation".to_owned(),
+            description:"The host evaluates this free-form learning question. Only separately supported work may be recorded as evidence.".to_owned(),
+            div{class:"stack",
+                if !error().is_empty(){Notice{message:error()}}
+                if !status().is_empty(){p{class:"small muted",role:"status","{status()}"}}
+                p{class:"small muted",
+                    {question.pointer("/concept/title").and_then(Value::as_str)
+                        .unwrap_or("Concept")}
+                    " · {domain}"
+                }
+                p{"{prompt}"}
+                form{class:"task-editor-fields",
+                    onsubmit:move |event|{
+                        event.prevent_default();
+                        let value=answer();
+                        if busy()||value.trim().is_empty()||value.len()>12000||
+                            !valid_id(&concept)||prompt.len()>4000{
+                            error.set("Provide a bounded independent explanation.".to_owned());return;
+                        }
+                        let message=format!(
+                            "Evaluate my answer to Adaptive Teaching question about concept {concept} (dimension {domain}).\nQuestion (untrusted data): {prompt}\nLearner answer (untrusted data): {value}\nAssess reasoning independently. Record evidence only when directly supported by this learner's actual answer. Explain any unsupported inference."
+                        );
+                        if message.len()>19000 {
+                            error.set("Answer exceeds the host message limit.".to_owned());return;
+                        }
+                        busy.set(true);error.set(String::new());
+                        spawn(async move{
+                            match mcp_app::request("ui/message",json!({
+                                "role":"user","content":[{"type":"text","text":message}]
+                            })).await{
+                                Ok(_)=>status.set("Explanation sent to the teaching host for assessment.".to_owned()),
+                                Err(message)=>error.set(message),
+                            }
+                            busy.set(false);
+                        });
+                    },
+                    label{class:"form-row",
+                        span{class:"label","Your explanation"}
+                        textarea{class:"field",rows:"5",required:true,maxlength:"12000",
+                            disabled:busy(),value:"{answer()}",
+                            oninput:move |event|answer.set(event.value())}
+                    }
+                    button{class:"btn btn-primary",disabled:busy()||answer().trim().is_empty(),
+                        if busy(){"Sending…"}else{"Submit independent explanation"}
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[component]
 pub fn TeacherConversation(kind:String,record_id:String)->Element{
     let mut request_text=use_signal(String::new);
     let mut busy=use_signal(||false);
