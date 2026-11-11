@@ -376,6 +376,14 @@ func(s *Server)mcp(w http.ResponseWriter,r *http.Request){
 }
 func tool(name,description string,properties map[string]any,required ...string)map[string]any{
  if required==nil{required=[]string{}}
+ if privilegedExecutorTool(name){
+  properties["request_id"]=map[string]any{
+   "type":"string","pattern":"^[0-9a-f]{32}$",
+   "minLength":32,"maxLength":32,
+   "description":"Caller-generated unique execution identity. Reuse exactly this ID for retries or reconciliation.",
+  }
+  required=append(required,"request_id")
+ }
  return map[string]any{"name":name,"description":description,"inputSchema":map[string]any{"type":"object","properties":properties,"required":required}}
 }
 func prop(kind string)map[string]any{return map[string]any{"type":kind}}
