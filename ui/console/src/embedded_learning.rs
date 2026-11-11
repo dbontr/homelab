@@ -22,6 +22,19 @@ impl Panel {
         }
     }
 
+    fn from_view(view:&str)->Option<Self>{
+        match view{
+            "graph"=>Some(Self::Graph),
+            "session"=>Some(Self::Sessions),
+            "learning_question"|"question"=>Some(Self::Question),
+            "problem"=>Some(Self::Problems),
+            "sources"=>Some(Self::Sources),
+            "practice"=>Some(Self::Practice),
+            "reasoning"=>Some(Self::Reasoning),
+            _=>None,
+        }
+    }
+
     fn read(self, id: &str) -> Result<(&'static str,Value),String> {
         let valid = !id.is_empty() && id.len() <= 128 &&
             id.bytes().all(|byte| byte.is_ascii_alphanumeric()
@@ -94,6 +107,28 @@ pub fn LearningApp() -> Element {
                     "{section.label()}"
                 }
             }
+        }
+        button{
+            class:"btn btn-outline",r#type:"button",
+            onclick:move |_|{
+                match mcp_app::take_host_learning_result(){
+                    Some(value)=>{
+                        if let Some(view)=value.get("view").and_then(Value::as_str)
+                            .and_then(Panel::from_view){
+                            panel.set(view);
+                        }
+                        if let Some(id)=value.get("id").and_then(Value::as_str)
+                            .filter(|id|valid_identity(id)){
+                            selected_id.set(id.to_owned());
+                        }
+                        result.set(Some(value));
+                        error.set(String::new());
+                        notice.set("Host-provided Learning record loaded.".to_owned());
+                    }
+                    None=>notice.set("No host result is available. Use the Learning search controls.".to_owned()),
+                }
+            },
+            "Open originating tool result"
         }
         Card {
             title:panel().label().to_owned(),
@@ -492,6 +527,8 @@ mod tests{
     fn browser_scope_is_defined_by_fixed_learning_panels(){
         assert_eq!(Panel::Question.read(""),Err("Select a question identifier.".to_owned()));
         assert_eq!(Panel::Sessions.read("").unwrap().0,"list_learning_sessions");
+        assert_eq!(Panel::from_view("learning_question"),Some(Panel::Question));
+        assert_eq!(Panel::from_view("reasoning"),Some(Panel::Reasoning));
         assert_eq!(Panel::Sources.read("../oops").unwrap().0,"list_learning_sources");
         assert!(!valid_identity("../../etc/passwd"));
     }
