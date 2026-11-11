@@ -35,6 +35,7 @@
     {
       nixosModules.clusterAgent = import ./infrastructure/modules/cluster-agent.nix;
       nixosModules.homelabPlatform = import ./nixosModules/platform.nix;
+      nixosModules.homelabConsole = import ./nixosModules/console.nix;
       nixosModules.homelabCalendar = import ./nixosModules/calendar.nix;
       nixosModules.homelabMotivation = import ./nixosModules/motivation.nix;
       nixosModules.homelabEngineering = import ./nixosModules/engineering.nix;
