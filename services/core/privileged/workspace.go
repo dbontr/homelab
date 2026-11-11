@@ -27,7 +27,9 @@ type WorkspacePolicy struct {
  Projects []string
  Workers []string
  Images []string
+ ImageReferences []string
  Software []string
+ Programs []string
  Packages []string
  Client *http.Client `json:"-"`
 }
@@ -57,7 +59,7 @@ func(p *WorkspacePolicy)validate()error{
    return errors.New("Workspace credential file must be a protected regular file")
   }
  }
- all:=[][]string{p.Projects,p.Workers,p.Images,p.Software,p.Packages}
+ all:=[][]string{p.Projects,p.Workers,p.Images,p.Software,p.Packages,p.Programs}
  enabled:=false
  for i,values:=range all{
   if len(values)>64{return errors.New("Workspace resource policy exceeds limit")}
@@ -69,6 +71,14 @@ func(p *WorkspacePolicy)validate()error{
    if !pattern.MatchString(value)||seen[value]{return errors.New("invalid Workspace resource allowlist")}
    seen[value]=true
   }
+ }
+ if len(p.ImageReferences)>64{return errors.New("Workspace image allowlist exceeds limit")}
+ seenImages:=map[string]bool{}
+ for _,reference:=range p.ImageReferences{
+  if !validWorkspaceImageReference(reference)||seenImages[reference]{
+   return errors.New("Workspace image reference is not a distinct immutable digest")
+  }
+  seenImages[reference]=true
  }
  if !enabled{return errors.New("Workspace executor must name explicit resources")}
  return nil
@@ -82,6 +92,9 @@ func(p *WorkspacePolicy)operationArgs(operation string,fields map[string]any)(st
   return field
  }
  switch operation{
+ case "infrastructure__workspace_register_image", "infrastructure__workspace_propose_program",
+  "infrastructure__workspace_review_program", "infrastructure__workspace_update_entry":
+  return p.catalogArgs(operation,fields)
  case "infrastructure__workspace_create":
   args,err:=p.allocationArgs(fields)
   if err!=nil{return "",nil,err}
