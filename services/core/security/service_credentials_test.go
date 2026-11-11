@@ -4,6 +4,7 @@ import (
  "bytes"
  "crypto/tls"
  "crypto/x509"
+ "net"
  "net/http"
  "net/http/httptest"
  "path/filepath"
@@ -154,6 +155,20 @@ func TestServiceCredentialDNSIdentityMustBeCanonical(t *testing.T) {
   if dns,ok:=verifiedServiceDNS(state);ok{
    t.Fatalf("malformed certificate DNS admitted: %q",dns)
   }
+ }
+ state.PeerCertificates[0]=&x509.Certificate{
+  DNSNames:[]string{"jupiter.internal"},
+  IPAddresses:[]net.IP{net.ParseIP("10.77.30.1")},
+ }
+ if dns,ok:=verifiedServiceDNS(state);ok{
+  t.Fatalf("mixed DNS/IP certificate identity accepted: %q",dns)
+ }
+ state.PeerCertificates[0]=&x509.Certificate{
+  DNSNames:[]string{"jupiter.internal"},
+  EmailAddresses:[]string{"operator@example.test"},
+ }
+ if dns,ok:=verifiedServiceDNS(state);ok{
+  t.Fatalf("mixed DNS/email certificate identity accepted: %q",dns)
  }
  state.PeerCertificates[0]=peer
  state.VerifiedChains=nil
