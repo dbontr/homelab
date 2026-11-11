@@ -95,6 +95,22 @@ func TestMigrationRejectsStaleStateVersionAndMalformedReceipts(t *testing.T){
     }
 }
 
+func TestSelectedGoAuthorityCannotRestartWithMissingReplayOrVault(t *testing.T){
+    dir:=migrationTestState(t)
+    if err:=os.WriteFile(filepath.Join(dir,"credentials.json"),[]byte("{}"),0600);err!=nil{t.Fatal(err)}
+    selected:=migrationTestReceipt(t,dir,"go",nil)
+    if err:=AdmitMigration(dir,"go",selected);err!=nil{t.Fatal(err)}
+    if err:=os.Remove(filepath.Join(dir,"credentials.json"));err!=nil{t.Fatal(err)}
+    if err:=AdmitMigration(dir,"go",selected);err==nil{
+        t.Fatal("selected Go restarted after its encrypted vault disappeared")
+    }
+    if err:=os.WriteFile(filepath.Join(dir,"credentials.json"),[]byte("{}"),0600);err!=nil{t.Fatal(err)}
+    if err:=os.Remove(filepath.Join(dir,"authenticator.json"));err!=nil{t.Fatal(err)}
+    if err:=AdmitMigration(dir,"go",selected);err==nil{
+        t.Fatal("selected Go restarted with empty TOTP replay state")
+    }
+}
+
 func TestMigrationRejectsSharedOrSymlinkedProtectedRecords(t *testing.T){
     dir:=migrationTestState(t)
     valid:=migrationTestReceipt(t,dir,"rust",nil)
