@@ -199,7 +199,7 @@ pub fn ComputeManagement(csrf: String) -> Element {
                         }
                     }
                     label { class:"inline-row",
-                        input { r#type:"checkbox", checked:draft().usb_passthrough(),
+                        input { r#type:"checkbox", checked:draft().usb_passthrough,
                             onchange:move |e|{let mut d=draft();d.usb_passthrough=e.checked();draft.set(d)}
                         }
                         span { "Request one explicitly permitted USB device" }
@@ -442,7 +442,7 @@ fn ComputeCatalog(csrf: String) -> Element {
                 if !error().is_empty(){ Notice { message:error() } }
                 if let Some(value)=receipt(){
                     p { role:"status",class:"small muted",
-                        "Catalog operation accepted: {api::property(&value,&["id","status","revision"])}"
+                        "Catalog operation accepted: " {api::property(&value,&["id","status","revision"])}
                     }
                 }
                 label { class:"form-row",
@@ -501,28 +501,40 @@ fn ComputeCatalog(csrf: String) -> Element {
                     }
                 }
                 if draft().operation=="propose-program"{
-                    for (field,title) in [("name","Program name"),("version","Version"),
-                        ("platform","Platform"),("distribution","Distribution"),
-                        ("source_url","Source URL"),("license_notes","License notes")] {
-                        label { class:"form-row",
-                            span { class:"label","{title}" }
-                            input { class:"field",
-                                value: "{match field {
-                                    "name"=>draft().name,"version"=>draft().version,
-                                    "platform"=>draft().platform,"distribution"=>draft().distribution,
-                                    "source_url"=>draft().source_url,_=>draft().license_notes}}",
-                                oninput:move |e|{
-                                    let mut d=draft();
-                                    match field {
-                                        "name"=>d.name=e.value(),"version"=>d.version=e.value(),
-                                        "platform"=>d.platform=e.value(),
-                                        "distribution"=>d.distribution=e.value(),
-                                        "source_url"=>d.source_url=e.value(),
-                                        _=>d.license_notes=e.value(),
-                                    }
-                                    draft.set(d);
-                                }
-                            }
+                    label { class:"form-row",
+                        span { class:"label","Program name" }
+                        input { class:"field", required:true, value:"{draft().name}",
+                            oninput:move |e|{let mut d=draft();d.name=e.value();draft.set(d)}
+                        }
+                    }
+                    label { class:"form-row",
+                        span { class:"label","Version" }
+                        input { class:"field",  value:"{draft().version}",
+                            oninput:move |e|{let mut d=draft();d.version=e.value();draft.set(d)}
+                        }
+                    }
+                    label { class:"form-row",
+                        span { class:"label","Platform" }
+                        input { class:"field",  value:"{draft().platform}",
+                            oninput:move |e|{let mut d=draft();d.platform=e.value();draft.set(d)}
+                        }
+                    }
+                    label { class:"form-row",
+                        span { class:"label","Distribution" }
+                        input { class:"field",  value:"{draft().distribution}",
+                            oninput:move |e|{let mut d=draft();d.distribution=e.value();draft.set(d)}
+                        }
+                    }
+                    label { class:"form-row",
+                        span { class:"label","Source URL" }
+                        input { class:"field",  value:"{draft().source_url}",
+                            oninput:move |e|{let mut d=draft();d.source_url=e.value();draft.set(d)}
+                        }
+                    }
+                    label { class:"form-row",
+                        span { class:"label","License notes" }
+                        input { class:"field",  value:"{draft().license_notes}",
+                            oninput:move |e|{let mut d=draft();d.license_notes=e.value();draft.set(d)}
                         }
                     }
                 }
