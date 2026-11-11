@@ -26,7 +26,15 @@ in {
         message = "Motivation service requires an independent, protected token file.";
       }
       {
-        assertion = builtins.match "^(127\\.0\\.0\\.1|\\[::1\\]):[0-9]+$" cfg.listenAddress != null;
+        assertion =
+          let
+            address = cfg.listenAddress;
+            port = if lib.hasPrefix "127.0.0.1:" address then
+              lib.removePrefix "127.0.0.1:" address
+            else if lib.hasPrefix "[::1]:" address then
+              lib.removePrefix "[::1]:" address
+            else "";
+          in port != "" && builtins.match "[0-9]+" port != null;
         message = "Motivation service must listen on an explicit numeric loopback address.";
       }
     ];
