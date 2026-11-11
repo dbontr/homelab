@@ -61,6 +61,11 @@ in {
   config = lib.mkIf cfg.enable {
     assertions = [
       {
+        assertion = cfg.computeVaultAlias == "" && cfg.model.vaultAlias == "" &&
+          cfg.vault.endpoint == null;
+        message = "Unattended engineering jobs require protected service credentials. Owner-bound vault tickets cannot be issued without a current signed human operation.";
+      }
+      {
         assertion = cfg.computeURL != "" &&
           ((cfg.computeTokenFile != null) != (cfg.computeVaultAlias != ""));
         message = "Engineering requires exactly one protected compute editor credential source.";
