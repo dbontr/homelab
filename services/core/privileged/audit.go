@@ -9,6 +9,7 @@ import (
  "io"
  "os"
  "path/filepath"
+ "sort"
  "sync"
  "syscall"
  "time"
@@ -40,7 +41,7 @@ func validAuditEntry(e auditEntry)bool{
  if _,err:=hex.DecodeString(e.ID);err!=nil{return false}
  if _,err:=hex.DecodeString(e.ArgumentsSHA256);err!=nil{return false}
  switch e.Outcome{
- case "started","accepted","succeeded","failed":return true
+ case "started","accepted","succeeded","failed","indeterminate":return true
  default:return false
  }
 }
@@ -167,6 +168,26 @@ func(j *AuditJournal)Record(id,operation,target,digest,outcome string)error{
  }
  j.seen[entry.ID]=entry
  return nil
+}
+
+// Unresolved returns attempts that can have taken effect but have no
+// verified terminal state. The caller must reconcile them out of band.
+func(j *AuditJournal)Unresolved()([]auditEntry,error){
+ if j==nil{return nil,errors.New("audit journal unavailable")}
+ j.mu.Lock();defer j.mu.Unlock()
+ if j.faulted{return nil,errors.New("audit journal is in an uncertain state")}
+ if err:=j.checkInode();err!=nil{
+  j.faulted=true
+  return nil,err
+ }
+ pending:=make([]auditEntry,0)
+ for _,entry:=range j.seen{
+  if entry.Outcome=="started"||entry.Outcome=="indeterminate"{
+   pending=append(pending,entry)
+  }
+ }
+ sort.Slice(pending,func(i,k int)bool{return pending[i].ID<pending[k].ID})
+ return pending,nil
 }
 
 func(j *AuditJournal)Close()error{
