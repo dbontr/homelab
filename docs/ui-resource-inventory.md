@@ -171,9 +171,12 @@ MIME signatures and SHA-256 integrity before a download is prepared as
 a local browser Blob. The host must permit sandbox downloads before
 download links are operational.
 
-Model calls are disabled unless a private provider endpoint and model
-identifier are configured. The owner must opt into disclosing source
-passages or learner responses for each model proposal. These proposals
+Model calls remain disabled unless a private provider endpoint and model
+identifier are configured and the operator explicitly sets
+`services.adaptiveTeachingMcp.model.allowDisclosure = true`. Each model
+proposal additionally requires an explicit disclosure permission from
+the caller. Source passages, learner answers and grading criteria can
+be sent to the approved model only when both controls authorize the request. These proposals
 cannot change grades or mastery by themselves: the Learning store remains
 the sole authority for review, grading and learner progress.
 
