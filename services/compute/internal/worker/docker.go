@@ -608,6 +608,11 @@ func (r *Runner) Handle(ctx context.Context, op Operation, c *Client) (map[strin
 	if err != nil {
 		return nil, err
 	}
+    if nativeCustodySelected() && op.Action!="start" && op.Action!="stop" {
+        if err:=verifyNativeWorkspace(ctx,op.Workspace);err!=nil{
+            return nil,fmt.Errorf("active device custody verification failed: %w",err)
+        }
+    }
 	switch op.Action {
 	case "start":
 		return r.Start(ctx, op.Workspace, payload)
