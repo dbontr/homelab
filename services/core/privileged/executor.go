@@ -151,6 +151,10 @@ func replayExecutionOutcome(requestID,outcome string) ExecutionResult{
  case "succeeded":
   return ExecutionResult{Authorization:security.Authorization{Allowed:true},
    State:ExecutionCompleted,AuditID:requestID,Replayed:true}
+ case "reconciled":
+  return ExecutionResult{Authorization:security.Authorization{
+   Reason:"execution request identity was reconciled and cannot be executed again",
+  }}
  default:
   return ExecutionResult{Authorization:security.Authorization{
    Reason:"execution request outcome requires independent reconciliation",
