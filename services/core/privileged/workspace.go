@@ -35,7 +35,84 @@ type WorkspacePolicy struct {
  Client *http.Client `json:"-"`
 }
 
-var workspaceIdentifier=regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,95}$`)
+var workspaceIdentifier=regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,95}package privileged
+
+import (
+ "bytes"
+ "context"
+ "encoding/json"
+ "errors"
+ "io"
+ "net/http"
+ "net/url"
+ "os"
+ "path/filepath"
+ "regexp"
+ "strings"
+ "syscall"
+ "time"
+)
+
+// WorkspacePolicy delegates explicitly approved mutations to the canonical
+// Workspace controller. The gateway never holds the controller root token.
+type WorkspacePolicy struct {
+ Endpoint string
+ TokenFile string
+ // TokenSource reads a provider token only after the independently authorized
+ // operation has an audit-start entry.
+ TokenSource func()(string,error) `json:"-"`
+ Projects []string
+ Workers []string
+ Devices []string
+ Images []string
+ ImageReferences []string
+ Software []string
+ Programs []string
+ Packages []string
+ Client *http.Client `json:"-"`
+}
+
+)
+// Controller resource IDs have a narrower namespace than host names and
+// Workspace execution IDs; reject identities the controller cannot store.
+var workspaceResourceID=regexp.MustCompile(`^[a-z][a-z0-9-]{1,62}package privileged
+
+import (
+ "bytes"
+ "context"
+ "encoding/json"
+ "errors"
+ "io"
+ "net/http"
+ "net/url"
+ "os"
+ "path/filepath"
+ "regexp"
+ "strings"
+ "syscall"
+ "time"
+)
+
+// WorkspacePolicy delegates explicitly approved mutations to the canonical
+// Workspace controller. The gateway never holds the controller root token.
+type WorkspacePolicy struct {
+ Endpoint string
+ TokenFile string
+ // TokenSource reads a provider token only after the independently authorized
+ // operation has an audit-start entry.
+ TokenSource func()(string,error) `json:"-"`
+ Projects []string
+ Workers []string
+ Devices []string
+ Images []string
+ ImageReferences []string
+ Software []string
+ Programs []string
+ Packages []string
+ Client *http.Client `json:"-"`
+}
+
+)
 var workspacePackage=regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9+._-]{0,79}$`)
 
 func containsID(allowed []string,id string)bool{
@@ -67,7 +144,7 @@ func(p *WorkspacePolicy)validate()error{
   if len(values)>0{enabled=true}
   seen:=map[string]bool{}
   for _,value:=range values{
-   pattern:=workspaceIdentifier
+   pattern:=workspaceResourceID
    if i==4{pattern=workspacePackage}
    if i==6{pattern=workspaceDeviceIdentity}
    if !pattern.MatchString(value)||seen[value]{return errors.New("invalid Workspace resource allowlist")}
