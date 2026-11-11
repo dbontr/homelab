@@ -234,7 +234,8 @@ pub async fn serve_unix(executor: Arc<Executor>, path: &Path, gid: u32)
         let (stream, _) = listener.accept().await?;
         let service = router.clone();
         tokio::spawn(async move {
-            let connection = Builder::new(TokioExecutor::new())
+            let builder = Builder::new(TokioExecutor::new());
+            let connection = builder
                 .serve_connection(TokioIo::new(stream), TowerToHyperService::new(service));
             let _ = tokio::time::timeout(Duration::from_secs(3*60*60), connection).await;
         });
