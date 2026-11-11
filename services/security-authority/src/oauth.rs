@@ -315,7 +315,7 @@ impl Broker {
         if selected.device_authorization_url.is_empty() || self.device.len() >= MAX_PENDING {
             return Err(Error::Unauthorized);
         }
-        let form = vec![
+        let form: Vec<(String, String)> = vec![
             ("client_id".into(), selected.client_id.clone()),
             ("scope".into(), selected.scopes.join(" ")),
         ];
