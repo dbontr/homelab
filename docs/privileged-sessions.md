@@ -154,6 +154,38 @@ The executor accepts four typed operations: stop an allowlisted project workspac
 
 The existing Workspace controller remains the sole owner of device leases, software inventories, worker identities and workspace lifecycle. The privileged bridge does not create shadow hardware or software stores. Environment builds may be asynchronous and should be checked through the owning Workspace operation-status API; an accepted request does not prove that software has finished installing. The privileged executor returns an audit correlation ID and an explicit `state`: `accepted` for Workspace, systemd and Kubernetes submissions, or `completed` for release activation and reversion after host-local release checks. The unified MCP response reports `accepted: true` for submissions and reserves `executed: true` for verified release transitions. An audit ID is not a downstream Workspace operation ID, and accepted submissions must be checked through their owning service before treating the work as finished. Delegated tool responses must contain a matching JSON-RPC identifier and the required MCP content array. An omitted `isError` is treated as `false`, as defined by MCP; explicit failures and malformed responses are rejected. This delegation is disabled by default and requires trusted controller configuration and deployment validation.
 
+## Durable privileged request identities
+
+The private executor's `POST /v1/execute` JSON body contains
+`request_id`, `operation`, `target` and `arguments`. The request ID is
+exactly 32 lowercase hexadecimal characters. A caller must generate a unique
+ID before the first attempt and retain it across timeouts or lost responses.
+All privileged MCP and native tool calls require `request_id`. The gateway
+does not include that field in the owner's canonical argument digest.
+
+The protected append-only audit journal records the request ID as the audit
+event ID before any side effect. Authorization, operation admission and
+exact operation/target/argument binding are verified independently. A
+concurrent request with the same ID cannot start another mutation. Once
+recorded, the ID remains reserved permanently, even after a recovery
+operator has reconciled an uncertain outcome.
+
+Retries with a matching ID must still provide the signed owner assertion
+and an active authorized owner session. The security authority's private
+`POST /v1/replay` operation performs a read-only policy check without
+issuing a new destructive confirmation or credential ticket. A matching
+`accepted` or `succeeded` journal record is returned as the original
+`accepted` or `completed` result with the same `audit_id` and
+`replayed: true`. A `started`, `failed`, `indeterminate` or
+`reconciled` record never initiates another effect under that identity.
+Investigate uncertain operations through the trusted audit recovery workflow
+before initiating a separately approved action under a different request ID.
+
+Durable fleet releases use a transaction-derived request ID for every host
+activation or rollback, preserving the same host-execution identity across
+coordinator restarts. Hosts without an identity-preserving interface are not
+eligible for durable fleet activation.
+
 ## Credential custody and rotation
 
 The owner-only socket can list opaque credential handles, store provider credentials, revoke entries, and atomically rotate an existing entry. Each add, delete, or rotate operation requires a fresh administrative password and an unreplayed TOTP submitted directly to the trusted owner channel. The gateway does not expose any credential-inventory or plaintext-credential operation.
