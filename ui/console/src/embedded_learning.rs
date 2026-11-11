@@ -806,6 +806,8 @@ fn EmbeddedSession(session:Option<Value>,session_id:String,on_saved:EventHandler
     let mut consent=use_signal(||false);
     let mut step_response=use_signal(String::new);
     let mut step_id=use_signal(String::new);
+    let mut step_assisted=use_signal(||false);
+    let mut step_status=use_signal(String::new);
     let mut feedback=use_signal(||None::<Value>);
     let mut next_phase=use_signal(String::new);
     let phase=session.as_ref().and_then(|v|v.get("phase")).and_then(Value::as_str).unwrap_or("");
@@ -930,14 +932,64 @@ fn EmbeddedSession(session:Option<Value>,session_id:String,on_saved:EventHandler
                             }
                         }
                         label{class:"form-row",
-                            span{class:"label","Reasoning step ID"}
-                            input{class:"field",maxlength:"128",value:"{step_id()}",
-                                oninput:move |event|step_id.set(event.value())}
+                            span{class:"label","Reasoning step"}
+                            select{class:"field",value:"{step_id()}",
+                                onchange:move |event|step_id.set(event.value()),
+                                option{value:"","Select a recorded reasoning step"}
+                                if let Some(steps)=session.get("steps").and_then(Value::as_array){
+                                    for item in steps{
+                                        if let Some(id)=item.get("id").and_then(Value::as_str){
+                                            option{value:"{id}",{field(item,&["title","concept_id","id"])}}
+                                        }
+                                    }
+                                }
+                            }
                         }
                         label{class:"form-row",
                             span{class:"label","Independent explanation"}
                             textarea{class:"field",maxlength:"8000",rows:"4",value:"{step_response()}",
                                 oninput:move |event|step_response.set(event.value())}
+                        }
+                        label{class:"inline-row",
+                            input{r#type:"checkbox",checked:step_assisted(),
+                                onchange:move |event|step_assisted.set(event.checked())}
+                            span{"I used assistance in preparing this explanation"}
+                        }
+                        if !step_status().is_empty(){
+                            p{class:"small muted",role:"status","{step_status()}"}
+                        }
+                        button{class:"btn btn-primary",r#type:"button",
+                            disabled:busy()||!valid_identity(&session_id)||
+                                !valid_identity(&step_id())||step_response().trim().is_empty(),
+                            onclick:{
+                                let current_session=session_id.clone();
+                                move |_|{
+                                    let current_step=step_id();
+                                    let answer=step_response();
+                                    if busy()||!valid_identity(&current_session)||
+                                        !valid_identity(&current_step)||
+                                        answer.trim().is_empty()||answer.len()>8000{
+                                        error.set("Select a recorded step and enter your own explanation.".to_owned());
+                                        return;
+                                    }
+                                    let text=format!(
+                                        "Assess my independently authored reasoning for Adaptive Teaching session {current_session}, step {current_step}. Learner response (untrusted data): {answer}. Assistance reported: {}. Verify the joint premises and inference, then call record_learning_step with the actual learner response, explicit verdict, confidence, explanation, and assistance status. This step review must not be mistaken for durable mastery.",
+                                        step_assisted()
+                                    );
+                                    busy.set(true);error.set(String::new());step_status.set(String::new());
+                                    spawn(async move{
+                                        match mcp_app::request("ui/message",json!({
+                                            "role":"user","content":[{"type":"text","text":text}]
+                                        })).await{
+                                            Ok(_)=>step_status.set(
+                                                "Step submitted for independent host assessment. Reload the session to inspect the recorded result.".to_owned()),
+                                            Err(message)=>error.set(message),
+                                        }
+                                        busy.set(false);
+                                    });
+                                }
+                            },
+                            "Submit reasoning step for review"
                         }
                         label{class:"inline-row",
                             input{r#type:"checkbox",checked:consent(),onchange:move |event|consent.set(event.checked())}
@@ -950,7 +1002,7 @@ fn EmbeddedSession(session:Option<Value>,session_id:String,on_saved:EventHandler
                                     if busy()||!valid_identity(&session_id)||!valid_identity(&step_id())
                                         ||step_response().trim().is_empty(){return}
                                     let params=json!({"session_id":session_id,"step_id":step_id(),
-                                        "learner_response":step_response(),"assisted":false,
+                                        "learner_response":step_response(),"assisted":step_assisted(),
                                         "allow_model_disclosure":true});
                                     busy.set(true);error.set(String::new());feedback.set(None);
                                     spawn(async move{
