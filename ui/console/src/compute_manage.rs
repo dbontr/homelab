@@ -289,6 +289,7 @@ pub fn ComputeManagement(csrf: String) -> Element {
 
 #[component]
 fn ComputeStop(csrf: String) -> Element {
+    let mut host=use_signal(String::new);
     let mut project=use_signal(String::new);
     let mut workspace=use_signal(String::new);
     let mut confirmed=use_signal(||false);
@@ -307,7 +308,7 @@ fn ComputeStop(csrf: String) -> Element {
                     if id.len()!=32||!id.bytes().all(|c|c.is_ascii_hexdigit()){
                         error.set("Enter a 32-character workspace ID.".to_owned());return;
                     }
-                    let request=json!({"project_id":project(),"confirm":true});
+                    let request=json!({"host":host(),"project_id":project(),"confirm":true});
                     let path=format!("/v1/compute/workspaces/{id}/stop");
                     let token=csrf.clone();
                     busy.set(true);error.set(String::new());message.set(String::new());
@@ -321,6 +322,12 @@ fn ComputeStop(csrf: String) -> Element {
                 },
                 if !error().is_empty(){ Notice { message:error() } }
                 if !message().is_empty(){p{role:"status",class:"small muted","{message()}"}}
+                label { class:"form-row",
+                    span { class:"label","Independent executor host" }
+                    input { class:"field", required:true, maxlength:"63", value:"{host()}",
+                        oninput:move |e|host.set(e.value())
+                    }
+                }
                 label { class:"form-row",
                     span { class:"label","Project ID" }
                     input { class:"field", required:true, value:"{project()}",
@@ -348,6 +355,7 @@ fn ComputeStop(csrf: String) -> Element {
 #[derive(Clone, PartialEq, Default)]
 struct CatalogDraft {
     operation: String,
+    host: String,
     id: String,
     image: String,
     image_id: String,
@@ -385,6 +393,10 @@ fn catalog_request(draft: &CatalogDraft) -> Result<Value,String> {
             if packages.is_empty() || packages.len()>128 {
                 return Err("Enter 1 to 128 apt package names.".to_owned());
             }
+            if draft.host.is_empty(){
+                return Err("Select the independent executor host.".to_owned());
+            }
+            payload["host"]=json!(draft.host);
             payload["image_id"]=json!(draft.image_id);
             payload["packages"]=json!(packages);
             payload["description"]=json!(draft.description);
@@ -424,7 +436,7 @@ fn catalog_request(draft: &CatalogDraft) -> Result<Value,String> {
 #[component]
 fn ComputeCatalog(csrf: String) -> Element {
     let mut draft=use_signal(||CatalogDraft{
-        operation:"register-image".to_owned(),..CatalogDraft::default()
+        operation:"register-software".to_owned(),..CatalogDraft::default()
     });
     let mut busy=use_signal(||false);
     let mut error=use_signal(String::new);
@@ -493,6 +505,13 @@ fn ComputeCatalog(csrf: String) -> Element {
                     }
                 }
                 if draft().operation=="register-software"{
+                    label { class:"form-row",
+                        span { class:"label","Independent executor host" }
+                        input { class:"field",required:true,maxlength:"63",
+                            value:"{draft().host}",
+                            oninput:move |e|{let mut d=draft();d.host=e.value();draft.set(d)}
+                        }
+                    }
                     label { class:"form-row",
                         span { class:"label","Approved image pool ID" }
                         input { class:"field",required:true,value:"{draft().image_id}",
