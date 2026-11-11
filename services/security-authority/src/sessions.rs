@@ -5,6 +5,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use chrono::{DateTime, SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use zeroize::Zeroizing;
 
 use crate::access::AccessVerifier;
 use crate::canonical::canonical_arguments;
@@ -374,7 +375,8 @@ impl Authority {
     }
 
     pub(crate) fn replace_broker_credential(
-        &mut self, session_id: &str, id: &str, provider: &str, token: &[u8]
+        &mut self, session_id: &str, id: &str, provider: &str,
+        expected_revision: &str, token: &[u8]
     ) -> Result<(), Error> {
         if !self.live(unix_now()?)
             || self.session.as_ref().is_none_or(|s|
@@ -384,14 +386,15 @@ impl Authority {
             return Err(Error::Unauthorized);
         }
         let vault = self.vault.as_mut().ok_or(Error::InvalidConfiguration)?;
-        vault.rotate(&mut self.store, id, provider, token)
+        vault.rotate_if_revision(&mut self.store, id, provider, expected_revision, token)
     }
 
-    pub(crate) fn with_broker_credential<R>(
-        &mut self,
-        session_id: &str, id: &str, provider: &str,
-        callback: impl FnOnce(&[u8]) -> R
-    ) -> Result<R, Error> {
+    /// Return a generation-fenced snapshot under the authority lock.
+    /// The refresh may execute over the network, but its later commit must
+    /// compare the same encrypted credential revision and owner session.
+    pub(crate) fn broker_credential_snapshot(
+        &mut self, session_id: &str, id: &str, provider: &str
+    ) -> Result<(Zeroizing<Vec<u8>>, String), Error> {
         if !self.live(unix_now()?)
             || self.session.as_ref().is_none_or(|s|
                 s.principal != "local-operator" || s.id != session_id
@@ -400,7 +403,10 @@ impl Authority {
             return Err(Error::Unauthorized);
         }
         let vault = self.vault.as_ref().ok_or(Error::InvalidConfiguration)?;
-        vault.with_secret(id, provider, None, callback)
+        let revision = vault.revision(id, provider)?;
+        let bytes = vault.with_secret(id, provider, Some(&revision), |secret|
+            Zeroizing::new(secret.to_vec()))?;
+        Ok((bytes, revision))
     }
 
 
