@@ -71,7 +71,17 @@ func TestExecutionRequestIsDurableAcrossRestartAndCannotChangeScope(t *testing.T
   "infrastructure__service_restart","jupiter",wrong);err==nil{
   t.Fatal("reused request ID changed its canonical arguments")
  }
- if auth.replay.Load()!=1{t.Fatal("recorded outcome bypassed independent replay authorization")}
+ if _,err:=executor.ExecuteWithID(context.Background(),id,
+  "infrastructure__service_stop","jupiter",args);err==nil{
+  t.Fatal("reused request ID changed its operation")
+ }
+ equivalent:=json.RawMessage(`{"service":"platform.service","host":"jupiter"}`)
+ same,err:=executor.ExecuteWithID(context.Background(),id,
+  "infrastructure__service_restart","jupiter",equivalent)
+ if err!=nil||!same.Replayed||!same.Allowed||calls.Load()!=1{
+  t.Fatal("equivalent canonical arguments caused another side effect",same,err)
+ }
+ if auth.replay.Load()!=2{t.Fatal("recorded outcome bypassed independent replay authorization")}
  auth.denyReplay=true
  denied,err:=executor.ExecuteWithID(context.Background(),id,
   "infrastructure__service_restart","jupiter",args)
