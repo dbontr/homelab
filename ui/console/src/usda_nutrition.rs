@@ -218,7 +218,7 @@ pub fn USDANutrition(
                     }
                     if !result.incomplete.is_empty() {
                         p { class: "small muted",
-                            "Incomplete source coverage (not saved as a total): {result.incomplete.join(", ")}"
+                            {format!("Incomplete source coverage (not saved as a total): {}", result.incomplete.join(", "))}
                         }
                     }
                     p { class: "small muted", "Evidence SHA-256: {result.sha256}" }
