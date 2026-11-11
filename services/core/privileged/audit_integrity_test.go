@@ -75,6 +75,23 @@ func TestAuditJournalReplacementFailsClosed(t *testing.T){
  if err==nil||result.Allowed||calls!=0{t.Fatalf("executor acted after journal substitution: %+v, %v",result,err)}
 }
 
+func TestRequestReplayRefusesSharedAuditJournalInode(t *testing.T){
+ dir:=privateAuditDir(t)
+ path:=filepath.Join(dir,"audit.jsonl")
+ journal,err:=OpenAuditJournal(path)
+ if err!=nil{t.Fatal(err)}
+ shared:=filepath.Join(dir,"shared-inode")
+ if err:=os.Link(path,shared);err!=nil{t.Fatal(err)}
+ if _,_,err:=journal.RequestOutcome(strings.Repeat("a",32),
+  "infrastructure__service_restart","jupiter",strings.Repeat("b",64));err==nil{
+  t.Fatal("request replay accepted a shared audit journal inode")
+ }
+ if err:=journal.Close();err!=nil{t.Fatal(err)}
+ if _,err:=OpenAuditJournal(path);err==nil{
+  t.Fatal("journal was opened through a shared hard-link inode")
+ }
+}
+
 func TestAuditJournalRefusesWritesAfterClose(t *testing.T){
  path:=filepath.Join(privateAuditDir(t),"audit.jsonl")
  journal,err:=OpenAuditJournal(path)
