@@ -91,6 +91,7 @@ func approvedDeviceClaims(claims []DeviceClaim,devices []Device,allowUSB bool) (
     }
     leases:=make([]nativeDeviceLease,0,len(claims))
     used:=make(map[string]bool)
+    usedPaths:=make(map[string]bool)
     for _,claim:=range claims{
         device,ok:=known[claim.ID]
         if !ok||used[claim.ID]||device.Kind!=claim.Kind{
@@ -113,6 +114,10 @@ func approvedDeviceClaims(claims []DeviceClaim,devices []Device,allowUSB bool) (
                 !strings.HasPrefix(alias,"/dev/"){
                 return nil,errors.New("invalid native device alias")
             }
+            if usedPaths[alias]{
+                return nil,errors.New("multiple native claims refer to the same device alias")
+            }
+            usedPaths[alias]=true
             leases=append(leases,nativeDeviceLease{kind:device.Kind,alias:alias})
         }
     }
