@@ -243,21 +243,38 @@ mod tests {
             alias: "provider_token".into(),
             provider: "research".into(),
             handle: handle.id.clone(),
+            operation: "infrastructure__workspace_create".into(),
+            target: "saturn".into(),
+            arguments_sha256: None,
             revision: None,
             expires_at: None,
         }], &vault).unwrap();
+        let revision = vault.revision(&handle.id, "research").unwrap();
+        let digest = "a".repeat(64);
         let allowed = VerifiedServiceIdentity::from_authenticated_peer("worker.internal".into()).unwrap();
         let wrong = VerifiedServiceIdentity::from_authenticated_peer("other.internal".into()).unwrap();
         assert_eq!(
-            policy.use_credential(&allowed, "provider_token", &vault, |s| s.to_vec()).unwrap(),
+            policy.use_credential(&allowed, "provider_token", "infrastructure__workspace_create", "saturn", &digest, &revision, &vault, |s| s.to_vec()).unwrap(),
             b"protected"
         );
+        assert_eq!(policy.scoped(&allowed, "infrastructure__workspace_create", "saturn", &digest, chrono::Utc::now().timestamp()).unwrap().len(), 1);
+        assert!(policy.scoped(&allowed, "infrastructure__workspace_stop", "saturn", &digest, chrono::Utc::now().timestamp()).unwrap().is_empty());
+        assert!(policy.scoped(&allowed, "infrastructure__workspace_create", "venus", &digest, chrono::Utc::now().timestamp()).unwrap().is_empty());
         assert!(matches!(
-            policy.use_credential(&wrong, "provider_token", &vault, |_| ()),
+            policy.use_credential(&allowed, "provider_token", "infrastructure__workspace_stop", "saturn", &digest, &revision, &vault, |_| ()),
             Err(Error::Unauthorized)
         ));
         assert!(matches!(
-            policy.use_credential(&allowed, "provider_other", &vault, |_| ()),
+            policy.use_credential(&allowed, "provider_token", "infrastructure__workspace_create", "venus", &digest, &revision, &vault, |_| ()),
+            Err(Error::Unauthorized)
+        ));
+
+        assert!(matches!(
+            policy.use_credential(&wrong, "provider_token", "infrastructure__workspace_create", "saturn", &digest, &revision, &vault, |_| ()),
+            Err(Error::Unauthorized)
+        ));
+        assert!(matches!(
+            policy.use_credential(&allowed, "provider_other", "infrastructure__workspace_create", "saturn", &digest, &revision, &vault, |_| ()),
             Err(Error::Unauthorized)
         ));
         assert!(matches!(
@@ -266,6 +283,9 @@ mod tests {
                 alias: "provider_token".into(),
                 provider: "other".into(),
                 handle: handle.id.clone(),
+            operation: "infrastructure__workspace_create".into(),
+            target: "saturn".into(),
+            arguments_sha256: None,
             revision: None,
             expires_at: None,
             }], &vault),
@@ -276,6 +296,9 @@ mod tests {
             alias: "provider_token".into(),
             provider: "research".into(),
             handle: handle.id.clone(),
+            operation: "infrastructure__workspace_create".into(),
+            target: "saturn".into(),
+            arguments_sha256: None,
             revision: Some("0".repeat(64)),
             expires_at: None,
         };
@@ -283,11 +306,28 @@ mod tests {
             ServiceCredentialPolicy::new(vec![stale], &vault),
             Err(Error::InvalidConfiguration)
         ));
+        let digest_locked = ServiceCredentialPolicy::new(vec![ServiceCredentialGrant {
+            client_dns: "worker.internal".into(),
+            alias: "digest_bound".into(),
+            provider: "research".into(),
+            handle: handle.id.clone(),
+            operation: "infrastructure__workspace_create".into(),
+            target: "saturn".into(),
+            arguments_sha256: Some(digest.clone()),
+            revision: None,
+            expires_at: None,
+        }], &vault).unwrap();
+        assert!(digest_locked.scoped(&allowed, "infrastructure__workspace_create", "saturn", &"b".repeat(64), chrono::Utc::now().timestamp()).unwrap().is_empty());
+        assert_eq!(digest_locked.scoped(&allowed, "infrastructure__workspace_create", "saturn", &digest, chrono::Utc::now().timestamp()).unwrap().len(), 1);
+
         let expired = ServiceCredentialGrant {
             client_dns: "worker.internal".into(),
             alias: "provider_token".into(),
             provider: "research".into(),
             handle: handle.id.clone(),
+            operation: "infrastructure__workspace_create".into(),
+            target: "saturn".into(),
+            arguments_sha256: None,
             revision: None,
             expires_at: Some("2020-01-01T00:00:00Z".into()),
         };
@@ -298,7 +338,7 @@ mod tests {
         // Rotation under the same opaque handle invalidates the pinned grant.
         vault.rotate(&mut state, &handle.id, "research", b"replacement").unwrap();
         assert!(matches!(
-            policy.use_credential(&allowed, "provider_token", &vault, |_| ()),
+            policy.use_credential(&allowed, "provider_token", "infrastructure__workspace_create", "saturn", &digest, &revision, &vault, |_| ()),
             Err(Error::Unauthorized)
         ));
         drop(vault);
