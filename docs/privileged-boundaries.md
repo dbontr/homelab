@@ -68,8 +68,10 @@ Never mark an operation `not_applied` merely because the caller timed out or
 a status response was lost. If the result remains uncertain, keep the attempt
 unresolved and do not retry it.
 
-On a host that selected the Rust executor, use
-`homelab-audit-inspect unresolved` to inspect outstanding attempts.
+On either Go or Rust executor hosts, use
+`homelab-audit-inspect unresolved` to inspect outstanding attempts. The
+NixOS command selects the matching implementation and pins the protected
+journal directory instead of trusting a caller-supplied location.
 Prepare an owner-only, root-owned JSON evidence file with these exact fields:
 `attempt_id`, `operation`, `target`, `arguments_sha256`, `finding`,
 `verified_by`, `inspected_at`, and `explanation`. The finding must be
