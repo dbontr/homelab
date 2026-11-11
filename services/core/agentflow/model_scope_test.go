@@ -10,6 +10,8 @@ import (
  "testing"
 )
 
+type scopedModelOwnerKey struct{}
+
 func TestModelProviderTokenIsBoundToExactRequestDigest(t *testing.T){
  const token="model-provider-scope-token-example"
  requests:=0
@@ -30,7 +32,7 @@ func TestModelProviderTokenIsBoundToExactRequestDigest(t *testing.T){
   ctx context.Context,operation,target string,args json.RawMessage,
  )(string,error){
   expectedCalls++
-  if ctx.Value("owner")==nil{return "",errors.New("owner assertion unavailable")}
+  if ctx.Value(scopedModelOwnerKey{})==nil{return "",errors.New("owner assertion unavailable")}
   if operation!="model__completion"||target!="exact-model"{
    t.Error("model authorization scope changed")
   }
@@ -43,7 +45,7 @@ func TestModelProviderTokenIsBoundToExactRequestDigest(t *testing.T){
   }
   return token,nil
  }
- ctx:=context.WithValue(context.Background(),"owner",true)
+ ctx:=context.WithValue(context.Background(),scopedModelOwnerKey{},true)
  output,err:=model.completeJSON(ctx,"system instructions","user content")
  if err!=nil||output!="{}"||requests!=1||expectedCalls!=1{
   t.Fatalf("authorized model request failed: %q %v",output,err)
