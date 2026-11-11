@@ -30,6 +30,12 @@ type Authorizer interface {
  Authorize(context.Context,string,string,json.RawMessage)(security.Authorization,error)
 }
 
+// ReplayAuthorizer validates a journaled request against the current owner
+// policy without requiring a fresh destructive operation confirmation.
+type ReplayAuthorizer interface {
+ Replay(context.Context,string,string,json.RawMessage)(security.Authorization,error)
+}
+
 type Run func(context.Context,string,...string)error
 
 type Actuator interface {
@@ -232,6 +238,22 @@ func (e *Executor) ExecuteWithID(ctx context.Context,requestID,operation,target 
 	if e.cfg.Audit == nil {
 		return deny("protected audit journal required"), errors.New("audit journal unavailable")
 	}
+    auditID := requestID
+    digest := sha256.Sum256(canonical)
+    argumentDigest := hex.EncodeToString(digest[:])
+    // Verify an existing request without consuming a second destructive
+    // confirmation. Only a matching independent owner and exact journal scope
+    // can recover a recorded disposition.
+    if outcome,found,lookupErr:=e.cfg.Audit.RequestOutcome(auditID,operation,target,argumentDigest);lookupErr!=nil{
+        return deny("execution request identity unavailable"),lookupErr
+    }else if found{
+        validator,ok:=e.cfg.Auth.(ReplayAuthorizer)
+        if !ok{return deny("independent replay authorization unavailable"),errors.New("replay authorization unsupported")}
+        replayDecision,replayErr:=validator.Replay(ctx,operation,target,canonical)
+        if replayErr!=nil{return deny("independent replay authorization unavailable"),replayErr}
+        if !replayDecision.Allowed{return ExecutionResult{Authorization:replayDecision},nil}
+        return replayExecutionOutcome(auditID,outcome),nil
+    }
 	decision, err := e.cfg.Auth.Authorize(ctx, operation, target, canonical)
 	if err != nil {
 		log.Print("security audit privileged_operation denied")
@@ -241,14 +263,6 @@ func (e *Executor) ExecuteWithID(ctx context.Context,requestID,operation,target 
 		log.Print("security audit privileged_operation denied")
 		return ExecutionResult{Authorization: decision}, nil
 	}
-	auditID := requestID
-	digest := sha256.Sum256(canonical)
-	argumentDigest := hex.EncodeToString(digest[:])
-    if outcome,found,err:=e.cfg.Audit.RequestOutcome(auditID,operation,target,argumentDigest);err!=nil{
-        return deny("execution request identity unavailable"),err
-    }else if found{
-        return replayExecutionOutcome(auditID,outcome),nil
-    }
     // The durable start append is the atomic admission boundary. Competing
     // requests for one ID cannot both cross into the external side effect.
 	if err := e.cfg.Audit.Record(auditID, operation, target, argumentDigest, "started"); err != nil {
