@@ -23,6 +23,16 @@ type ModelAssessment struct {
     ReasoningEvaluation string  `json:"reasoning_evaluation,omitempty"`
 }
 
+// EnableModelDisclosure is selected only through trusted service startup
+// configuration. An untrusted tool argument cannot enable external disclosure.
+func (svc *Service) EnableModelDisclosure() error {
+    if svc == nil || svc.model == nil || svc.modelDisclosureEnabled {
+        return errors.New("Learning model disclosure has not been configured")
+    }
+    svc.modelDisclosureEnabled = true
+    return nil
+}
+
 func (svc *Service) SetModelProvider(model teacheval.CompletionClient, name string) error {
     if model == nil || len(name) == 0 || len(name) > 128 ||
         strings.ContainsAny(name, "\x00\r\n") || svc.model != nil {
@@ -48,8 +58,8 @@ func registerModelTool[In any](server *mcp.Server, name, description string,
 }
 
 func (svc *Service) modelJSON(ctx context.Context, instruction string, input any, output any) error {
-    if svc.model == nil {
-        return errors.New("Learning model provider is not configured")
+    if svc.model == nil || !svc.modelDisclosureEnabled {
+        return errors.New("Learning model disclosure is disabled by owner policy")
     }
     data, err := json.Marshal(input)
     if err != nil || len(data) > 32<<10 {
