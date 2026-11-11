@@ -60,17 +60,51 @@ fn layout(data:&Value)->(Vec<GraphNode>,Vec<(usize,usize,String)>) {
 
 #[component]
 pub fn LearningGraph(data:Value,on_select:EventHandler<String>)->Element{
+    let mut zoom=use_signal(||1.0_f64);
+    let mut pan_x=use_signal(||0.0_f64);
+    let mut pan_y=use_signal(||0.0_f64);
+    let mut search=use_signal(String::new);
     let (nodes,edges)=layout(&data);
+    let scale=zoom().clamp(0.5,3.0);
+    let width=WIDTH/scale;
+    let height=HEIGHT/scale;
+    let x=(WIDTH-width)/2.0+pan_x();
+    let y=(HEIGHT-height)/2.0+pan_y();
+    let bounds=format!("{x:.2} {y:.2} {width:.2} {height:.2}");
+    let term=search().trim().to_lowercase();
     if nodes.is_empty(){return rsx!{p{class:"small muted","No graph nodes are available."}}}
     rsx! {
         div{class:"stack",
             p{class:"small muted",
-                "Knowledge relationships. Select any concept below to focus on it."
+                "Knowledge relationships. Use text controls to select a concept or navigate with keyboard focus."
+            }
+            label{class:"form-row",
+                span{class:"label","Find a concept or proposition"}
+                input{class:"field",maxlength:"128",value:"{search()}",
+                    oninput:move |event|search.set(event.value())}
+            }
+            div{class:"inline-row",role:"group",aria_label:"Graph viewport",
+                button{class:"btn btn-outline btn-sm",r#type:"button",
+                    onclick:move |_|zoom.set((zoom()*1.25).min(3.0)),"Zoom in"}
+                button{class:"btn btn-outline btn-sm",r#type:"button",
+                    onclick:move |_|zoom.set((zoom()/1.25).max(0.5)),"Zoom out"}
+                button{class:"btn btn-outline btn-sm",r#type:"button",
+                    onclick:move |_|pan_x.set((pan_x()-60.0).max(-WIDTH/2.0)),"Pan left"}
+                button{class:"btn btn-outline btn-sm",r#type:"button",
+                    onclick:move |_|pan_x.set((pan_x()+60.0).min(WIDTH/2.0)),"Pan right"}
+                button{class:"btn btn-outline btn-sm",r#type:"button",
+                    onclick:move |_|pan_y.set((pan_y()-60.0).max(-HEIGHT/2.0)),"Pan up"}
+                button{class:"btn btn-outline btn-sm",r#type:"button",
+                    onclick:move |_|pan_y.set((pan_y()+60.0).min(HEIGHT/2.0)),"Pan down"}
+                button{class:"btn btn-outline btn-sm",r#type:"button",
+                    onclick:move |_|{
+                        zoom.set(1.0);pan_x.set(0.0);pan_y.set(0.0);
+                    },"Reset view"}
             }
             svg{
                 role:"img",
                 aria_label:"Concept relationship graph; all concepts are also available as text controls.",
-                viewBox:"0 0 880 520",
+                viewBox:"{bounds}",
                 preserve_aspect_ratio:"xMidYMid meet",
                 style:"display:block;width:100%;height:auto;max-height:500px;background:var(--surface);border:1px solid var(--border);border-radius:10px",
                 for (index,(a,b,kind)) in edges.iter().enumerate(){
@@ -100,7 +134,9 @@ pub fn LearningGraph(data:Value,on_select:EventHandler<String>)->Element{
                 }
             }
             div{class:"task-items",
-                for node in nodes{
+                for node in nodes.into_iter().filter(|item|
+                    term.is_empty()||item.id.to_lowercase().contains(&term)||
+                    item.title.to_lowercase().contains(&term)){
                     button{
                         key:"{node.id}",
                         class:"btn btn-outline btn-sm",
