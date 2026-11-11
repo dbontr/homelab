@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/dbontr/homelab-new/system/learning/internal/store"
+    "github.com/dbontr/homelab-new/system/learning/internal/teacheval"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"net/http"
 	"strings"
@@ -21,6 +22,8 @@ var appHTML string
 type Service struct {
 	Store  *store.Store
 	Server *mcp.Server
+    model teacheval.CompletionClient
+    modelName string
 }
 
 func register[In any](server *mcp.Server, name, description string, handler func(In) (store.Value, error), app bool) {
@@ -722,7 +725,9 @@ func NewService(db *store.Store) *Service {
 		}
 		return db.DueReassessments(limit)
 	}, false)
-	return &Service{db, server}
+    svc := &Service{Store:db,Server:server}
+    registerModelTools(svc)
+    return svc
 }
 
 // Handler serves the local MCP transport. Remote listeners must use
