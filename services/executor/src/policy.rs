@@ -493,6 +493,58 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    #[test]
+    fn workspace_allocation_is_limited_to_operator_resources() {
+        let policy = WorkspacePolicy {
+            endpoint: "https://workspace.example/mcp".into(),
+            projects: vec!["research".into()],
+            workers: vec!["jupiter".into()],
+            images: vec!["approved-image".into()],
+            software: Vec::new(),
+            packages: Vec::new(),
+        };
+        let accepted = json!({
+            "host":"saturn",
+            "project_id":"research",
+            "image_pool_id":"approved-image",
+            "node_id":"jupiter",
+            "cpu":2.0,
+            "memory_mb":2048,
+            "duration_minutes":90,
+            "hardware":{"gpu":1}
+        });
+        let fields = accepted.as_object().unwrap();
+        let (name, args) = policy.operation("infrastructure__workspace_create",fields)
+            .expect("allowlisted workspace");
+        assert_eq!(name,"workspace_create");
+        assert_eq!(args["project_id"],"research");
+        assert!(args.get("host").is_none());
+        for (key,value) in [
+            ("project_id",json!("other")),
+            ("image_pool_id",json!("unapproved")),
+            ("node_id",json!("untrusted")),
+            ("cpu",json!(200)),
+            ("memory_mb",json!(0)),
+            ("architecture",json!("invalid")),
+            ("hardware",json!({"sudo":1})),
+            ("hardware",json!({"gpu":9})),
+            ("unknown_field",json!(true)),
+        ] {
+            let mut changed=fields.clone();
+            changed.insert(key.into(),value);
+            assert!(policy.operation("infrastructure__workspace_create",&changed).is_err(),
+                "unsafe allocation accepted: {key}");
+        }
+        let mut usb=fields.clone();
+        usb.insert("hardware".into(),json!({"usb":1}));
+        usb.insert("usb_passthrough".into(),json!(true));
+        usb.insert("usb_node".into(),json!("jupiter"));
+        usb.insert("usb_device_id".into(),json!("jtag"));
+        assert!(policy.operation("infrastructure__workspace_create",&usb).is_ok());
+        usb.insert("usb_node".into(),json!("outside"));
+        assert!(policy.operation("infrastructure__workspace_create",&usb).is_err());
+    }
+
     fn policy() -> Policy {
         Policy {
             host: "jupiter".into(),
