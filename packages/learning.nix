@@ -3,6 +3,6 @@
   pname = "homelab-learning";
   version = "0.1.0";
   src = ../services/learning;
-  vendorHash = "sha256-NbuubsnNbz3aKajjyfpkbi52qRhX1473j3LuaUDn3L8=";
+  vendorHash = "sha256-NbuvbsmNbz3aKdjyyfpkbi52yRhXl473j3LvAUDn3L8=";
   subPackages = [ "cmd/adaptive-teaching" ];
 }
