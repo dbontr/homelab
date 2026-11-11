@@ -132,7 +132,7 @@ impl AuditJournal {
             .map_err(|_| Error::Storage("audit inode cannot be synchronized"))?;
         file.seek(SeekFrom::Start(0)).map_err(|_| Error::Storage("audit seek failed"))?;
         let mut contents = Vec::new();
-        file.by_ref().take(MAX_AUDIT_BYTES + 1).read_to_end(&mut contents)
+        std::io::Read::by_ref(&mut file).take(MAX_AUDIT_BYTES + 1).read_to_end(&mut contents)
             .map_err(|_| Error::Storage("audit read failed"))?;
         if contents.len() as u64 > MAX_AUDIT_BYTES ||
             (!contents.is_empty() && contents.last() != Some(&b'\n')) {
