@@ -780,6 +780,12 @@ mod tests {
         let mut invalid = policy.clone();
         invalid.devices = vec!["/dev/bus/usb".into()];
         assert!(invalid.validate().is_err());
+        invalid.devices=policy.devices.clone();
+        for name in ["a","A-device","not_valid",&"x".repeat(64)] {
+            assert!(!valid_workspace_resource_id(name));
+            invalid.projects=vec![name.to_owned()];
+            assert!(invalid.validate().is_err());
+        }
     }
 
     #[test]
