@@ -261,6 +261,7 @@ mod tests {
         assert!(validate_copy_directory(path.clone()).is_err());
         fs::write(path.join("authenticator.json"),
             br#"{"version":1,"last_totp_step":-1,"failures":0,"locked_until":"0001-01-01T00:00:00Z"}"#).unwrap();
+        fs::set_permissions(path.join("authenticator.json"), fs::Permissions::from_mode(0o600)).unwrap();
         assert_eq!(validate_copy_directory(path.clone()).unwrap(), path);
         let link = path.with_extension("link");
         std::os::unix::fs::symlink(&path, &link).unwrap();
