@@ -179,7 +179,13 @@ func main() {
   if err:=json.Unmarshal([]byte(os.Getenv("HOMELAB_SECURITY_REMOTE_CLIENT_IDENTITIES")),&clients);err!=nil||len(clients)==0{
    log.Fatal("invalid trusted executor identity list")
   }
-  go func(){failures<-manager.ServeAuthorizationTLS(ctx,listen,cert,roots,clients)}()
+  var credentialClients []string
+  if raw:=os.Getenv("HOMELAB_SECURITY_REMOTE_CREDENTIAL_CLIENT_IDENTITIES");raw!=""{
+   if err:=json.Unmarshal([]byte(raw),&credentialClients);err!=nil{
+    log.Fatal("invalid credential-only TLS identity list")
+   }
+  }
+  go func(){failures<-manager.ServeAuthorizationTLS(ctx,listen,cert,roots,clients,credentialClients)}()
  }
 	log.Print("independent owner authentication sockets starting")
 	err = <-failures
