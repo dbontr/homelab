@@ -53,6 +53,14 @@ The security listener separates authorizing clients (`remote.allowedClientDNS`) 
 
 The security service holds `.securityd.lock` for its lifetime. The executor holds `/var/lib/homelab-releases/.executord.lock` while serving requests. A separate release journal lock serializes staging and activation. Both Go and Rust implementations use the same owner lease, so a failed cutover cannot produce two managed writers. A service restart invalidates in-memory approvals. An unfinished audit-start record or an indeterminate result after dispatch remains unresolved and requires owner reconciliation rather than being treated as a failed or safely retriable operation.
 
+## Security state migration
+
+The Rust security daemon requires an existing, protected `authenticator.json` replay record. Missing or unrecognized authentication state, invalid vault authentication, or missing vault keys must not be treated as fresh enrollment during an implementation switch.
+
+Before cutover, inspect an independent offline copy with `security-preflight --state-dir ABSOLUTE_COPY_DIRECTORY` and the intended daemon's protected credential and policy environment. The directory must be owner-only (0700). Copied state files must be owner-only regular files (0600 or stricter), have one hard link, and have inodes distinct from live state. File or directory bind mounts of live state are not acceptable. Inspection creates no state files and acquires no writer lease.
+
+The Go and Rust daemons share `.securityd.lock`, which allows only one process to own the state. Only an authorized NixOS generation switch may select the Rust daemon. Stop the active owner and verify lease release before cutover. Keep the preceding generation and protected state available for rollback; neither sessions nor destructive confirmations survive a restart.
+
 ## Unresolved execution reconciliation
 
 The Go and Rust executors share the same owner-only `executor-actions.jsonl`
