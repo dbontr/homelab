@@ -178,18 +178,13 @@ func (a *AdminSessions) ClientHandler() http.Handler {
    Arguments json.RawMessage `json:"arguments"`
   }
   if err:=readJSON(r,&input);err!=nil{http.Error(w,"invalid request",400);return}
-  decision:=a.AuthorizeFor(principal,a.client,input.Operation,input.Target,input.Arguments)
-  if decision.Allowed {
-   if peer,verified:=r.Context().Value(verifiedCredentialPeerContextKey{}).(string);verified{
-    tickets,err:=a.issueServiceTickets(principal,peer,input.Operation,input.Target,input.Arguments)
-    if err!=nil{
-     respondJSON(w,200,Authorization{Reason:"credential capability unavailable"})
-     return
-    }
-    decision.CredentialTickets=tickets
-   }
+  peer,_:=r.Context().Value(verifiedCredentialPeerContextKey{}).(string)
+  if peer!="" {
+   respondJSON(w,200,a.authorizeForServicePeer(
+    principal,a.client,peer,input.Operation,input.Target,input.Arguments))
+   return
   }
-  respondJSON(w,200,decision)
+  respondJSON(w,200,a.AuthorizeFor(principal,a.client,input.Operation,input.Target,input.Arguments))
  })
  return privateHeaders(mux)
 }
