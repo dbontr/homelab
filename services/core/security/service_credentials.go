@@ -176,21 +176,29 @@ func (a *AdminSessions) issueServiceTicketsLocked(
     if absolute:=a.session.created.Add(SessionAbsoluteTimeout);expires.After(absolute){expires=absolute}
     if !now.Before(expires){return nil,errors.New("owner session expired")}
     issued:=make([]CredentialTicket,0,len(grants))
+    staged:=make(map[string]issuedCredentialTicket,len(grants))
     for _,grant:=range grants {
-        id,err:=randomID()
-        if err!=nil {
-            for _,prior:=range issued {delete(a.serviceCredentialTickets,prior.Ticket)}
-            return nil,err
+        id:=""
+        for attempt:=0;attempt<4;attempt++{
+            candidate,err:=randomID()
+            if err!=nil{return nil,err}
+            if _,exists:=a.serviceCredentialTickets[candidate];exists{continue}
+            if _,exists:=staged[candidate];exists{continue}
+            id=candidate
+            break
         }
+        if id==""{return nil,errors.New("credential capability entropy collision")}
         deadline:=expires
         if grant.ExpiresAt!=nil && deadline.After(*grant.ExpiresAt){deadline=*grant.ExpiresAt}
-        a.serviceCredentialTickets[id]=issuedCredentialTicket{
+        if !now.Before(deadline){return nil,errors.New("credential grant expired")}
+        staged[id]=issuedCredentialTicket{
             PeerDNS:peer,Principal:principal,SessionID:a.session.id,Alias:grant.Alias,
             Operation:operation,Target:target,ArgumentsSHA256:argumentsSHA,
             Revision:grant.Revision,Expires:deadline,
         }
         issued=append(issued,CredentialTicket{Alias:grant.Alias,Ticket:id})
     }
+    for id,grant:=range staged{a.serviceCredentialTickets[id]=grant}
     return issued,nil
 }
 
