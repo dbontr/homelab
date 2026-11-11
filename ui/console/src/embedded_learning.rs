@@ -154,6 +154,10 @@ pub fn LearningApp() -> Element {
         }
         button{class:"btn btn-outline",r#type:"button",
             onclick:move |_|{
+                if !mcp_app::host_fullscreen_available(){
+                    notice.set("Fullscreen mode is not available from this host.".to_owned());
+                    return;
+                }
                 error.set(String::new());
                 spawn(async move{
                     match mcp_app::request("ui/request-display-mode",
