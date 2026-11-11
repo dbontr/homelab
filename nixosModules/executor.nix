@@ -114,6 +114,11 @@ in
       };
       projects = lib.mkOption { type = lib.types.listOf lib.types.str; default = []; };
       workers = lib.mkOption { type = lib.types.listOf lib.types.str; default = []; };
+      devices = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = [];
+        description = "Exact enrolled USB device identities authorized for privileged passthrough.";
+      };
       images = lib.mkOption { type = lib.types.listOf lib.types.str; default = []; };
       imageReferences = lib.mkOption {
         type = lib.types.listOf lib.types.str;
@@ -279,6 +284,7 @@ in
           Endpoint = cfg.workspace.endpoint;
           Projects = cfg.workspace.projects;
           Workers = cfg.workspace.workers;
+          Devices = cfg.workspace.devices;
           Images = cfg.workspace.images;
           ImageReferences = cfg.workspace.imageReferences;
           Software = cfg.workspace.software;
