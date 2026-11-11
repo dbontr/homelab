@@ -378,8 +378,10 @@ struct CatalogDraft {
 }
 
 fn catalog_request(draft: &CatalogDraft) -> Result<Value,String> {
-    if draft.id.is_empty(){return Err("Enter a catalog ID.".to_owned());}
-    let mut payload=json!({"id":draft.id});
+    if draft.id.is_empty()||draft.host.is_empty(){
+        return Err("Enter the catalog ID and independent executor host.".to_owned());
+    }
+    let mut payload=json!({"id":draft.id,"host":draft.host});
     match draft.operation.as_str(){
         "register-image"=>{
             if !draft.image.contains("@sha256:"){return Err("Use a digest-qualified OCI image.".to_owned());}
@@ -393,10 +395,6 @@ fn catalog_request(draft: &CatalogDraft) -> Result<Value,String> {
             if packages.is_empty() || packages.len()>128 {
                 return Err("Enter 1 to 128 apt package names.".to_owned());
             }
-            if draft.host.is_empty(){
-                return Err("Select the independent executor host.".to_owned());
-            }
-            payload["host"]=json!(draft.host);
             payload["image_id"]=json!(draft.image_id);
             payload["packages"]=json!(packages);
             payload["description"]=json!(draft.description);
@@ -484,6 +482,13 @@ fn ComputeCatalog(csrf: String) -> Element {
                     }
                 }
                 label { class:"form-row",
+                    span { class:"label","Independent executor host" }
+                    input { class:"field",required:true,maxlength:"63",
+                        value:"{draft().host}",
+                        oninput:move |e|{let mut d=draft();d.host=e.value();draft.set(d)}
+                    }
+                }
+                label { class:"form-row",
                     span { class:"label","Catalog identifier" }
                     input { class:"field", required:true, maxlength:"80", value:"{draft().id}",
                         oninput:move |e|{let mut d=draft();d.id=e.value();draft.set(d)}
@@ -505,13 +510,6 @@ fn ComputeCatalog(csrf: String) -> Element {
                     }
                 }
                 if draft().operation=="register-software"{
-                    label { class:"form-row",
-                        span { class:"label","Independent executor host" }
-                        input { class:"field",required:true,maxlength:"63",
-                            value:"{draft().host}",
-                            oninput:move |e|{let mut d=draft();d.host=e.value();draft.set(d)}
-                        }
-                    }
                     label { class:"form-row",
                         span { class:"label","Approved image pool ID" }
                         input { class:"field",required:true,value:"{draft().image_id}",
