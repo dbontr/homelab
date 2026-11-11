@@ -88,7 +88,7 @@ Run `go run scripts/ai_residue_check.go` against the final repository when Go is
 
 Require a canonical `REFERENCES.md` at the repository root for every repository that this Skill modifies. Treat it as part of the implementation, not optional documentation.
 
-At the start of repository work, read `REFERENCES.md`. If it does not exist, create it from `assets/REFERENCES.md` or run `scripts/references_page_check.py --init <repo-root>`.
+At the start of repository work, read `REFERENCES.md`. If it does not exist, create it from `assets/REFERENCES.md` or run `go run scripts/references_page_check.go --init <repo-root>`.
 
 Maintain the page as current-state documentation:
 
@@ -104,7 +104,7 @@ Maintain the page as current-state documentation:
 
 If no external source materially supports the current repository, keep the canonical empty-state sentence from the template. Remove that sentence as soon as the first reference is added.
 
-Run `scripts/references_page_check.py <repo-root>` before completion. A code task is not complete if the required page is missing, malformed, stale relative to the work, contains duplicate or ephemeral references, or omits a material source used by the implementation. Consult `references/repository-references.md` for entry format and maintenance rules.
+Run `go run scripts/references_page_check.go <repo-root>` before completion. A code task is not complete if the required page is missing, malformed, stale relative to the work, contains duplicate or ephemeral references, or omits a material source used by the implementation. Consult `references/repository-references.md` for entry format and maintenance rules.
 
 ## Match the repository before changing it
 
