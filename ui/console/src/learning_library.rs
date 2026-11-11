@@ -400,6 +400,7 @@ fn ReasoningGraph(csrf: String) -> Element {
 #[component]
 fn ProblemLibrary(csrf: String) -> Element {
     let mut selected = use_signal(String::new);
+    let attachments_csrf = csrf.clone();
     let mut problems = use_resource({
         let token=csrf.clone();
         move || {
@@ -493,6 +494,12 @@ fn ProblemLibrary(csrf: String) -> Element {
                     }
                 }
             }
+            crate::learning_attachments::LearningAttachments {
+                key: "{selected()}",
+                csrf: attachments_csrf.clone(),
+                owner_kind: "problem".to_owned(),
+                owner_id: selected(),
+            }
         }
     }
 }
@@ -555,6 +562,8 @@ fn ReviewQueue(csrf: String) -> Element {
 
 #[component]
 fn SourceList(csrf: String) -> Element {
+    let attachments_csrf = csrf.clone();
+    let mut selected_source = use_signal(String::new);
     let mut sources=use_resource(move || {
         let token=csrf.clone();
         async move {
@@ -585,6 +594,7 @@ fn SourceList(csrf: String) -> Element {
                                         th { "Kind" }
                                         th { "Coverage" }
                                         th { "Imported" }
+                                        th { "Files" }
                                     } }
                                     tbody {
                                         for item in all {
@@ -593,6 +603,17 @@ fn SourceList(csrf: String) -> Element {
                                                 td { {label(&item,&["kind","mime_type","type"])} }
                                                 td { {label(&item,&["coverage","status","state"])} }
                                                 td { {label(&item,&["created_at","imported_at"])} }
+                                                td {
+                                                    button {
+                                                        class: "btn btn-outline btn-sm",
+                                                        r#type: "button",
+                                                        onclick: {
+                                                            let id = label(&item,&["id"]);
+                                                            move |_| selected_source.set(id.clone())
+                                                        },
+                                                        "Originals"
+                                                    }
+                                                }
                                             }
                                         }
                                     }
@@ -601,6 +622,14 @@ fn SourceList(csrf: String) -> Element {
                         }
                     }
                 }
+            }
+        }
+        if !selected_source().is_empty() {
+            crate::learning_attachments::LearningAttachments {
+                key: "{selected_source()}",
+                csrf: attachments_csrf.clone(),
+                owner_kind: "source".to_owned(),
+                owner_id: selected_source(),
             }
         }
     }
