@@ -53,6 +53,21 @@ fn store_path(path: &str) -> bool {
             matches!(c, std::path::Component::ParentDir | std::path::Component::CurDir))
 }
 
+// Select the committed Git tree, not the live filesystem checkout. Escaping
+// the file URL prevents path characters from changing the Nix flake reference.
+fn pinned_flake(source: &Path, revision: &str, host: &str) -> Result<String, Error> {
+    if !valid_hex(revision, 40) || !crate::valid_host(host) {
+        return Err(Error::Denied("invalid pinned release revision or host"));
+    }
+    let file_url = url::Url::from_directory_path(source)
+        .map_err(|_| Error::Configuration("release source must be an absolute file path"))?;
+    let source_path = file_url.as_str().strip_prefix("file://")
+        .ok_or(Error::Configuration("invalid release source file URL"))?;
+    Ok(format!(
+        "git+file://{source_path}?rev={revision}#nixosConfigurations.{host}.config.system.build.toplevel"
+    ))
+}
+
 fn require_root_owned_path(path: &Path) -> Result<(), Error> {
     if !path.is_absolute() { return Err(Error::Configuration("trusted release path must be absolute")); }
     let mut current = path;
@@ -233,10 +248,10 @@ impl ReleaseController {
         let head = run(&self.policy.git, &["-C".into(),root.into(),"rev-parse".into(),"HEAD".into()],
             Duration::from_secs(20)).await?;
         if head.trim() != revision { return Err(Error::Denied("source revision differs from requested commit")); }
-        let changes = run(&self.policy.git, &["-C".into(),root.into(),"status".into(),"--porcelain".into()],
+        let changes = run(&self.policy.git, &["-C".into(),root.into(),"status".into(),"--porcelain".into(),"--untracked-files=all".into()],
             Duration::from_secs(20)).await?;
         if !changes.trim().is_empty() { return Err(Error::Denied("source worktree is not clean")); }
-        let attribute = format!("{root}#nixosConfigurations.{}.config.system.build.toplevel", self.policy.host);
+        let attribute = pinned_flake(&self.policy.source, revision, &self.policy.host)?;
         let system = run(&self.policy.nix, &[
             "build".into(), "--offline".into(), "--no-link".into(),
             "--print-out-paths".into(), attribute
@@ -313,5 +328,34 @@ impl ReleaseController {
             return Err(Error::Storage("release journal is invalid"));
         }
         Ok(journal)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn release_flake_selects_an_exact_git_commit() {
+        let revision = "a".repeat(40);
+        let reference = pinned_flake(Path::new("/srv/homelab"), &revision, "saturn").unwrap();
+        assert!(reference.starts_with("git+file:///srv/homelab"));
+        assert_eq!(
+            reference.split_once('?').unwrap().1,
+            format!("rev={revision}#nixosConfigurations.saturn.config.system.build.toplevel")
+        );
+        assert!(!reference.starts_with("/srv/homelab#"));
+    }
+
+    #[test]
+    fn release_flake_escapes_path_delimiters_and_rejects_unpinned_sources() {
+        let revision = "0".repeat(40);
+        let reference = pinned_flake(
+            Path::new("/srv/lab #snapshot?"), &revision, "saturn"
+        ).unwrap();
+        assert!(reference.contains("lab%20%23snapshot%3F"));
+        assert!(pinned_flake(Path::new("relative/repo"), &revision, "saturn").is_err());
+        assert!(pinned_flake(Path::new("/srv/homelab"), "HEAD", "saturn").is_err());
+        assert!(pinned_flake(Path::new("/srv/homelab"), &revision, "untrusted/host").is_err());
     }
 }
