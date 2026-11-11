@@ -7,13 +7,25 @@ on:
     paths:
       - services/security-authority/**
       - services/core/security/**
+      - services/core/statelease/**
+      - services/core/cmd/homelab-securityd/**
+      - services/core/cmd/homelab-security-preflight/**
+      - packages/security.nix
+      - packages/security-authority.nix
+      - nixosModules/security.nix
+      - scripts/verify-security-authority.sh
       - .github/workflows/security-authority.yml
   pull_request:
     paths:
       - services/security-authority/**
       - services/core/security/**
+      - services/core/statelease/**
+      - services/core/cmd/homelab-securityd/**
+      - services/core/cmd/homelab-security-preflight/**
+      - packages/security.nix
       - packages/security-authority.nix
       - nixosModules/security.nix
+      - scripts/verify-security-authority.sh
       - .github/workflows/security-authority.yml
 
 permissions:
@@ -59,4 +71,4 @@ jobs:
         run: go test -race -count=1 ./security -run TestSecurityAuthority
       - name: Security and executor regressions
         working-directory: services/core
-        run: go test -race -count=1 ./security ./privileged
+        run: go test -race -count=1 ./security ./privileged ./statelease ./cmd/homelab-securityd ./cmd/homelab-security-preflight
