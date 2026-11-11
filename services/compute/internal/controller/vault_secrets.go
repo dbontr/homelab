@@ -8,9 +8,12 @@ import (
  "crypto/x509"
  "errors"
  "io"
+ "net"
  "net/http"
  "net/url"
  "os"
+ "path/filepath"
+ "syscall"
  "regexp"
  "strings"
  "time"
@@ -26,19 +29,64 @@ type VaultSecretClient struct {
  endpoint string
 }
 
+// A vault TLS name is an exact certificate DNS identity, not an IP literal,
+// wildcard, URL or hostname with ambiguous case.
+func validVaultServerDNS(name string)bool{
+ if name==""||len(name)>253||net.ParseIP(name)!=nil{return false}
+ for _,label:=range strings.Split(name,"."){
+  if len(label)==0||len(label)>63{return false}
+  for i:=0;i<len(label);i++{
+   c:=label[i]
+   ordinary:=(c>='a'&&c<='z')||(c>='0'&&c<='9')
+   if !ordinary&&(c!='-'||i==0||i==len(label)-1){return false}
+  }
+ }
+ return true
+}
+
+// Read only the opened, protected inode; a path replacement or symbolic
+// link cannot supply different trust material or the client private key.
+func protectedVaultTLSFile(path string,private bool)([]byte,error){
+ if !filepath.IsAbs(path)||filepath.Clean(path)!=path{return nil,errors.New("absolute TLS path required")}
+ file,err:=os.OpenFile(path,os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_CLOEXEC,0)
+ if err!=nil{return nil,errors.New("vault TLS file unavailable")}
+ defer file.Close()
+ info,err:=file.Stat()
+ if err!=nil||!info.Mode().IsRegular()||info.Size()<1||info.Size()>1<<20{
+  return nil,errors.New("vault TLS file has invalid custody")
+ }
+ forbidden:=os.FileMode(0o022)
+ if private{forbidden=0o077}
+ if info.Mode().Perm()&forbidden!=0{return nil,errors.New("vault TLS file has unsafe permissions")}
+ if private{
+  inode,ok:=info.Sys().(*syscall.Stat_t)
+  if !ok||inode.Uid!=uint32(os.Geteuid())||inode.Nlink!=1{
+   return nil,errors.New("vault private key has unsafe ownership")
+  }
+ }
+ data,err:=io.ReadAll(io.LimitReader(file,1<<20+1))
+ if err!=nil||len(data)>1<<20{return nil,errors.New("vault TLS file exceeds size limit")}
+ return data,nil
+}
+
 func NewVaultSecretClient(endpoint,serverName,caFile,certFile,keyFile string)(*VaultSecretClient,error){
  parsed,err:=url.Parse(endpoint)
  if err!=nil||parsed.Scheme!="https"||parsed.Host==""||parsed.User!=nil||
   parsed.Opaque!=""||parsed.RawQuery!=""||parsed.Fragment!=""||
-  (parsed.Path!=""&&parsed.Path!="/")||serverName==""||
+  (parsed.Path!=""&&parsed.Path!="/")||!validVaultServerDNS(serverName)||
   caFile==""||certFile==""||keyFile==""{
   return nil,errors.New("invalid owner vault service endpoint")
  }
- rootsRaw,err:=os.ReadFile(caFile)
- if err!=nil||len(rootsRaw)>128<<10{return nil,errors.New("vault trust roots unavailable")}
+ rootsRaw,err:=protectedVaultTLSFile(caFile,false)
+ if err!=nil{return nil,errors.New("vault trust roots unavailable")}
  roots:=x509.NewCertPool()
  if !roots.AppendCertsFromPEM(rootsRaw){return nil,errors.New("invalid vault trust roots")}
- pair,err:=tls.LoadX509KeyPair(certFile,keyFile)
+ certRaw,err:=protectedVaultTLSFile(certFile,false)
+ if err!=nil{return nil,errors.New("vault client certificate unavailable")}
+ keyRaw,err:=protectedVaultTLSFile(keyFile,true)
+ if err!=nil{return nil,errors.New("vault private key unavailable")}
+ defer func(){for i:=range keyRaw{keyRaw[i]=0}}()
+ pair,err:=tls.X509KeyPair(certRaw,keyRaw)
  if err!=nil{return nil,errors.New("vault client certificate unavailable")}
  transport:=&http.Transport{
   Proxy:nil,DisableKeepAlives:true,
