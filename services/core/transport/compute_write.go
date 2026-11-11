@@ -116,14 +116,14 @@ type consoleWorkspaceRequest struct{
 }
 
 func validConsoleWorkspace(req consoleWorkspaceRequest) bool {
-    if !consoleProjectID.MatchString(req.ProjectID)||
+    if !catalogID(req.ProjectID)||
         math.IsNaN(req.CPU)||math.IsInf(req.CPU,0)||
         req.CPU<0.1||req.CPU>32||req.MemoryMB<64||req.MemoryMB>131072||
         req.DurationMinutes<1||req.DurationMinutes>1440||
         len(req.Image)>256||len(req.Environment)>80||len(req.ImagePoolID)>80||
-        (req.NodeID!=""&&!consoleProjectID.MatchString(req.NodeID))||
-        (req.ImagePoolID!=""&&!consoleProjectID.MatchString(req.ImagePoolID))||
-        (req.Environment!=""&&!consoleProjectID.MatchString(req.Environment))||
+        (req.NodeID!=""&&!catalogID(req.NodeID))||
+        (req.ImagePoolID!=""&&!catalogID(req.ImagePoolID))||
+        (req.Environment!=""&&!catalogID(req.Environment))||
         (req.Architecture!=""&&req.Architecture!="amd64"&&req.Architecture!="arm64")||
         len(req.USBNode)>80||len(req.USBDeviceID)>128||
         req.MinGPUMemoryMB<0||req.MinGPUMemoryMB>1000000||
@@ -133,7 +133,7 @@ func validConsoleWorkspace(req consoleWorkspaceRequest) bool {
     if req.Image!=""&&req.ImagePoolID!=""||req.Environment!=""&&req.ImagePoolID!=""{
         return false
     }
-    if req.USBPassthrough&&(req.USBNode==""||req.USBDeviceID=="")||
+    if req.USBPassthrough&&(!catalogID(req.USBNode)||req.USBDeviceID=="")||
         !req.USBPassthrough&&(req.USBNode!=""||req.USBDeviceID!=""){
         return false
     }
@@ -170,7 +170,7 @@ func (s *Server) uiComputeWorkspace(w http.ResponseWriter,r *http.Request){
     if !validConsoleWorkspace(in){
         writeError(w,400,"invalid Compute resource selection");return
     }
-    if !consoleProjectID.MatchString(in.Host)||
+    if len(in.Host)>63||!consoleProjectID.MatchString(in.Host)||
         in.ImagePoolID==""||in.Image!=""||in.Environment!=""{
         writeError(w,400,"workspace creation requires an exact executor host and approved image pool")
         return
@@ -273,7 +273,7 @@ func validConsoleProgramSource(raw string)bool{
 }
 
 func catalogID(id string) bool {
-    return id!=""&&len(id)<=80&&id[0]>='a'&&id[0]<='z'&&
+    return len(id)>=2&&len(id)<=63&&id[0]>='a'&&id[0]<='z'&&
         strings.IndexFunc(id,func(r rune)bool{
             return !(r>='a'&&r<='z'||r>='0'&&r<='9'||r=='-')
         })<0
