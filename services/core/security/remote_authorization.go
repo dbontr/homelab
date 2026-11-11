@@ -69,7 +69,10 @@ func(c *RemoteAuthorizationClient)requestDecision(ctx context.Context,path,opera
  response,err:=c.client.Do(request)
  if err!=nil{return Authorization{},fmt.Errorf("remote security service unavailable: %w",err)}
  defer response.Body.Close()
- if response.StatusCode!=http.StatusOK{return Authorization{},errors.New("remote security service refused authorization")}
+ if response.StatusCode!=http.StatusOK||
+  !strings.HasPrefix(response.Header.Get("Content-Type"),"application/json"){
+  return Authorization{},errors.New("remote security service refused authorization")
+ }
  const maxAuthorizationResponse=8192
  payload,err:=io.ReadAll(io.LimitReader(response.Body,maxAuthorizationResponse+1))
  if err!=nil||len(payload)>maxAuthorizationResponse{
@@ -81,6 +84,24 @@ func(c *RemoteAuthorizationClient)requestDecision(ctx context.Context,path,opera
  if err:=decoder.Decode(&result);err!=nil{return Authorization{},errors.New("invalid remote authorization result")}
  var extra any
  if err:=decoder.Decode(&extra);err!=io.EOF{return Authorization{},errors.New("invalid remote authorization result")}
+ if result.Allowed&&(result.Reason!=""||result.ConfirmationID!=""||
+  !result.ConfirmationExpiresAt.IsZero()){
+  return Authorization{},errors.New("contradictory authorization approval")
+ }
+ if (!result.Allowed||path!="/v1/authorize")&&len(result.CredentialTickets)!=0{
+  return Authorization{},errors.New("unexpected credential capabilities")
+ }
+ if len(result.CredentialTickets)>maxCredentialTicketsPerOperation{
+  return Authorization{},errors.New("credential capability limit exceeded")
+ }
+ seen:=map[string]bool{}
+ for _,ticket:=range result.CredentialTickets{
+  if !serviceCredentialName.MatchString(ticket.Alias)||
+   !serviceCredentialTicket.MatchString(ticket.Ticket)||seen[ticket.Alias]{
+   return Authorization{},errors.New("invalid or duplicate credential capability")
+  }
+  seen[ticket.Alias]=true
+ }
  return result,nil
 }
 
