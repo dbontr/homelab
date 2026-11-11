@@ -29,7 +29,7 @@ type RemoteAuthorizationClient struct{client *http.Client;endpoint string}
 func NewRemoteAuthorizationClient(cfg RemoteAuthorizationConfig)(*RemoteAuthorizationClient,error){
  u,err:=url.Parse(cfg.Endpoint)
  if err!=nil||u.Scheme!="https"||u.Host==""||u.User!=nil||u.Opaque!=""||u.Fragment!=""||u.RawQuery!=""||(u.Path!=""&&u.Path!="/")||
-  cfg.ServerName==""||cfg.TrustRoots==nil||len(cfg.Certificate.Certificate)==0||cfg.Certificate.PrivateKey==nil{
+  !ValidServiceDNS(cfg.ServerName)||cfg.TrustRoots==nil||len(cfg.Certificate.Certificate)==0||cfg.Certificate.PrivateKey==nil{
   return nil,errors.New("invalid remote authorizer configuration")
  }
  transport:=&http.Transport{Proxy:nil,DisableKeepAlives:true,
