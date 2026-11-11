@@ -306,6 +306,7 @@ async fn session_client_delete(State(shared): State<Shared>, headers: HeaderMap)
 async fn operation_response(
     shared: Shared, headers: HeaderMap, raw: Bytes, consume: bool,
     peer: Option<&crate::grants::VerifiedServiceIdentity>,
+    replay: bool,
 ) -> Response {
     let Ok(assertion) = owner_assertion(&headers) else {
         return protected_status("independent owner identity required", StatusCode::FORBIDDEN);
@@ -315,7 +316,10 @@ async fn operation_response(
     };
     let args = arguments(&input);
     let result = shared.with_authority(|auth| {
-        if consume {
+        if replay {
+            auth.replay_gateway(assertion, &input.operation, &input.target, args)
+                .map(AuthorizationWire::from)
+        } else if consume {
             match peer {
                 Some(peer) => auth.authorize_remote_gateway(
                     assertion, peer, &input.operation, &input.target, args
@@ -348,11 +352,17 @@ async fn operation_response(
 }
 
 async fn operation_client_preview(State(shared): State<Shared>, headers: HeaderMap, raw: Bytes) -> Response {
-    operation_response(shared, headers, raw, false, None).await
+    operation_response(shared, headers, raw, false, None, false).await
 }
 
 async fn operation_client_authorize(State(shared): State<Shared>, headers: HeaderMap, raw: Bytes) -> Response {
-    operation_response(shared, headers, raw, true, None).await
+    operation_response(shared, headers, raw, true, None, false).await
+}
+
+async fn operation_client_replay(
+    State(shared): State<Shared>, headers: HeaderMap, raw: Bytes,
+) -> Response {
+    operation_response(shared, headers, raw, false, None, true).await
 }
 
 pub fn owner_router(shared: Shared) -> Router {
@@ -377,7 +387,7 @@ async fn remote_authorize(
     if !peer.may_authorize {
         return protected_status("remote operation authorization denied", StatusCode::FORBIDDEN);
     }
-    operation_response(shared, headers, raw, true, Some(&peer.identity)).await
+    operation_response(shared, headers, raw, true, Some(&peer.identity), false).await
 }
 
 async fn remote_preview(
@@ -389,7 +399,17 @@ async fn remote_preview(
     if !peer.may_authorize {
         return protected_status("remote operation authorization denied", StatusCode::FORBIDDEN);
     }
-    operation_response(shared, headers, raw, false, Some(&peer.identity)).await
+    operation_response(shared, headers, raw, false, Some(&peer.identity), false).await
+}
+
+async fn remote_replay(
+    axum::Extension(peer): axum::Extension<crate::remote::VerifiedPeer>,
+    State(shared): State<Shared>, headers: HeaderMap, raw: Bytes,
+) -> Response {
+    if !peer.may_authorize {
+        return protected_status("remote replay authorization denied", StatusCode::FORBIDDEN);
+    }
+    operation_response(shared, headers, raw, false, Some(&peer.identity), true).await
 }
 
 async fn remote_service_credential(
@@ -430,6 +450,7 @@ pub fn remote_router(shared: Shared) -> Router {
     Router::new()
         .route("/v1/authorize", post(remote_authorize))
         .route("/v1/preview", post(remote_preview))
+        .route("/v1/replay", post(remote_replay))
         .route("/v1/service-credentials/{alias}", post(remote_service_credential))
         .layer(DefaultBodyLimit::max(MAX_JSON_BYTES))
         .layer(middleware::from_fn(private_headers))
@@ -440,6 +461,7 @@ pub fn client_router(shared: Shared) -> Router {
     Router::new()
         .route("/v1/session", get(session_client_get).delete(session_client_delete))
         .route("/v1/preview", post(operation_client_preview))
+        .route("/v1/replay", post(operation_client_replay))
         .route("/v1/authorize", post(operation_client_authorize))
         .layer(DefaultBodyLimit::max(MAX_JSON_BYTES))
         .layer(middleware::from_fn(private_headers))
