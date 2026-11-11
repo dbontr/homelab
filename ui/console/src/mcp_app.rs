@@ -1,6 +1,6 @@
 //! JSON-RPC transport for an MCP Apps sandboxed iframe.
 //! The iframe receives no backend token; the host mediates tool calls.
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -70,6 +70,7 @@ struct Bridge {
     _listener: Closure<dyn FnMut(MessageEvent)>,
     pending: Rc<RefCell<HashMap<u32, Pending>>>,
     host_result: Rc<RefCell<Option<Value>>>,
+    closed: Rc<Cell<bool>>,
     next_id: u32,
 }
 
@@ -85,7 +86,10 @@ impl Bridge {
         let pending_messages = pending.clone();
         let host_result = Rc::new(RefCell::new(None::<Value>));
         let observed_result = host_result.clone();
+        let closed = Rc::new(Cell::new(false));
+        let closed_for_listener = closed.clone();
         let expected_source = parent.clone();
+        let reply_destination = parent.clone();
         let listener = Closure::<dyn FnMut(MessageEvent)>::new(move |event| {
             let Some(source) = event.source() else { return };
             if !Object::is(&JsValue::from(source), expected_source.as_ref()) {
@@ -93,6 +97,24 @@ impl Bridge {
             }
             let Ok(raw) = JSON::stringify(&event.data()) else { return };
             let Some(raw) = raw.as_string() else { return };
+            if raw.len() > MAX_REPLY { return; }
+            if let Ok(value) = serde_json::from_str::<Value>(&raw) {
+                if value.get("jsonrpc").and_then(Value::as_str)==Some("2.0")
+                    && value.get("method").and_then(Value::as_str)==Some("ui/resource-teardown") {
+                    if let Some(id)=value.get("id").filter(|id|
+                        id.is_number() || id.is_string()) {
+                        let response=json!({"jsonrpc":"2.0","id":id,"result":{}});
+                        if let Ok(reply)=JSON::parse(&response.to_string()) {
+                            let _=reply_destination.post_message(&reply,"*");
+                        }
+                    }
+                    closed_for_listener.set(true);
+                    pending_messages.borrow_mut().clear();
+                    observed_result.replace(None);
+                    return;
+                }
+            }
+            if closed_for_listener.get(){return}
             if let Some(value) = decode_host_result(&raw) {
                 observed_result.replace(Some(value));
                 return;
@@ -103,10 +125,13 @@ impl Bridge {
         });
         current.add_event_listener_with_callback("message", listener.as_ref().unchecked_ref())
             .map_err(|_| "MCP Apps message listener unavailable")?;
-        Ok(Self { parent, current, _listener: listener, pending, host_result, next_id: 1 })
+        Ok(Self { parent, current, _listener: listener, pending, host_result, closed, next_id: 1 })
     }
 
     fn send(&mut self, method: &str, params: Value) -> Result<oneshot::Receiver<Result<Value, String>>, String> {
+        if self.closed.get() {
+            return Err("MCP Apps resource has been torn down".to_owned());
+        }
         if self.pending.borrow().len() >= MAX_PENDING {
             return Err("Too many pending MCP Apps requests".to_owned());
         }
@@ -134,6 +159,9 @@ impl Bridge {
     }
 
     fn notify(&self, method: &str) -> Result<(), String> {
+        if self.closed.get() {
+            return Err("MCP Apps resource has been torn down".to_owned());
+        }
         let payload = JSON::parse(&json!({"jsonrpc":"2.0","method":method}).to_string())
             .map_err(|_| "Unable to encode MCP Apps notification")?;
         self.parent.post_message(&payload, "*")
