@@ -147,9 +147,9 @@ create assessment records or increase mastery.
 ## Learning MCP App release
 
 The Rust Learning MCP App is opt-in through
-`services.adaptiveTeaching.model` for private model proposals and
-`services.adaptiveTeaching.appBundle.directory` with
-`services.adaptiveTeaching.appBundle.origin` for the verified UI bundle.
+`services.adaptiveTeachingMcp.model` for private model proposals and
+`services.adaptiveTeachingMcp.appBundle.directory` with
+`services.adaptiveTeachingMcp.appBundle.origin` for the verified UI bundle.
 The Learning service retains its original embedded HTML resource while
 the app bundle is disabled. With a verified release, the exact same
 `ui://adaptive-teaching/learning-workspace.html` URI returns the
