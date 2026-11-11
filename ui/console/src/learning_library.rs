@@ -365,7 +365,7 @@ fn ReasoningGraph(csrf: String) -> Element {
                         rsx! {
                             div { class: "card-body stack",
                                 p { class: "small muted",
-                                    "Relation: {label(&value,&["relation","kind"])}"
+                                    {format!("Relation: {}", label(&value,&["relation","kind"]))}
                                 }
                                 p { "Premises: {premises}" }
                                 p { "Conclusion: {label(&value,&["conclusion","conclusion_id"])}" }
@@ -765,7 +765,7 @@ fn SourceCurriculum(csrf: String, source_id: String, on_imported: EventHandler<(
                                             p { class: "small muted", "{quote}" }
                                         }
                                         p { class: "small muted",
-                                            "Prerequisites: " {records(step, &["dependencies"]).len()}
+                                            {format!("Prerequisites: {}", records(step, &["dependencies"]).len())}
                                         }
                                     }
                                 }
