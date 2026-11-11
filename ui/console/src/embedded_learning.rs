@@ -244,6 +244,8 @@ pub fn LearningApp() -> Element {
 
 #[component]
 fn EmbeddedAnswer(question: Option<Value>,on_saved:EventHandler<()>) -> Element {
+    let mut model_consent=use_signal(||false);
+    let mut model_proposal=use_signal(||None::<Value>);
     let mut answer=use_signal(String::new);
     let mut reasoning=use_signal(String::new);
     let mut confidence=use_signal(String::new);
@@ -265,6 +267,40 @@ fn EmbeddedAnswer(question: Option<Value>,on_saved:EventHandler<()>) -> Element 
                     div{class:"alert",role:"status","Response saved. Await independent assessment."}
                     p{ {field(&question,&["learner_response"])} }
                     p{class:"small muted",{field(&question,&["learner_reasoning"])}}
+                    label{class:"inline-row",
+                        input{r#type:"checkbox",checked:model_consent(),disabled:busy(),
+                            onchange:move |event|model_consent.set(event.checked())}
+                        span{"Disclose this submitted answer, reasoning and committed grading reference to the configured model for provisional assessment."}
+                    }
+                    button{
+                        class:"btn btn-outline",r#type:"button",disabled:busy()||!model_consent(),
+                        onclick:{
+                            let question_id=id.clone();
+                            move |_|{
+                                if busy()||!model_consent()||!valid_identity(&question_id){return}
+                                let args=json!({"question_id":question_id,
+                                    "allow_model_disclosure":true});
+                                error.set(String::new());model_proposal.set(None);busy.set(true);
+                                spawn(async move{
+                                    match mcp_app::call_learning_tool::<Value>(
+                                        "propose_question_model_assessment",args).await{
+                                        Ok(value)=>{model_proposal.set(Some(value));model_consent.set(false);}
+                                        Err(message)=>error.set(message),
+                                    }
+                                    busy.set(false);
+                                });
+                            }
+                        },
+                        "Request provisional question feedback"
+                    }
+                    if let Some(value)=model_proposal(){
+                        p{class:"small muted",
+                            "This proposal is not a recorded grade and awards no mastery."
+                        }
+                        pre{class:"mono small",
+                            "{serde_json::to_string_pretty(&value).unwrap_or_default()}"
+                        }
+                    }
                 }else if status!="pending" {
                     p{class:"small muted","This question is not awaiting a learner answer."}
                 }else{
@@ -457,6 +493,8 @@ fn EmbeddedSession(session:Option<Value>,session_id:String,on_saved:EventHandler
 
 #[component]
 fn EmbeddedSource(source_id:String)->Element{
+    let mut extraction_consent=use_signal(||false);
+    let mut extraction=use_signal(||None::<Value>);
     let mut preview=use_signal(||None::<Value>);
     let mut receipt=use_signal(||None::<Value>);
     let mut consent=use_signal(||false);
@@ -468,6 +506,43 @@ fn EmbeddedSource(source_id:String)->Element{
             description:"Import only reviewed claims and prerequisite links; no mastery is awarded.".to_owned(),
             div{class:"card-body stack",
                 if !error().is_empty(){Notice{message:error()}}
+                label{class:"inline-row",
+                    input{r#type:"checkbox",checked:extraction_consent(),disabled:busy(),
+                        onchange:move |event|extraction_consent.set(event.checked())}
+                    span{"Disclose the next source passage to the configured model. Extracted claims will require independent audit."}
+                }
+                button{class:"btn btn-outline",r#type:"button",
+                    disabled:busy()||!valid_identity(&source_id)||!extraction_consent(),
+                    onclick:{
+                        let source=source_id.clone();
+                        move |_|{
+                            if busy()||!extraction_consent()||!valid_identity(&source){return}
+                            let args=json!({"source_id":source,
+                                "allow_model_disclosure":true});
+                            busy.set(true);error.set(String::new());extraction.set(None);
+                            spawn(async move{
+                                match mcp_app::call_learning_tool::<Value>(
+                                    "stage_model_source_extraction",args).await{
+                                    Ok(value)=>{
+                                        extraction.set(Some(value));
+                                        extraction_consent.set(false);
+                                    }
+                                    Err(msg)=>error.set(msg),
+                                }
+                                busy.set(false);
+                            });
+                        }
+                    },
+                    "Stage a model extraction for audit"
+                }
+                if let Some(value)=extraction(){
+                    p{class:"small muted",
+                        "The extraction is provisional; claims require a separate audit."
+                    }
+                    pre{class:"mono small",
+                        "{serde_json::to_string_pretty(&value).unwrap_or_default()}"
+                    }
+                }
                 button{class:"btn btn-outline",r#type:"button",
                     disabled:busy()||!valid_identity(&source_id),
                     onclick:{
