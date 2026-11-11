@@ -267,6 +267,9 @@ pub(crate) fn release_workspace(workspace: &str) -> Result<usize, &'static str> 
     matches.sort_by_key(|path| {
         if path.extension().and_then(|s| s.to_str()) == Some("lease") { 0 } else { 1 }
     });
+    let released = matches.iter().filter(|path| {
+        path.extension().and_then(|s| s.to_str()) == Some("lease")
+    }).count();
     for path in &matches {
         // The Go controller must have already verified that the workspace
         // container is absent. This helper never destroys a running container.
@@ -274,7 +277,7 @@ pub(crate) fn release_workspace(workspace: &str) -> Result<usize, &'static str> 
     }
     fs::File::open(&root).and_then(|dir| dir.sync_all())
         .map_err(|_| "cannot sync released custody")?;
-    Ok(matches.len())
+    Ok(released)
 }
 
 #[cfg(test)]
