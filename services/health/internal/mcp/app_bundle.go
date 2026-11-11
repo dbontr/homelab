@@ -141,6 +141,11 @@ func LoadAppBundle(directory, origin string) (*AppBundle, error) {
         // independently hosted entrypoint. Verify its bytes and marker but
         // do not expose its resource through a Health MCP tool.
         if name == "learning.html" {
+            marker := `<meta name="homelab-mcp-view" content="learning">`
+            if len(data)>1<<20 || !strings.Contains(string(data),marker) ||
+                !strings.Contains(string(data),"<head>") {
+                return errors.New("Learning App entrypoint marker is missing")
+            }
             return nil
         }
         for view, expected := range healthAppViews {
