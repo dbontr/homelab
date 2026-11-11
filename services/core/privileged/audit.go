@@ -146,6 +146,13 @@ func(j *AuditJournal)Record(id,operation,target,digest,outcome string)error{
  previous,exists:=j.seen[entry.ID]
  if entry.Outcome=="started" {
   if exists{return errors.New("audit ID was already used")}
+  for _,prior:=range j.seen{
+   if prior.Operation==entry.Operation&&prior.Target==entry.Target&&
+    prior.ArgumentsSHA256==entry.ArgumentsSHA256&&
+    (prior.Outcome=="started"||prior.Outcome=="indeterminate"){
+    return errors.New("matching unresolved execution requires reconciliation")
+   }
+  }
  }else{
   if !exists||previous.Outcome!="started"||previous.Operation!=entry.Operation||
    previous.Target!=entry.Target||previous.ArgumentsSHA256!=entry.ArgumentsSHA256||
