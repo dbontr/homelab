@@ -102,6 +102,24 @@ func name(id string) (string, error) {
 	return "pwm-" + id, nil
 }
 
+// Raw-device operations use only the Nix-store Docker client selected by
+// the host, not an executable that a worker can inject through its PATH.
+func dockerExecutable() (string,error) {
+    executable,err:=exec.LookPath("docker")
+    if err!=nil{return "",errors.New("Docker is not installed")}
+    if !nativeCustodySelected(){return executable,nil}
+    canonical,err:=filepath.EvalSymlinks(executable)
+    if err!=nil||!filepath.IsAbs(canonical)||
+        !strings.HasPrefix(canonical,"/nix/store/"){
+        return "",errors.New("native device custody requires a pinned Docker client")
+    }
+    info,err:=os.Lstat(canonical)
+    if err!=nil||!info.Mode().IsRegular()||info.Mode().Perm()&0022!=0{
+        return "",errors.New("native device Docker executable is not protected")
+    }
+    return canonical,nil
+}
+
 // Docker custody and the native release verifier must inspect the same
 // local daemon. Explicit CLI selection overrides a configured remote
 // context when raw hardware passthrough is enabled.
@@ -113,12 +131,11 @@ func dockerInvocationArgs(args ...string) []string {
 }
 
 func (r *Runner) docker(ctx context.Context, timeout time.Duration, input io.Reader, args ...string) ([]byte, []byte, int, error) {
-	if _, err := exec.LookPath("docker"); err != nil {
-		return nil, nil, -1, errors.New("Docker is not installed")
-	}
+	binary,err:=dockerExecutable()
+    if err!=nil{return nil,nil,-1,err}
 	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	cmd := exec.CommandContext(runCtx, "docker", dockerInvocationArgs(args...)...)
+	cmd := exec.CommandContext(runCtx, binary, dockerInvocationArgs(args...)...)
     if nativeCustodySelected(){
         cmd.Env=append(os.Environ(),
             "DOCKER_HOST=unix:///var/run/docker.sock","DOCKER_CONTEXT=")
