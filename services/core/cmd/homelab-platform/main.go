@@ -31,6 +31,12 @@ import (
     "github.com/dbontr/homelab-new/system/transport"
 )
 
+func protectedServiceCredential(path string, mode os.FileMode) bool {
+ if mode.Perm()&0077==0{return true}
+ directory:=os.Getenv("CREDENTIALS_DIRECTORY")
+ return directory!=""&&filepath.Dir(filepath.Clean(path))==filepath.Clean(directory)&&mode.Perm()&0037==0
+}
+
 func secret(path string) (string,error) {
     if path=="" {return "",errors.New("token file path is required")}
     b,e:=os.ReadFile(path);if e!=nil{return "",e}
@@ -103,7 +109,7 @@ func main(){
     if motivationURL!=""{
         if motivationTokenPath==""{log.Fatal("motivation service requires dedicated token file")}
         info,err:=os.Lstat(motivationTokenPath)
-        if err!=nil||!info.Mode().IsRegular()||info.Mode().Perm()&0077!=0{
+        if err!=nil||!info.Mode().IsRegular()||!protectedServiceCredential(motivationTokenPath,info.Mode()){
             log.Fatal("motivation service token must be a private regular file")
         }
         identity,err:=secret(motivationTokenPath)
