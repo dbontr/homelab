@@ -450,16 +450,26 @@ func (a *AdminSessions) Authorize(client,operation,target string,args json.RawMe
 // AuthorizeFor rechecks the owner session and consumes a matching confirmed
 // challenge at the actual executor operation boundary.
 func (a *AdminSessions) AuthorizeFor(principal,client,operation,target string,args json.RawMessage) Authorization {
- return a.evaluateFor(principal,client,operation,target,args,true)
+ return a.evaluateFor(principal,client,operation,target,args,true,"")
 }
 
 // PreviewFor checks the same policy and records pending confirmations without
 // consuming an approved challenge or refreshing session activity.
 func (a *AdminSessions) PreviewFor(principal,client,operation,target string,args json.RawMessage) Authorization {
- return a.evaluateFor(principal,client,operation,target,args,false)
+ return a.evaluateFor(principal,client,operation,target,args,false,"")
 }
 
-func (a *AdminSessions) evaluateFor(principal,client,operation,target string,args json.RawMessage,consume bool) Authorization {
+// authorizeForServicePeer is reached only through the TLS listener after
+// certificate verification. Tickets and owner authorization share one lock.
+func (a *AdminSessions) authorizeForServicePeer(
+ principal,client,peer,operation,target string,args json.RawMessage,
+) Authorization {
+ return a.evaluateFor(principal,client,operation,target,args,true,peer)
+}
+
+func (a *AdminSessions) evaluateFor(
+ principal,client,operation,target string,args json.RawMessage,consume bool,peer string,
+) Authorization {
  a.mu.Lock()
  defer a.mu.Unlock()
  now:=a.now().UTC()
@@ -489,17 +499,26 @@ func (a *AdminSessions) evaluateFor(principal,client,operation,target string,arg
 	}
 	sum := sha256.Sum256(canonical)
 	digest := hex.EncodeToString(sum[:])
+    approve:=func()Authorization{
+        result:=Authorization{Allowed:true}
+        if peer!=""&&consume {
+            tickets,err:=a.issueServiceTicketsLocked(principal,peer,operation,target,digest,now)
+            if err!=nil{return Authorization{Reason:"credential capability unavailable"}}
+            result.CredentialTickets=tickets
+        }
+        if consume{a.session.lastActivity=now}
+        return result
+    }
 	if !rule.Destructive {
-		if consume { a.session.lastActivity = now }
-		return Authorization{Allowed: true}
+		return approve()
 	}
 	a.pruneConfirmations(now)
 	for id, item := range a.pending {
 		if item.sessionID == a.session.id && item.Operation == operation && item.Target == target && item.ArgumentsSHA256 == digest {
 			if item.Confirmed {
-				if consume { delete(a.pending, id) }
-				if consume { a.session.lastActivity = now }
-				return Authorization{Allowed: true}
+                decision:=approve()
+                if decision.Allowed&&consume{delete(a.pending,id)}
+                return decision
 			}
 			return Authorization{Reason: "confirmation required", ConfirmationID: id, ConfirmationExpiresAt: item.ExpiresAt}
 		}
