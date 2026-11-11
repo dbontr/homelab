@@ -67,6 +67,7 @@ type Authorization struct {
 	Reason                string    `json:"reason,omitempty"`
 	ConfirmationID        string    `json:"confirmation_id,omitempty"`
 	ConfirmationExpiresAt time.Time `json:"confirmation_expires_at,omitempty"`
+	CredentialTickets []CredentialTicket `json:"credential_tickets,omitempty"`
 }
 
 type PendingConfirmation struct {
@@ -108,6 +109,7 @@ type AdminSessions struct {
 	gatewayAudience string
 	vault *Vault
 	serviceCredentialGrants map[string]ServiceCredentialGrant
+	serviceCredentialTickets map[string]issuedCredentialTicket
 	oauth *OAuthBroker
 	oauthClient *http.Client
 	verifier  PassphraseRecord
@@ -163,7 +165,7 @@ func NewAdminSessions(cfg SessionConfig) (*AdminSessions, error) {
 		rules[rule.Operation] = rule
 	}
 	manager := &AdminSessions{owner: cfg.Owner, client: cfg.Client, verifier: cfg.Verifier, totpKey: key, stateFile: cfg.StateFile,
-		rules: rules, pending: make(map[string]confirmation), now: time.Now, state: authenticatorState{Version: 1, LastTOTPStep: -1}}
+		rules: rules, pending: make(map[string]confirmation), serviceCredentialTickets: make(map[string]issuedCredentialTicket), now: time.Now, state: authenticatorState{Version: 1, LastTOTPStep: -1}}
 	if err := manager.loadState(); err != nil {
 		return nil, err
 	}
@@ -272,6 +274,7 @@ func (a *AdminSessions) authenticateLocked(password, code string, now time.Time)
 		a.faulted = true
 		a.session = nil
 		a.pending = make(map[string]confirmation)
+		a.serviceCredentialTickets = make(map[string]issuedCredentialTicket)
 		return err
 	}
 	a.state = next
@@ -342,6 +345,7 @@ func (a *AdminSessions) AuthenticateFor(principal,password, code string) (Sessio
 	}
 	a.session = &activeSession{principal:principal,id: id, created: now, lastActivity: now}
 	a.pending = make(map[string]confirmation)
+	a.serviceCredentialTickets = make(map[string]issuedCredentialTicket)
 	return a.statusLocked(now), nil
 }
 
@@ -353,6 +357,7 @@ func (a *AdminSessions) validSession(now time.Time) bool {
 	if now.Before(s.lastActivity) || !now.Before(s.lastActivity.Add(SessionIdleTimeout)) || !now.Before(s.created.Add(SessionAbsoluteTimeout)) {
 		a.session = nil
 		a.pending = make(map[string]confirmation)
+		a.serviceCredentialTickets = make(map[string]issuedCredentialTicket)
 		return false
 	}
 	return true
@@ -387,6 +392,7 @@ func (a *AdminSessions) RevokeFor(principal string) bool {
  if !a.validSession(a.now().UTC())||principal==""||a.session.principal!=principal{return false}
  a.session=nil
  a.pending=make(map[string]confirmation)
+ a.serviceCredentialTickets=make(map[string]issuedCredentialTicket)
  return true
 }
 
@@ -408,6 +414,7 @@ func (a *AdminSessions) Revoke() {
 	defer a.mu.Unlock()
 	a.session = nil
 	a.pending = make(map[string]confirmation)
+	a.serviceCredentialTickets = make(map[string]issuedCredentialTicket)
 }
 
 func (a *AdminSessions) Pending() []PendingConfirmation {
