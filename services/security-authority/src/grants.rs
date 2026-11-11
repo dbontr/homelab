@@ -15,6 +15,10 @@ pub struct ServiceCredentialGrant {
     pub alias: String,
     pub provider: String,
     pub handle: String,
+    pub operation: String,
+    pub target: String,
+    #[serde(default)]
+    pub arguments_sha256: Option<String>,
     #[serde(default)]
     pub revision: Option<String>,
     #[serde(default)]
@@ -42,6 +46,17 @@ pub(crate) fn valid_service_dns(name: &str) -> bool {
             && bytes.iter().all(|byte| byte.is_ascii_lowercase()
                 || byte.is_ascii_digit() || *byte == b'-')
     })
+}
+
+fn valid_operation(operation: &str) -> bool {
+    operation.len() <= 128
+        && operation.bytes().next().is_some_and(|b| b.is_ascii_alphanumeric())
+        && operation.bytes().all(|b| b.is_ascii_alphanumeric()
+            || matches!(b, b'_' | b'-' | b'.' | b'/' | b':'))
+}
+
+fn valid_target(target: &str) -> bool {
+    valid_operation(target)
 }
 
 fn valid_revision(value: &str) -> bool {
@@ -74,11 +89,18 @@ struct BoundGrant {
     provider: String,
     handle: String,
     revision: String,
+    arguments_sha256: Option<String>,
     expires_at: Option<i64>,
 }
 
+#[derive(Clone)]
+pub(crate) struct ScopedCredential {
+    pub alias: String,
+    pub revision: String,
+}
+
 pub(crate) struct ServiceCredentialPolicy {
-    entries: BTreeMap<(String, String), BoundGrant>,
+    entries: BTreeMap<(String, String, String, String), BoundGrant>,
 }
 
 impl ServiceCredentialPolicy {
@@ -94,6 +116,9 @@ impl ServiceCredentialPolicy {
                 || !valid_name(&grant.alias)
                 || !valid_name(&grant.provider)
                 || !valid_handle(&grant.handle)
+                || !valid_operation(&grant.operation)
+                || !valid_target(&grant.target)
+                || grant.arguments_sha256.as_deref().is_some_and(|digest| !valid_revision(digest))
             {
                 return Err(Error::InvalidConfiguration);
             }
@@ -114,32 +139,66 @@ impl ServiceCredentialPolicy {
             }
             let bound = BoundGrant {
                 provider: grant.provider, handle: grant.handle, revision, expires_at,
+                arguments_sha256: grant.arguments_sha256,
             };
-            if entries.insert((grant.client_dns, grant.alias), bound).is_some() {
+            if entries.insert((grant.client_dns, grant.alias, grant.operation, grant.target), bound).is_some() {
                 return Err(Error::InvalidConfiguration);
             }
         }
         Ok(Self { entries })
     }
 
+    pub(crate) fn scoped(
+        &self,
+        peer: &VerifiedServiceIdentity,
+        operation: &str,
+        target: &str,
+        arguments_sha256: &str,
+        now: i64,
+    ) -> Result<Vec<ScopedCredential>, Error> {
+        let mut result = Vec::new();
+        for ((dns, alias, allowed_operation, allowed_target), grant) in &self.entries {
+            if dns == &peer.dns && allowed_operation == operation && allowed_target == target
+                && grant.arguments_sha256.as_deref().is_none_or(|digest| digest == arguments_sha256)
+                && grant.expires_at.is_none_or(|deadline| now < deadline)
+            {
+                result.push(ScopedCredential {
+                    alias: alias.clone(),
+                    revision: grant.revision.clone(),
+                });
+            }
+        }
+        if result.len() > 8 {
+            return Err(Error::InvalidConfiguration);
+        }
+        Ok(result)
+    }
+
     pub(crate) fn use_credential<T>(
         &self,
         peer: &VerifiedServiceIdentity,
         alias: &str,
+        operation: &str,
+        target: &str,
+        arguments_sha256: &str,
+        revision: &str,
         vault: &Vault,
         use_secret: impl FnOnce(&[u8]) -> T,
     ) -> Result<T, Error> {
-        if !valid_name(alias) {
+        if !valid_name(alias) || !valid_revision(arguments_sha256)
+            || !valid_revision(revision) {
             return Err(Error::Unauthorized);
         }
-        let grant = self
-            .entries
-            .get(&(peer.dns.clone(), alias.into()))
+        let grant = self.entries
+            .get(&(peer.dns.clone(), alias.into(), operation.into(), target.into()))
             .ok_or(Error::Unauthorized)?;
-        if grant.expires_at.is_some_and(|deadline| chrono::Utc::now().timestamp() >= deadline) {
+        if grant.revision != revision
+            || grant.arguments_sha256.as_deref().is_some_and(|expected| expected != arguments_sha256)
+            || grant.expires_at.is_some_and(|deadline| chrono::Utc::now().timestamp() >= deadline)
+        {
             return Err(Error::Unauthorized);
         }
-        vault.with_secret(&grant.handle, &grant.provider, Some(&grant.revision), use_secret)
+        vault.with_secret(&grant.handle, &grant.provider, Some(revision), use_secret)
     }
 }
 
