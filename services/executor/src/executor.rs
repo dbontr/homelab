@@ -155,7 +155,8 @@ impl Executor {
             let outcome = match &result {
                 Ok("completed") => "succeeded",
                 Ok(_) => "accepted",
-                Err(_) => "failed",
+                // External effects can occur before an error is observed.
+                Err(_) => "indeterminate",
             };
             executor.audit.record(&id,&operation,&target,&digest,outcome)?;
             result.map(|state| ExecutionResult::approved(state,id))
@@ -187,7 +188,7 @@ impl Executor {
             let digest = hex::encode(Sha256::digest(&args));
             owner.audit.record(&id,operation,&host,&digest,"started")?;
             let staged = owner.release.stage(&revision).await;
-            let outcome = if staged.is_ok() { "succeeded" } else { "failed" };
+            let outcome = if staged.is_ok() { "succeeded" } else { "indeterminate" };
             owner.audit.record(&id,operation,&host,&digest,outcome)?;
             staged.map(|manifest| StageResult {
                 decision: Decision { allowed:true, ..Decision::default() }, manifest:Some(manifest)
