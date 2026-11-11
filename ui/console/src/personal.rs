@@ -40,6 +40,9 @@ pub fn Learning(csrf: String) -> Element {
             value.get("question").cloned()
         } else {None}
     );
+    let current_question_id = current_question.as_ref()
+        .and_then(|question| question.get("id").and_then(Value::as_str))
+        .unwrap_or("").to_owned();
     rsx!{
         Heading{
             title:"Learning".to_owned(),
@@ -178,7 +181,7 @@ pub fn Learning(csrf: String) -> Element {
             }
             if let Some(question)=current_question{
                 LearningQuestion {
-                    key: "{api::property(&question, &["id"])}",
+                    key: "{current_question_id}",
                     csrf: csrf(),
                     question,
                     on_saved: move |_| {
