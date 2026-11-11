@@ -10,6 +10,13 @@ on:
       - "services/executor/Cargo.toml"
       - "services/motivation/Cargo.toml"
       - "ui/console/Cargo.toml"
+  pull_request:
+    paths:
+      - ".github/workflows/rust-lockfiles.yml"
+      - "services/security-authority/Cargo.toml"
+      - "services/executor/Cargo.toml"
+      - "services/motivation/Cargo.toml"
+      - "ui/console/Cargo.toml"
 
 permissions:
   contents: write
@@ -20,7 +27,10 @@ concurrency:
 
 jobs:
   resolve:
-    if: github.repository == 'dbontr/homelab'
+    if: >-
+      github.repository == 'dbontr/homelab' &&
+      (github.event_name == 'push' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -59,6 +69,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
       - name: Commit reviewed-scope lockfiles
+        if: github.event_name == 'push'
         run: |
           set -euo pipefail
           git add -f -- services/security-authority/Cargo.lock services/executor/Cargo.lock services/motivation/Cargo.lock ui/console/Cargo.lock
