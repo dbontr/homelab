@@ -34,6 +34,9 @@ type ServiceCredentialGrant struct {
 
 // CredentialTicket can be redeemed only by the authenticated service
 // identity for the same operation, target, canonical arguments and owner session.
+// The context value is injected only by the certificate-verifying TLS listener.
+type verifiedCredentialPeerContextKey struct{}
+
 type CredentialTicket struct {
     Alias string `json:"alias"`
     Ticket string `json:"ticket"`
@@ -155,7 +158,7 @@ func (a *AdminSessions) issueServiceTickets(principal,peer,operation,target stri
     defer a.mu.Unlock()
     now:=a.now().UTC()
     if !ValidServiceDNS(peer) || !a.validSession(now) || principal=="" ||
-        a.session.principal!=principal || a.serviceCredentialGrants==nil {
+        a.session.principal!=principal {
         return nil,errors.New("owner session or credential policy unavailable")
     }
     a.pruneCredentialTickets(now)
