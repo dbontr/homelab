@@ -148,6 +148,8 @@ func(s *Server) Handler()http.Handler{
  mux.HandleFunc("POST /v1/learning/sessions/{id}/plan",s.uiLearningPlan)
  mux.HandleFunc("POST /v1/learning/sessions/{id}/phase",s.uiLearningPhase)
  mux.HandleFunc("POST /v1/learning/questions/{id}/answer",s.uiLearningAnswer)
+ mux.HandleFunc("POST /v1/learning/sources/{id}/curriculum/preview",s.uiLearningSourceCurriculumPreview)
+ mux.HandleFunc("POST /v1/learning/sources/{id}/curriculum/import",s.uiLearningSourceCurriculumImport)
  mux.HandleFunc("GET /v1/learning/reviews",s.uiLearningReviews)
  mux.HandleFunc("GET /v1/learning/attachments/{kind}/{id}",s.uiLearningAttachmentList)
  mux.HandleFunc("GET /v1/learning/attachment-originals/{id}",s.uiLearningAttachmentOriginal)
