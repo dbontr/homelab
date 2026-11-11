@@ -144,7 +144,7 @@ func (r *Runner) docker(ctx context.Context, timeout time.Duration, input io.Rea
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &limitWriter{Writer: &stdout, Limit: 512 * 1024}
 	cmd.Stderr = &limitWriter{Writer: &stderr, Limit: 32 * 1024}
-	err := cmd.Run()
+	err = cmd.Run()
 	if runCtx.Err() != nil {
 		return stdout.Bytes(), stderr.Bytes(), -1, runCtx.Err()
 	}
@@ -355,6 +355,8 @@ func (r *Runner) Command(ctx context.Context, id, command string, stdin io.Reade
 }
 
 func (r *Runner) streamDocker(ctx context.Context, input io.Reader, args ...string) (*os.File, string, error) {
+    binary,err:=dockerExecutable()
+    if err!=nil{return nil,"",err}
 	file, err := os.CreateTemp("", "pwm-archive-*")
 	if err != nil {
 		return nil, "", err
@@ -362,7 +364,7 @@ func (r *Runner) streamDocker(ctx context.Context, input io.Reader, args ...stri
 	os.Remove(file.Name()) // anonymous temporary data; never persists in the source tree
 	runCtx, cancel := context.WithTimeout(ctx, 2*time.Hour)
 	defer cancel()
-	cmd := exec.CommandContext(runCtx, "docker", dockerInvocationArgs(args...)...)
+	cmd := exec.CommandContext(runCtx, binary, dockerInvocationArgs(args...)...)
     if nativeCustodySelected(){
         cmd.Env=append(os.Environ(),
             "DOCKER_HOST=unix:///var/run/docker.sock","DOCKER_CONTEXT=")
