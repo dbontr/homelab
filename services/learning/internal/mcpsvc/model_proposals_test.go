@@ -89,6 +89,9 @@ func TestModelProposalsRejectMalformedAndNonFiniteResults(t *testing.T) {
     }
     for _,reply:=range []string{
         `{"verdict":"supported","evaluation":"x","confidence":0.5,"unknown":1}`,
+        `{"verdict":"supported","evaluation":"x"}`,
+        `{"verdict":"supported","confidence":0.5}`,
+        `{"evaluation":"x","confidence":0.5}`,
         `{"verdict":"supported","evaluation":"x","confidence":0.5} {}`,
         `{}`+strings.Repeat(" ",25<<10),
     }{
