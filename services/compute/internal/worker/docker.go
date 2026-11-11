@@ -621,6 +621,14 @@ func (r *Runner) Handle(ctx context.Context, op Operation, c *Client) (map[strin
 		if status != 0 && !strings.Contains(string(stderr), "No such container") {
 			return nil, fmt.Errorf("docker cleanup failed: %s", stderr)
 		}
+        if nativeCustodySelected() {
+            if err:=r.assertWorkspaceContainerAbsent(ctx,op.Workspace);err!=nil {
+                return nil,fmt.Errorf("cannot release native device custody: %w",err)
+            }
+            if err:=releaseNativeWorkspace(op.Workspace);err!=nil {
+                return nil,fmt.Errorf("device custody remains reserved: %w",err)
+            }
+        }
 		return map[string]any{"status": "stopped", "volume": n}, nil
 	case "command":
 		if _, selected := payload["sandbox_check"]; selected {
