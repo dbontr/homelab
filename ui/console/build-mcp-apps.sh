@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+export CARGO_NET_OFFLINE=true
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 if [[ $# -ne 1 || "$1" != /* || "$1" == "/" || "$1" == */ ]]; then
@@ -14,12 +15,23 @@ if [[ -e "$output" || -L "$output" || ! -d "$parent" || -L "$parent" ]]; then
   exit 2
 fi
 
-for tool in dx find grep sed mktemp sort sha256sum xargs; do
+for tool in cargo dx find grep sed mktemp sort sha256sum xargs; do
   command -v "$tool" >/dev/null || {
     printf 'Missing required bundle tool: %s\n' "$tool" >&2
     exit 1
   }
 done
+
+# Packaging is not allowed to resolve fresh or floating dependencies.
+# A source-only preview with no lockfile is not an eligible release artifact.
+if [[ ! -s "$root/Cargo.lock" ]]; then
+  printf '%s\n' 'The Rust MCP Apps bundle requires a committed Cargo.lock' >&2
+  exit 1
+fi
+(
+  cd "$root"
+  cargo metadata --locked --offline --features embedded-app --no-deps --format-version 1 >/dev/null
+)
 
 umask 077
 stage=$(mktemp -d "$parent/.homelab-mcp-apps.XXXXXXXX")
