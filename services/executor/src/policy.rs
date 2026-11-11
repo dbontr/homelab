@@ -101,6 +101,13 @@ fn valid_workspace_name(value: &str, package: bool) -> bool {
             || (package && c == b'+'))
 }
 
+fn valid_workspace_device_identity(value: &str) -> bool {
+    !value.is_empty() && value.len() <= 128
+        && value.as_bytes()[0].is_ascii_alphanumeric()
+        && value.bytes().all(|b| b.is_ascii_alphanumeric()
+            || matches!(b, b'_' | b'.' | b':' | b'-'))
+}
+
 fn valid_workspace_image_reference(reference: &str) -> bool {
     let Some((name,digest)) = reference.split_once("@sha256:") else { return false };
     name.len()>=3 && name.len()<=190 && digest.len()==64
@@ -355,10 +362,7 @@ impl WorkspaceAllocation {
                 || !policy.devices.contains(&input.usb_device_id)
                 || !valid_workspace_name(&input.usb_node,false)
                 || !input.node_id.is_empty()&&input.node_id!=input.usb_node
-                || id.is_empty()||id.len()>128
-                || !id.as_bytes()[0].is_ascii_alphanumeric()
-                || !id.bytes().all(|b|b.is_ascii_alphanumeric()
-                    ||matches!(b,b'.'|b'_'|b':'|b'-'))
+                || !valid_workspace_device_identity(id)
             {
                 return Err(Error::Denied("USB requires an exact approved worker and device"));
             }
@@ -404,7 +408,12 @@ impl WorkspacePolicy {
             if names.len() > 64 { return Err(Error::Configuration("Workspace resource policy too large")); }
             let mut seen = BTreeSet::new();
             for name in names {
-                if !valid_workspace_name(name, i == 4) || !seen.insert(name) {
+                let accepted = if i == 6 {
+                    valid_workspace_device_identity(name)
+                } else {
+                    valid_workspace_name(name, i == 4)
+                };
+                if !accepted || !seen.insert(name) {
                     return Err(Error::Configuration("Workspace resource policy has invalid identifiers"));
                 }
             }
