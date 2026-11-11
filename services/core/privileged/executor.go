@@ -129,7 +129,7 @@ func NewExecutionRequestID()(string,error){
  return hex.EncodeToString(entropy),nil
 }
 
-func validExecutionRequestID(id string)bool{
+func ValidExecutionRequestID(id string)bool{
  if len(id)!=32||id!=strings.ToLower(id){return false}
  for _,char:=range id{
   if (char<'0'||char>'9')&&(char<'a'||char>'f'){return false}
@@ -162,7 +162,7 @@ func (e *Executor) ExecuteWithID(ctx context.Context,requestID,operation,target 
 	deny := func(reason string) ExecutionResult {
 		return ExecutionResult{Authorization: security.Authorization{Reason: reason}}
 	}
-	if !validExecutionRequestID(requestID) {
+	if !ValidExecutionRequestID(requestID) {
         return deny("invalid execution request identity"),nil
     }
 	if e == nil || target != e.cfg.Host {
