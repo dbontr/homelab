@@ -6,6 +6,7 @@ import (
     "errors"
     "fmt"
     "io"
+    "math"
     "strings"
     "time"
 
@@ -82,6 +83,7 @@ func validAssessment(result ModelAssessment, reasoningRequired bool) error {
         return errors.New("model returned an invalid verdict")
     }
     if len(strings.TrimSpace(result.Evaluation)) == 0 || len(result.Evaluation) > 4000 ||
+        math.IsNaN(result.Confidence) || math.IsInf(result.Confidence, 0) ||
         result.Confidence < 0 || result.Confidence > 1 {
         return errors.New("model returned an invalid evaluation or confidence")
     }
