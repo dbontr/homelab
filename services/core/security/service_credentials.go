@@ -7,6 +7,7 @@ import (
     "encoding/hex"
     "encoding/json"
     "errors"
+    "log"
     "net"
     "net/http"
     "regexp"
@@ -253,6 +254,7 @@ func (a *AdminSessions) ServiceCredentialHandler() http.Handler {
         alias:=r.PathValue("alias")
         identity,verified:=verifiedServicePeer(r)
         if r.Method!=http.MethodPost || !verified || !serviceCredentialName.MatchString(alias) {
+            log.Print("security audit credential_redemption denied")
             http.Error(w,"service credential access denied",http.StatusForbidden)
             return
         }
@@ -264,16 +266,19 @@ func (a *AdminSessions) ServiceCredentialHandler() http.Handler {
             Arguments json.RawMessage `json:"arguments"`
         }
         if err:=readJSON(r,&input);err!=nil || len(input.Arguments)==0 {
+            log.Print("security audit credential_redemption malformed")
             http.Error(w,"invalid credential redemption",http.StatusBadRequest)
             return
         }
         secret,err:=a.redeemServiceTicket(identity,alias,input.Ticket,
             input.Operation,input.Target,input.Arguments)
         if err!=nil {
+            log.Print("security audit credential_redemption denied")
             http.Error(w,"service credential access denied",http.StatusForbidden)
             return
         }
         defer func(){for i:=range secret{secret[i]=0}}()
+        log.Print("security audit credential_redemption allowed")
         w.Header().Set("Content-Type","application/octet-stream")
         w.WriteHeader(http.StatusOK)
         _,_=w.Write(secret)
