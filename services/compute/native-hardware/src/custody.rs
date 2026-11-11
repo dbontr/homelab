@@ -202,10 +202,22 @@ pub(crate) fn verify_workspace(workspace: &str) -> Result<usize, &'static str> {
     for entry in entries {
         let entry = entry.map_err(|_| "device custody inventory unavailable")?;
         let path = entry.path();
-        if path.extension().and_then(|ext| ext.to_str()) != Some("lease") {
+        let suffix = path.extension().and_then(|ext| ext.to_str());
+        if !matches!(suffix, Some("lease" | "physical")) {
             return Err("unexpected device custody entry");
         }
         let owner = read_owner(&path)?;
+        if suffix == Some("physical") {
+            let body = private_record(&path)?;
+            let rows: Vec<&str> = body.lines().collect();
+            if rows.len() != 6 ||
+                physical_from_record(rows[2], rows[3], &body)? !=
+                    path.file_name().and_then(|name| name.to_str()).unwrap_or("") ||
+                private_record(&root.join(key(rows[2], rows[3])))? != body {
+                return Err("physical custody record has no matching alias");
+            }
+            continue;
+        }
         if owner != workspace { continue; }
         let contents = fs::read_to_string(&path)
             .map_err(|_| "cannot read device custody record")?;
@@ -236,16 +248,25 @@ pub(crate) fn release_workspace(workspace: &str) -> Result<usize, &'static str> 
     for entry in entries {
         let entry = entry.map_err(|_| "device custody inventory is unavailable")?;
         let path = entry.path();
-        if path.extension().and_then(|s|s.to_str()) != Some("lease") {
+        if !matches!(path.extension().and_then(|s| s.to_str()),
+            Some("lease" | "physical")) {
             return Err("unexpected file in exclusive custody directory");
         }
-        if read_owner(&path)? == workspace {
+        let current_owner = read_owner(&path)?;
+        if current_owner == workspace {
+            // Workspace teardown has been proven externally. This also
+            // removes a physical reservation orphaned by a partial write.
             matches.push(path);
         }
-        if matches.len() > 64 {
+        if matches.len() > 128 {
             return Err("too many device custody records");
         }
     }
+    // Release alias names first. If a process stops between unlink calls,
+    // the physical reservation remains in place and blocks reassignment.
+    matches.sort_by_key(|path| {
+        if path.extension().and_then(|s| s.to_str()) == Some("lease") { 0 } else { 1 }
+    });
     for path in &matches {
         // The Go controller must have already verified that the workspace
         // container is absent. This helper never destroys a running container.
@@ -267,6 +288,34 @@ mod tests {
         assert!(!valid_workspace("../owned"));
         assert_ne!(key("gpu","/dev/dri/renderD128"),key("npu","/dev/dri/renderD128"));
         assert_eq!(key("usb","/dev/bus/usb/001/002").len(),22);
+    }
+
+    #[test]
+    fn different_device_aliases_share_the_same_physical_reservation() {
+        assert_eq!(
+            physical_key("usb", "/dev/serial/by-id/usb-a", 0x0103),
+            physical_key("gpu", "/dev/dri/renderD128", 0x0103)
+        );
+        assert_ne!(
+            physical_key("usb", "/dev/disk/by-id/usb-a", 0x0103),
+            physical_key("gpu", "/dev/dri/renderD128", 0x0103)
+        );
+        assert_ne!(
+            physical_key("gpu", "/dev/dri/renderD128", 0x0103),
+            physical_key("gpu", "/dev/dri/renderD129", 0x0104)
+        );
+    }
+
+    #[test]
+    fn physical_record_names_and_owners_are_strict() {
+        assert_eq!(physical_from_record(
+            "gpu", "/dev/dri/renderD128",
+            "v1\n0123456789abcdef0123456789abcdef\ngpu\n/dev/dri/renderD128\n/dev/dri/renderD128\n259\n"
+        ).unwrap(), "char-0000000000000103.physical");
+        assert!(physical_from_record(
+            "npu", "/dev/dri/renderD128",
+            "v1\n0123456789abcdef0123456789abcdef\ngpu\n/dev/dri/renderD128\n/dev/dri/renderD128\n259\n"
+        ).is_err());
     }
 
     #[test]
