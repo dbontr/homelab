@@ -41,6 +41,24 @@ fn decode_response(raw: &str) -> Option<(u32, Result<Value, String>)> {
     Some((id, response))
 }
 
+fn decode_host_result(raw:&str)->Option<Value>{
+    if raw.len()>MAX_REPLY {return None}
+    let message:Value=serde_json::from_str(raw).ok()?;
+    if message.get("jsonrpc").and_then(Value::as_str)!=Some("2.0")||
+        message.get("method").and_then(Value::as_str)!=Some("ui/notifications/tool-result"){
+        return None;
+    }
+    let params=message.get("params")?;
+    if params.get("isError").and_then(Value::as_bool)==Some(true){
+        return None;
+    }
+    if let Some(data)=params.get("structuredContent"){
+        return Some(data.clone());
+    }
+    let text=params.pointer("/content/0/text")?.as_str()?;
+    serde_json::from_str(text).ok()
+}
+
 struct Pending {
     reply: oneshot::Sender<Result<Value, String>>,
     _timeout: Timeout,
@@ -51,6 +69,7 @@ struct Bridge {
     current: Window,
     _listener: Closure<dyn FnMut(MessageEvent)>,
     pending: Rc<RefCell<HashMap<u32, Pending>>>,
+    host_result: Rc<RefCell<Option<Value>>>,
     next_id: u32,
 }
 
@@ -64,6 +83,8 @@ impl Bridge {
         }
         let pending = Rc::new(RefCell::new(HashMap::<u32, Pending>::new()));
         let pending_messages = pending.clone();
+        let host_result = Rc::new(RefCell::new(None::<Value>));
+        let observed_result = host_result.clone();
         let expected_source = parent.clone();
         let listener = Closure::<dyn FnMut(MessageEvent)>::new(move |event| {
             let Some(source) = event.source() else { return };
@@ -72,13 +93,17 @@ impl Bridge {
             }
             let Ok(raw) = JSON::stringify(&event.data()) else { return };
             let Some(raw) = raw.as_string() else { return };
+            if let Some(value) = decode_host_result(&raw) {
+                observed_result.replace(Some(value));
+                return;
+            }
             let Some((id, response)) = decode_response(&raw) else { return };
             let Some(pending) = pending_messages.borrow_mut().remove(&id) else { return };
             let _ = pending.reply.send(response);
         });
         current.add_event_listener_with_callback("message", listener.as_ref().unchecked_ref())
             .map_err(|_| "MCP Apps message listener unavailable")?;
-        Ok(Self { parent, current, _listener: listener, pending, next_id: 1 })
+        Ok(Self { parent, current, _listener: listener, pending, host_result, next_id: 1 })
     }
 
     fn send(&mut self, method: &str, params: Value) -> Result<oneshot::Receiver<Result<Value, String>>, String> {
@@ -137,6 +162,13 @@ pub async fn request(method: &str, params: Value) -> Result<Value, String> {
     })?;
     receiver.await
         .map_err(|_| "MCP Apps request was interrupted".to_owned())?
+}
+
+// A tool-triggered Learning App receives the originating tool result as a
+// host notification. It is not an authorization token or a grading verdict.
+pub fn take_host_learning_result() -> Option<Value> {
+    BRIDGE.with(|cell| cell.borrow().as_ref()
+        .and_then(|bridge| bridge.host_result.borrow_mut().take()))
 }
 
 fn notify_initialized() -> Result<(), String> {
@@ -280,6 +312,16 @@ mod tests {
         assert!(MAX_REPLY <= 4 * 1024 * 1024);
     }
 
+
+    #[test]
+    fn host_result_notifications_are_read_only_and_bounded() {
+        let event=r#"{"jsonrpc":"2.0","method":"ui/notifications/tool-result","params":{"structuredContent":{"view":"graph","nodes":[{"id":"linear-algebra"}]}}}"#;
+        let data=decode_host_result(event).expect("structured host result");
+        assert_eq!(data["view"],"graph");
+        assert_eq!(data["nodes"][0]["id"],"linear-algebra");
+        assert!(decode_host_result(r#"{"jsonrpc":"2.0","method":"ui/notifications/tool-result","params":{"isError":true,"content":[]}}"#).is_none());
+        assert!(decode_host_result(r#"{"jsonrpc":"2.0","method":"ui/notifications/tool-input","params":{"arguments":{}}}"#).is_none());
+    }
 
     #[test]
     fn response_parser_rejects_notifications_and_malformed_envelopes() {
