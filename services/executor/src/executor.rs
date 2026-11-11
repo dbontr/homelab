@@ -21,6 +21,7 @@ use crate::{random_hex, valid_hex, Error};
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ExecutionRequest {
+    pub request_id: String,
     pub operation: String,
     pub target: String,
     pub arguments: Value,
@@ -34,17 +35,32 @@ pub struct ExecutionResult {
     pub state: Option<&'static str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub audit_id: Option<String>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub replayed: bool,
 }
 impl ExecutionResult {
     pub fn denied(reason: &str) -> Self {
-        Self { decision: Decision::denied(reason), state: None, audit_id: None }
+        Self { decision: Decision::denied(reason), state: None, audit_id: None, replayed: false }
     }
     pub fn from_decision(decision: Decision) -> Self {
-        Self { decision, state: None, audit_id: None }
+        Self { decision, state: None, audit_id: None, replayed: false }
     }
     fn approved(state: &'static str, audit_id: String) -> Self {
         Self { decision: Decision { allowed: true, ..Decision::default() },
-            state: Some(state), audit_id: Some(audit_id) }
+            state: Some(state), audit_id: Some(audit_id), replayed: false }
+    }
+    fn recorded(outcome: &str, id: &str) -> Self {
+        match outcome {
+            "accepted" | "succeeded" => Self {
+                decision: Decision { allowed: true, ..Decision::default() },
+                state: Some(if outcome == "succeeded" { "completed" } else { "accepted" }),
+                audit_id: Some(id.to_owned()),
+                replayed: true,
+            },
+            // Started, failed, indeterminate and reconciled records are
+            // never evidence that re-execution is safe.
+            _ => Self::denied("execution request outcome requires independent reconciliation"),
+        }
     }
 }
 
@@ -134,6 +150,9 @@ impl Executor {
     pub async fn execute(self: &Arc<Self>, request: ExecutionRequest,
         assertion: &str) -> Result<ExecutionResult, Error>
     {
+        if !valid_hex(&request.request_id, 32) {
+            return Ok(ExecutionResult::denied("invalid execution request identity"));
+        }
         let raw = serde_json::to_vec(&request.arguments)
             .map_err(|_| Error::Denied("invalid operation arguments"))?;
         let canonical = canonical_arguments(&raw)?;
@@ -147,6 +166,7 @@ impl Executor {
         let executor = self.clone();
         let operation = request.operation;
         let target = request.target;
+        let request_id = request.request_id;
         let assertion = Zeroizing::new(assertion.to_owned());
         let job = tokio::spawn(async move {
             let decision = executor.authorization.decision(
@@ -154,9 +174,24 @@ impl Executor {
             if !decision.allowed {
                 return Ok(ExecutionResult::from_decision(decision));
             }
-            let id = random_hex::<16>()?;
             let digest = hex::encode(Sha256::digest(&canonical));
-            executor.audit.record(&id,&operation,&target,&digest,"started")?;
+            if let Some(outcome) = executor.audit.request_outcome(
+                &request_id, &operation, &target, &digest
+            )? {
+                return Ok(ExecutionResult::recorded(&outcome, &request_id));
+            }
+            // The journal append is the atomic execution-admission point.
+            // Competing requests with the same ID cannot both pass it.
+            if let Err(error) = executor.audit.record(
+                &request_id, &operation, &target, &digest, "started"
+            ) {
+                return match executor.audit.request_outcome(
+                    &request_id, &operation, &target, &digest
+                )? {
+                    Some(outcome) => Ok(ExecutionResult::recorded(&outcome, &request_id)),
+                    None => Err(error),
+                };
+            }
             let result = executor.perform(
                 action, &operation, &target, &canonical, &decision.credential_tickets
             ).await;
@@ -166,8 +201,8 @@ impl Executor {
                 // External effects can occur before an error is observed.
                 Err(_) => "indeterminate",
             };
-            executor.audit.record(&id,&operation,&target,&digest,outcome)?;
-            result.map(|state| ExecutionResult::approved(state,id))
+            executor.audit.record(&request_id,&operation,&target,&digest,outcome)?;
+            result.map(|state| ExecutionResult::approved(state,request_id))
         });
         job.await.map_err(|_| Error::Unavailable("privileged execution outcome unknown"))?
     }
