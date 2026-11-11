@@ -70,11 +70,11 @@ impl Event {
             && valid_host(&self.target)
             && matches!(self.outcome.as_str(), "started" | "accepted" | "succeeded" | "failed"
                 | "indeterminate" | "reconciled")
-            && if self.outcome == "reconciled" {
+            && (if self.outcome == "reconciled" {
                 self.reconciliation_sha256.as_deref().is_some_and(|digest| valid_hex(digest, 64))
             } else {
                 self.reconciliation_sha256.is_none()
-            }
+            })
             && DateTime::parse_from_rfc3339(&self.at).is_ok_and(|date| date.year() > 1)
     }
 }
@@ -356,6 +356,57 @@ mod tests {
                 &"b".repeat(64),"started").unwrap();
         }
         fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn reconciliation_preserves_evidence_and_ends_the_replay_barrier() {
+        let directory = std::env::temp_dir().join(format!(
+            "homelab-executor-reconciled-{}", crate::random_hex::<12>().unwrap()
+        ));
+        fs::create_dir(&directory).unwrap();
+        fs::set_permissions(&directory, fs::Permissions::from_mode(0o700)).unwrap();
+        let path = directory.join("executor-actions.jsonl");
+        let id = "a".repeat(32);
+        let replay = "b".repeat(32);
+        let digest = "c".repeat(64);
+        let evidence = "d".repeat(64);
+        {
+            let journal = AuditJournal::open(&path).unwrap();
+            journal.record(&id, "infrastructure__service_restart", "saturn",
+                &digest, "started").unwrap();
+            journal.record(&id, "infrastructure__service_restart", "saturn",
+                &digest, "indeterminate").unwrap();
+            assert!(journal.reconcile(&id, "not-a-digest").is_err());
+            journal.reconcile(&id, &evidence).unwrap();
+            assert!(journal.unresolved().unwrap().is_empty());
+            assert!(journal.reconcile(&id, &evidence).is_err());
+        }
+        {
+            let journal = AuditJournal::open(&path).unwrap();
+            assert!(journal.unresolved().unwrap().is_empty());
+            journal.record(&replay,"infrastructure__service_restart","saturn",
+                &digest,"started").unwrap();
+        }
+        let raw = fs::read_to_string(&path).unwrap();
+        assert!(raw.contains(&format!("\\\"reconciliation_sha256\\\":\\\"{evidence}\\\"")));
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn rejects_unjustified_reconciliation_records() {
+        let id = "e".repeat(32);
+        let prior = event(&id, "started");
+        let mut seen = BTreeMap::new();
+        seen.insert(id.clone(), prior);
+        let mut invalid = event(&id, "reconciled");
+        assert!(!invalid.valid());
+        invalid.reconciliation_sha256 = Some("f".repeat(64));
+        assert!(invalid.valid());
+        assert!(transition(&seen, &invalid).is_ok());
+        seen.insert(id.clone(), event(&id, "accepted"));
+        assert!(transition(&seen, &invalid).is_err());
+        invalid.arguments_sha256 = "1".repeat(64);
+        assert!(transition(&seen, &invalid).is_err());
     }
 
     #[test]
