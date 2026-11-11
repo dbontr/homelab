@@ -133,7 +133,7 @@ func TestServiceCredentialDNSIdentityMustBeCanonical(t *testing.T) {
  }
  for _,name:=range []string{"", ".", "worker.", ".worker", "worker..internal",
   "-worker.internal", "worker-.internal", "*.internal", "worker.*",
-  "Worker.internal", "worker_internal", "worker/internal", "worker.internal:443",
+  "Worker.internal", "worker_internal", "127.0.0.1", "worker/internal", "worker.internal:443",
   "https://worker.internal", "worker internal", "worker\n.internal",
   strings.Repeat("a",64)+".internal", strings.Repeat("a",251)+".internal"} {
   if ValidServiceDNS(name){t.Fatalf("invalid service identity accepted: %q",name)}
