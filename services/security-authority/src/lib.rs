@@ -11,6 +11,7 @@ pub mod credentials;
 pub mod grants;
 pub mod sessions;
 pub mod state;
+pub mod migration;
 pub mod vault;
 pub mod transport;
 pub mod remote;
