@@ -38,8 +38,10 @@ else
   exit 1
 fi
 
-if [[ -n "${SECURITY_AUTHORITY_STATE_COPY:-}" ]]; then
-  "$crate/target/release/security-preflight" --state-dir "$SECURITY_AUTHORITY_STATE_COPY"
+if [[ -z "${SECURITY_AUTHORITY_STATE_COPY:-}" ]]; then
+  printf 'Security acceptance requires SECURITY_AUTHORITY_STATE_COPY pointing to a protected, independent offline state copy.\n' >&2
+  exit 1
 fi
+"$crate/target/release/security-preflight" --state-dir "$SECURITY_AUTHORITY_STATE_COPY"
 
-printf 'Rust security authority source and package checks passed.\n'
+printf 'Rust security authority source, package and state-copy checks passed.\n'
