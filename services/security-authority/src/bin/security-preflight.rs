@@ -60,6 +60,19 @@ fn copied_state_directory() -> Result<PathBuf, &'static str> {
     validate_copy_directory(directory)
 }
 
+// A preflight copy must not share writable inodes with the source state.
+fn validate_copied_file(path: &Path) -> Result<(), &'static str> {
+    let metadata = fs::symlink_metadata(path).map_err(|_| "copied state file missing")?;
+    if !metadata.is_file() || metadata.file_type().is_symlink()
+        || metadata.nlink() != 1
+        || metadata.mode() & 0o077 != 0
+        || metadata.uid() != unsafe { libc::geteuid() }
+    {
+        return Err("copied state file is not independently owned");
+    }
+    Ok(())
+}
+
 fn validate_copy_directory(directory: PathBuf) -> Result<PathBuf, &'static str> {
     if !directory.is_absolute()
         || directory == Path::new("/var/lib/homelab-securityd")
@@ -68,8 +81,11 @@ fn validate_copy_directory(directory: PathBuf) -> Result<PathBuf, &'static str> 
         return Err("preflight requires an independent copied state directory");
     }
     let copy = fs::symlink_metadata(&directory).map_err(|_| "state copy missing")?;
-    if !copy.is_dir() || copy.file_type().is_symlink() {
-        return Err("state copy must be a real directory");
+    if !copy.is_dir() || copy.file_type().is_symlink()
+        || copy.mode() & 0o077 != 0
+        || copy.uid() != unsafe { libc::geteuid() }
+    {
+        return Err("state copy must be an owner-only directory");
     }
     // The same inode would allow a bind mount to modify the live state.
     if let Ok(live) = fs::metadata("/var/lib/homelab-securityd") {
@@ -77,10 +93,13 @@ fn validate_copy_directory(directory: PathBuf) -> Result<PathBuf, &'static str> 
             return Err("preflight cannot open the live state inode");
         }
     }
-    let metadata = fs::symlink_metadata(directory.join("authenticator.json"))
-        .map_err(|_| "copied authentication replay state missing")?;
-    if !metadata.is_file() || metadata.file_type().is_symlink() {
-        return Err("copied authentication replay state invalid");
+    validate_copied_file(&directory.join("authenticator.json"))
+        .map_err(|_| "copied authentication replay state invalid")?;
+    match fs::symlink_metadata(directory.join("credentials.json")) {
+        Ok(_) => validate_copied_file(&directory.join("credentials.json"))
+            .map_err(|_| "copied encrypted credential store invalid")?,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => (),
+        Err(_) => return Err("cannot inspect copied encrypted credential store"),
     }
     Ok(directory)
 }
@@ -204,6 +223,33 @@ fn main() {
 mod tests {
     use super::*;
     use std::os::unix::fs::PermissionsExt;
+
+    #[test]
+    fn rejects_hardlinked_and_unprotected_copied_state() {
+        let mut id = [0u8; 12];
+        getrandom::fill(&mut id).unwrap();
+        let parent = env::temp_dir().join(format!("authority-hardlink-test-{}", hex::encode(id)));
+        let directory = parent.join("copy");
+        fs::create_dir_all(&directory).unwrap();
+        fs::set_permissions(&directory, fs::Permissions::from_mode(0o700)).unwrap();
+        let source = parent.join("source.json");
+        fs::write(&source, br#"{"version":1}"#).unwrap();
+        fs::set_permissions(&source, fs::Permissions::from_mode(0o600)).unwrap();
+        fs::hard_link(&source, directory.join("authenticator.json")).unwrap();
+        assert!(validate_copy_directory(directory.clone()).is_err());
+        fs::remove_file(directory.join("authenticator.json")).unwrap();
+        fs::write(directory.join("authenticator.json"), br#"{"version":1}"#).unwrap();
+        fs::set_permissions(directory.join("authenticator.json"), fs::Permissions::from_mode(0o600)).unwrap();
+        assert!(validate_copy_directory(directory.clone()).is_ok());
+        fs::write(directory.join("credentials.json"), b"{}").unwrap();
+        fs::set_permissions(directory.join("credentials.json"), fs::Permissions::from_mode(0o644)).unwrap();
+        assert!(validate_copy_directory(directory.clone()).is_err());
+        fs::set_permissions(directory.join("credentials.json"), fs::Permissions::from_mode(0o600)).unwrap();
+        assert!(validate_copy_directory(directory.clone()).is_ok());
+        fs::set_permissions(&directory, fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(validate_copy_directory(directory).is_err());
+        fs::remove_dir_all(parent).unwrap();
+    }
 
     #[test]
     fn requires_complete_independent_replay_state() {
