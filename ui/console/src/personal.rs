@@ -327,7 +327,7 @@ pub fn Health(csrf: String) -> Element{
                         "distance_meters":meters,"rpe":exertion
                     });
                     let token=csrf();
-                    health_error.set(String::new);health_busy.set(true);
+                    health_error.set(String::new());health_busy.set(true);
                     spawn(async move{
                         match api::write::<Value,_>(reqwest::Method::POST,"/v1/health/training-sets",&token,&payload).await{
                             Ok(_)=>{sets.restart();},
