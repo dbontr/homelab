@@ -73,6 +73,18 @@ fn validate_copied_file(path: &Path) -> Result<(), &'static str> {
     Ok(())
 }
 
+// A bind-mounted source file may have one hard link; compare live file inodes.
+fn reject_live_inode(copy: &Path, live: &Path) -> Result<(), &'static str> {
+    let copy_md = fs::symlink_metadata(copy).map_err(|_| "copied state file missing")?;
+    match fs::metadata(live) {
+        Ok(live_md) if copy_md.dev() == live_md.dev() && copy_md.ino() == live_md.ino() =>
+            Err("copied state file references the live authority inode"),
+        Ok(_) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(_) => Err("cannot inspect live authority inode"),
+    }
+}
+
 fn validate_copy_directory(directory: PathBuf) -> Result<PathBuf, &'static str> {
     if !directory.is_absolute()
         || directory == Path::new("/var/lib/homelab-securityd")
@@ -95,9 +107,19 @@ fn validate_copy_directory(directory: PathBuf) -> Result<PathBuf, &'static str> 
     }
     validate_copied_file(&directory.join("authenticator.json"))
         .map_err(|_| "copied authentication replay state invalid")?;
+    reject_live_inode(
+        &directory.join("authenticator.json"),
+        Path::new("/var/lib/homelab-securityd/authenticator.json"),
+    )?;
     match fs::symlink_metadata(directory.join("credentials.json")) {
-        Ok(_) => validate_copied_file(&directory.join("credentials.json"))
-            .map_err(|_| "copied encrypted credential store invalid")?,
+        Ok(_) => {
+            validate_copied_file(&directory.join("credentials.json"))
+                .map_err(|_| "copied encrypted credential store invalid")?;
+            reject_live_inode(
+                &directory.join("credentials.json"),
+                Path::new("/var/lib/homelab-securityd/credentials.json"),
+            )?;
+        },
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => (),
         Err(_) => return Err("cannot inspect copied encrypted credential store"),
     }
