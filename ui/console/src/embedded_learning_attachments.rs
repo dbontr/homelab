@@ -119,7 +119,7 @@ pub fn EmbeddedAttachments(owner_kind:String, owner_id:String)->Element{
                             move |event|{
                                 if busy(){return}
                                 let Some(file)=event.files().into_iter().next()else{return};
-                                if file.size()==0||file.size()>ORIGINAL_LIMIT as u64{
+                                if file.size()==0||(file.size() as u64)>ORIGINAL_LIMIT as u64{
                                     error.set("Original file must be between 1 byte and 5 MiB.".to_owned());
                                     return;
                                 }
