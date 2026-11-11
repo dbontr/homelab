@@ -400,6 +400,7 @@ async fn remote_service_credential(
     raw: Bytes,
 ) -> Response {
     let Ok(input) = json_input::<CredentialRedeemInput>(&headers, &raw) else {
+        audit("credential_redemption_malformed");
         return protected_status("invalid credential redemption", StatusCode::BAD_REQUEST);
     };
     let credential = shared.with_authority(|authority| {
@@ -409,11 +410,14 @@ async fn remote_service_credential(
         )
     });
     let Ok(bytes) = credential else {
+        audit("credential_redemption_denied");
         return protected_status("service credential access denied", StatusCode::FORBIDDEN);
     };
     if bytes.is_empty() || bytes.len() > 8192 {
+        audit("credential_redemption_denied");
         return protected_status("service credential unavailable", StatusCode::FORBIDDEN);
     }
+    audit("credential_redemption_allowed");
     let mut response = axum::body::Body::from(Bytes::from_owner(ProtectedBody(bytes))).into_response();
     response.headers_mut().insert(
         header::CONTENT_TYPE, HeaderValue::from_static("application/octet-stream")
