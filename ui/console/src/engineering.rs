@@ -54,8 +54,8 @@ fn RunDetail(run: Value, csrf: String) -> Element {
             div { class: "card-body",
                 if source.is_object() {
                     div { class: "inline-row",
-                        span { class: "muted", "Decisions: {text(&source, "turns")}" }
-                        span { class: "muted", "Latest action: {text(&source, "last_action")}" }
+                        span { class: "muted", {format!("Decisions: {}", text(&source, "turns"))} }
+                        span { class: "muted", {format!("Latest action: {}", text(&source, "last_action"))} }
                     }
                     if !plan.is_empty() {
                         h3 { "Engineering plan" }
@@ -162,7 +162,7 @@ fn TeamDetail(team: Value, csrf: String) -> Element {
             summary { class: "card-header",
                 div {
                     h2 { class: "card-title", {text(&team, "id")} }
-                    p { class: "card-description", {text(&team, "project")} · {text(&team, "repository")} }
+                    p { class: "card-description", {format!("{} · {}", text(&team, "project"), text(&team, "repository"))} }
                 }
                 Badge { text: text(&team, "status") }
             }
