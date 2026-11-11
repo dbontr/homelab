@@ -368,7 +368,7 @@ fn ReasoningGraph(csrf: String) -> Element {
                                     {format!("Relation: {}", label(&value,&["relation","kind"]))}
                                 }
                                 p { "Premises: {premises}" }
-                                p { "Conclusion: {label(&value,&["conclusion","conclusion_id"])}" }
+                                p { {format!("Conclusion: {}", label(&value,&["conclusion","conclusion_id"]))} }
                                 p { class: "learning-problem-statement",
                                     {label(&value,&["explanation","rationale"])}
                                 }
