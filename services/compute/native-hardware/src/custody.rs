@@ -289,6 +289,10 @@ pub(crate) fn verify_workspace(workspace: &str) -> Result<usize, &'static str> {
             return Err("unexpected device custody entry");
         }
         let owner = read_owner(&path)?;
+        // A different workspace may hold an incomplete but still effective
+        // physical reservation after a crash. That reservation excludes
+        // competing claims; it must not invalidate unrelated devices.
+        if owner != workspace { continue; }
         if suffix == Some("physical") {
             let body = private_record(&path)?;
             let rows: Vec<&str> = body.lines().collect();
@@ -300,7 +304,6 @@ pub(crate) fn verify_workspace(workspace: &str) -> Result<usize, &'static str> {
             }
             continue;
         }
-        if owner != workspace { continue; }
         let contents = private_record(&path)?;
         let rows: Vec<&str> = contents.lines().collect();
         if rows.len() != 8 {
