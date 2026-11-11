@@ -81,12 +81,12 @@ func(c *RemoteAuthorizationClient)requestDecision(ctx context.Context,path,opera
   return Authorization{},errors.New("remote security service refused authorization")
  }
  const maxAuthorizationResponse=8192
- payload,err:=io.ReadAll(io.LimitReader(response.Body,maxAuthorizationResponse+1))
- if err!=nil||len(payload)>maxAuthorizationResponse{
+ responsePayload,err:=io.ReadAll(io.LimitReader(response.Body,maxAuthorizationResponse+1))
+ if err!=nil||len(responsePayload)>maxAuthorizationResponse{
   return Authorization{},errors.New("remote authorization response exceeds size limit")
  }
  var result Authorization
- decoder:=json.NewDecoder(bytes.NewReader(payload))
+ decoder:=json.NewDecoder(bytes.NewReader(responsePayload))
  decoder.DisallowUnknownFields()
  if err:=decoder.Decode(&result);err!=nil{return Authorization{},errors.New("invalid remote authorization result")}
  var extra any
