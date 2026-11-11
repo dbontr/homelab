@@ -82,7 +82,7 @@ func validateAuditHistory(file *os.File)(map[string]auditEntry,error){
   }else{
    validPrior:=exists&&previous.Outcome=="started"
    if event.Outcome=="reconciled"{
-    validPrior=exists&&(previous.Outcome=="started"||previous.Outcome=="indeterminate")
+    validPrior=exists&&(previous.Outcome=="started"||previous.Outcome=="indeterminate"||previous.Outcome=="failed")
    }
    if !validPrior||previous.Operation!=event.Operation||
     previous.Target!=event.Target||previous.ArgumentsSHA256!=event.ArgumentsSHA256||
@@ -161,7 +161,7 @@ func(j *AuditJournal)Record(id,operation,target,digest,outcome string)error{
   for _,prior:=range j.seen{
    if prior.Operation==entry.Operation&&prior.Target==entry.Target&&
     prior.ArgumentsSHA256==entry.ArgumentsSHA256&&
-    (prior.Outcome=="started"||prior.Outcome=="indeterminate"){
+    (prior.Outcome=="started"||prior.Outcome=="indeterminate"||prior.Outcome=="failed"){
     return errors.New("matching unresolved execution requires reconciliation")
    }
   }
@@ -201,7 +201,7 @@ func(j *AuditJournal)Unresolved()([]auditEntry,error){
  }
  pending:=make([]auditEntry,0)
  for _,entry:=range j.seen{
-  if entry.Outcome=="started"||entry.Outcome=="indeterminate"{
+  if entry.Outcome=="started"||entry.Outcome=="indeterminate"||entry.Outcome=="failed"{
    pending=append(pending,entry)
   }
  }
