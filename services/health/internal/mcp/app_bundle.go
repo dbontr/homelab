@@ -137,6 +137,12 @@ func LoadAppBundle(directory, origin string) (*AppBundle, error) {
         }
         names[name] = true
         if name == "index.html" { return nil }
+        // The shared WebAssembly distribution also carries Learning's
+        // independently hosted entrypoint. Verify its bytes and marker but
+        // do not expose its resource through a Health MCP tool.
+        if name == "learning.html" {
+            return nil
+        }
         for view, expected := range healthAppViews {
             if name == expected {
                 marker := "<meta name=\"homelab-mcp-view\" content=\"" + view + "\">"
