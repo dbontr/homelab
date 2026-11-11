@@ -3,9 +3,11 @@ package release
 import (
  "bytes"
  "context"
+ "crypto/rand"
  "crypto/tls"
  "crypto/x509"
  "encoding/json"
+ "encoding/hex"
  "errors"
  "fmt"
  "io"
@@ -74,32 +76,66 @@ func(a *RemoteReleaseAgent)call(ctx context.Context,method,path string,input,out
  return nil
 }
 
+// Explicit release execution IDs are stable across transport retries.
+func validRemoteExecutionID(id string)bool{
+ if len(id)!=32{return false}
+ for _,c:=range id{
+  if (c<'0'||c>'9')&&(c<'a'||c>'f'){return false}
+ }
+ return true
+}
+
 func(a *RemoteReleaseAgent)execute(ctx context.Context,operation,id string)error{
- if !idPattern.MatchString(id){return errors.New("invalid staged release ID")}
+ var entropy [16]byte
+ if _,err:=rand.Read(entropy[:]);err!=nil{return err}
+ return a.executeWithID(ctx,hex.EncodeToString(entropy[:]),operation,id)
+}
+
+func(a *RemoteReleaseAgent)executeWithID(ctx context.Context,requestID,operation,id string)error{
+ if !idPattern.MatchString(id)||!validRemoteExecutionID(requestID){
+  return errors.New("invalid staged release or execution request identity")
+ }
  arguments:=struct{
   Host string `json:"host"`
   ReleaseID string `json:"release_id"`
  }{a.host,id}
  request:=struct{
+  RequestID string `json:"request_id"`
   Operation string `json:"operation"`
   Target string `json:"target"`
   Arguments any `json:"arguments"`
- }{operation,a.host,arguments}
+ }{requestID,operation,a.host,arguments}
  var response struct{
   Allowed bool `json:"allowed"`
   Reason string `json:"reason"`
   ConfirmationID string `json:"confirmation_id"`
+  AuditID string `json:"audit_id"`
+  State string `json:"state"`
+  Replayed bool `json:"replayed"`
  }
  if err:=a.call(ctx,http.MethodPost,"/v1/execute",request,&response);err!=nil{return err}
  if !response.Allowed{
   if response.ConfirmationID!=""{return fmt.Errorf("owner confirmation required: %s",response.ConfirmationID)}
   return errors.New("independent authorization denied release operation")
  }
+ if response.AuditID!=requestID||response.State!="completed"{
+  return errors.New("release executor returned an unrelated or unverified execution receipt")
+ }
  return nil
 }
 
 func(a *RemoteReleaseAgent)Activate(ctx context.Context,id string)error{return a.execute(ctx,"infrastructure__release_activate",id)}
 func(a *RemoteReleaseAgent)Revert(ctx context.Context,id string)error{return a.execute(ctx,"infrastructure__release_revert",id)}
+
+// A coordinator may retry these methods with the same request ID if the
+// transport fails. The executor will return its recorded disposition without
+// repeating a release activation or reversion.
+func(a *RemoteReleaseAgent)ActivateWithID(ctx context.Context,requestID,id string)error{
+ return a.executeWithID(ctx,requestID,"infrastructure__release_activate",id)
+}
+func(a *RemoteReleaseAgent)RevertWithID(ctx context.Context,requestID,id string)error{
+ return a.executeWithID(ctx,requestID,"infrastructure__release_revert",id)
+}
 
 func(a *RemoteReleaseAgent)Observe(ctx context.Context)(ReleaseObservation,error){
  var result ReleaseObservation
