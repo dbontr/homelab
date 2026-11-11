@@ -167,6 +167,11 @@ in
       url = lib.mkOption { type = lib.types.str; default = ""; };
       tokenFile = lib.mkOption { type = lib.types.nullOr lib.types.str; default = null; };
       vaultAlias = lib.mkOption { type = lib.types.str; default = ""; };
+      forwardOwnerAssertion = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = "Permit forwarding signed owner assertions only to the explicitly trusted Workspace controller, for operation-bound provider authorization.";
+      };
     });
   };
 
@@ -238,6 +243,11 @@ in
         assertion = cfg.vault.endpoint == null || (cfg.vault.serverName != "" &&
           cfg.vault.caFile != null && cfg.vault.certificateFile != null && cfg.vault.keyFile != null);
         message = "Platform vault endpoint requires complete pinned TLS trust and service identity.";
+      }
+      {
+        assertion = lib.all (name: !cfg.integrations.${name}.forwardOwnerAssertion)
+          [ "learning" "health" ];
+        message = "Signed owner assertions may only be forwarded to the Workspace integration.";
       }
       {
         assertion = let
@@ -381,6 +391,9 @@ in
           }
           // lib.optionalAttrs (integration.vaultAlias != "") {
             "HOMELAB_${upper}_MCP_VAULT_ALIAS" = integration.vaultAlias;
+          }
+          // lib.optionalAttrs (name == "workspace" && integration.forwardOwnerAssertion) {
+            HOMELAB_WORKSPACE_MCP_FORWARD_OWNER_ASSERTION = "1";
           }
       ) {} [ "workspace" "learning" "health" ]);
       serviceConfig = {
