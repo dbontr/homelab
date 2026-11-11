@@ -30,6 +30,7 @@ if ! command -v bash >/dev/null 2>&1; then
 fi
 bash "$root/scripts/tests/verify-release-test.sh"
 bash "$root/scripts/tests/stage-component-test.sh"
+bash -n "$root/scripts/saturn-detached-activation.sh"
 
 if ! command -v go >/dev/null 2>&1; then
   printf "%s\n" "Go is required for the selected verification mode." >&2
