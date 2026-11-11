@@ -46,12 +46,12 @@ pub fn KnowledgeApproval(run_id: String, proposal: Value, csrf: String) -> Eleme
                     }
                 }
                 if let Some(record) = expanded(){
-                    h4 { {api::property(&record,&["kind"])} — {api::property(&record,&["title"])} }
+                    h4 { {format!("{} — {}", api::property(&record,&["kind"]), api::property(&record,&["title"]))} }
                     p { class:"muted", {api::property(&record,&["body"])} }
                     p { class:"mono", {format!("Source: {} @ {}", api::property(&record,&["repository"]), api::property(&record,&["revision"]))} }
                     if let Some(evidence)=record.get("evidence_sha256").and_then(Value::as_object) {
                         for (path,digest) in evidence {
-                            p { class:"mono", "{path}: {digest.as_str().unwrap_or("")}" }
+                            p { class:"mono", {format!("{}: {}", path, digest.as_str().unwrap_or(""))} }
                         }
                     }
                     if status=="proposed" && !approved(){
