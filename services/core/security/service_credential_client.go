@@ -66,6 +66,7 @@ func(c *RemoteAuthorizationClient)ServiceCredential(
   return "",errors.New("owner vault refused credential")
  }
  raw,err:=io.ReadAll(io.LimitReader(response.Body,8193))
+ defer func(){for i:=range raw{raw[i]=0}}()
  if err!=nil||len(raw)==0||len(raw)>8192{
   return "",errors.New("invalid service credential payload")
  }
