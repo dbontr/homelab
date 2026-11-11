@@ -70,7 +70,7 @@ func configureLearningModel(svc *mcpsvc.Service) error {
         raw, err := os.ReadFile(tokenFile)
         if err != nil { return fmt.Errorf("Learning model credential read failed: %w",err) }
         key = strings.TrimSpace(string(raw))
-        if len(key) < 20 || len(key) > 4096 || strings.ContainsAny(key,"\\r\\n\\x00") {
+        if len(key) < 20 || len(key) > 4096 || strings.ContainsAny(key,"\r\n\x00") {
             return errors.New("Learning model credential is invalid")
         }
     }
