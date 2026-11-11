@@ -161,6 +161,24 @@ func AdmitMigration(stateDir,target string,receiptBytes []byte)error{
     if err!=nil{return err}
     fingerprint:=migrationSHA(receiptBytes)
     if previous!=nil&&previous.Target==target&&previous.ReceiptSHA256==fingerprint{
+        // Repeated startup may observe a newer valid state, but must never
+        // initialize a fresh replay history or discard the protected vault.
+        auth,exists,err:=protectedMigrationFile(
+            filepath.Join(stateDir,"authenticator.json"),migrationMaxAuth)
+        if err!=nil||!exists{return errors.New("selected authority lost replay state")}
+        var replay authenticatorState
+        if err:=migrationJSON(auth,&replay);err!=nil||
+            replay.Version!=1||replay.LastTOTPStep < -1||
+            replay.Failures<0||replay.Failures>4{
+            return errors.New("selected authority has incompatible replay state")
+        }
+        if receipt.VaultSHA256!=nil{
+            _,present,err:=protectedMigrationFile(
+                filepath.Join(stateDir,"credentials.json"),migrationMaxVault)
+            if err!=nil||!present{
+                return errors.New("selected authority lost encrypted vault")
+            }
+        }
         return nil
     }
     if (receipt.ParentMarkerSHA256==nil)!=(parent==nil){
