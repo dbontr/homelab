@@ -171,9 +171,27 @@ impl Vault {
     pub(crate) fn rotate(&mut self, storage: &mut StateStore, id: &str, provider: &str, secret: &[u8])
         -> Result<(), Error>
     {
+        self.rotate_checked(storage, id, provider, None, secret)
+    }
+
+    /// A provider response cannot overwrite a credential that was revoked or
+    /// rotated while the remote request was in flight.
+    pub(crate) fn rotate_if_revision(
+        &mut self, storage: &mut StateStore, id: &str, provider: &str,
+        expected_revision: &str, secret: &[u8]
+    ) -> Result<(), Error> {
+        self.rotate_checked(storage, id, provider, Some(expected_revision), secret)
+    }
+
+    fn rotate_checked(
+        &mut self, storage: &mut StateStore, id: &str, provider: &str,
+        expected_revision: Option<&str>, secret: &[u8]
+    ) -> Result<(), Error> {
         checked_secret(secret)?;
         let existing = self.records.get(id).ok_or(Error::Unauthorized)?;
-        if existing.provider != provider {
+        if existing.provider != provider
+            || expected_revision.is_some_and(|revision| revision != record_revision(existing))
+        {
             return Err(Error::Unauthorized);
         }
         let replacement = self.seal(provider, id, secret, existing.created_at.clone())?;
@@ -271,6 +289,34 @@ mod tests {
         let got = vault.with_secret("abcdefghijklmnopqrstuvwxABCDEFGH", "research", None,
             |secret| secret.to_vec()).unwrap();
         assert_eq!(got, b"fixture-credential");
+        drop(vault);
+        drop(storage);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn stale_refresh_cannot_replace_rotated_or_revoked_credential() {
+        let dir = private_dir();
+        let mut storage = StateStore::acquire(&dir).unwrap();
+        let mut vault = Vault::open(&storage, [b'k'; 32]).unwrap();
+        let handle = vault.store(&mut storage, "vendor", b"initial").unwrap();
+        let snapshot = vault.revision(&handle.id, "vendor").unwrap();
+        vault.rotate(&mut storage, &handle.id, "vendor", b"rotated").unwrap();
+        assert!(matches!(
+            vault.rotate_if_revision(&mut storage, &handle.id, "vendor", &snapshot, b"stale"),
+            Err(Error::Unauthorized)
+        ));
+        let read = vault.with_secret(&handle.id, "vendor", None, |v| v.to_vec()).unwrap();
+        assert_eq!(read, b"rotated");
+        let current = vault.revision(&handle.id, "vendor").unwrap();
+        vault.rotate_if_revision(&mut storage, &handle.id, "vendor", &current, b"fresh").unwrap();
+        assert_eq!(vault.with_secret(&handle.id, "vendor", None, |v| v.to_vec()).unwrap(), b"fresh");
+        let last = vault.revision(&handle.id, "vendor").unwrap();
+        vault.delete(&mut storage, &handle.id).unwrap();
+        assert!(matches!(
+            vault.rotate_if_revision(&mut storage, &handle.id, "vendor", &last, b"resurrected"),
+            Err(Error::Unauthorized)
+        ));
         drop(vault);
         drop(storage);
         fs::remove_dir_all(dir).unwrap();
