@@ -178,8 +178,12 @@ pub fn admit(state: &Path, target: &str, raw: Option<&[u8]>) -> Result<(), Error
     let receipt_hash = sha(raw);
     if let Some((marker, _)) = &previous {
         if marker.target == target && marker.receipt_sha256 == receipt_hash {
-            // The persisted state may legitimately advance after selection.
-            // Runtime parsers still reject incompatible state versions.
+            // State may legitimately advance, but a selected authority
+            // cannot restart against a missing replay or vault record.
+            let (_, current_vault) = current_hashes(state)?;
+            if receipt.vault_sha256.is_some() && current_vault.is_none() {
+                return Err(Error::Storage);
+            }
             return Ok(());
         }
     }
