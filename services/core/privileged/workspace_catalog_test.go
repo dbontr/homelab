@@ -34,6 +34,15 @@ func TestWorkspaceUSBDeviceAllowlistMatchesControllerSyntax(t *testing.T) {
             t.Errorf("invalid device policy identity accepted: %q",identity)
         }
     }
+    policy.Devices=[]string{"jtag:1"}
+    for _,identity:=range []string{
+        "a","A-device","not_valid",strings.Repeat("n",64),
+    }{
+        policy.Projects=[]string{identity}
+        if err:=policy.validate();err==nil{
+            t.Errorf("invalid controller resource identity accepted: %q",identity)
+        }
+    }
 }
 
 func TestWorkspaceCatalogUsesExactOperatorResourceNames(t *testing.T){
