@@ -10,71 +10,47 @@ on:
       - "services/executor/Cargo.toml"
       - "services/motivation/Cargo.toml"
       - "ui/console/Cargo.toml"
-  pull_request:
-    paths:
-      - ".github/workflows/rust-lockfiles.yml"
-      - "services/security-authority/Cargo.toml"
-      - "services/executor/Cargo.toml"
-      - "services/motivation/Cargo.toml"
-      - "ui/console/Cargo.toml"
 
 permissions:
   contents: write
 
 concurrency:
-  group: rust-lockfiles-${{ github.event.pull_request.head.sha }}
+  group: rust-lockfiles-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   resolve:
-    if: >-
-      (github.event_name == 'push' &&
-       github.ref == 'refs/heads/feature/rust-native-execution-boundaries') ||
-      (github.event_name == 'pull_request' &&
-       github.event.pull_request.head.repo.full_name == github.repository &&
-       github.event.pull_request.head.ref == 'feature/rust-native-execution-boundaries')
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
+    if: github.repository == 'dbontr/homelab'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
-      - name: Check out the feature branch
+      - name: Check out the draft branch
         uses: actions/checkout@v4
         with:
           ref: feature/rust-native-execution-boundaries
           persist-credentials: true
-      - name: Install pinned Rust toolchain
+      - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
-      - name: Generate authentic Cargo lockfiles
+      - name: Resolve dependency graphs
         run: |
           set -euo pipefail
           mkdir -p lock-diagnostics
           rustc --version > lock-diagnostics/toolchain.txt
           cargo --version >> lock-diagnostics/toolchain.txt
           for manifest in services/security-authority/Cargo.toml services/executor/Cargo.toml services/motivation/Cargo.toml ui/console/Cargo.toml; do
-            echo "Resolving $manifest"
-            if ! cargo generate-lockfile --manifest-path "$manifest" > lock-diagnostics/last.log 2>&1; then
-              cat lock-diagnostics/last.log
-              cp lock-diagnostics/last.log "lock-diagnostics/$(basename "$(dirname "$manifest")").log"
+            name="$(basename "$(dirname "$manifest")")"
+            if ! cargo generate-lockfile --manifest-path "$manifest" > "lock-diagnostics/$name.log" 2>&1; then
+              cat "lock-diagnostics/$name.log"
               exit 1
             fi
-            cp lock-diagnostics/last.log "lock-diagnostics/$(basename "$(dirname "$manifest")").log"
-            cat lock-diagnostics/last.log
+            cat "lock-diagnostics/$name.log"
+            cargo metadata --format-version 1 --locked --no-deps --manifest-path "$manifest" > /dev/null
           done
           for file in services/security-authority/Cargo.lock services/executor/Cargo.lock services/motivation/Cargo.lock ui/console/Cargo.lock; do
             test -s "$file"
-            grep -q '^version = 4
-      - name: Commit reviewed-scope dependency resolution
-        run: |
-          set -euo pipefail
-          git add -f -- services/security-authority/Cargo.lock services/executor/Cargo.lock services/motivation/Cargo.lock ui/console/Cargo.lock
-          if git diff --cached --quiet; then
-            echo 'All Rust dependency locks are current.'
-            exit 0
-          fi
-          git -c user.name='homelab-build' -c user.email='build@users.noreply.github.com' commit -m 'Lock Rust release dependencies for reproducible builds'
-          git push origin "HEAD:${{ github.event.pull_request.head.ref }}"
- "$file"
+            grep -q '^version = 4$' "$file"
           done
-      - name: Preserve resolution diagnostics
+      - name: Preserve Cargo diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -82,13 +58,13 @@ jobs:
           path: lock-diagnostics/
           if-no-files-found: warn
           retention-days: 7
-      - name: Commit reviewed-scope dependency resolution
+      - name: Commit reviewed-scope lockfiles
         run: |
           set -euo pipefail
           git add -f -- services/security-authority/Cargo.lock services/executor/Cargo.lock services/motivation/Cargo.lock ui/console/Cargo.lock
           if git diff --cached --quiet; then
-            echo 'All Rust dependency locks are current.'
+            echo "Cargo locks already match the four manifests."
             exit 0
           fi
-          git -c user.name='homelab-build' -c user.email='build@users.noreply.github.com' commit -m 'Lock Rust release dependencies for reproducible builds'
-          git push origin "HEAD:${{ github.event.pull_request.head.ref }}"
+          git -c user.name=homelab-build -c user.email=build@users.noreply.github.com commit -m "Lock Rust release dependencies"
+          git push origin HEAD:feature/rust-native-execution-boundaries
