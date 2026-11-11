@@ -218,10 +218,35 @@ func (r *Runner) Start(ctx context.Context, id string, p map[string]any) (map[st
 			return nil, errors.New("USB passthrough requires the worker opt-in and workspace toggle")
 		}
 	}
-	flags, err := DeviceDockerArgsAuthorized(selected, r.AvailableDevices(), r.USBEnabled && p["usb_passthrough"] == true)
+    available:=r.AvailableDevices()
+    nativeLeases:=[]nativeDeviceLease{}
+    custodyArmed:=false
+    if nativeCustodySelected() && len(selected)>0 {
+        if err:=r.assertWorkspaceContainerAbsent(ctx,id);err!=nil{return nil,err}
+        nativeLeases,err=approvedDeviceClaims(selected,available,
+            r.USBEnabled && p["usb_passthrough"]==true)
+        if err!=nil{return nil,err}
+        if err:=acquireNativeLeases(ctx,id,nativeLeases);err!=nil{return nil,err}
+        custodyArmed=true
+        // The device remains reserved until the container's absence is
+        // verified. A failed cleanup deliberately retains the native lease.
+        defer func(){
+            if !custodyArmed{return}
+            recoveryCtx,cancel:=context.WithTimeout(context.Background(),40*time.Second)
+            defer cancel()
+            if r.assertWorkspaceContainerAbsent(recoveryCtx,id)==nil{
+                _=rollbackNativeLeases(nativeLeases,id)
+            }
+        }()
+    }
+	flags, err := DeviceDockerArgsAuthorized(selected,available,
+        r.USBEnabled && p["usb_passthrough"] == true)
 	if err != nil {
 		return nil, err
 	}
+    if custodyArmed{
+        if err:=verifyNativeLeases(ctx,id,nativeLeases);err!=nil{return nil,err}
+    }
 	if _, err := r.checked(ctx, 30*time.Second, nil, "volume", "create", "--label", "project-workspace=volume",
 		"--label", "project-workspace-workspace="+id, n); err != nil {
 		return nil, err
@@ -255,6 +280,16 @@ func (r *Runner) Start(ctx context.Context, id string, p map[string]any) (map[st
 		_, _, _, _ = r.docker(ctx, 30*time.Second, nil, "rm", "-f", n)
 		return nil, err
 	}
+    if custodyArmed {
+        // Recheck kernel identity after Docker has admitted the device. On a
+        // changed identity, destroy the container before releasing any lease.
+        if err:=verifyNativeLeases(ctx,id,nativeLeases);err!=nil{
+            cleanupCtx,cancel:=context.WithTimeout(context.Background(),30*time.Second)
+            _,_,_,_=r.docker(cleanupCtx,20*time.Second,nil,"rm","-f",n)
+            cancel()
+            return nil,fmt.Errorf("native device identity changed during allocation: %w",err)
+        }
+    }
 	if display {
 		if err := r.startVirtualDisplay(ctx, n, int(width), int(height)); err != nil {
 			cleanupCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
@@ -262,8 +297,10 @@ func (r *Runner) Start(ctx context.Context, id string, p map[string]any) (map[st
 			cancel()
 			return nil, fmt.Errorf("virtual display startup failed: %w", err)
 		}
+        custodyArmed=false
 		return map[string]any{"status": "ready", "container": n, "display": ":99", "width": width, "height": height}, nil
 	}
+    custodyArmed=false
 	return map[string]any{"status": "ready", "container": n}, nil
 }
 
