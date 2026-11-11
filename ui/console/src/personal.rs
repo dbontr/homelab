@@ -32,9 +32,6 @@ pub fn Learning(csrf: String) -> Element {
     let mut goal=use_signal(String::new);
     let mut target=use_signal(String::new);
     let mut mode=use_signal(||"learn".to_owned());
-    let mut answer=use_signal(String::new);
-    let mut reasoning=use_signal(String::new);
-    let mut assisted=use_signal(||false);
     let mut busy=use_signal(||false);
     let mut error=use_signal(String::new);
     let mut notice=use_signal(String::new);
@@ -180,73 +177,23 @@ pub fn Learning(csrf: String) -> Element {
                 owner_id: session_id.clone(),
             }
             if let Some(question)=current_question{
-                section{class:"card",
-                    div{class:"card-header",
-                        h2{class:"card-title","Pending question"}
-                        p{class:"card-description",
-                            "Your answer will be saved without automatic grading or mastery credit."}
-                    }
-                    div{class:"card-body stack",
-                        p{ {api::property(&question,&["prompt"])} }
-                        if let Some(options)=question.get("options").and_then(Value::as_array){
-                            div{class:"task-items",
-                                for option in options{
-                                    div{class:"task-item",
-                                        span{class:"small muted",{api::property(option,&["id"])}}
-                                        span{ {api::property(option,&["label"])} }
-                                    }
-                                }
-                            }
-                        }
-                        form{class:"task-editor-fields",
-                            onsubmit:move |event|{
-                                event.prevent_default();
-                                if busy(){return}
-                                let Some(value)=pending.cloned().and_then(Result::ok) else{return};
-                                let Some(id)=value.get("question").and_then(|q|q.get("id")).and_then(Value::as_str) else{return};
-                                let path=format!("/v1/learning/questions/{id}/answer");
-                                let payload=serde_json::json!({
-                                    "learner_response":answer(),"learner_reasoning":reasoning(),"assisted":assisted()
-                                });
-                                let token=csrf();
-                                busy.set(true);error.set(String::new());
-                                spawn(async move{
-                                    match api::write::<Value,_>(reqwest::Method::POST,&path,&token,&payload).await{
-                                        Ok(_)=>{
-                                            answer.set(String::new());
-                                            reasoning.set(String::new());
-                                            notice.set("Response saved; it awaits independent assessment".to_owned());
-                                            pending.restart();detail.restart();sessions.restart();
-                                        },
-                                        Err(e)=>error.set(e),
-                                    }
-                                    busy.set(false);
-                                });
-                            },
-                            label{class:"form-row",
-                                span{class:"label","Your answer"}
-                                textarea{class:"field",required:true,rows:"3",
-                                    value:"{answer()}",oninput:move |e|answer.set(e.value())}
-                            }
-                            label{class:"form-row",
-                                span{class:"label","Your reasoning"}
-                                textarea{class:"field",rows:"4",
-                                    value:"{reasoning()}",oninput:move |e|reasoning.set(e.value())}
-                            }
-                            label{class:"inline-row",
-                                input{r#type:"checkbox",checked:assisted(),
-                                    onchange:move |e|assisted.set(e.checked())}
-                                span{"I used assistance"}
-                            }
-                            button{class:"btn btn-primary",disabled:busy(),"Submit response"}
-                        }
+                LearningQuestion {
+                    key: "{api::property(&question, &["id"])}",
+                    csrf: csrf(),
+                    question,
+                    on_saved: move |_| {
+                        pending.restart();
+                        detail.restart();
+                        sessions.restart();
+                        reviews.restart();
+                        notice.set("Your response is saved. Independent assessment is still required.".to_owned());
                     }
                 }
             } else {
                 Card{title:"Pending work".to_owned(),
-                    description:"No unanswered learning question is available.".to_owned(),
+                    description:"No ungraded learning question is available.".to_owned(),
                     div{class:"card-body",
-                        p{class:"small muted","Continue planning and asking questions through the Adaptive Teaching MCP."}
+                        p{class:"small muted","Continue planning and asking questions through Adaptive Teaching."}
                     }
                 }
             }
@@ -723,5 +670,216 @@ pub fn Health(csrf: String) -> Element{
                 }
             }
         }
+    }
+}
+
+#[component]
+fn LearningQuestion(question: Value, csrf: String, on_saved: EventHandler<()>) -> Element {
+    let mut answer = use_signal(String::new);
+    let mut reasoning = use_signal(String::new);
+    let mut confidence = use_signal(String::new);
+    let mut assisted = use_signal(|| false);
+    let mut busy = use_signal(|| false);
+    let mut error = use_signal(String::new);
+
+    let id = question.get("id").and_then(Value::as_str).unwrap_or("").to_owned();
+    let status = question.get("status").and_then(Value::as_str).unwrap_or("");
+    let multiple_choice = question.get("response_kind").and_then(Value::as_str)
+        == Some("multiple_choice");
+    let options = question.get("options").and_then(Value::as_array).cloned()
+        .unwrap_or_default();
+    let saved_response = question.get("learner_response").and_then(Value::as_str)
+        .unwrap_or("");
+    let saved_option = options.iter()
+        .find(|option| option.get("id").and_then(Value::as_str) == Some(saved_response))
+        .and_then(|option| option.get("label").and_then(Value::as_str));
+    let saved_confidence = question.get("self_confidence").and_then(Value::as_f64)
+        .map(|value| format!("{:.0}%", value * 100.0));
+
+    rsx! {
+        Card {
+            title: "Learning question".to_owned(),
+            description: "An answer is saved before a separate evaluator assesses correctness and reasoning.".to_owned(),
+            div { class: "card-body stack",
+                p { {api::property(&question, &["prompt"])} }
+                if !error().is_empty() { Notice { message: error() } }
+                if status == "answered" {
+                    div { role: "status", class: "alert",
+                        "Response recorded. Independent assessment is pending."
+                    }
+                    div { class: "kv-list",
+                        div { class: "kv-entry",
+                            span { class: "small muted", "Your answer" }
+                            span { "{saved_option.unwrap_or(saved_response)}" }
+                        }
+                        if let Some(explanation) = question.get("learner_reasoning")
+                            .and_then(Value::as_str).filter(|value| !value.is_empty()) {
+                            div { class: "kv-entry",
+                                span { class: "small muted", "Your reasoning" }
+                                span { "{explanation}" }
+                            }
+                        }
+                        if let Some(value) = saved_confidence {
+                            div { class: "kv-entry",
+                                span { class: "small muted", "Your confidence" }
+                                span { "{value}" }
+                            }
+                        }
+                        div { class: "kv-entry",
+                            span { class: "small muted", "Assistance used" }
+                            span { if question.get("assisted").and_then(Value::as_bool) == Some(true) {
+                                "Yes"
+                            } else {
+                                "No"
+                            } }
+                        }
+                    }
+                    p { class: "small muted",
+                        "The committed answer key remains sealed. This record does not establish mastery."
+                    }
+                } else if status == "pending" {
+                    form {
+                        class: "task-editor-fields",
+                        onsubmit: {
+                            let id = id.clone();
+                            let token = csrf.clone();
+                            let options = options.clone();
+                            move |event| {
+                                event.prevent_default();
+                                if busy() { return; }
+                                let response = answer();
+                                if response.trim().is_empty() || id.is_empty()
+                                    || id.len() > 128
+                                    || !id.bytes().all(|b| b.is_ascii_alphanumeric()
+                                        || b == b'-' || b == b'_')
+                                    || (multiple_choice && !options.iter().any(|option|
+                                        option.get("id").and_then(Value::as_str)
+                                            == Some(response.as_str()))) {
+                                    error.set("Select a valid answer before submitting.".to_owned());
+                                    return;
+                                }
+                                let explanation = reasoning();
+                                if response.len() > 12000 || explanation.len() > 16000 {
+                                    error.set("The response exceeds the accepted length.".to_owned());
+                                    return;
+                                }
+                                let belief = confidence().parse::<f64>().ok()
+                                    .filter(|value| value.is_finite() && (0.0..=1.0).contains(value));
+                                let payload = serde_json::json!({
+                                    "learner_response": response,
+                                    "learner_reasoning": explanation,
+                                    "assisted": assisted(),
+                                    "self_confidence": belief,
+                                });
+                                let url = format!("/v1/learning/questions/{id}/answer");
+                                let token = token.clone();
+                                error.set(String::new());
+                                busy.set(true);
+                                spawn(async move {
+                                    match api::write::<Value, _>(
+                                        reqwest::Method::POST, &url, &token, &payload
+                                    ).await {
+                                        Ok(_) => on_saved.call(()),
+                                        Err(message) => error.set(format!(
+                                            "The response was not saved: {message}. Refresh before retrying."
+                                        )),
+                                    }
+                                    busy.set(false);
+                                });
+                            }
+                        },
+                        if multiple_choice {
+                            label { class: "form-row",
+                                span { class: "label", "Your answer" }
+                                select {
+                                    class: "field",
+                                    required: true,
+                                    disabled: busy(),
+                                    value: "{answer()}",
+                                    onchange: move |event| answer.set(event.value()),
+                                    option { value: "", "Choose an answer" }
+                                    for option in &options {
+                                        if let (Some(value), Some(title)) = (
+                                            option.get("id").and_then(Value::as_str),
+                                            option.get("label").and_then(Value::as_str)
+                                        ) {
+                                            option { value: "{value}", "{title}" }
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            label { class: "form-row",
+                                span { class: "label", "Your answer" }
+                                textarea {
+                                    class: "field", required: true, rows: "4",
+                                    maxlength: "12000", disabled: busy(),
+                                    value: "{answer()}",
+                                    oninput: move |event| answer.set(event.value())
+                                }
+                            }
+                        }
+                        label { class: "form-row",
+                            span { class: "label", "Your reasoning" }
+                            textarea {
+                                class: "field", rows: "4", maxlength: "16000", disabled: busy(),
+                                value: "{reasoning()}",
+                                oninput: move |event| reasoning.set(event.value())
+                            }
+                        }
+                        label { class: "form-row",
+                            span { class: "label", "Confidence (optional)" }
+                            select {
+                                class: "field", disabled: busy(),
+                                value: "{confidence()}",
+                                onchange: move |event| confidence.set(event.value()),
+                                option { value: "", "Not specified" }
+                                option { value: "0.0", "0% — certain it is incorrect" }
+                                option { value: "0.25", "25%" }
+                                option { value: "0.5", "50%" }
+                                option { value: "0.75", "75%" }
+                                option { value: "1.0", "100% — certain it is correct" }
+                            }
+                        }
+                        label { class: "inline-row",
+                            input {
+                                r#type: "checkbox", checked: assisted(), disabled: busy(),
+                                onchange: move |event| assisted.set(event.checked())
+                            }
+                            span { "I used assistance" }
+                        }
+                        button {
+                            class: "btn btn-primary",
+                            disabled: busy() || answer().trim().is_empty(),
+                            "Save answer"
+                        }
+                        p { class: "small muted",
+                            "Your answer, reasoning, confidence and assistance report are preserved together. Submission does not grade the response."
+                        }
+                    }
+                } else {
+                    p { class: "small muted",
+                        "This question is not awaiting an answer. Refresh its Learning session to inspect the latest state."
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod learning_question_tests {
+    use super::*;
+
+    #[test]
+    fn ungraded_questions_do_not_contain_sealed_answers() {
+        let pending = serde_json::json!({
+            "id":"q1", "status":"pending", "prompt":"Explain why",
+            "response_kind":"multiple_choice",
+            "options":[{"id":"a","label":"first"},{"id":"b","label":"second"}]
+        });
+        assert!(pending.get("expected_answer").is_none());
+        assert!(pending.get("grading_criteria").is_none());
+        assert_eq!(pending.get("response_kind").and_then(Value::as_str),Some("multiple_choice"));
     }
 }
