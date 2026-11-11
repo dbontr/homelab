@@ -193,15 +193,23 @@ func(s *Server) Handler()http.Handler{
  mux.HandleFunc("POST /v1/recipes/recipesage/preview",s.recipeSagePreview)
  mux.HandleFunc("POST /v1/recipes/recipesage/import",s.recipeSageImport)
  mux.HandleFunc("POST /v1/recipes/images",s.recipeImageUpload)
- mux.HandleFunc("GET /v1/recipes/images/{name}",s.recipeImage)
+ mux.HandleFunc("GET /v1/recipes/{id}/{name}",func(w http.ResponseWriter,r *http.Request){
+  if r.PathValue("id")=="images"{
+   s.recipeImage(w,r)
+   return
+  }
+  switch r.PathValue("name"){
+  case "nutrition": s.recipeNutrition(w,r)
+  case "history": s.recipeHistory(w,r)
+  default: http.NotFound(w,r)
+  }
+ })
  mux.HandleFunc("POST /v1/recipes/import",s.recipeArchive)
  mux.HandleFunc("GET /v1/recipes/{id}",s.recipeItem)
  mux.HandleFunc("PUT /v1/recipes/{id}",s.recipeItem)
  mux.HandleFunc("DELETE /v1/recipes/{id}",s.recipeItem)
  mux.HandleFunc("POST /v1/recipes/{id}/usda-preview",s.recipeUSDAHTTP)
  mux.HandleFunc("POST /v1/recipes/{id}/usda-apply",s.recipeUSDAHTTP)
- mux.HandleFunc("GET /v1/recipes/{id}/nutrition",s.recipeNutrition)
- mux.HandleFunc("GET /v1/recipes/{id}/history",s.recipeHistory)
  mux.HandleFunc("POST /v1/recipes/{id}/restore",s.recipeRestore)
  mux.HandleFunc("GET /v1/meals",s.mealCollection)
  mux.HandleFunc("POST /v1/meals",s.mealCollection)
