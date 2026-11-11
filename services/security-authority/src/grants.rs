@@ -97,6 +97,7 @@ struct BoundGrant {
 pub(crate) struct ScopedCredential {
     pub alias: String,
     pub revision: String,
+    pub expires_at: Option<i64>,
 }
 
 pub(crate) struct ServiceCredentialPolicy {
@@ -165,6 +166,7 @@ impl ServiceCredentialPolicy {
                 result.push(ScopedCredential {
                     alias: alias.clone(),
                     revision: grant.revision.clone(),
+                    expires_at: grant.expires_at,
                 });
             }
         }
