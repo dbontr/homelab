@@ -117,8 +117,8 @@ pub fn DependencyGraph(members: Vec<Value>) -> Element {
                         let key = api::property(member,&["key"]);
                         move |_| selected.set(key.clone())
                     },
-                    span { class:"engineering-graph-role", "{api::property(member,&["role"])}" }
-                    span { class:"engineering-graph-key", "{api::property(member,&["key"])}" }
+                    span { class:"engineering-graph-role", {api::property(member,&["role"])} }
+                    span { class:"engineering-graph-key", {api::property(member,&["key"])} }
                     span { class:"engineering-graph-deps",
                         "Depends on: "
                         {
@@ -138,7 +138,7 @@ pub fn DependencyGraph(members: Vec<Value>) -> Element {
         }
         if let Some(chosen) = chosen {
             div { class:"engineering-graph-detail",
-                strong { "{api::property(&chosen,&["role"])}" }
+                strong { {api::property(&chosen,&["role"])} }
                 span { class:"muted", "Run: {chosen.get("run").map(|run|api::property(run,&["id"])).unwrap_or_default()}" }
                 span { class:"muted", "Dependencies must complete before this member begins." }
             }
