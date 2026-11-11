@@ -176,7 +176,14 @@ for host in $hosts; do
   printf 'Evaluating %s\n' "$host"
   nix --extra-experimental-features 'nix-command flakes' eval --offline --raw ".#nixosConfigurations.$host.config.system.build.toplevel.drvPath"
 done
-for package in homelab-platform homelab-calendar homelab-engineering homelab-security homelab-executor homelab-fleet; do
+# Every supported source-defined release artifact must be independently buildable.
+# Include disabled-by-default Rust authorities: their Nix derivations cannot be
+# silently excluded from source acceptance merely because Go remains active.
+for package in \
+  homelab-platform homelab-calendar homelab-engineering homelab-security \
+  homelab-security-authority homelab-executor homelab-executor-authority \
+  homelab-actuator homelab-native-hardware homelab-engineering-sandbox \
+  homelab-motivation homelab-interfaces homelab-fleet; do
   nix --extra-experimental-features 'nix-command flakes' build --offline --no-link ".#packages.x86_64-linux.$package"
 done
 printf '%s\n' 'All local source checks succeeded. No NixOS configuration was activated.'
