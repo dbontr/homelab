@@ -13,7 +13,8 @@ WorkingDirectory=/var/lib/project-workspace-worker
 Environment=HOME=/var/lib/project-workspace-worker
 EnvironmentFile=/etc/project-workspace/worker.env
 ExecStart=/usr/local/bin/project-workspace-worker serve --backend docker --controller ${PWM_CONTROLLER_URL} --node ${PWM_NODE_ID}
-StateDirectory=project-workspace-worker
+StateDirectory=project-workspace-worker homelab-device-leases
+Environment=HOMELAB_NATIVE_CUSTODY_DIR=/var/lib/homelab-device-leases
 StateDirectoryMode=0700
 UMask=0077
 NoNewPrivileges=true
