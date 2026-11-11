@@ -83,9 +83,6 @@ impl VerifiedServiceIdentity {
         }
         Ok(Self { dns })
     }
-    pub(crate) fn dns(&self) -> &str {
-        &self.dns
-    }
 }
 
 struct BoundGrant {
