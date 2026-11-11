@@ -125,6 +125,32 @@ func TestSelectedGoAuthorityCannotRestartWithMissingReplayOrVault(t *testing.T){
     }
 }
 
+func TestMigrationRequiresExactUnduplicatedCrossLanguageFields(t *testing.T){
+ dir:=migrationTestState(t)
+ approved:=migrationTestReceipt(t,dir,"rust",nil)
+ for _,altered:=range []struct{name string;raw []byte}{
+  {"case-folded-version",bytes.Replace(approved,[]byte(`"version"`),[]byte(`"Version"`),1)},
+  {"duplicate-version",append(bytes.TrimSuffix(bytes.Clone(approved),[]byte("}")),
+   []byte(`,"version":1}`)... )},
+  {"unknown-extra",append(bytes.TrimSuffix(bytes.Clone(approved),[]byte("}")),
+   []byte(`,"unrecognized":true}`)... )},
+  {"null-target",bytes.Replace(approved,[]byte(`"target":"rust"`),[]byte(`"target":null`),1)},
+ }{
+  t.Run(altered.name,func(t *testing.T){
+   if err:=AdmitMigration(dir,"rust",altered.raw);err==nil{
+    t.Fatal("ambiguous shared migration record was accepted")
+   }
+  })
+ }
+ replay:=[]byte(`{"version":1,"last_totp_step":1,"failures":0,"locked_until":"0001-01-01T00:00:00Z"}`)
+ var state authenticatorState
+ if err:=migrationJSON(replay,&state);err!=nil{t.Fatal(err)}
+ if err:=migrationJSON(bytes.Replace(replay,[]byte(`"locked_until"`),
+  []byte(`"LOCKED_UNTIL"`),1),&state);err==nil{
+  t.Fatal("case-insensitive replay state name was accepted")
+ }
+}
+
 func TestMigrationRejectsSharedOrSymlinkedProtectedRecords(t *testing.T){
     dir:=migrationTestState(t)
     valid:=migrationTestReceipt(t,dir,"rust",nil)
