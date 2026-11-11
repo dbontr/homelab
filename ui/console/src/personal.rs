@@ -673,6 +673,26 @@ pub fn Health(csrf: String) -> Element{
     }
 }
 
+fn valid_learning_answer(question: &Value, response: &str) -> bool {
+    let Some(id) = question.get("id").and_then(Value::as_str) else {
+        return false;
+    };
+    if id.is_empty() || id.len() > 128
+        || !id.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+        || response.trim().is_empty() || response.len() > 12000
+        || question.get("status").and_then(Value::as_str) != Some("pending")
+    {
+        return false;
+    }
+    match question.get("response_kind").and_then(Value::as_str) {
+        Some("multiple_choice") => question.get("options").and_then(Value::as_array)
+            .is_some_and(|options| options.iter().any(|option|
+                option.get("id").and_then(Value::as_str) == Some(response))),
+        Some("free_response") => true,
+        _ => false,
+    }
+}
+
 #[component]
 fn LearningQuestion(question: Value, csrf: String, on_saved: EventHandler<()>) -> Element {
     let mut answer = use_signal(String::new);
@@ -743,18 +763,12 @@ fn LearningQuestion(question: Value, csrf: String, on_saved: EventHandler<()>) -
                         onsubmit: {
                             let id = id.clone();
                             let token = csrf.clone();
-                            let options = options.clone();
+                            let question = question.clone();
                             move |event| {
                                 event.prevent_default();
                                 if busy() { return; }
                                 let response = answer();
-                                if response.trim().is_empty() || id.is_empty()
-                                    || id.len() > 128
-                                    || !id.bytes().all(|b| b.is_ascii_alphanumeric()
-                                        || b == b'-' || b == b'_')
-                                    || (multiple_choice && !options.iter().any(|option|
-                                        option.get("id").and_then(Value::as_str)
-                                            == Some(response.as_str()))) {
+                                if !valid_learning_answer(&question, &response) {
                                     error.set("Select a valid answer before submitting.".to_owned());
                                     return;
                                 }
@@ -872,14 +886,32 @@ mod learning_question_tests {
     use super::*;
 
     #[test]
-    fn ungraded_questions_do_not_contain_sealed_answers() {
-        let pending = serde_json::json!({
-            "id":"q1", "status":"pending", "prompt":"Explain why",
-            "response_kind":"multiple_choice",
-            "options":[{"id":"a","label":"first"},{"id":"b","label":"second"}]
+    fn accepts_only_a_pending_question_and_a_committed_choice() {
+        let mut question = serde_json::json!({
+            "id": "question-1",
+            "status": "pending",
+            "response_kind": "multiple_choice",
+            "options": [{"id": "a", "label": "First"}, {"id": "b", "label": "Second"}],
         });
-        assert!(pending.get("expected_answer").is_none());
-        assert!(pending.get("grading_criteria").is_none());
-        assert_eq!(pending.get("response_kind").and_then(Value::as_str),Some("multiple_choice"));
+        assert!(valid_learning_answer(&question, "b"));
+        assert!(!valid_learning_answer(&question, "uncommitted"));
+        assert!(!valid_learning_answer(&question, ""));
+        question["status"] = serde_json::json!("answered");
+        assert!(!valid_learning_answer(&question, "a"));
+        question["status"] = serde_json::json!("pending");
+        question["id"] = serde_json::json!("../another-session");
+        assert!(!valid_learning_answer(&question, "b"));
+    }
+
+    #[test]
+    fn free_response_has_separate_bounds_and_cannot_use_unknown_question_types() {
+        let mut question = serde_json::json!({
+            "id": "question_2", "status": "pending", "response_kind": "free_response"
+        });
+        assert!(valid_learning_answer(&question, "A derivation with explicit assumptions"));
+        assert!(!valid_learning_answer(&question, "  "));
+        assert!(!valid_learning_answer(&question, &"a".repeat(12001)));
+        question["response_kind"] = serde_json::json!("unrecognized");
+        assert!(!valid_learning_answer(&question, "answer"));
     }
 }
