@@ -66,6 +66,7 @@ func(p *WorkspacePolicy)allocationArgs(fields map[string]any)(map[string]any,err
     if input.MinGPUMemoryMB>0&&input.Hardware["gpu"]==0{
         return nil,errors.New("GPU memory requires an approved GPU request")
     }
+    if input.Hardware==nil{input.Hardware=make(map[string]int)}
     if input.USBPassthrough{
         if input.Hardware["usb"]>1 ||input.USBNode==""||
             !workspaceIdentifier.MatchString(input.USBNode)||
