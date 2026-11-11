@@ -15,6 +15,9 @@ fn text(value:&Value,keys:&[&str])->String{
         if let Some(s)=value.get(key).and_then(Value::as_str){
             if !s.is_empty(){return s.to_owned()}
         }
+        if let Some(number)=value.get(key).and_then(Value::as_i64){
+            return number.to_string();
+        }
     }
     "Not reported".to_owned()
 }
@@ -595,6 +598,12 @@ pub fn SourceProgress(source_id:String)->Element{
 #[cfg(test)]
 mod tests{
     use super::*;
+    #[test]
+    fn recorded_hint_levels_are_displayed_without_coercion() {
+        assert_eq!(text(&json!({"level":2}),&["level"]),"2");
+        assert_eq!(text(&json!({"level":null}),&["level"]),"Not reported");
+    }
+
     #[test]
     fn host_requests_are_bounded_and_explicit(){
         assert!(bounded_host_request("Explain this result","learning session","s_1",None).is_ok());
