@@ -80,6 +80,7 @@
 
 - [RFC 8446: The Transport Layer Security (TLS) Protocol Version 1.3](https://www.rfc-editor.org/rfc/rfc8446) — IETF. Used for: TLS 1.3 transport between trusted release coordinator and host executors.
 - [RFC 5280: Internet X.509 Public Key Infrastructure Certificate Profile](https://www.rfc-editor.org/rfc/rfc5280) — IETF. Used for: verified server and client certificate identities and trust anchors in authenticated release transport.
+- [RFC 1123: Requirements for Internet Hosts — Application and Support](https://www.rfc-editor.org/rfc/rfc1123) — IETF. Used for: canonical ASCII DNS host-label syntax in certificate-bound service identities and credential grants.
 - [OpenAI Embeddings API](https://platform.openai.com/docs/api-reference/embeddings/create) — OpenAI. Used for: a configurable bounded embeddings-compatible provider contract for consented research indexing and semantic queries.
 - [OpenAI Chat Completions API](https://platform.openai.com/docs/api-reference/chat/create) — OpenAI. Used for: the optional bounded chat-completions wire format that returns proposed source-file contents from a configured model endpoint.
 - [Go types package](https://pkg.go.dev/go/types) — Go project. Used for: type-aware identifier and definition analysis using the standard Go type checker, with explicit partial results when imports are unavailable.
