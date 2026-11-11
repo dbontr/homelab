@@ -98,12 +98,13 @@ fn encode_state(state: &AuthenticatorState) -> Result<Vec<u8>, Error> {
 
 pub struct StateStore {
     directory: PathBuf,
-    _lease: File,
+    _lease: Option<File>,
+    read_only: bool,
     faulted: bool,
 }
 
 impl StateStore {
-    pub fn acquire(directory: &Path) -> Result<Self, Error> {
+    fn validate_directory(directory: &Path) -> Result<(), Error> {
         if !directory.is_absolute()
             || directory.components().any(|c| matches!(c, std::path::Component::ParentDir))
         {
@@ -116,6 +117,21 @@ impl StateStore {
         {
             return Err(Error::Storage);
         }
+        Ok(())
+    }
+
+    pub fn inspect(directory: &Path) -> Result<Self, Error> {
+        Self::validate_directory(directory)?;
+        Ok(Self {
+            directory: directory.to_owned(),
+            _lease: None,
+            read_only: true,
+            faulted: false,
+        })
+    }
+
+    pub fn acquire(directory: &Path) -> Result<Self, Error> {
+        Self::validate_directory(directory)?;
         let lease = OpenOptions::new()
             .read(true)
             .write(true)
@@ -130,7 +146,8 @@ impl StateStore {
         FileExt::try_lock_exclusive(&lease).map_err(|_| Error::Storage)?;
         Ok(Self {
             directory: directory.to_owned(),
-            _lease: lease,
+            _lease: Some(lease),
+            read_only: false,
             faulted: false,
         })
     }
@@ -152,7 +169,7 @@ impl StateStore {
     }
 
     pub fn persist_authenticator(&mut self, state: &AuthenticatorState) -> Result<(), Error> {
-        if self.faulted {
+        if self.faulted || self.read_only {
             return Err(Error::Storage);
         }
         let payload = encode_state(state)?;
@@ -171,7 +188,7 @@ impl StateStore {
     }
 
     pub(crate) fn persist_vault(&mut self, payload: &[u8]) -> Result<(), Error> {
-        if self.faulted {
+        if self.faulted || self.read_only {
             return Err(Error::Storage);
         }
         if self.write_atomically(VAULT_NAME, payload, MAX_VAULT_BYTES).is_err() {
@@ -182,7 +199,7 @@ impl StateStore {
     }
 
     fn write_atomically(&self, name: &str, payload: &[u8], limit: usize) -> Result<(), Error> {
-        if payload.len() > limit || name.contains('/') {
+        if self.read_only || payload.len() > limit || name.contains('/') {
             return Err(Error::Storage);
         }
         let mut nonce = [0u8; 16];
@@ -220,6 +237,23 @@ mod tests {
         fs::create_dir(&path).unwrap();
         fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
         path
+    }
+
+    #[test]
+    fn preflight_inspection_does_not_create_or_write_state() {
+        let directory = dir();
+        let mut store = StateStore::inspect(&directory).unwrap();
+        assert!(!directory.join(LOCK_NAME).exists());
+        assert_eq!(store.load_authenticator().unwrap(), AuthenticatorState::default());
+        assert_eq!(
+            store.persist_authenticator(&AuthenticatorState::default()),
+            Err(Error::Storage)
+        );
+        assert_eq!(store.persist_vault(b"{}"), Err(Error::Storage));
+        assert!(!directory.join(STATE_NAME).exists());
+        assert!(!directory.join(VAULT_NAME).exists());
+        drop(store);
+        fs::remove_dir_all(directory).unwrap();
     }
 
     #[test]
