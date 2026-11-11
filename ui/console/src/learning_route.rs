@@ -169,7 +169,7 @@ pub fn LearningRoute(
                                 }
                                 if let Some(premises) = step.get("premises").and_then(Value::as_array) {
                                     p { class: "small muted",
-                                        "Premises: {premises.iter().filter_map(Value::as_str).collect::<Vec<_>>().join(", ")}"
+                                        {format!("Premises: {}", premises.iter().filter_map(Value::as_str).collect::<Vec<_>>().join(", "))}
                                     }
                                 }
                             }
