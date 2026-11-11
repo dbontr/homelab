@@ -279,7 +279,7 @@ pub(crate) fn verify_workspace(workspace: &str) -> Result<usize, &'static str> {
     }
     let root = directory()?;
     let mut count = 0usize;
-    let entries = fs::read_dir(root)
+    let entries = fs::read_dir(&root)
         .map_err(|_| "device custody inventory unavailable")?;
     for entry in entries {
         let entry = entry.map_err(|_| "device custody inventory unavailable")?;
