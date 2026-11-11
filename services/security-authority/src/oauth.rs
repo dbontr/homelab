@@ -103,9 +103,23 @@ fn random_token(bytes: usize) -> Result<String, Error> {
     Ok(encoded)
 }
 
+fn public_provider_host(host: &str) -> bool {
+    if !crate::grants::valid_service_dns(host)
+        || !host.contains('.')
+        || host.ends_with(".local")
+        || host.ends_with(".internal")
+    {
+        return false;
+    }
+    host.rsplit('.').next().is_some_and(|suffix|
+        suffix.len() >= 2 && suffix.bytes().all(|c| c.is_ascii_lowercase())
+    )
+}
+
 fn safe_https(value: &str) -> Result<Url, Error> {
     let url = Url::parse(value).map_err(|_| Error::InvalidConfiguration)?;
-    if url.scheme() != "https" || url.host_str().is_none()
+    if url.scheme() != "https"
+        || url.host_str().is_none_or(|host| !public_provider_host(host))
         || url.password().is_some() || !url.username().is_empty()
         || url.fragment().is_some() || url.query().is_some()
     {
@@ -121,7 +135,8 @@ fn verify_url(url: &str, name: &str) -> bool {
     let Ok(url) = Url::parse(url) else {
         return false;
     };
-    url.scheme() == "https" && url.host_str() == Some(name)
+    public_provider_host(name)
+        && url.scheme() == "https" && url.host_str() == Some(name)
         && url.username().is_empty() && url.password().is_none()
         && url.fragment().is_none()
 }
@@ -746,6 +761,24 @@ mod tests {
             br#"{"access_token":"newer","refresh_token":"refresh-b","token_type":"Bearer"}"#
         ).unwrap();
         assert_eq!(changed["refresh_token"], "refresh-b");
+    }
+
+    #[test]
+    fn oauth_endpoints_require_public_dns_hosts() {
+        for endpoint in [
+            "https://127.0.0.1/token",
+            "https://[::1]/token",
+            "https://localhost/token",
+            "https://metadata.internal/token",
+            "https://identity.local/token",
+            "https://example.invalid/token?redirect=1",
+            "https://user@example.invalid/token",
+        ] {
+            assert!(safe_https(endpoint).is_err(), "unsafe OAuth endpoint: {endpoint}");
+        }
+        assert!(safe_https("https://example.invalid/token").is_ok());
+        assert!(!verify_url("https://127.0.0.1/verify", "127.0.0.1"));
+        assert!(verify_url("https://example.invalid/verify", "example.invalid"));
     }
 
     #[test]
