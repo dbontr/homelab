@@ -3,7 +3,13 @@ package transport
 import (
     "net/http"
     "net/http/httptest"
+    "encoding/json"
+    "path/filepath"
     "strings"
+
+    "github.com/dbontr/homelab-new/system/security"
+    "github.com/dbontr/homelab-new/system/session"
+    "github.com/dbontr/homelab-new/system/store"
     "testing"
 )
 
@@ -79,5 +85,65 @@ func TestLearningAttachmentRejectsInvalidInputBeforeForwarding(t *testing.T) {
     service.uiLearningAttachmentUpload(result,req)
     if result.Code!=http.StatusRequestEntityTooLarge {
         t.Fatalf("oversized upload returned %d",result.Code)
+    }
+}
+
+
+func TestLearningOriginalsRequireOwnerSessionCSRFAndApprovedMedia(t *testing.T) {
+    db,err:=store.Open(filepath.Join(t.TempDir(),"state.json"),"UTC")
+    if err!=nil{t.Fatal(err)}
+    service,err:=New(db,strings.Repeat("p",40),nil)
+    if err!=nil{t.Fatal(err)}
+    key,err:=security.HashPassphrase([]byte("learning-original-owner-passphrase"))
+    if err!=nil{t.Fatal(err)}
+    sessions,err:=session.New(key)
+    if err!=nil{t.Fatal(err)}
+    service.SetSessions(sessions)
+    if err:=service.SetAllowedOrigins([]string{"https://console.example"});err!=nil{t.Fatal(err)}
+    handler:=service.Handler()
+    call:=func(method,path,mimeType,body string,cookie *http.Cookie,csrf string)*httptest.ResponseRecorder{
+        req:=httptest.NewRequest(method,path,strings.NewReader(body))
+        req.Host="console.example"
+        req.Header.Set("Origin","https://console.example")
+        if mimeType!=""{req.Header.Set("Content-Type",mimeType)}
+        if cookie!=nil{req.AddCookie(cookie)}
+        if csrf!=""{req.Header.Set("X-CSRF-Token",csrf)}
+        req.Header.Set("X-Learning-Owner-Kind","session")
+        req.Header.Set("X-Learning-Owner-ID","abc")
+        req.Header.Set("X-Learning-Filename","notes.txt")
+        result:=httptest.NewRecorder()
+        handler.ServeHTTP(result,req)
+        return result
+    }
+    if got:=call("POST","/v1/learning/attachments","text/plain","original text",nil,"");got.Code!=401{
+        t.Fatalf("anonymous original accepted: %d",got.Code)
+    }
+    logged:=call("POST","/ui/session","application/json",`{"passphrase":"learning-original-owner-passphrase"}`,nil,"")
+    if logged.Code!=200||len(logged.Result().Cookies())!=1{
+        t.Fatalf("cannot establish owner browser session: %d",logged.Code)
+    }
+    cookie:=logged.Result().Cookies()[0]
+    status:=call("GET","/ui/session","","",cookie,"")
+    var identity struct{CSRF string `json:"csrf_token"`}
+    if err:=json.Unmarshal(status.Body.Bytes(),&identity);err!=nil||identity.CSRF==""{
+        t.Fatalf("CSRF unavailable: %v",err)
+    }
+    if got:=call("POST","/v1/learning/attachments","text/plain","original text",cookie,"");got.Code!=401{
+        t.Fatalf("missing CSRF authorized original: %d",got.Code)
+    }
+    if got:=call("POST","/v1/learning/attachments","application/javascript","alert(1)",cookie,identity.CSRF);got.Code!=401{
+        t.Fatalf("unsafe content type passed owner authorization: %d",got.Code)
+    }
+    if got:=call("POST","/v1/learning/attachments","text/plain","original text",cookie,identity.CSRF);got.Code!=502{
+        t.Fatalf("allowed attachment did not reach unavailable Learning backend: %d",got.Code)
+    }
+    if got:=call("GET","/v1/learning/attachments/session/abc","","",cookie,"");got.Code!=502{
+        t.Fatalf("allowed attachment listing route inaccessible: %d",got.Code)
+    }
+    if got:=call("GET","/v1/learning/attachment-originals/abc","","",cookie,"");got.Code!=502{
+        t.Fatalf("original-download route blocked: %d",got.Code)
+    }
+    if got:=call("GET","/v1/learning/attachment-originals/abc","","",nil,"");got.Code!=401{
+        t.Fatalf("anonymous original retrieval accepted: %d",got.Code)
     }
 }
