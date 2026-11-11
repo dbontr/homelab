@@ -33,6 +33,21 @@ func TestNativeDeviceCustodyRequiresExactClaims(t *testing.T) {
     if err!=nil||len(granted)!=1{t.Fatalf("explicit USB custody rejected: %+v %v",granted,err)}
 }
 
+func TestNativeDeviceCustodyPinsDockerToLocalDaemon(t *testing.T) {
+    t.Setenv("PWM_NATIVE_DEVICE_CUSTODY","1")
+    args:=dockerInvocationArgs("ps","-a")
+    if len(args)!=4 || args[0]!="--host" ||
+        args[1]!="unix:///var/run/docker.sock" ||
+        args[2]!="ps" || args[3]!="-a" {
+        t.Fatalf("raw hardware Docker command was not host-pinned: %v",args)
+    }
+    t.Setenv("PWM_NATIVE_DEVICE_CUSTODY","0")
+    ordinary:=dockerInvocationArgs("ps","-a")
+    if len(ordinary)!=2 || ordinary[0]!="ps" {
+        t.Fatal("ordinary Docker worker unexpectedly forced a device custody host")
+    }
+}
+
 func TestNativeDeviceCustodyRejectsTransientUSBBusAliases(t *testing.T) {
     devices:=[]Device{
         {ID:"usb-bus",Kind:"usb",Paths:[]string{"/dev/bus/usb/002/013"}},
