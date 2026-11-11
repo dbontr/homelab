@@ -37,6 +37,10 @@ mod embedded_learning;
 mod embedded_learning_graph;
 #[cfg(feature = "embedded-app")]
 mod embedded_learning_attachments;
+#[cfg(feature = "embedded-app")]
+mod embedded_learning_insights;
+#[cfg(feature = "embedded-app")]
+mod embedded_learning_workflows;
 
 use dioxus::prelude::*;
 use components::Icon;
