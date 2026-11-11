@@ -55,11 +55,25 @@ The security service holds `.securityd.lock` for its lifetime. The executor hold
 
 ## Security state migration
 
-The Rust security daemon requires an existing, protected `authenticator.json` replay record. Missing or unrecognized authentication state, invalid vault authentication, or missing vault keys must not be treated as fresh enrollment during an implementation switch.
+The two security implementations share a single protected state directory,
+version-one authentication and vault formats, and the exclusive
+`.securityd.lock`. An operator prepares an independent owner-only snapshot
+under that lock. Rust preflight validates encrypted records and runtime
+configuration without writing state. A Go rollback also requires a successful
+Go offline compatibility preflight.
 
-Before cutover, inspect an independent offline copy with `security-preflight --state-dir ABSOLUTE_COPY_DIRECTORY` and the intended daemon's protected credential and policy environment. The directory must be owner-only (0700). Copied state files must be owner-only regular files (0600 or stricter), have one hard link, and have inodes distinct from live state. File or directory bind mounts of live state are not acceptable. Inspection creates no state files and acquires no writer lease.
+The selected NixOS generation passes an operator-provisioned cutover receipt
+as a protected systemd credential. The receipt binds the exact current state
+digests, target implementation and fingerprint of the preceding selection
+marker. At startup, the selected implementation atomically publishes the
+next marker before admitting requests. Restarts preserve the selected
+implementation while allowing its state to advance; a switch back requires a
+new parent-bound receipt. Neither stale snapshots nor old selection receipts
+can authorize normal rollback.
 
-The Go and Rust daemons share `.securityd.lock`, which allows only one process to own the state. Only an authorized NixOS generation switch may select the Rust daemon. Stop the active owner and verify lease release before cutover. Keep the preceding generation and protected state available for rollback; neither sessions nor destructive confirmations survive a restart.
+Production selection is a separate authorized release step, never a side
+effect of a source commit. See [Security authority migration](security-authority-migration.md)
+for offline preparation, cutover and current-state-preserving rollback.
 
 ## Execution request identity and replay
 
