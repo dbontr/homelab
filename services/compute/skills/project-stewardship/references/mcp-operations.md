@@ -80,3 +80,36 @@ For smaller files, `artifact_send_base64`, `artifact_read_base64` and `workspace
 For any material operation, report only observed evidence: project/task ID; exact source repository and commit; authorization scope; image/toolchain; worker/device and lease; input/output artifact hashes; command exit code or provider terminal state; versioned knowledge destination if enabled; GitHub issue/PR/board state if applicable; and precise open risks.
 
 Use [cluster-and-delivery.md](cluster-and-delivery.md) for deployment, safety and acceptance gates. Treat controller tool availability, CI success, real cluster execution and hardware acceptance as distinct conditions.
+
+
+## Conversation continuity
+
+When the unified homelab MCP is connected, `continuity_checkpoint` stores
+bounded, revisioned working state independently of the model context.
+`continuity_status` retrieves the latest summary and any caller-reported
+context-pressure estimate. `continuity_handoff` generates a portable
+resumption record. These are unified MCP operations, not Compute controller
+tools; discover which endpoint provides them before invoking a name.
+
+Use a stable project key, preserve `expected_revision`, and include exact
+GitHub and artifact IDs, actual test results, unresolved effects and a
+specific next safe action. A lost response or terminated worker may have
+performed a side effect; retain its nonsecret request/audit identity for
+investigation rather than blindly submitting another operation.
+
+An MCP cannot independently measure the host's complete ChatGPT context,
+switch to a new conversation, or invoke a future checkpoint by itself.
+Treat absent usage measurements as unknown. Retain only verified working
+summaries, not owner assertions, vault credentials, bearer tokens, or the
+full transcript.
+
+## Provider authorization boundaries
+
+Vault-backed GitHub, GitLab and embedding integrations obtain a one-use
+credential only within an authenticated controller operation. The
+independent owner authority must validate the signed assertion, exact
+operation, target and canonical arguments, and grant the matching mTLS
+client identity. Do not use a controller-wide `TokenSource(alias)` as a
+substitute for a human-authorized operation. Background tasks and
+scheduled workers must use a distinct least-privilege service identity
+until an explicit delegated operation contract exists.
