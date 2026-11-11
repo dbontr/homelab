@@ -104,7 +104,7 @@ fn transition(seen: &BTreeMap<String, Event>, current: &Event) -> Result<(), Err
     let after = DateTime::parse_from_rfc3339(&current.at)
         .map_err(|_| Error::Storage("invalid audit time"))?;
     let valid_prior = if current.outcome == "reconciled" {
-        matches!(prior.outcome.as_str(), "started" | "indeterminate")
+        matches!(prior.outcome.as_str(), "started" | "indeterminate" | "failed")
     } else {
         prior.outcome == "started"
     };
@@ -171,7 +171,7 @@ impl AuditJournal {
             return Err(Error::Storage("audit journal was replaced"));
         }
         Ok(journal.seen.values().filter(|event|
-            matches!(event.outcome.as_str(), "started" | "indeterminate"))
+            matches!(event.outcome.as_str(), "started" | "indeterminate" | "failed"))
             .cloned().collect())
     }
 
@@ -195,7 +195,7 @@ impl AuditJournal {
             if journal.faulted { return Err(Error::Storage("audit journal is in an uncertain state")); }
             journal.seen.get(id).cloned().ok_or(Error::Denied("audit attempt not found"))?
         };
-        if !matches!(original.outcome.as_str(), "started" | "indeterminate") {
+        if !matches!(original.outcome.as_str(), "started" | "indeterminate" | "failed") {
             return Err(Error::Denied("audit attempt is already resolved"));
         }
         self.append_event(Event {
@@ -219,7 +219,7 @@ impl AuditJournal {
             prior.operation == entry.operation
                 && prior.target == entry.target
                 && prior.arguments_sha256 == entry.arguments_sha256
-                && matches!(prior.outcome.as_str(), "started" | "indeterminate")
+                && matches!(prior.outcome.as_str(), "started" | "indeterminate" | "failed")
         }) {
             return Err(Error::Denied("matching unresolved execution requires reconciliation"));
         }
@@ -320,6 +320,39 @@ mod tests {
             assert_eq!(pending.len(), 1);
             assert_eq!(pending[0].id, id);
             assert_eq!(pending[0].outcome, "indeterminate");
+        }
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn legacy_failed_effects_require_operator_reconciliation() {
+        let directory = std::env::temp_dir().join(format!(
+            "homelab-executor-legacy-failure-{}", crate::random_hex::<12>().unwrap()
+        ));
+        fs::create_dir(&directory).unwrap();
+        fs::set_permissions(&directory, fs::Permissions::from_mode(0o700)).unwrap();
+        let path = directory.join("executor-actions.jsonl");
+        let first = "e".repeat(32);
+        let repeat = "f".repeat(32);
+        let digest = "a".repeat(64);
+        {
+            let journal = AuditJournal::open(&path).unwrap();
+            journal.record(&first,"infrastructure__service_restart","saturn",
+                &digest,"started").unwrap();
+            journal.record(&first,"infrastructure__service_restart","saturn",
+                &digest,"failed").unwrap();
+        }
+        {
+            let journal = AuditJournal::open(&path).unwrap();
+            assert_eq!(journal.unresolved().unwrap()[0].outcome,"failed");
+            assert!(matches!(
+                journal.record(&repeat,"infrastructure__service_restart","saturn",
+                    &digest,"started"),
+                Err(Error::Denied(_))
+            ));
+            journal.reconcile(&first,&"d".repeat(64)).unwrap();
+            journal.record(&repeat,"infrastructure__service_restart","saturn",
+                &digest,"started").unwrap();
         }
         fs::remove_dir_all(directory).unwrap();
     }
