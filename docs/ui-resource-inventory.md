@@ -130,6 +130,16 @@ The browser transfer limit is five MiB; larger originals retained through
 Learning's other interfaces cannot be downloaded through this route.
 Uploads do not imply interpretation, a correct answer, or mastery.
 
+The source library can request a deterministic preview of at most 80
+reviewed curriculum steps through an owner-session route. Each preview
+identifies source coverage, blocked extraction or review work, exact
+source quotations, prerequisite links and the evidence digest. Import
+requires the owner to confirm the ready preview and submits that exact
+digest and selection limit to the Learning store. The store recomputes
+eligibility within its transaction and refuses stale or unreviewed
+evidence. Import creates concepts and prerequisites only; it does not
+create assessment records or increase mastery.
+
 The embedded Learning App remains responsible for model-mediated
 assessment, source extraction, diagnostics and the full adaptive-teaching
 workflow until the native interfaces achieve functional parity.
