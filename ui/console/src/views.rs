@@ -346,7 +346,7 @@ pub fn Projects() -> Element {
 enum ComputeTab { Nodes, Devices, Profiles }
 
 #[component]
-pub fn Compute() -> Element {
+pub fn Compute(csrf: String) -> Element {
     let mut tab = use_signal(|| ComputeTab::Nodes);
     let mut nodes = use_resource(|| async { api::get::<Vec<Node>>("/v1/nodes").await });
     let mut devices = use_resource(|| async { api::get::<Vec<Device>>("/v1/devices").await });
@@ -378,6 +378,7 @@ pub fn Compute() -> Element {
             ComputeTab::Devices => rsx!{ DeviceTable { records: devices.cloned() } },
             ComputeTab::Profiles => rsx!{ ProfileTable { records: profiles.cloned() } },
         }
+        crate::compute_manage::ComputeManagement { csrf: csrf.clone() }
     }
 }
 
