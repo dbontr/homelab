@@ -114,6 +114,9 @@ func approvedDeviceClaims(claims []DeviceClaim,devices []Device,allowUSB bool) (
                 !strings.HasPrefix(alias,"/dev/"){
                 return nil,errors.New("invalid native device alias")
             }
+            if device.Kind=="usb"&&strings.HasPrefix(alias,"/dev/bus/usb/"){
+                return nil,errors.New("durable raw USB custody requires a by-id alias")
+            }
             if usedPaths[alias]{
                 return nil,errors.New("multiple native claims refer to the same device alias")
             }
