@@ -38,6 +38,12 @@ in
         proxy_set_header Host 127.0.0.1:8201;
       '';
       "/".return = "404";
+    } // lib.optionalAttrs config.services.homelabInterfaces.mcp.enable {
+      "= /mcp".extraConfig = streamProxy + ''
+        proxy_pass http://127.0.0.1:8401/mcp;
+        proxy_set_header Host 127.0.0.1:8401;
+        proxy_set_header Cf-Access-Jwt-Assertion $http_cf_access_jwt_assertion;
+      '';
     } // lib.optionalAttrs config.services.homelabPlatform.enable {
       "= /platform".extraConfig = streamProxy + ''
         proxy_pass http://127.0.0.1:8300/mcp;
