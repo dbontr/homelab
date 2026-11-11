@@ -122,6 +122,18 @@ fn map_usb(alias: &str) -> Result<(String, u32), &'static str> {
 
 fn main() {
     let args: Vec<String> = env::args().skip(1).collect();
+    if let [verb, kind, alias, workspace] = args.as_slice() {
+        if verb == "release-device" {
+            match custody::release_device(kind, alias, workspace) {
+                Ok(()) => println!("released"),
+                Err(message) => {
+                    eprintln!("{message}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+    }
     if let [verb, workspace] = args.as_slice() {
         if verb == "release-workspace" {
             match custody::release_workspace(workspace) {
@@ -141,7 +153,7 @@ fn main() {
             custody::acquire(kind, alias, workspace),
         [verb, kind, alias, workspace] if verb == "verify-device" =>
             custody::verify(kind, alias, workspace),
-        _ => Err("usage: homelab-native-hardware <map-usb ALIAS | map-char KIND PATH | acquire-device KIND PATH WORKSPACE | verify-device KIND PATH WORKSPACE | release-workspace WORKSPACE>"),
+        _ => Err("usage: homelab-native-hardware <map-usb ALIAS | map-char KIND PATH | acquire-device KIND PATH WORKSPACE | verify-device KIND PATH WORKSPACE | release-device KIND PATH WORKSPACE | release-workspace WORKSPACE>"),
     };
     match result {
         Ok((resolved, group)) => println!("{resolved}\n{group}"),
