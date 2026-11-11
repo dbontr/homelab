@@ -38,7 +38,7 @@ func(c *Client) Execute(ctx context.Context,operation,target string,args json.Ra
 func(c *Client) ExecuteWithID(
  ctx context.Context,requestID,operation,target string,args json.RawMessage,
 )(ExecutionResult,error){
- if c==nil||!validExecutionRequestID(requestID){
+ if c==nil||!ValidExecutionRequestID(requestID){
   return ExecutionResult{},errors.New("invalid execution request identity")
  }
  payload,err:=json.Marshal(map[string]any{
