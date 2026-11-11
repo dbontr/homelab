@@ -94,6 +94,25 @@ func TestComputeWorkspaceAdmissionValidatesResourceBounds(t *testing.T) {
     valid.DisplayWidth=1440
     valid.DisplayHeight=900
     if !validConsoleWorkspace(valid){t.Fatal("valid display request rejected")}
+    valid.ProjectID="x"
+    if validConsoleWorkspace(valid){t.Fatal("one-letter project ID accepted")}
+    valid.ProjectID="research"
+    valid.NodeID="NOT-valid"
+    if validConsoleWorkspace(valid){t.Fatal("noncanonical worker ID accepted")}
+    valid.NodeID="jupiter"
+    valid.ImagePoolID=strings.Repeat("a",64)
+    if validConsoleWorkspace(valid){t.Fatal("oversized image pool ID accepted")}
+    valid.ImagePoolID="build-image"
+    if !validConsoleWorkspace(valid){t.Fatal("valid controller resource IDs rejected")}
+}
+
+func TestComputeBrowserResourceIdentifiersMatchControllerSchema(t *testing.T) {
+    for _,name:=range []string{"research","builder-image","worker-1"} {
+        if !catalogID(name){t.Errorf("valid Compute resource identity rejected: %q",name)}
+    }
+    for _,name:=range []string{"a","Wrong","a_bad",strings.Repeat("a",64),""} {
+        if catalogID(name){t.Errorf("invalid Compute resource identity accepted: %q",name)}
+    }
 }
 
 func TestComputeBrowserCatalogRequiresExactImmutableDigest(t *testing.T){
