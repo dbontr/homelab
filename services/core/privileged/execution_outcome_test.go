@@ -92,6 +92,7 @@ func TestExecutorClientRejectsAmbiguousSuccess(t *testing.T) {
 		{"missing audit ID", `{"allowed":true,"state":"accepted"}`, false, "", true},
 		{"unknown state", `{"allowed":true,"state":"running","audit_id":"` + id + `"}`, false, "", true},
 		{"bad audit ID", `{"allowed":true,"state":"accepted","audit_id":"wrong"}`, false, "", true},
+        {"unrelated receipt", `{"allowed":true,"state":"accepted","audit_id":"` + strings.Repeat("c",32) + `"}`, false, "", true},
 		{"contradictory denial", `{"allowed":false,"state":"completed","audit_id":"` + id + `"}`, false, "", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -107,7 +108,7 @@ func TestExecutorClientRejectsAmbiguousSuccess(t *testing.T) {
 					}, nil
 				}),
 			}}
-			result, err := client.Execute(context.Background(), "infrastructure__service_restart", "saturn", json.RawMessage(`{}`))
+			result, err := client.ExecuteWithID(context.Background(), id, "infrastructure__service_restart", "saturn", json.RawMessage(`{}`))
 			if (err != nil) != tc.wantError {
 				t.Fatalf("expected error=%t, got %+v, %v", tc.wantError, result, err)
 			}
