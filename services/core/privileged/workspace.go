@@ -16,7 +16,7 @@ import (
  "time"
 
  "github.com/dbontr/homelab-new/system/canonicaljson"
- "github.com/dbontr/homelab-new/services/core/security"
+ "github.com/dbontr/homelab-new/system/security"
 )
 
 // WorkspacePolicy restricts the controller endpoints and resource identities
