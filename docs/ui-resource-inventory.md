@@ -182,10 +182,19 @@ the sole authority for review, grading and learner progress.
 
 The Compute Dioxus console has exact owner-session routes for resource
 planning, workspace creation and teardown, immutable image and software
-catalog registration, and revision-qualified program/catalog review.
-Origin, CSRF, project/device admission and independent privileged
-authorization remain mandatory; no controller bearer credential is
-copied into the browser.
+catalog registration, program proposals, and revision-qualified catalog
+and program review. All state changes use the independent host executor;
+only read-only resource planning reaches the Compute controller through
+the ordinary gateway. Nix-defined project, image, immutable image reference,
+program, software, worker, package and USB-device allowlists limit executor
+authority. Workspace allocation also checks the enrolled-device catalog,
+and FPGA claims require an exact enrolled worker.
+
+Origin, CSRF, one-use administrative confirmation, resource admission, and
+independent executor authorization remain mandatory. The controller bearer
+credential is never copied into the browser. Executor acceptance produces a
+protected audit ID; it does not assert that an asynchronous downstream
+workspace or catalog operation has completed.
 
 WebAssembly compilation, actual MCP host permission handling, device
 custody and browser accessibility still require acceptance before the
