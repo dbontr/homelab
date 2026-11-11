@@ -135,6 +135,16 @@ fn main() {
         }
     }
     if let [verb, workspace] = args.as_slice() {
+        if verb == "verify-workspace" {
+            match custody::verify_workspace(workspace) {
+                Ok(count) => println!("{count}"),
+                Err(message) => {
+                    eprintln!("{message}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
         if verb == "release-workspace" {
             match custody::release_workspace(workspace) {
                 Ok(count) => println!("{count}"),
@@ -153,7 +163,7 @@ fn main() {
             custody::acquire(kind, alias, workspace),
         [verb, kind, alias, workspace] if verb == "verify-device" =>
             custody::verify(kind, alias, workspace),
-        _ => Err("usage: homelab-native-hardware <map-usb ALIAS | map-char KIND PATH | acquire-device KIND PATH WORKSPACE | verify-device KIND PATH WORKSPACE | release-device KIND PATH WORKSPACE | release-workspace WORKSPACE>"),
+        _ => Err("usage: homelab-native-hardware <map-usb ALIAS | map-char KIND PATH | acquire-device KIND PATH WORKSPACE | verify-device KIND PATH WORKSPACE | release-device KIND PATH WORKSPACE | verify-workspace WORKSPACE | release-workspace WORKSPACE>"),
     };
     match result {
         Ok((resolved, group)) => println!("{resolved}\n{group}"),
