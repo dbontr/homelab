@@ -181,6 +181,19 @@ impl AuthorizationClient {
 
     pub async fn decision(&self, operation: &str, target: &str, arguments: &[u8],
         assertion: &str, consume: bool) -> Result<Decision, Error> {
+        let path = if consume { "/v1/authorize" } else { "/v1/preview" };
+        self.decision_path(operation, target, arguments, assertion, path, consume).await
+    }
+
+    /// Verify replay observation against the current independent owner
+    /// session and finite operation policy without consuming an approval.
+    pub async fn replay(&self, operation: &str, target: &str, arguments: &[u8],
+        assertion: &str) -> Result<Decision, Error> {
+        self.decision_path(operation, target, arguments, assertion, "/v1/replay", false).await
+    }
+
+    async fn decision_path(&self, operation: &str, target: &str, arguments: &[u8],
+        assertion: &str, path: &str, consume: bool) -> Result<Decision, Error> {
         if assertion.is_empty() || assertion.len() > 16 << 10 {
             return Err(Error::Denied("signed owner assertion required"));
         }
@@ -189,7 +202,6 @@ impl AuthorizationClient {
         let payload = serde_json::to_vec(&serde_json::json!({
             "operation": operation, "target": target, "arguments": args
         })).map_err(|_| Error::Protocol("authorization request encoding failed"))?;
-        let path = if consume { "/v1/authorize" } else { "/v1/preview" };
         let (status, mime, result) = self.request(path, Method::POST, assertion, payload, 8192).await?;
         if status != StatusCode::OK || !mime.as_deref().is_some_and(|v| v.starts_with("application/json")) {
             return Err(Error::Denied("independent authorization rejected the operation"));
