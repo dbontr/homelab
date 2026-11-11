@@ -39,23 +39,20 @@ fn private_address(address: SocketAddr) -> bool {
     }
 }
 
+fn single_dns_identity(names: &[GeneralName<'_>]) -> Result<String, Error> {
+    match names {
+        [GeneralName::DNSName(name)] if valid_service_dns(name) => Ok((*name).to_owned()),
+        _ => Err(Error::Unauthorized),
+    }
+}
+
 fn certificate_identity(certificate: &CertificateDer<'_>) -> Result<String, Error> {
     let (_, certificate) = parse_x509_certificate(certificate.as_ref())
         .map_err(|_| Error::Unauthorized)?;
     let san = certificate.subject_alternative_name()
         .map_err(|_| Error::Unauthorized)?
         .ok_or(Error::Unauthorized)?;
-    let dns = san.value.general_names.iter().filter_map(|name| {
-        if let GeneralName::DNSName(value) = name {
-            Some((*value).to_owned())
-        } else {
-            None
-        }
-    }).collect::<Vec<_>>();
-    if dns.len() != 1 || !valid_service_dns(&dns[0]) {
-        return Err(Error::Unauthorized);
-    }
-    Ok(dns[0].clone())
+    single_dns_identity(&san.value.general_names)
 }
 
 impl Remote {
@@ -161,6 +158,27 @@ impl Remote {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn identity_rejects_mixed_subject_alternative_names() {
+        assert_eq!(
+            single_dns_identity(&[GeneralName::DNSName("executor.internal")]).unwrap(),
+            "executor.internal"
+        );
+        assert!(single_dns_identity(&[
+            GeneralName::DNSName("executor.internal"),
+            GeneralName::IPAddress(&[10, 77, 30, 1]),
+        ]).is_err());
+        assert!(single_dns_identity(&[
+            GeneralName::DNSName("executor.internal"),
+            GeneralName::URI("spiffe://cluster/executor"),
+        ]).is_err());
+        assert!(single_dns_identity(&[
+            GeneralName::DNSName("executor.internal"),
+            GeneralName::DNSName("other.internal"),
+        ]).is_err());
+        assert!(single_dns_identity(&[GeneralName::DNSName("*.internal")]).is_err());
+    }
     #[test]
     fn only_explicit_private_bind_addresses_are_valid() {
         assert!(private_address("10.77.30.1:8443".parse().unwrap()));
