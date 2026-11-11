@@ -21,6 +21,8 @@ const ABSOLUTE_SECONDS: i64 = 12 * 60 * 60;
 const CONFIRMATION_SECONDS: i64 = 5 * 60;
 const CONFIRMED_SECONDS: i64 = 2 * 60;
 const MAX_PENDING: usize = 64;
+const MAX_CREDENTIAL_TICKETS: usize = 128;
+const CREDENTIAL_TICKET_SECONDS: i64 = 60;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct OperationPolicy {
@@ -86,6 +88,26 @@ pub enum Decision {
     },
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CredentialTicket {
+    pub alias: String,
+    pub ticket: String,
+}
+
+#[derive(Clone)]
+struct IssuedCredentialTicket {
+    peer: VerifiedServiceIdentity,
+    principal: String,
+    session_id: String,
+    alias: String,
+    operation: String,
+    target: String,
+    arguments_sha256: String,
+    revision: String,
+    expires: i64,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct AuthorizationWire {
     pub allowed: bool,
@@ -95,6 +117,8 @@ pub struct AuthorizationWire {
     pub confirmation_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub confirmation_expires_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub credential_tickets: Vec<CredentialTicket>,
 }
 
 impl From<Decision> for AuthorizationWire {
@@ -105,18 +129,21 @@ impl From<Decision> for AuthorizationWire {
                 reason: None,
                 confirmation_id: None,
                 confirmation_expires_at: None,
+                credential_tickets: Vec::new(),
             },
             Decision::Denied(reason) => Self {
                 allowed: false,
                 reason: Some(reason.to_owned()),
                 confirmation_id: None,
                 confirmation_expires_at: None,
+                credential_tickets: Vec::new(),
             },
             Decision::Confirmation { id, expires_at } => Self {
                 allowed: false,
                 reason: Some("confirmation required".into()),
                 confirmation_id: Some(id),
                 confirmation_expires_at: Some(wire_time(expires_at)),
+                credential_tickets: Vec::new(),
             },
         }
     }
@@ -144,6 +171,7 @@ pub struct Authority {
     pending: BTreeMap<String, Confirmation>,
     vault: Option<Vault>,
     service_grants: Option<ServiceCredentialPolicy>,
+    credential_tickets: BTreeMap<String, IssuedCredentialTicket>,
     access: Option<AccessVerifier>,
     gateway_audience: String,
     browser_audience: Option<String>,
@@ -305,6 +333,7 @@ impl Authority {
             pending: BTreeMap::new(),
             vault: None,
             service_grants: None,
+            credential_tickets: BTreeMap::new(),
             access: None,
             gateway_audience: String::new(),
             browser_audience: None,
@@ -495,6 +524,77 @@ impl Authority {
         self.authorize(&principal, &client, operation, target, args)
     }
 
+    /// Credential tickets are issued only on the mTLS executor route, after
+    /// consuming the exact independent owner authorization decision.
+    pub(crate) fn authorize_remote_gateway(
+        &mut self,
+        assertion: &str,
+        peer: &VerifiedServiceIdentity,
+        operation: &str,
+        target: &str,
+        args: &[u8],
+    ) -> Result<AuthorizationWire, Error> {
+        let principal = self.verified_principal(assertion, &self.gateway_audience)?;
+        let client = self.client.clone();
+        let decision = self.authorize(&principal, &client, operation, target, args)?;
+        let mut wire = AuthorizationWire::from(decision);
+        if wire.allowed {
+            wire.credential_tickets = self.issue_credential_tickets(
+                &principal, peer, operation, target, args
+            )?;
+        }
+        Ok(wire)
+    }
+
+    fn issue_credential_tickets(
+        &mut self,
+        principal: &str,
+        peer: &VerifiedServiceIdentity,
+        operation: &str,
+        target: &str,
+        args: &[u8],
+    ) -> Result<Vec<CredentialTicket>, Error> {
+        let now = unix_now()?;
+        if !self.live(now) || self.session.as_ref().is_none_or(|s| s.principal != principal) {
+            return Err(Error::Unauthorized);
+        }
+        let canonical = canonical_arguments(args)?;
+        let digest = hex::encode(Sha256::digest(&canonical));
+        let scoped = match &self.service_grants {
+            Some(grants) => grants.scoped(peer, operation, target, &digest, now)?,
+            None => Vec::new(),
+        };
+        self.prune(now);
+        if self.credential_tickets.len().saturating_add(scoped.len()) > MAX_CREDENTIAL_TICKETS {
+            return Err(Error::Unauthorized);
+        }
+        let session = self.session.as_ref().ok_or(Error::Unauthorized)?;
+        let expires = (now + CREDENTIAL_TICKET_SECONDS)
+            .min(session.last_activity + IDLE_SECONDS)
+            .min(session.created + ABSOLUTE_SECONDS);
+        if expires <= now {
+            return Err(Error::Unauthorized);
+        }
+        let session_id = session.id.clone();
+        let mut issued = Vec::with_capacity(scoped.len());
+        for grant in scoped {
+            let token = random_id()?;
+            self.credential_tickets.insert(token.clone(), IssuedCredentialTicket {
+                peer: peer.clone(),
+                principal: principal.into(),
+                session_id: session_id.clone(),
+                alias: grant.alias.clone(),
+                operation: operation.into(),
+                target: target.into(),
+                arguments_sha256: digest.clone(),
+                revision: grant.revision,
+                expires,
+            });
+            issued.push(CredentialTicket {alias: grant.alias, ticket: token});
+        }
+        Ok(issued)
+    }
+
     pub fn preview_gateway(
         &mut self,
         assertion: &str,
@@ -549,19 +649,50 @@ impl Authority {
     }
 
     pub(crate) fn use_service_credential<T>(
-        &self,
+        &mut self,
         peer: &VerifiedServiceIdentity,
         alias: &str,
+        ticket: &str,
+        operation: &str,
+        target: &str,
+        args: &[u8],
         use_secret: impl FnOnce(&[u8]) -> T,
     ) -> Result<T, Error> {
-        // A failed vault mutation invalidates credential access until
-        // persistent state has been reconciled by the exclusive owner.
+        let now = unix_now()?;
+        if !self.live(now) {
+            return Err(Error::Unauthorized);
+        }
+        self.prune(now);
+        if ticket.len() != 48 || !ticket.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return Err(Error::Unauthorized);
+        }
+        // Consume before comparing the context. A stolen or substituted ticket
+        // cannot be retried, and neither an error nor an interrupted response
+        // can authorize another credential read.
+        let issued = self.credential_tickets.remove(ticket).ok_or(Error::Unauthorized)?;
+        let session = self.session.as_ref().ok_or(Error::Unauthorized)?;
+        if now >= issued.expires
+            || &issued.peer != peer
+            || issued.alias != alias
+            || issued.operation != operation
+            || issued.target != target
+            || issued.session_id != session.id
+            || issued.principal != session.principal
+        {
+            return Err(Error::Unauthorized);
+        }
+        let canonical = canonical_arguments(args)?;
+        let digest = hex::encode(Sha256::digest(&canonical));
+        if issued.arguments_sha256 != digest {
+            return Err(Error::Unauthorized);
+        }
         if !self.store.healthy() {
             return Err(Error::Storage);
         }
         let policy = self.service_grants.as_ref().ok_or(Error::Unauthorized)?;
         let vault = self.vault.as_ref().ok_or(Error::Unauthorized)?;
-        policy.use_credential(peer, alias, vault, use_secret)
+        policy.use_credential(peer, alias, operation, target, &digest,
+            &issued.revision, vault, use_secret)
     }
 
     /// Owner-only credential enrollment is gated by an active owner session
@@ -647,6 +778,7 @@ impl Authority {
         if !self.store.healthy() {
             self.session = None;
             self.pending.clear();
+            self.credential_tickets.clear();
             return Err(Error::Storage);
         }
         result
@@ -679,6 +811,7 @@ impl Authority {
             last_activity: now,
         });
         self.pending.clear();
+        self.credential_tickets.clear();
         Ok(self.status_at(principal, now))
     }
 
@@ -686,6 +819,7 @@ impl Authority {
         if !self.store.healthy() {
             self.session = None;
             self.pending.clear();
+            self.credential_tickets.clear();
             return false;
         }
         let Some(session) = &self.session else {
@@ -697,6 +831,7 @@ impl Authority {
         {
             self.session = None;
             self.pending.clear();
+            self.credential_tickets.clear();
             return false;
         }
         true
@@ -736,11 +871,13 @@ impl Authority {
         }
         self.session = None;
         self.pending.clear();
+        self.credential_tickets.clear();
         true
     }
 
     fn prune(&mut self, now: i64) {
         self.pending.retain(|_, item| now < item.expires);
+        self.credential_tickets.retain(|_, item| now < item.expires);
     }
 
     pub(crate) fn pending(&mut self, principal: &str) -> Result<Vec<ConfirmationPreview>, Error> {
