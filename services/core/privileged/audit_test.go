@@ -198,3 +198,35 @@ func TestLegacyGoFailedReceiptNeedsOperatorInspection(t *testing.T) {
   t.Fatal("attempt was repeated before inspection of a legacy failure")
  }
 }
+
+func TestGoAuditReconciliationRequiresEvidenceAndUnresolvedAttempt(t *testing.T){
+ dir:=privateAuditDir(t)
+ path:=filepath.Join(dir,"executor-actions.jsonl")
+ journal,err:=OpenAuditJournal(path)
+ if err!=nil{t.Fatal(err)}
+ operation:="infrastructure__service_restart"
+ id:=strings.Repeat("a",32)
+ digest:=strings.Repeat("b",64)
+ evidence:=strings.Repeat("c",64)
+ if err:=journal.Record(id,operation,"saturn",digest,"started");err!=nil{t.Fatal(err)}
+ if err:=journal.Record(id,operation,"saturn",digest,"indeterminate");err!=nil{t.Fatal(err)}
+ if err:=journal.Record(id,operation,"saturn",digest,"reconciled");err==nil{
+  t.Fatal("ordinary audit append bypassed evidence requirement")
+ }
+ if err:=journal.Reconcile(id,"short");err==nil{
+  t.Fatal("incomplete evidence digest accepted")
+ }
+ if err:=journal.Reconcile(id,evidence);err!=nil{t.Fatal(err)}
+ if err:=journal.Reconcile(id,evidence);err==nil{
+  t.Fatal("reconciled attempt accepted a second resolution")
+ }
+ if err:=journal.Close();err!=nil{t.Fatal(err)}
+ recovered,err:=OpenAuditJournal(path)
+ if err!=nil{t.Fatal("reconciliation was not durable:",err)}
+ defer recovered.Close()
+ pending,err:=recovered.Unresolved()
+ if err!=nil||len(pending)!=0{t.Fatalf("resolved operation stayed unresolved: %+v %v",pending,err)}
+ if err:=recovered.Record(strings.Repeat("d",32),operation,"saturn",digest,"started");err!=nil{
+  t.Fatal("valid independently reauthorized attempt was still blocked:",err)
+ }
+}
