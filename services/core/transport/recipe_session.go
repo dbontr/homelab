@@ -43,6 +43,8 @@ func (s *Server) sessionOwnerWriteAllowed(r *http.Request) bool {
         allowed=true
     case r.Method == http.MethodPost && path == "/v1/learning/sessions":
         allowed = true
+    case r.Method == http.MethodPost && path == "/v1/learning/attachments":
+        allowed = true
     case r.Method == http.MethodPost && ownerLearningSessionWritePath(path):
         allowed = true
     case r.Method == http.MethodPost && strings.HasPrefix(path, "/v1/learning/questions/"):
@@ -80,7 +82,9 @@ func (s *Server) sessionOwnerWriteAllowed(r *http.Request) bool {
 	if r.Method != http.MethodDelete {
 		mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 		if err != nil { return false }
-		if path == "/v1/recipes/images" {
+		if path == "/v1/learning/attachments" {
+            if !learningAttachmentMIME[mediaType] { return false }
+        } else if path == "/v1/recipes/images" {
 			if mediaType != "image/png" && mediaType != "image/jpeg" { return false }
 		} else if path == "/v1/recipes/bundle" {
 			if mediaType != "application/zip" { return false }
