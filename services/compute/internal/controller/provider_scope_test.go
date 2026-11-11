@@ -140,6 +140,13 @@ func TestProviderAuthorizationRejectsMalformedAndUnscopedDecisions(t *testing.T)
  if _,err:=broker.AuthorizeOperation(context.Background(),"","git_repository_head","controller",args);err==nil||calls!=0{
   t.Fatal("unsigned request reached the authority")
  }
+ reply=`{"allowed":true,"confirmation_expires_at":"0001-01-01T00:00:00Z","credential_tickets":[{"alias":"github_token","ticket":"`+
+  strings.Repeat("a",48)+`"}]}`
+ granted,err:=broker.AuthorizeOperation(context.Background(),"signed-owner",
+  "git_repository_head","controller",args)
+ if err!=nil||granted["github_token"].Ticket!=strings.Repeat("a",48){
+  t.Fatal("Go zero-valued confirmation timestamp was rejected",err)
+ }
  for _,invalid:=range []string{
   `{"allowed":false,"credential_tickets":[{"alias":"github_token","ticket":"`+strings.Repeat("a",48)+`"}]}`,
   `{"allowed":true,"reason":"denied"}`,
