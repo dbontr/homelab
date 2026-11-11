@@ -450,13 +450,13 @@ func (a *AdminSessions) Authorize(client,operation,target string,args json.RawMe
 // AuthorizeFor rechecks the owner session and consumes a matching confirmed
 // challenge at the actual executor operation boundary.
 func (a *AdminSessions) AuthorizeFor(principal,client,operation,target string,args json.RawMessage) Authorization {
- return a.evaluateFor(principal,client,operation,target,args,true,"")
+ return a.evaluateFor(principal,client,operation,target,args,true,"",false)
 }
 
 // PreviewFor checks the same policy and records pending confirmations without
 // consuming an approved challenge or refreshing session activity.
 func (a *AdminSessions) PreviewFor(principal,client,operation,target string,args json.RawMessage) Authorization {
- return a.evaluateFor(principal,client,operation,target,args,false,"")
+ return a.evaluateFor(principal,client,operation,target,args,false,"",false)
 }
 
 // authorizeForServicePeer is reached only through the TLS listener after
@@ -464,11 +464,20 @@ func (a *AdminSessions) PreviewFor(principal,client,operation,target string,args
 func (a *AdminSessions) authorizeForServicePeer(
  principal,client,peer,operation,target string,args json.RawMessage,
 ) Authorization {
- return a.evaluateFor(principal,client,operation,target,args,true,peer)
+ return a.evaluateFor(principal,client,operation,target,args,true,peer,false)
+}
+
+// ReplayFor checks the current independently verified owner and finite
+// operation policy without consuming confirmations or generating tickets.
+// It never authorizes an unjournaled side effect.
+func (a *AdminSessions) ReplayFor(
+ principal,client,operation,target string,args json.RawMessage,
+) Authorization {
+ return a.evaluateFor(principal,client,operation,target,args,false,"",true)
 }
 
 func (a *AdminSessions) evaluateFor(
- principal,client,operation,target string,args json.RawMessage,consume bool,peer string,
+ principal,client,operation,target string,args json.RawMessage,consume bool,peer string,replay bool,
 ) Authorization {
  a.mu.Lock()
  defer a.mu.Unlock()
@@ -499,6 +508,7 @@ func (a *AdminSessions) evaluateFor(
 	}
 	sum := sha256.Sum256(canonical)
 	digest := hex.EncodeToString(sum[:])
+    if replay{return Authorization{Allowed:true}}
     approve:=func()Authorization{
         result:=Authorization{Allowed:true}
         if peer!=""&&consume {
