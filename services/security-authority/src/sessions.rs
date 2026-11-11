@@ -625,7 +625,8 @@ impl Authority {
         &mut self, assertion: &str, operation: &str, target: &str, args: &[u8],
     ) -> Result<Decision, Error> {
         let principal = self.verified_principal(assertion, &self.gateway_audience)?;
-        self.replay_at(&principal, &self.client.clone(), operation, target, args, unix_now()?)
+        let client = self.client.clone();
+        self.replay_at(&principal, &client, operation, target, args, unix_now()?)
     }
 
     fn replay_at(
