@@ -59,8 +59,10 @@ impl ExecutionResult {
                 audit_id: Some(id.to_owned()),
                 replayed: true,
             },
-            // Started, failed, indeterminate and reconciled records are
-            // never evidence that re-execution is safe.
+            "reconciled" => Self::denied(
+                "execution request identity was reconciled and cannot be executed again"
+            ),
+            // A started or indeterminate record may have applied its effect.
             _ => Self::denied("execution request outcome requires independent reconciliation"),
         }
     }
