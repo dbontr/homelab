@@ -35,8 +35,8 @@ the privileged executor's administrative authority.
 | `infrastructure__release_status` and `infrastructure__audit_status` | Signed owner assertion and independent read authorization | Protected journal and unresolved-attempt observation only |
 
 The Nix options `services.homelabExecutor.workspace.images`,
-`imageReferences`, `software`, `programs`, `packages`, `workers`
-and `projects` supply independent resource allowlists. All seven
+`imageReferences`, `software`, `programs`, `packages`, `workers`,
+`devices` and `projects` supply independent resource allowlists. All seven
 workspace families require exact operation-bound owner authorization,
 and catalog writes plus workspace creation require one-use confirmation.
 The gateway neither reads the controller's privileged token nor forwards
