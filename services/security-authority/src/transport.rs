@@ -346,20 +346,26 @@ pub fn owner_router(shared: Shared) -> Router {
 }
 
 async fn remote_authorize(
-    axum::Extension(_peer): axum::Extension<crate::remote::VerifiedPeer>,
+    axum::Extension(peer): axum::Extension<crate::remote::VerifiedPeer>,
     State(shared): State<Shared>,
     headers: HeaderMap,
     raw: Bytes,
 ) -> Response {
+    if !peer.may_authorize {
+        return protected_status("remote operation authorization denied", StatusCode::FORBIDDEN);
+    }
     operation_response(shared, headers, raw, true).await
 }
 
 async fn remote_preview(
-    axum::Extension(_peer): axum::Extension<crate::remote::VerifiedPeer>,
+    axum::Extension(peer): axum::Extension<crate::remote::VerifiedPeer>,
     State(shared): State<Shared>,
     headers: HeaderMap,
     raw: Bytes,
 ) -> Response {
+    if !peer.may_authorize {
+        return protected_status("remote operation authorization denied", StatusCode::FORBIDDEN);
+    }
     operation_response(shared, headers, raw, false).await
 }
 
