@@ -173,6 +173,17 @@ impl AuditJournal {
         if raw.len() > 1024 { return Err(Error::Storage("audit record too large")); }
         let mut journal = self.inner.lock().unwrap_or_else(|_| std::process::abort());
         if journal.faulted { return Err(Error::Storage("audit journal is in an uncertain state")); }
+        // Policy refusals are not journal I/O failures. A denied replay
+        // leaves the journal usable for unrelated authorized operations.
+        transition(&journal.seen, &entry)?;
+        if entry.outcome == "started" && journal.seen.values().any(|prior| {
+            prior.operation == entry.operation
+                && prior.target == entry.target
+                && prior.arguments_sha256 == entry.arguments_sha256
+                && matches!(prior.outcome.as_str(), "started" | "indeterminate")
+        }) {
+            return Err(Error::Denied("matching unresolved execution requires reconciliation"));
+        }
         let result = (|| {
             let path_meta = fs::symlink_metadata(&self.path)
                 .map_err(|_| Error::Storage("audit path missing"))?;
@@ -182,7 +193,6 @@ impl AuditJournal {
                 || fd_meta.dev() != self.dev || fd_meta.ino() != self.ino {
                 return Err(Error::Storage("audit journal was replaced"));
             }
-            transition(&journal.seen, &entry)?;
             if fd_meta.len() + raw.len() as u64 + 1 > MAX_AUDIT_BYTES {
                 return Err(Error::Storage("audit journal reached retention limit"));
             }
@@ -270,6 +280,40 @@ mod tests {
             assert_eq!(pending.len(), 1);
             assert_eq!(pending[0].id, id);
             assert_eq!(pending[0].outcome, "indeterminate");
+        }
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn unresolved_attempt_blocks_matching_resubmission_without_poisoning_audit() {
+        let directory = std::env::temp_dir().join(format!(
+            "homelab-executor-replay-{}", crate::random_hex::<12>().unwrap()
+        ));
+        fs::create_dir(&directory).unwrap();
+        fs::set_permissions(&directory, fs::Permissions::from_mode(0o700)).unwrap();
+        let path = directory.join("executor-actions.jsonl");
+        let digest = "a".repeat(64);
+        {
+            let journal = AuditJournal::open(&path).unwrap();
+            let first = "1".repeat(32);
+            let replay = "2".repeat(32);
+            journal.record(&first,"infrastructure__service_restart","jupiter",
+                &digest,"started").unwrap();
+            assert!(matches!(
+                journal.record(&replay,"infrastructure__service_restart","jupiter",
+                    &digest,"started"),
+                Err(Error::Denied(_))
+            ));
+            journal.record(&first,"infrastructure__service_restart","jupiter",
+                &digest,"indeterminate").unwrap();
+            assert!(matches!(
+                journal.record(&replay,"infrastructure__service_restart","jupiter",
+                    &digest,"started"),
+                Err(Error::Denied(_))
+            ));
+            // A separate target or canonical argument digest remains eligible.
+            journal.record(&replay,"infrastructure__service_restart","jupiter",
+                &"b".repeat(64),"started").unwrap();
         }
         fs::remove_dir_all(directory).unwrap();
     }
