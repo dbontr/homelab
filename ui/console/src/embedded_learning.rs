@@ -217,6 +217,18 @@ pub fn LearningApp() -> Element {
         if panel()==Panel::Sources {
             EmbeddedSource { source_id:selected_id() }
         }
+        if let Some(kind)=match panel(){
+            Panel::Sessions=>Some("session"),
+            Panel::Problems=>Some("problem"),
+            Panel::Sources=>Some("source"),
+            _=>None,
+        } {
+            if valid_identity(&selected_id()){
+                crate::embedded_learning_attachments::EmbeddedAttachments{
+                    owner_kind:kind.to_owned(),owner_id:selected_id()
+                }
+            }
+        }
     }
 }
 
