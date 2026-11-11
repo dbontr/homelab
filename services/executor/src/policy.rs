@@ -793,6 +793,13 @@ mod tests {
         assert!(policy.operation("infrastructure__workspace_create",&usb).is_ok());
         usb.insert("usb_node".into(),json!("outside"));
         assert!(policy.operation("infrastructure__workspace_create",&usb).is_err());
+        usb.insert("usb_node".into(),json!("jupiter"));
+        usb.insert("usb_device_id".into(),json!("unlisted"));
+        assert!(policy.operation("infrastructure__workspace_create",&usb).is_err());
+        let mut fpga=fields.clone();
+        fpga.insert("hardware".into(),json!({"fpga":1}));
+        fpga.insert("node_id".into(),json!(""));
+        assert!(policy.operation("infrastructure__workspace_create",&fpga).is_err());
     }
 
     fn policy() -> Policy {
