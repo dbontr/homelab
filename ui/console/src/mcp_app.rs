@@ -267,13 +267,16 @@ pub async fn call_tool<T: DeserializeOwned>(name: &str, arguments: Value) -> Res
 // privileged operations remain outside the browser capability.
 const LEARNING_APP_TOOLS: &[&str] = &[
     "get_learning_summary", "get_graph", "get_concept",
+    "get_confidence_calibration", "get_mastery_portfolio", "get_reassessment_queue",
+    "get_proposition", "get_translation_reviews", "get_reasoning_formal_checks",
     "list_learning_sessions", "get_learning_session", "start_learning_session",
     "build_learning_plan", "advance_learning_session", "save_problem_draft",
     "set_learning_target",
     "get_pending_learning_question", "get_learning_question",
     "answer_learning_question", "next_learning_action",
     "recommend_session_probe", "get_reasoning_graph", "get_reasoning_chain",
-    "list_problems", "get_problem", "get_review_queue",
+    "recommend_practice", "next_extraction",
+    "list_problems", "get_problem", "get_problem_solution", "get_review_queue",
     "list_learning_sources", "search_learning_sources",
     "list_practice_sessions", "get_practice_session",
     "preview_source_curriculum", "import_source_curriculum",
