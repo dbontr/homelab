@@ -247,6 +247,21 @@ mod tests {
     use std::os::unix::fs::PermissionsExt;
 
     #[test]
+    fn rejects_state_file_that_is_the_live_inode() {
+        let mut id = [0u8; 12];
+        getrandom::fill(&mut id).unwrap();
+        let parent = env::temp_dir().join(format!("authority-inode-test-{}", hex::encode(id)));
+        fs::create_dir(&parent).unwrap();
+        let live = parent.join("live.json");
+        fs::write(&live, b"{}").unwrap();
+        assert!(reject_live_inode(&live, &live).is_err());
+        let copy = parent.join("copy.json");
+        fs::write(&copy, b"{}").unwrap();
+        assert!(reject_live_inode(&copy, &live).is_ok());
+        fs::remove_dir_all(parent).unwrap();
+    }
+
+    #[test]
     fn rejects_hardlinked_and_unprotected_copied_state() {
         let mut id = [0u8; 12];
         getrandom::fill(&mut id).unwrap();
