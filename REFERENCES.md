@@ -17,6 +17,7 @@
 - [RustCrypto HMAC](https://docs.rs/hmac/0.12.1/hmac/) — RustCrypto project. Used for: six-digit HMAC-SHA1 TOTP verification.
 - [RustCrypto AES-GCM](https://docs.rs/aes-gcm/0.10.3/aes_gcm/) — RustCrypto project. Used for: Go-compatible encrypted credential custody in Rust.
 - [Serde JSON](https://docs.rs/serde_json/latest/serde_json/) — Serde project. Used for: canonical request parsing, duplicate-key rejection and arbitrary-precision values in the Rust authority.
+- [RFC 8259: The JavaScript Object Notation (JSON) Data Interchange Format](https://www.rfc-editor.org/rfc/rfc8259) — IETF. Used for: interoperable migration receipts with unique, exact field names and explicit JSON object structure.
 - [jsonwebtoken 9.3.1](https://docs.rs/crate/jsonwebtoken/9.3.1) — Rust jsonwebtoken project. Used for: RS256 owner assertion verification against pinned JWKS in the Rust security authority.
 - [fs2](https://docs.rs/fs2/latest/fs2/) — Rust community crate. Used for: exclusive Linux state-directory locks during authority migration.
 - [Axum](https://docs.rs/axum/0.8.6/axum/) — Tokio project. Used for: bounded HTTP owner, gateway, browser, and remote authorization routes over isolated transports.
