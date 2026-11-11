@@ -76,6 +76,32 @@ func TestAuditJournalReopensIndeterminateRustOutcomes(t *testing.T){
  }
 }
 
+func TestAuditRejectsDuplicateUnresolvedExecutionAcrossRestarts(t *testing.T){
+ dir:=privateAuditDir(t)
+ path:=filepath.Join(dir,"executor-actions.jsonl")
+ journal,err:=OpenAuditJournal(path)
+ if err!=nil{t.Fatal(err)}
+ operation:="infrastructure__service_restart"
+ first:=strings.Repeat("a",32)
+ replay:=strings.Repeat("b",32)
+ digest:=strings.Repeat("c",64)
+ if err:=journal.Record(first,operation,"jupiter",digest,"started");err!=nil{t.Fatal(err)}
+ if err:=journal.Record(replay,operation,"jupiter",digest,"started");err==nil{
+  t.Fatal("concurrent identical execution was admitted")
+ }
+ if err:=journal.Record(first,operation,"jupiter",digest,"indeterminate");err!=nil{t.Fatal(err)}
+ if err:=journal.Close();err!=nil{t.Fatal(err)}
+ recovered,err:=OpenAuditJournal(path)
+ if err!=nil{t.Fatal(err)}
+ defer recovered.Close()
+ if err:=recovered.Record(replay,operation,"jupiter",digest,"started");err==nil{
+  t.Fatal("unresolved attempt could be retried after executor restart")
+ }
+ if err:=recovered.Record(replay,operation,"jupiter",strings.Repeat("d",64),"started");err!=nil{
+  t.Fatal("unrelated authorized attempt was denied:",err)
+ }
+}
+
 func TestExecutorDoesNotClaimFailedEffectWasNotApplied(t *testing.T){
  journal:=testExecutorAudit(t)
  executor,err:=New(Config{
