@@ -166,10 +166,9 @@ func main(){
         if (path=="")==(alias==""){log.Fatal("Seerr requires exactly one credential authority")}
         var client *media.Client
         if alias!=""{
-            if vault==nil{log.Fatal("Seerr vault is unavailable")}
-            source,err:=vault.TokenSource(alias)
+            source,err:=authorizedVaultToken(vault,alias)
             if err!=nil{log.Fatal(err)}
-            client,err=media.NewSeerrWithSource(url,source)
+            client,err=media.NewSeerrWithScopedSource(url,source)
             if err!=nil{log.Fatal(err)}
         }else{
             raw,e:=os.ReadFile(path);if e!=nil{log.Fatal(e)}
