@@ -185,7 +185,7 @@ func dangerousOperation(name string) bool {
 	tokens := strings.FieldsFunc(strings.ToLower(name), func(r rune) bool { return r == '.' || r == '_' || r == '-' || r == '/' })
 	for _, word := range tokens {
 		switch word {
-		case "delete", "destroy", "purge", "revoke", "rotate", "reset", "remove", "wipe", "drop", "format", "shutdown", "reboot", "restart", "start", "stop", "reload", "build", "register", "scale", "activate", "revert", "switch", "prune", "firewall", "router", "network", "credential", "credentials", "trust", "rollback", "reinstall", "merge", "deploy", "apply", "force", "configure", "cleanup", "restore", "clear", "recover", "grant", "update", "patch":
+		case "delete", "destroy", "purge", "revoke", "rotate", "reset", "remove", "wipe", "drop", "format", "shutdown", "reboot", "restart", "start", "stop", "reload", "build", "register", "scale", "activate", "revert", "switch", "prune", "firewall", "router", "network", "credential", "credentials", "trust", "rollback", "reinstall", "merge", "deploy", "apply", "force", "configure", "cleanup", "restore", "clear", "recover", "grant", "create", "update", "patch":
 			return true
 		}
 	}
