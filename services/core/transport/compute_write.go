@@ -175,6 +175,15 @@ func (s *Server) uiComputeWorkspace(w http.ResponseWriter,r *http.Request){
         writeError(w,400,"workspace creation requires an exact executor host and approved image pool")
         return
     }
+    if s.deviceCatalog==nil{
+        writeError(w,http.StatusServiceUnavailable,"enrolled hardware policy is not configured")
+        return
+    }
+    raw,err:=json.Marshal(in)
+    if err!=nil||s.deviceCatalog.ValidateAllocation(raw)!=nil{
+        writeError(w,http.StatusForbidden,"workspace device claim is not enrolled or authorized")
+        return
+    }
     s.computeExecutorWrite(w,r,"infrastructure__workspace_create",in)
 }
 
