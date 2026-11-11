@@ -1,0 +1,498 @@
+//! Host-mediated Learning workspace. Browser code cannot grade, modify
+//! prerequisite evidence, or obtain an independent security credential.
+use dioxus::prelude::*;
+use serde_json::{json, Value};
+use crate::components::{Card, Empty, Heading, Notice};
+use crate::mcp_app;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Panel { Graph, Sessions, Question, Problems, Sources, Reviews, Practice, Reasoning }
+
+impl Panel {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Graph => "Knowledge graph",
+            Self::Sessions => "Learning sessions",
+            Self::Question => "Question",
+            Self::Problems => "Problems",
+            Self::Sources => "Sources",
+            Self::Reviews => "Review queue",
+            Self::Practice => "Practice",
+            Self::Reasoning => "Reasoning",
+        }
+    }
+
+    fn read(self, id: &str) -> Result<(&'static str,Value),String> {
+        let valid = !id.is_empty() && id.len() <= 128 &&
+            id.bytes().all(|byte| byte.is_ascii_alphanumeric()
+                || byte == b'-' || byte == b'_');
+        match self {
+            Self::Graph => Ok(("get_graph",json!({"focus":if valid {id}else{""},
+                "depth":2,"limit":80}))),
+            Self::Sessions if valid => Ok(("get_learning_session",json!({"session_id":id}))),
+            Self::Sessions => Ok(("list_learning_sessions",json!({"limit":50}))),
+            Self::Question if valid => Ok(("get_learning_question",json!({"question_id":id}))),
+            Self::Question => Err("Select a question identifier.".to_owned()),
+            Self::Problems if valid => Ok(("get_problem",json!({"problem_id":id}))),
+            Self::Problems => Ok(("list_problems",json!({"limit":50}))),
+            Self::Sources => Ok(("list_learning_sources",json!({"limit":80}))),
+            Self::Reviews => Ok(("get_review_queue",json!({"limit":80}))),
+            Self::Practice if valid => Ok(("get_practice_session",json!({"session_id":id}))),
+            Self::Practice => Ok(("list_practice_sessions",json!({"limit":50}))),
+            Self::Reasoning if valid => Ok(("get_reasoning_chain",json!({"chain_id":id}))),
+            Self::Reasoning => Ok(("get_reasoning_graph",json!({"limit":80}))),
+        }
+    }
+}
+
+fn list_records(value:&Value)->Vec<Value>{
+    if let Some(items)=value.as_array(){return items.clone()}
+    for field in ["concepts","nodes","sessions","questions","problems","sources",
+        "queue","reviews","items","chains","propositions","steps","attempts"] {
+        if let Some(items)=value.get(field).and_then(Value::as_array){
+            return items.clone()
+        }
+    }
+    Vec::new()
+}
+fn field(value:&Value, names:&[&str])->String{
+    for name in names{
+        if let Some(text)=value.get(name).and_then(Value::as_str){
+            if !text.is_empty(){return text.to_owned()}
+        }
+        if let Some(n)=value.get(name).and_then(Value::as_i64){return n.to_string()}
+    }
+    "—".to_owned()
+}
+fn valid_identity(s:&str)->bool{
+    !s.is_empty()&&s.len()<=128&&s.bytes().all(|byte|
+        byte.is_ascii_alphanumeric()||byte==b'-'||byte==b'_')
+}
+
+#[component]
+pub fn LearningApp() -> Element {
+    let mut panel=use_signal(||Panel::Graph);
+    let mut selected_id=use_signal(String::new);
+    let mut result=use_signal(||None::<Value>);
+    let mut loading=use_signal(||false);
+    let mut error=use_signal(String::new);
+    let mut notice=use_signal(String::new);
+    rsx!{
+        Heading {
+            title:"Learning workspace".to_owned(),
+            description:"Source-grounded reasoning, problems and independent assessments.".to_owned(),
+        }
+        div { class:"health-plan-list",role:"group",aria_label:"Learning sections",
+            for section in [Panel::Graph,Panel::Sessions,Panel::Question,
+                Panel::Problems,Panel::Sources,Panel::Reviews,Panel::Practice,Panel::Reasoning] {
+                button {
+                    class:if panel()==section{"btn btn-primary"}else{"btn btn-outline"},
+                    aria_pressed:panel()==section,
+                    onclick:move |_|{
+                        panel.set(section);result.set(None);error.set(String::new());
+                    },
+                    "{section.label()}"
+                }
+            }
+        }
+        Card {
+            title:panel().label().to_owned(),
+            description:"Tool results are supplied by the Learning MCP host. No browser credential is stored.".to_owned(),
+            div { class:"card-body stack",
+                if !error().is_empty(){ Notice { message:error() } }
+                if !notice().is_empty(){p{class:"small muted",role:"status","{notice()}"}}
+                label { class:"form-row",
+                    span { class:"label","Record identifier or optional graph focus" }
+                    input {
+                        class:"field",maxlength:"128",value:"{selected_id()}",
+                        placeholder:"Leave empty to browse the collection",
+                        oninput:move |event|selected_id.set(event.value())
+                    }
+                }
+                button {
+                    class:"btn btn-outline",disabled:loading(),
+                    onclick:move |_|{
+                        if loading(){return}
+                        let (tool,args)=match panel().read(&selected_id()){
+                            Ok(value)=>value,
+                            Err(message)=>{error.set(message);return}
+                        };
+                        loading.set(true);error.set(String::new());notice.set(String::new());
+                        spawn(async move{
+                            match mcp_app::call_learning_tool::<Value>(tool,args).await{
+                                Ok(value)=>result.set(Some(value)),
+                                Err(message)=>error.set(message),
+                            }
+                            loading.set(false);
+                        });
+                    },
+                    if loading(){"Loading…"}else{"Load from Learning"}
+                }
+                if let Some(data)=result(){
+                    if list_records(&data).is_empty(){
+                        pre { class:"mono small", "{serde_json::to_string_pretty(&data).unwrap_or_default()}" }
+                    }else{
+                        div { class:"task-items",
+                            for (index,record) in list_records(&data).iter().enumerate(){
+                                div { class:"task-item",key:"{index}",
+                                    div { class:"task-information",
+                                        strong { {field(record,&["title","label","name","goal","statement","prompt","id"])} }
+                                        span { class:"small muted",
+                                            {field(record,&["phase","kind","status","domain","due_at"])}
+                                        }
+                                        if let Some(id)=record.get("id").and_then(Value::as_str){
+                                            button {
+                                                class:"btn btn-outline btn-sm",r#type:"button",
+                                                onclick:{
+                                                    let id=id.to_owned();
+                                                    move |_|selected_id.set(id.clone())
+                                                },
+                                                "Select"
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }else{
+                    Empty {
+                        title:"Choose Learning records".to_owned(),
+                        description:"Open a graph, session, question, problem, source, review or practice record.".to_owned()
+                    }
+                }
+            }
+        }
+        if panel()==Panel::Question {
+            EmbeddedAnswer {
+                question:result(),
+                on_saved:move |_|{
+                    result.set(None);
+                    notice.set("The original response was saved. An independent assessment remains necessary.".to_owned());
+                }
+            }
+        }
+        if panel()==Panel::Sessions {
+            EmbeddedSession {
+                session:result(),
+                session_id:selected_id(),
+                on_saved:move |_|{result.set(None);notice.set("Learning session action accepted.".to_owned());}
+            }
+        }
+        if panel()==Panel::Sources {
+            EmbeddedSource { source_id:selected_id() }
+        }
+    }
+}
+
+#[component]
+fn EmbeddedAnswer(question: Option<Value>,on_saved:EventHandler<()>) -> Element {
+    let mut answer=use_signal(String::new);
+    let mut reasoning=use_signal(String::new);
+    let mut confidence=use_signal(String::new);
+    let mut assisted=use_signal(||false);
+    let mut busy=use_signal(||false);
+    let mut error=use_signal(String::new);
+    let Some(question)=question else {return rsx!{}};
+    let id=field(&question,&["id"]);
+    let status=field(&question,&["status"]);
+    let options=question.get("options").and_then(Value::as_array).cloned().unwrap_or_default();
+    let multi=question.get("response_kind").and_then(Value::as_str)==Some("multiple_choice");
+    rsx!{
+        Card{
+            title:"Answer the question".to_owned(),
+            description:"A correct option without supported reasoning is not evidence of mastery.".to_owned(),
+            div{class:"card-body stack",
+                p{ {field(&question,&["prompt"])} }
+                if status=="answered"{
+                    div{class:"alert",role:"status","Response saved. Await independent assessment."}
+                    p{ {field(&question,&["learner_response"])} }
+                    p{class:"small muted",{field(&question,&["learner_reasoning"])}}
+                }else if status!="pending" {
+                    p{class:"small muted","This question is not awaiting a learner answer."}
+                }else{
+                    if !error().is_empty(){Notice{message:error()}}
+                    form{
+                        class:"task-editor-fields",
+                        onsubmit:{
+                            let id=id.clone();
+                            let options=options.clone();
+                            move |event|{
+                                event.prevent_default();
+                                if busy() || !valid_identity(&id) || answer().trim().is_empty()||
+                                    answer().len()>12000||reasoning().len()>16000||
+                                    multi&&!options.iter().any(|o|
+                                        o.get("id").and_then(Value::as_str)==Some(answer().as_str())){
+                                    error.set("Choose a valid response and reasoning before submitting.".to_owned());
+                                    return;
+                                }
+                                let answer_text=answer();
+                                let reasoning_text=reasoning();
+                                let certainty=confidence().parse::<f64>().ok();
+                                let params=json!({"question_id":id,
+                                    "learner_response":answer_text,"learner_reasoning":reasoning_text,
+                                    "assisted":assisted(),"self_confidence":certainty});
+                                busy.set(true);error.set(String::new());
+                                spawn(async move{
+                                    match mcp_app::call_learning_tool::<Value>(
+                                        "answer_learning_question",params).await{
+                                        Ok(_)=>on_saved.call(()),
+                                        Err(message)=>error.set(message),
+                                    }
+                                    busy.set(false);
+                                });
+                            }
+                        },
+                        if multi{
+                            label{class:"form-row",
+                                span{class:"label","Answer" }
+                                select{
+                                    class:"field",required:true,disabled:busy(),value:"{answer()}",
+                                    onchange:move |event|answer.set(event.value()),
+                                    option{value:"","Select an option"}
+                                    for option in &options{
+                                        if let (Some(id),Some(title))=(
+                                            option.get("id").and_then(Value::as_str),
+                                            option.get("label").and_then(Value::as_str)){
+                                            option{value:"{id}","{title}"}
+                                        }
+                                    }
+                                }
+                            }
+                        }else{
+                            label{class:"form-row",
+                                span{class:"label","Answer"}
+                                textarea{class:"field",rows:"3",maxlength:"12000",required:true,
+                                    disabled:busy(),value:"{answer()}",
+                                    oninput:move |event|answer.set(event.value())}
+                            }
+                        }
+                        label{class:"form-row",
+                            span{class:"label","Independent reasoning"}
+                            textarea{class:"field",rows:"4",maxlength:"16000",
+                                disabled:busy(),value:"{reasoning()}",
+                                oninput:move |event|reasoning.set(event.value())}
+                        }
+                        label{class:"form-row",
+                            span{class:"label","Confidence (optional)"}
+                            select{class:"field",value:"{confidence()}",disabled:busy(),
+                                onchange:move |event|confidence.set(event.value()),
+                                option{value:"","No estimate"}
+                                option{value:"0.0","0%"}
+                                option{value:"0.25","25%"}
+                                option{value:"0.5","50%"}
+                                option{value:"0.75","75%"}
+                                option{value:"1.0","100%"}
+                            }
+                        }
+                        label{class:"inline-row",
+                            input{r#type:"checkbox",checked:assisted(),disabled:busy(),
+                                onchange:move |event|assisted.set(event.checked())}
+                            span{"I used assistance"}
+                        }
+                        button{class:"btn btn-primary",disabled:busy(),"Record my answer"}
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[component]
+fn EmbeddedSession(session:Option<Value>,session_id:String,on_saved:EventHandler<()>) -> Element {
+    let mut goal=use_signal(String::new);
+    let mut concept=use_signal(String::new);
+    let mut busy=use_signal(||false);
+    let mut error=use_signal(String::new);
+    let mut consent=use_signal(||false);
+    let mut step_response=use_signal(String::new);
+    let mut step_id=use_signal(String::new);
+    let mut feedback=use_signal(||None::<Value>);
+    rsx!{
+        Card{
+            title:"Learning sessions and reasoning".to_owned(),
+            description:"The host stores evidence. Model feedback is provisional and requires explicit disclosure consent.".to_owned(),
+            div{class:"card-body stack",
+                if !error().is_empty(){Notice{message:error()}}
+                if let Some(value)=feedback(){
+                    pre{class:"mono small","{serde_json::to_string_pretty(&value).unwrap_or_default()}"}
+                }
+                form{class:"task-editor-fields",
+                    onsubmit:move |event|{
+                        event.prevent_default();
+                        if busy()||goal().trim().len()<2||!valid_identity(&concept()){return}
+                        let params=json!({"goal":goal(),"target_concept_id":concept(),"mode":"learn"});
+                        busy.set(true);error.set(String::new());
+                        spawn(async move{
+                            match mcp_app::call_learning_tool::<Value>("start_learning_session",params).await{
+                                Ok(_)=>on_saved.call(()),
+                                Err(msg)=>error.set(msg),
+                            }
+                            busy.set(false);
+                        });
+                    },
+                    label{class:"form-row",
+                        span{class:"label","Learning objective"}
+                        input{class:"field",required:true,maxlength:"500",value:"{goal()}",
+                            oninput:move |event|goal.set(event.value())}
+                    }
+                    label{class:"form-row",
+                        span{class:"label","Existing concept ID"}
+                        input{class:"field",required:true,maxlength:"128",value:"{concept()}",
+                            oninput:move |event|concept.set(event.value())}
+                    }
+                    button{class:"btn btn-outline",disabled:busy(),"Start learning session"}
+                }
+                if let Some(session)=session{
+                    if session.get("steps").and_then(Value::as_array).is_some(){
+                        p{class:"small muted","Reasoning steps: {list_records(&session).len()}"}
+                        if let Some(steps)=session.get("steps").and_then(Value::as_array){
+                            for step in steps{
+                                p{class:"small muted",
+                                    {field(step,&["title","concept_id","id"])}
+                                    " — "
+                                    {field(step,&["kind"])}
+                                }
+                            }
+                        }
+                        label{class:"form-row",
+                            span{class:"label","Reasoning step ID"}
+                            input{class:"field",maxlength:"128",value:"{step_id()}",
+                                oninput:move |event|step_id.set(event.value())}
+                        }
+                        label{class:"form-row",
+                            span{class:"label","Independent explanation"}
+                            textarea{class:"field",maxlength:"8000",rows:"4",value:"{step_response()}",
+                                oninput:move |event|step_response.set(event.value())}
+                        }
+                        label{class:"inline-row",
+                            input{r#type:"checkbox",checked:consent(),onchange:move |event|consent.set(event.checked())}
+                            span{"Permit this explanation to be disclosed to the configured model for provisional feedback."}
+                        }
+                        button{class:"btn btn-outline",r#type:"button",disabled:busy()||!consent(),
+                            onclick:{
+                                let session_id=session_id.clone();
+                                move |_|{
+                                    if busy()||!valid_identity(&session_id)||!valid_identity(&step_id())
+                                        ||step_response().trim().is_empty(){return}
+                                    let params=json!({"session_id":session_id,"step_id":step_id(),
+                                        "learner_response":step_response(),"assisted":false,
+                                        "allow_model_disclosure":true});
+                                    busy.set(true);error.set(String::new());feedback.set(None);
+                                    spawn(async move{
+                                        match mcp_app::call_learning_tool::<Value>(
+                                            "propose_step_model_assessment",params).await{
+                                            Ok(value)=>feedback.set(Some(value)),
+                                            Err(msg)=>error.set(msg),
+                                        }
+                                        busy.set(false);
+                                    });
+                                }
+                            },
+                            "Request provisional reasoning feedback"
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[component]
+fn EmbeddedSource(source_id:String)->Element{
+    let mut preview=use_signal(||None::<Value>);
+    let mut receipt=use_signal(||None::<Value>);
+    let mut consent=use_signal(||false);
+    let mut busy=use_signal(||false);
+    let mut error=use_signal(String::new);
+    rsx!{
+        Card{
+            title:"Audited source curriculum".to_owned(),
+            description:"Import only reviewed claims and prerequisite links; no mastery is awarded.".to_owned(),
+            div{class:"card-body stack",
+                if !error().is_empty(){Notice{message:error()}}
+                button{class:"btn btn-outline",r#type:"button",
+                    disabled:busy()||!valid_identity(&source_id),
+                    onclick:{
+                        let source=source_id.clone();
+                        move |_|{
+                            if busy()||!valid_identity(&source){return}
+                            preview.set(None);receipt.set(None);consent.set(false);
+                            busy.set(true);error.set(String::new());
+                            let source=source.clone();
+                            spawn(async move{
+                                match mcp_app::call_learning_tool::<Value>(
+                                    "preview_source_curriculum",json!({"source_id":source,"limit":80})).await{
+                                    Ok(value)=>preview.set(Some(value)),
+                                    Err(msg)=>error.set(msg),
+                                }
+                                busy.set(false);
+                            });
+                        }
+                    },
+                    "Preview source curriculum"
+                }
+                if let Some(data)=preview(){
+                    pre{class:"mono small","{serde_json::to_string_pretty(&data).unwrap_or_default()}"}
+                    if let Some(plan)=data.get("curriculum"){
+                        if plan.get("ready").and_then(Value::as_bool)==Some(true){
+                            if let Some(sha)=plan.get("sha256").and_then(Value::as_str){
+                                if sha.len()==64&&sha.bytes().all(|b|
+                                    b.is_ascii_digit()||(b'a'..=b'f').contains(&b)){
+                                    label{class:"inline-row",
+                                        input{r#type:"checkbox",checked:consent(),
+                                            onchange:move |event|consent.set(event.checked())}
+                                        span{"Import exactly these reviewed source concepts and prerequisites."}
+                                    }
+                                    button{class:"btn btn-primary",r#type:"button",
+                                        disabled:busy()||!consent(),
+                                        onclick:{
+                                            let source=source_id.clone();
+                                            let digest=sha.to_owned();
+                                            move |_|{
+                                                if busy()||!consent(){return}
+                                                let params=json!({"source_id":source,
+                                                    "limit":80,"expected_sha256":digest,"confirm":true});
+                                                busy.set(true);error.set(String::new());
+                                                spawn(async move{
+                                                    match mcp_app::call_learning_tool::<Value>(
+                                                        "import_source_curriculum",params).await{
+                                                        Ok(value)=>{
+                                                            receipt.set(Some(value));consent.set(false);
+                                                        }
+                                                        Err(msg)=>error.set(msg),
+                                                    }
+                                                    busy.set(false);
+                                                });
+                                            }
+                                        },
+                                        "Import confirmed curriculum"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                if let Some(data)=receipt(){
+                    div{class:"alert",role:"status",
+                        strong{"Source curriculum recorded"}
+                        p{"Mastery remains unchanged."}
+                        pre{class:"mono small","{serde_json::to_string_pretty(&data).unwrap_or_default()}"}
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests{
+    use super::*;
+    #[test]
+    fn browser_scope_is_defined_by_fixed_learning_panels(){
+        assert_eq!(Panel::Question.read(""),Err("Select a question identifier.".to_owned()));
+        assert_eq!(Panel::Sessions.read("").unwrap().0,"list_learning_sessions");
+        assert_eq!(Panel::Sources.read("../oops").unwrap().0,"list_learning_sources");
+        assert!(!valid_identity("../../etc/passwd"));
+    }
+}
