@@ -28,15 +28,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - name: Generate dependency lockfile
-        working-directory: services/security-authority
-        run: cargo generate-lockfile
-      - name: Export dependency lockfile
-        uses: actions/upload-artifact@v4
-        with:
-          name: security-authority-cargo-lock
-          path: services/security-authority/Cargo.lock
-          if-no-files-found: error
+      - name: Verify committed security dependency lock
+        run: |
+          test -s services/security-authority/Cargo.lock
+          git ls-files --error-unmatch services/security-authority/Cargo.lock >/dev/null
       - name: Check formatting
         working-directory: services/security-authority
         run: cargo fmt --all -- --check
