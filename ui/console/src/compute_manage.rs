@@ -556,7 +556,9 @@ fn ComputeCatalog(csrf: String) -> Element {
                                 option { value:"disabled","Disabled" }
                                 option { value:"retired","Retired" }
                             }else{
+                                option { value:"reviewed","Reviewed" }
                                 option { value:"available","Available" }
+                                option { value:"disabled","Disabled" }
                                 option { value:"rejected","Rejected" }
                                 option { value:"retired","Retired" }
                             }
