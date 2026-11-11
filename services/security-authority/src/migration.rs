@@ -212,6 +212,7 @@ pub fn prepare(state: &Path, destination: &Path, target: &str) -> Result<(), Err
     let parent_dir = destination.parent().ok_or(Error::InvalidConfiguration)?;
     let parent_md = fs::symlink_metadata(parent_dir).map_err(|_| Error::Storage)?;
     if !parent_md.is_dir() || parent_md.file_type().is_symlink()
+        || fs::canonicalize(parent_dir).map_err(|_| Error::Storage)? != parent_dir
         || parent_md.mode() & 0o022 != 0
     {
         return Err(Error::Storage);
@@ -230,6 +231,32 @@ pub fn prepare(state: &Path, destination: &Path, target: &str) -> Result<(), Err
             .status().map_err(|_| Error::Storage)?;
         if !status.success() {
             return Err(Error::InvalidConfiguration);
+        }
+        if target == "go" {
+            // A rollback receipt is issued only after both independent
+            // implementations accept the exact copied replay and vault state.
+            let binary = std::env::var("HOMELAB_SECURITY_GO_PREFLIGHT")
+                .map_err(|_| Error::InvalidConfiguration)?;
+            let binary = Path::new(&binary);
+            if !binary.is_absolute()
+                || binary.components().any(|c| c == Component::ParentDir)
+            {
+                return Err(Error::InvalidConfiguration);
+            }
+            let md = fs::symlink_metadata(binary).map_err(|_| Error::Storage)?;
+            if !md.is_file() || md.file_type().is_symlink()
+                || md.mode() & 0o022 != 0
+                || !matches!(md.uid(), 0 if unsafe { libc::geteuid() } != 0)
+                    && md.uid() != unsafe { libc::geteuid() }
+            {
+                return Err(Error::Storage);
+            }
+            let outcome = Command::new(binary)
+                .arg("--state-dir").arg(destination)
+                .status().map_err(|_| Error::Storage)?;
+            if !outcome.success() {
+                return Err(Error::InvalidConfiguration);
+            }
         }
         let mut nonce = [0u8; 16];
         getrandom::fill(&mut nonce).map_err(|_| Error::Storage)?;
