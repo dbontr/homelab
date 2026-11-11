@@ -93,13 +93,26 @@ in
       };
       serviceCredentialGrants = lib.mkOption {
         default = [];
-        description = "Exact service identity and opaque vault handle bindings for mutually authenticated credential reads. Never put credential values in this configuration.";
+        description = "Exact certificate identity, operation, resource and opaque vault handle bindings for one-use owner-authorized credential tickets. Never put credential values in this configuration.";
         type = lib.types.listOf (lib.types.submodule {
           options = {
             clientDNS = lib.mkOption { type = lib.types.str; };
             alias = lib.mkOption { type = lib.types.str; };
             provider = lib.mkOption { type = lib.types.str; };
             handle = lib.mkOption { type = lib.types.str; };
+            operation = lib.mkOption {
+              type = lib.types.str;
+              description = "Exact independently authorized operation required for this credential.";
+            };
+            target = lib.mkOption {
+              type = lib.types.str;
+              description = "Exact independently authorized resource target for this credential.";
+            };
+            argumentsSHA256 = lib.mkOption {
+              type = lib.types.nullOr lib.types.str;
+              default = null;
+              description = "Optional exact SHA-256 of the canonical operation arguments; all issued tickets bind the actual argument digest.";
+            };
             revision = lib.mkOption {
               type = lib.types.nullOr lib.types.str;
               default = null;
@@ -174,9 +187,14 @@ in
         message = "Remote certificate identities must be disjoint between authorization and credential-only roles and limited to sixteen peers."; }
       { assertion = cfg.remote.serviceCredentialGrants == [] ||
           (cfg.remote.enable && cfg.vaultKeyFile != null &&
-           lib.all (grant: lib.elem grant.clientDNS
-             (cfg.remote.allowedClientDNS ++ cfg.remote.credentialClientDNS)) cfg.remote.serviceCredentialGrants);
-        message = "Service credentials require independent vault custody, private remote TLS, and an explicitly allowed client certificate identity."; }
+           lib.all (grant:
+             lib.elem grant.clientDNS cfg.remote.allowedClientDNS &&
+             lib.any (policy: policy.operation == grant.operation &&
+               lib.elem grant.target policy.targets) cfg.policies &&
+             (grant.argumentsSHA256 == null ||
+               builtins.match "[0-9a-f]{64}" grant.argumentsSHA256 != null)
+           ) cfg.remote.serviceCredentialGrants);
+        message = "Service credentials require a TLS authorizer identity, exact operation/resource policy, optional canonical digest and independent vault custody."; }
       { assertion = cfg.owner != ""; message = "Security daemon requires an owner identity."; }
       { assertion = cfg.passwordVerifierFile != null && cfg.totpSecretFile != null;
         message = "Security daemon requires separate password and TOTP credential files."; }
@@ -247,6 +265,9 @@ in
             alias = grant.alias;
             provider = grant.provider;
             handle = grant.handle;
+            operation = grant.operation;
+            target = grant.target;
+            arguments_sha256 = grant.argumentsSHA256;
             revision = grant.revision;
             expires_at = grant.expiresAt;
           }) cfg.remote.serviceCredentialGrants);
