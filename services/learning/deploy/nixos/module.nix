@@ -40,6 +40,11 @@ in {
       };
     };
     model = {
+      allowDisclosure = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = "Permit consented learner responses and source passages to leave the Learning service for the configured model.";
+      };
       endpoint = lib.mkOption {
         type = lib.types.nullOr lib.types.str;
         default = null;
@@ -108,8 +113,9 @@ in {
       }
       {
         assertion = (cfg.model.endpoint == null) == (cfg.model.name == null) &&
-          (cfg.model.tokenCredentialFile == null || cfg.model.endpoint != null);
-        message = "Learning model requires endpoint and name together, and credentials require an endpoint.";
+          (cfg.model.tokenCredentialFile == null || cfg.model.endpoint != null) &&
+          (!cfg.model.allowDisclosure || cfg.model.endpoint != null);
+        message = "Learning model requires endpoint and name together; credentials and disclosure require a configured provider.";
       }
       {
         assertion = (cfg.appBundle.directory == null) == (cfg.appBundle.origin == null);
@@ -177,7 +183,9 @@ in {
         ] ++ lib.optionals (cfg.model.endpoint != null) [
           "ADAPTIVE_TEACHING_MODEL_ENDPOINT=${cfg.model.endpoint}"
           "ADAPTIVE_TEACHING_MODEL_NAME=${cfg.model.name}"
-        ] ++ lib.optional (cfg.model.tokenCredentialFile != null)
+        ] ++ lib.optional cfg.model.allowDisclosure
+          "ADAPTIVE_TEACHING_MODEL_DISCLOSURE_ENABLED=1" ++
+          lib.optional (cfg.model.tokenCredentialFile != null)
           "ADAPTIVE_TEACHING_MODEL_TOKEN_FILE=/run/adaptive-teaching/model_token" ++
           lib.optionals (cfg.access.ownerCredentialFile != null) [
           "ADAPTIVE_TEACHING_ACCESS_ISSUER=${cfg.access.issuer}"
