@@ -192,6 +192,9 @@ func (s *Server) uiComputeResourcePlan(w http.ResponseWriter,r *http.Request){
     if !validConsoleWorkspace(in){
         writeError(w,400,"invalid Compute resource selection");return
     }
+    // Planning does not invoke the privileged executor. Host identity is
+    // relevant only when the owner explicitly requests an allocation.
+    in.Host=""
     s.computeWrite(w,r,"resource_plan",in,http.StatusOK)
 }
 
