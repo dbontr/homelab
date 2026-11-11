@@ -765,7 +765,7 @@ fn SourceCurriculum(csrf: String, source_id: String, on_imported: EventHandler<(
                                             p { class: "small muted", "{quote}" }
                                         }
                                         p { class: "small muted",
-                                            "Prerequisites: {records(step,&["dependencies"]).len()}"
+                                            "Prerequisites: " {records(step, &["dependencies"]).len()}
                                         }
                                     }
                                 }
@@ -829,8 +829,8 @@ fn SourceCurriculum(csrf: String, source_id: String, on_imported: EventHandler<(
                 if let Some(result) = receipt() {
                     div { class: "alert", role: "status",
                         strong { "Curriculum recorded" }
-                        p { "Concepts created: {label(&result, &["concepts_created"])}" }
-                        p { "Prerequisites linked: {label(&result, &["prerequisites_linked"])}" }
+                        p { "Concepts created: " {label(&result, &["concepts_created"])} }
+                        p { "Prerequisites linked: " {label(&result, &["prerequisites_linked"])} }
                         p { "No mastery was awarded." }
                     }
                 }
