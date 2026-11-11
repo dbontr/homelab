@@ -144,6 +144,58 @@ eligibility within its transaction and refuses stale or unreviewed
 evidence. Import creates concepts and prerequisites only; it does not
 create assessment records or increase mastery.
 
+## Embedded Learning interaction contracts
+
+The Rust Learning workspace exposes the legacy study operations through the
+MCP Apps host rather than a second browser-owned backend. The host's 28
+established study tool calls are available through an explicit tool allowlist.
+The browser cannot invoke direct grading, source-audit judgments, mastery
+records, privileged execution, or sealed answer-key inspection outside the
+Learning service's authorized release conditions.
+
+The knowledge view supports bounded concept graphs, search, zoom and pan,
+individual concept evidence and mastery portfolios. The reasoning view projects
+source-grounded propositions, joint-premise chains, disputes and their current
+review state. It can inspect exact propositions, premise-chain provenance,
+propositional formal-check results and source-anchored translation reviews.
+These records do not independently certify natural-language entailment.
+
+The confidence view distinguishes precommitted multiple-choice calibration
+from authenticated checker outcomes. It displays sample counts, missing
+confidence estimates, conflicting checker exclusions, accuracy, Brier scores,
+confidence bands and individually inspectable confident errors and
+underconfident successes. Small samples remain visibly qualified.
+
+Learning sessions support prerequisite planning, phase transitions, diagnosed
+gaps, committed questions, learner-authored reasoning, assistance disclosure,
+provisional model feedback and host-mediated independent assessment. A saved
+committed answer remains visibly ungraded until Learning records a verdict.
+Ordinary free-form questions send the learner's own explanation to the host
+without inventing an assessment in the browser.
+
+Problem solving supports versioned learner drafts, optional self-confidence,
+saved hints and reviews, formative feedback and final submission through the
+host. Exam mode suppresses hints and interim reviews; only closed problems with
+released reference solutions expose their answer and rubric. Practice sessions
+offer interleaved recommendations, a path back to active exercises and
+host-mediated novel problem creation with a sealed solution. The delayed-review
+queue includes upcoming obligations.
+
+The source library shows coverage and pending extraction work, offers explicit
+host requests for separate extraction and audit, and retains digest-confirmed
+curriculum import with zero mastery credit. Original files are uploaded within
+the five-MiB limit, and verified images can be viewed as browser-local Blob
+previews alongside annotations; downloads remain owner-selected.
+
+An embedded host may supply the initial Learning view through a bounded tool
+result notification. The bridge honors exact parent-window identity, versioned
+JSON-RPC initialization, host-context and display-mode permissions, request
+correlation, teardown, per-operation transfer limits and host-managed
+conversation messages. The iframe has no independent backend credential.
+
+These are source contracts. Build, runtime and MCP-host conformance remain
+separate acceptance evidence and are not implied by source-level tool coverage.
+
 ## Learning MCP App release
 
 The Rust Learning MCP App is opt-in through
