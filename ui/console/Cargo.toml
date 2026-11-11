@@ -6,7 +6,7 @@ license = "MIT"
 description = "Rust web console for the unified homelab"
 
 [dependencies]
-dioxus = { version = "0.7.0", default-features = false, features = ["web"] }
+dioxus = { version = "0.7.0", default-features = false, features = ["web", "lib"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 reqwest = { version = "0.12", default-features = false, features = ["json"] }
