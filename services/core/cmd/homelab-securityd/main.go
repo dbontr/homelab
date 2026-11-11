@@ -9,6 +9,7 @@ import (
 	"errors"
 	"io"
 	"log"
+	"net"
 	"os"
 	"os/signal"
 	"os/user"
@@ -161,6 +162,14 @@ func main() {
  var remoteRoots *x509.CertPool
  var remoteClients,credentialClients []string
  if remoteListen!=""{
+  listenerHost,listenerPort,splitErr:=net.SplitHostPort(remoteListen)
+  listenerIP:=net.ParseIP(listenerHost)
+  portNumber,portErr:=strconv.Atoi(listenerPort)
+  if splitErr!=nil||listenerIP==nil||
+   !(listenerIP.IsPrivate()||listenerIP.IsLoopback())||
+   portErr!=nil||portNumber<1||portNumber>65535{
+   log.Fatal("remote security listener must name an explicit private IP and valid port")
+  }
   remoteCert,err=security.LoadTLSIdentity(
    os.Getenv("HOMELAB_SECURITY_REMOTE_CERT"),os.Getenv("HOMELAB_SECURITY_REMOTE_KEY"))
   if err!=nil{log.Fatal("remote security certificate unavailable: ",err)}
