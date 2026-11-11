@@ -37,6 +37,14 @@ operator to stop, select, deploy or restart a live authority.
 Stop the current authority through the separately authorized host release
 process. Confirm that the daemon has stopped. Prepare the exact intended
 environment variables and protected file paths for the offline preflight.
+The service's `/run/credentials/homelab-securityd.service/` files disappear
+when systemd stops that unit. The operator must separately provision temporary
+owner-only credential files for the offline verifier; the verifier must not
+assume the stopped unit's credential mount remains available. Do not copy
+secrets into the repository or environment variables. Remove temporary
+credential material using an approved secret-management procedure after
+preparation.
+
 The selected state owner invokes:
 
 ```sh
