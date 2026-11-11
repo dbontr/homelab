@@ -33,6 +33,8 @@ mod learning_attachments;
 mod mcp_app;
 #[cfg(feature = "embedded-app")]
 mod embedded_learning;
+#[cfg(feature = "embedded-app")]
+mod embedded_learning_attachments;
 
 use dioxus::prelude::*;
 use components::Icon;
