@@ -2,6 +2,7 @@ package recipes
 
 import (
 	"errors"
+	"os"
 	"math"
 	"path/filepath"
 	"testing"
@@ -103,4 +104,23 @@ func TestGroceryChecklistRevisionAndRestart(t *testing.T) {
  reopened,err:=Open(path);if err!=nil{t.Fatal(err)}
  persisted,err:=reopened.Board("","");if err!=nil||!persisted.Items[0].Checked{t.Fatalf("not persisted: %+v %v",persisted,err)}
  if _,err:=reopened.MarkGrocery("not-a-key",true,1);err==nil{t.Fatal("invalid grocery key accepted")}
+}
+
+func TestStateDirectoryAllowsOnlyConfiguredPrivateSymlink(t *testing.T) {
+    base:=t.TempDir()
+    target:=filepath.Join(base,"private")
+    if err:=os.Mkdir(target,0700);err!=nil{t.Fatal(err)}
+    link:=filepath.Join(base,"state")
+    if err:=os.Symlink(target,link);err!=nil{t.Fatal(err)}
+    if _,err:=Open(filepath.Join(link,"recipes.json"));err==nil{
+        t.Fatal("unconfigured symlink to recipe data was accepted")
+    }
+    t.Setenv("STATE_DIRECTORY",link)
+    if _,err:=Open(filepath.Join(link,"recipes.json"));err!=nil{
+        t.Fatalf("systemd state directory mapping rejected: %v",err)
+    }
+    if err:=os.Chmod(target,0755);err!=nil{t.Fatal(err)}
+    if _,err:=Open(filepath.Join(link,"recipes.json"));err==nil{
+        t.Fatal("public recipe state directory was accepted")
+    }
 }
