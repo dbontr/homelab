@@ -17,7 +17,7 @@ use x509_parser::extensions::GeneralName;
 use x509_parser::prelude::parse_x509_certificate;
 
 use crate::bootstrap::{configured_file, required};
-use crate::grants::VerifiedServiceIdentity;
+use crate::grants::{valid_service_dns, VerifiedServiceIdentity};
 use crate::transport::{remote_router, Shared};
 use crate::Error;
 
@@ -52,7 +52,7 @@ fn certificate_identity(certificate: &CertificateDer<'_>) -> Result<String, Erro
             None
         }
     }).collect::<Vec<_>>();
-    if dns.len() != 1 {
+    if dns.len() != 1 || !valid_service_dns(&dns[0]) {
         return Err(Error::Unauthorized);
     }
     Ok(dns[0].clone())
@@ -78,9 +78,7 @@ impl Remote {
         }
         let mut allowed = BTreeSet::new();
         for client in clients {
-            if client.is_empty() || client.len() > 253
-                || client.bytes().any(|b| matches!(b, b' ' | b'/' | b'\\' | b':' | b';' | 0))
-                || !allowed.insert(client)
+            if !valid_service_dns(&client) || !allowed.insert(client)
             {
                 return Err(Error::InvalidConfiguration);
             }
