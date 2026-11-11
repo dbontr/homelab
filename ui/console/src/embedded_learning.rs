@@ -165,6 +165,15 @@ pub fn LearningApp() -> Element {
                     if loading(){"Loading…"}else{"Load from Learning"}
                 }
                 if let Some(data)=result(){
+                    if panel()==Panel::Graph {
+                        crate::embedded_learning_graph::LearningGraph {
+                            data:data.clone(),
+                            on_select:move |id:String|{
+                                selected_id.set(id);
+                                result.set(None);
+                            }
+                        }
+                    }
                     if list_records(&data).is_empty(){
                         pre { class:"mono small", "{serde_json::to_string_pretty(&data).unwrap_or_default()}" }
                     }else{
