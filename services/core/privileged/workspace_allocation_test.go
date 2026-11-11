@@ -7,7 +7,7 @@ func TestWorkspaceAllocationRequiresOperatorResourceLists(t *testing.T){
         Projects:[]string{"research"},
         Images:[]string{"approved-image"},
         Workers:[]string{"jupiter"},
-        Devices:[]string{"jtag"},
+        Devices:[]string{"jtag:1"},
     }
     accepted:=map[string]any{
         "host":"saturn","project_id":"research",
@@ -50,7 +50,7 @@ func TestWorkspaceAllocationRequiresOperatorResourceLists(t *testing.T){
     device["hardware"]=map[string]any{"usb":1.0}
     device["usb_passthrough"]=true
     device["usb_node"]="jupiter"
-    device["usb_device_id"]="jtag"
+    device["usb_device_id"]="jtag:1"
     if _,_,err:=policy.operationArgs("infrastructure__workspace_create",device);err!=nil{
         t.Fatal("approved operator-selected USB resource was rejected:",err)
     }
