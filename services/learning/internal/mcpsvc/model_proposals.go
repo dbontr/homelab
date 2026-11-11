@@ -75,6 +75,25 @@ func (svc *Service) modelJSON(ctx context.Context, instruction string, input any
     if len(reply) == 0 || len(reply) > 24<<10 {
         return errors.New("Learning model reply is empty or exceeds its limit")
     }
+    // A zero-value JSON field is not evidence that the model supplied the
+    // required assessment or source-extraction schema.
+    var fields map[string]json.RawMessage
+    if err := json.Unmarshal([]byte(reply), &fields); err != nil || fields == nil {
+        return errors.New("Learning model must return exactly one JSON object")
+    }
+    mandatory := []string{}
+    switch output.(type) {
+    case *ModelAssessment:
+        mandatory = []string{"verdict", "evaluation", "confidence"}
+    case *store.ExtractionProposal:
+        mandatory = []string{"claims"}
+    }
+    for _, key := range mandatory {
+        raw, ok := fields[key]
+        if !ok || len(raw) == 0 || string(raw) == "null" {
+            return errors.New("Learning model omitted a required proposal field")
+        }
+    }
     decoder := json.NewDecoder(strings.NewReader(reply))
     decoder.DisallowUnknownFields()
     if err := decoder.Decode(output); err != nil {
