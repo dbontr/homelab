@@ -46,8 +46,8 @@ fn RunDetail(run: Value, csrf: String) -> Element {
         details { class: "card",
             summary { class: "card-header",
                 div {
-                    h2 { class: "card-title", "{text(&run, "id")}" }
-                    p { class: "card-description", "Project: {text(&run, "project")}" }
+                    h2 { class: "card-title", {text(&run, "id")} }
+                    p { class: "card-description", {format!("Project: {}", text(&run, "project"))} }
                 }
                 Badge { text: text(&run, "status") }
             }
@@ -78,9 +78,9 @@ fn RunDetail(run: Value, csrf: String) -> Element {
                         ol { class: "engineering-activity",
                             for event in activity {
                                 li {
-                                    strong { "{text(&event, "action")}" }
-                                    span { class:"muted", "{text(&event, "target")}" }
-                                    p { class:"muted", "{text(&event, "reason")}" }
+                                    strong { {text(&event, "action")} }
+                                    span { class:"muted", {text(&event, "target")} }
+                                    p { class:"muted", {text(&event, "reason")} }
                                 }
                             }
                         }
@@ -89,7 +89,7 @@ fn RunDetail(run: Value, csrf: String) -> Element {
                         h3 { "Verification diagnostics" }
                         for diagnostic in diagnostics {
                             div { class:"inline-row",
-                                span { class:"mono", "{text(&diagnostic, "command")}" }
+                                span { class:"mono", {text(&diagnostic, "command")} }
                                 Badge { text:text(&diagnostic,"category") }
                                 span { class:"muted", "Exit: {text(&diagnostic, "exit_code")}" }
                             }
@@ -161,8 +161,8 @@ fn TeamDetail(team: Value, csrf: String) -> Element {
         details { class: "card",
             summary { class: "card-header",
                 div {
-                    h2 { class: "card-title", "{text(&team, "id")}" }
-                    p { class: "card-description", "{text(&team, "project")} · {text(&team, "repository")}" }
+                    h2 { class: "card-title", {text(&team, "id")} }
+                    p { class: "card-description", {text(&team, "project")} · {text(&team, "repository")} }
                 }
                 Badge { text: text(&team, "status") }
             }
@@ -173,7 +173,7 @@ fn TeamDetail(team: Value, csrf: String) -> Element {
                     h3 { "Verified artifacts" }
                     for artifact in artifacts {
                         div { class: "inline-row",
-                            span { class: "mono", "{text(&artifact, "path")}" }
+                            span { class: "mono", {text(&artifact, "path")} }
                             span { class: "muted", "Prepared by {text(&artifact, "member")}" }
                         }
                     }
