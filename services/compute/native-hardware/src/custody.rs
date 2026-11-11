@@ -391,12 +391,22 @@ mod tests {
     fn physical_record_names_and_owners_are_strict() {
         assert_eq!(physical_from_record(
             "gpu", "/dev/dri/renderD128",
-            "v1\n0123456789abcdef0123456789abcdef\ngpu\n/dev/dri/renderD128\n/dev/dri/renderD128\n259\n"
+            "v2\n0123456789abcdef0123456789abcdef\ngpu\n/dev/dri/renderD128\n/dev/dri/renderD128\n259\n22\n998\n"
         ).unwrap(), "char-0000000000000103.physical");
         assert!(physical_from_record(
             "npu", "/dev/dri/renderD128",
-            "v1\n0123456789abcdef0123456789abcdef\ngpu\n/dev/dri/renderD128\n/dev/dri/renderD128\n259\n"
+            "v2\n0123456789abcdef0123456789abcdef\ngpu\n/dev/dri/renderD128\n/dev/dri/renderD128\n259\n22\n998\n"
         ).is_err());
+    }
+
+    #[test]
+    fn physical_record_rejects_legacy_or_incomplete_kernel_identity() {
+        let legacy = "v1\n0123456789abcdef0123456789abcdef\ngpu\n/dev/dri/renderD128\n/dev/dri/renderD128\n259\n";
+        assert!(physical_from_record("gpu", "/dev/dri/renderD128", legacy).is_err());
+        let no_inode = "v2\n0123456789abcdef0123456789abcdef\ngpu\n/dev/dri/renderD128\n/dev/dri/renderD128\n259\n22\n";
+        assert!(physical_from_record("gpu", "/dev/dri/renderD128", no_inode).is_err());
+        let invalid_inode = "v2\n0123456789abcdef0123456789abcdef\ngpu\n/dev/dri/renderD128\n/dev/dri/renderD128\n259\n22\ninvalid\n";
+        assert!(physical_from_record("gpu", "/dev/dri/renderD128", invalid_inode).is_err());
     }
 
     #[test]
