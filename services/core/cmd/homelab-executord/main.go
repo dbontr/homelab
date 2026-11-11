@@ -112,9 +112,10 @@ func main(){
   if vaultAlias!=""{
    remote,ok:=client.(*security.RemoteAuthorizationClient)
    if !ok{log.Fatal("vault-backed Workspace requires independent remote authorization")}
-   source,sourceErr:=remote.TokenSource(vaultAlias)
+   source,sourceErr:=remote.ScopedTokenSource(vaultAlias)
    if sourceErr!=nil{log.Fatal("invalid Workspace vault alias: ",sourceErr)}
-   policy.TokenSource=source
+   policy.ScopedTokenSource=source
+   policy.CredentialAlias=vaultAlias
   }else{
    policy.TokenFile=tokenFile
   }
