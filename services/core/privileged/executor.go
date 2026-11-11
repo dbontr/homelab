@@ -153,6 +153,8 @@ func (e *Executor) Execute(ctx context.Context, operation, target string, args j
 			return deny("host mismatch"), nil
 		}
 	case "infrastructure__workspace_create", "infrastructure__workspace_stop",
+        "infrastructure__workspace_register_image", "infrastructure__workspace_propose_program",
+        "infrastructure__workspace_review_program", "infrastructure__workspace_update_entry",
         "infrastructure__workspace_build_environment",
 		"infrastructure__workspace_register_software", "infrastructure__workspace_revoke_worker":
 		host, ok := fields["host"].(string)
@@ -211,6 +213,8 @@ func (e *Executor) Execute(ctx context.Context, operation, target string, args j
 	case "infrastructure__service_start", "infrastructure__service_stop", "infrastructure__service_reload", "infrastructure__service_restart":
 		err = e.cfg.Run(ctx, e.cfg.Systemctl, verb, fields["service"].(string))
 	case "infrastructure__workspace_create", "infrastructure__workspace_stop",
+        "infrastructure__workspace_register_image", "infrastructure__workspace_propose_program",
+        "infrastructure__workspace_review_program", "infrastructure__workspace_update_entry",
         "infrastructure__workspace_build_environment",
 		"infrastructure__workspace_register_software", "infrastructure__workspace_revoke_worker":
 		err = e.cfg.Workspace.Call(ctx, operation, fields)
