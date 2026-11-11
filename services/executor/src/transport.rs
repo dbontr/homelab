@@ -263,19 +263,20 @@ fn valid_coordinator_dns(name: &str) -> bool {
             && bytes.iter().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || *b == b'-')
     })
 }
+fn single_dns_identity(names: &[GeneralName<'_>]) -> Result<String, Error> {
+    match names {
+        [GeneralName::DNSName(name)] if valid_coordinator_dns(name) => Ok((*name).to_owned()),
+        _ => Err(Error::Denied("invalid or ambiguous coordinator DNS identity")),
+    }
+}
+
 fn certificate_dns(certificate: &[u8]) -> Result<String, Error> {
     let (_, cert) = parse_x509_certificate(certificate)
         .map_err(|_| Error::Denied("invalid coordinator certificate"))?;
     let san = cert.subject_alternative_name()
         .map_err(|_| Error::Denied("invalid coordinator identity"))?
         .ok_or(Error::Denied("coordinator DNS SAN missing"))?;
-    let names = san.value.general_names.iter().filter_map(|v|
-        if let GeneralName::DNSName(name) = v { Some((*name).to_owned()) } else { None }
-    ).collect::<Vec<_>>();
-    if names.len() != 1 || !valid_coordinator_dns(&names[0]) {
-        return Err(Error::Denied("invalid or ambiguous coordinator DNS identity"));
-    }
-    Ok(names[0].clone())
+    single_dns_identity(&san.value.general_names)
 }
 impl Remote {
     pub fn from_environment() -> Result<Option<Self>, Error> {
@@ -345,6 +346,27 @@ impl Remote {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn coordinator_identity_rejects_mixed_subject_alternative_names() {
+        assert_eq!(
+            single_dns_identity(&[GeneralName::DNSName("release.internal")]).unwrap(),
+            "release.internal"
+        );
+        assert!(single_dns_identity(&[
+            GeneralName::DNSName("release.internal"),
+            GeneralName::IPAddress(&[10, 77, 30, 1]),
+        ]).is_err());
+        assert!(single_dns_identity(&[
+            GeneralName::DNSName("release.internal"),
+            GeneralName::URI("spiffe://cluster/release"),
+        ]).is_err());
+        assert!(single_dns_identity(&[
+            GeneralName::DNSName("release.internal"),
+            GeneralName::DNSName("other.internal"),
+        ]).is_err());
+        assert!(single_dns_identity(&[GeneralName::DNSName("*.internal")]).is_err());
+    }
 
     #[test]
     fn coordinator_identity_rejects_wildcards_and_non_dns_names() {
