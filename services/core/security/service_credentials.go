@@ -22,7 +22,47 @@ type ServiceCredentialGrant struct {
 }
 
 var serviceCredentialName=regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]{0,63}$`)
-var serviceCredentialHandle=regexp.MustCompile(`^[A-Za-z0-9_-]{32}$`)
+var serviceCredentialHandle=regexp.MustCompile(`^[A-Za-z0-9_-]{32}package security
+
+import (
+ "bytes"
+ "errors"
+ "net/http"
+ "regexp"
+ "strings"
+ "time"
+)
+
+// ServiceCredentialGrant lets a named, mTLS-verified service read one
+// credential from the owner vault. The handle and policy are trusted Nix
+// configuration, never parameters accepted from MCP or a remote request.
+type ServiceCredentialGrant struct {
+ ClientDNS string `json:"client_dns"`
+ Alias string `json:"alias"`
+ Provider string `json:"provider"`
+ Handle string `json:"handle"`
+ Revision string `json:"revision,omitempty"`
+ ExpiresAt *time.Time `json:"expires_at,omitempty"`
+}
+
+var serviceCredentialName=regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]{0,63}$`)
+)
+
+// ValidServiceDNS accepts one canonical ASCII host identity, never a wildcard,
+// URL, or DNS name with an ambiguous spelling.
+func ValidServiceDNS(name string) bool {
+ if name=="" || len(name)>253 { return false }
+ for _,label:=range strings.Split(name,".") {
+  if len(label)==0 || len(label)>63 { return false }
+  for i:=0;i<len(label);i++ {
+   c:=label[i]
+   alpha:=c>='a' && c<='z'
+   digit:=c>='0' && c<='9'
+   if !alpha && !digit && (c!='-' || i==0 || i==len(label)-1) { return false }
+  }
+ }
+ return true
+}
 
 func serviceCredentialKey(identity,alias string)string{return identity+"\x00"+alias}
 
@@ -38,8 +78,7 @@ func(a *AdminSessions)SetServiceCredentialGrants(grants []ServiceCredentialGrant
  if a.serviceCredentialGrants!=nil{return errors.New("service credential policy is already configured")}
  policy:=map[string]ServiceCredentialGrant{}
  for _,grant:=range grants{
-  if grant.ClientDNS==""||len(grant.ClientDNS)>253||
-   strings.ContainsAny(grant.ClientDNS,"/?#:@\\ \t\r\n\x00")||
+  if !ValidServiceDNS(grant.ClientDNS)||
    !serviceCredentialName.MatchString(grant.Alias)||
    !serviceCredentialName.MatchString(grant.Provider)||
    !serviceCredentialHandle.MatchString(grant.Handle){
@@ -73,7 +112,7 @@ func verifiedServicePeer(request *http.Request)(string,bool){
  peer:=request.TLS.PeerCertificates[0]
  if peer==nil||len(peer.DNSNames)!=1{return "",false}
  dns:=peer.DNSNames[0]
- if peer.VerifyHostname(dns)!=nil{return "",false}
+ if !ValidServiceDNS(dns)||peer.VerifyHostname(dns)!=nil{return "",false}
  // The authorization listener checks the peer's cert chain and configured
  // identity allowlist at connection establishment.
  return dns,true
