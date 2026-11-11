@@ -115,7 +115,17 @@ in
       projects = lib.mkOption { type = lib.types.listOf lib.types.str; default = []; };
       workers = lib.mkOption { type = lib.types.listOf lib.types.str; default = []; };
       images = lib.mkOption { type = lib.types.listOf lib.types.str; default = []; };
+      imageReferences = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = [];
+        description = "Exact digest-qualified OCI references authorized for image-catalog registration.";
+      };
       software = lib.mkOption { type = lib.types.listOf lib.types.str; default = []; };
+      programs = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = [];
+        description = "Exact program catalog identities authorized for proposals and status reviews.";
+      };
       packages = lib.mkOption { type = lib.types.listOf lib.types.str; default = []; };
     };
     kubernetes = {
@@ -270,7 +280,9 @@ in
           Projects = cfg.workspace.projects;
           Workers = cfg.workspace.workers;
           Images = cfg.workspace.images;
+          ImageReferences = cfg.workspace.imageReferences;
           Software = cfg.workspace.software;
+          Programs = cfg.workspace.programs;
           Packages = cfg.workspace.packages;
         });
       } // lib.optionalAttrs (cfg.workspace.enable && cfg.workspace.rootTokenFile != null) {
