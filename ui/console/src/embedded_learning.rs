@@ -60,6 +60,16 @@ impl Panel {
     }
 }
 
+fn panel_for_host_data(value:&Value)->Option<Panel>{
+    value.get("view").and_then(Value::as_str).and_then(Panel::from_view)
+        .or_else(||{
+            if value.get("choice_accuracy").is_some(){Some(Panel::Calibration)}
+            else if value.get("propositions").is_some(){Some(Panel::Reasoning)}
+            else if value.get("nodes").is_some(){Some(Panel::Graph)}
+            else{None}
+        })
+}
+
 fn list_records(value:&Value)->Vec<Value>{
     if let Some(items)=value.as_array(){return items.clone()}
     for field in ["concepts","nodes","sessions","questions","problems","sources",
@@ -94,6 +104,19 @@ pub fn LearningApp() -> Element {
     let mut notice=use_signal(String::new);
     let mut target_level=use_signal(||3_i64);
     let mut target_busy=use_signal(||false);
+    let mut initial_host_result_loaded=use_signal(||false);
+    use_effect(move ||{
+        if initial_host_result_loaded(){return}
+        initial_host_result_loaded.set(true);
+        if let Some(value)=mcp_app::take_host_learning_result(){
+            if let Some(view)=panel_for_host_data(&value){panel.set(view)}
+            if let Some(id)=value.get("id").and_then(Value::as_str)
+                .filter(|id|valid_identity(id)){
+                selected_id.set(id.to_owned());
+            }
+            result.set(Some(value));
+        }
+    });
     rsx!{
         Heading {
             title:"Learning workspace".to_owned(),
@@ -174,8 +197,7 @@ pub fn LearningApp() -> Element {
             onclick:move |_|{
                 match mcp_app::take_host_learning_result(){
                     Some(value)=>{
-                        if let Some(view)=value.get("view").and_then(Value::as_str)
-                            .and_then(Panel::from_view){
+                        if let Some(view)=panel_for_host_data(&value){
                             panel.set(view);
                         }
                         if let Some(id)=value.get("id").and_then(Value::as_str)
@@ -1218,6 +1240,9 @@ mod tests{
         assert_eq!(Panel::from_view("learning_question"),Some(Panel::Question));
         assert_eq!(Panel::from_view("reasoning"),Some(Panel::Reasoning));
         assert_eq!(Panel::from_view("calibration"),Some(Panel::Calibration));
+        assert_eq!(panel_for_host_data(&json!({"choice_accuracy":{}})),Some(Panel::Calibration));
+        assert_eq!(panel_for_host_data(&json!({"propositions":[]})),Some(Panel::Reasoning));
+        assert_eq!(panel_for_host_data(&json!({"nodes":[]})),Some(Panel::Graph));
         assert_eq!(Panel::Reasoning.read("proposition_12").unwrap().0,"get_reasoning_graph");
         assert_eq!(Panel::Calibration.read("").unwrap().0,"get_confidence_calibration");
         assert_eq!(Panel::Sources.read("../oops").unwrap().0,"list_learning_sources");
