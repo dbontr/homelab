@@ -38,27 +38,27 @@ func secret(path string) (string,error) {
     return v,nil
 }
 
-func configuredBackend(name,upper string,vault *security.RemoteAuthorizationClient)(transport.Backend,bool,error){
+func configuredBackend(name,upper string)(transport.Backend,bool,error){
  u:=os.Getenv("HOMELAB_"+upper+"_MCP_URL")
  path:=os.Getenv("HOMELAB_"+upper+"_MCP_TOKEN_FILE")
  alias:=os.Getenv("HOMELAB_"+upper+"_MCP_VAULT_ALIAS")
+ if alias!=""{
+  return transport.Backend{},false,errors.New(
+   "federated MCP discovery requires a dedicated service token; owner-operation tickets cannot be used as ambient backend credentials")
+ }
  if u==""{
-  if path!=""||alias!=""{return transport.Backend{},false,errors.New("backend credential without endpoint")}
+  if path!=""{return transport.Backend{},false,errors.New("backend credential without endpoint")}
   return transport.Backend{},false,nil
  }
- if path!=""&&alias!=""{return transport.Backend{},false,errors.New("backend has conflicting credential authorities")}
- var source func()(string,error)
- var err error
- if alias!=""{
-  if vault==nil{return transport.Backend{},false,errors.New("backend vault is unavailable")}
-  source,err=vault.TokenSource(alias)
+ token:=""
+ if path!=""{
+  var err error
+  token,err=secret(path)
   if err!=nil{return transport.Backend{},false,err}
  }
- token:=""
- if path!=""{token,err=secret(path);if err!=nil{return transport.Backend{},false,err}}
  forward:=name=="workspace"&&os.Getenv("HOMELAB_WORKSPACE_MCP_FORWARD_OWNER_ASSERTION")=="1"
  return transport.Backend{
-  Name:name,URL:u,Token:token,TokenSource:source,
+  Name:name,URL:u,Token:token,
   ForwardOwnerAssertion:forward,
  },true,nil
 }
@@ -79,7 +79,7 @@ func main(){
     if err!=nil{log.Fatal("service credential trust: ",err)}
     backends:=[]transport.Backend{}
     for _,b:=range []struct{name,upper string}{{"workspace","WORKSPACE"},{"learning","LEARNING"},{"health","HEALTH"}}{
-        v,enabled,e:=configuredBackend(b.name,b.upper,vault);if e!=nil{log.Fatal(e)};if enabled{backends=append(backends,v)}
+        v,enabled,e:=configuredBackend(b.name,b.upper);if e!=nil{log.Fatal(e)};if enabled{backends=append(backends,v)}
     }
     server,e:=transport.New(db,token,backends);if e!=nil{log.Fatal(e)}
     mcpInterfaceToken,apiInterfaceToken:="",""
