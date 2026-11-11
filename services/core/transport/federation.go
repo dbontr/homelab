@@ -9,6 +9,8 @@ import (
     "io"
     "net/http"
     "strings"
+
+    "github.com/dbontr/homelab-new/system/security"
 )
 
 const maxFederatedResponse = 8 << 20
@@ -31,6 +33,15 @@ func (s *Server) forward(ctx context.Context, backend Backend, rpc rpcRequest, o
      }
     }
     if token!=""{req.Header.Set("Authorization","Bearer "+token)}
+    if backend.ForwardOwnerAssertion&&backend.Name=="workspace"{
+     assertion:=security.AccessAssertion(ctx)
+     if assertion!=""&&len(assertion)<=16<<10{
+      // The independently configured Workspace backend may pass the signed
+      // assertion only to its pinned owner-authorization service. Unrelated
+      // backends never receive the owner's identity token.
+      req.Header.Set("Cf-Access-Jwt-Assertion",assertion)
+     }
+    }
     resp, err := s.client.Do(req)
     if err != nil { return fmt.Errorf("service %s unavailable", backend.Name) }
     defer resp.Body.Close()
