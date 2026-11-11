@@ -66,7 +66,7 @@ impl Event {
         valid_hex(&self.id, 32) && valid_hex(&self.arguments_sha256, 64)
             && !self.operation.is_empty() && self.operation.len() <= 128
             && valid_host(&self.target)
-            && matches!(self.outcome.as_str(), "started" | "accepted" | "succeeded" | "failed")
+            && matches!(self.outcome.as_str(), "started" | "accepted" | "succeeded" | "failed" | "indeterminate")
             && DateTime::parse_from_rfc3339(&self.at).is_ok_and(|date| date.year() > 1)
     }
 }
@@ -142,8 +142,8 @@ impl AuditJournal {
     }
 
     /// An uncertain append or directory replacement permanently disables execution.
-    /// Returns operations whose outcome was never durably recorded.
-    /// They may have executed before the process exited; their status is unknown.
+    /// Return operations with no confirmed effect. Both unfinished and
+    /// indeterminate attempts require explicit reconciliation before retry.
     pub fn unresolved(&self) -> Result<Vec<Event>, Error> {
         let journal = self.inner.lock().unwrap_or_else(|_| std::process::abort());
         if journal.faulted {
@@ -157,7 +157,8 @@ impl AuditJournal {
             path_meta.ino() != self.ino || fd_meta.dev() != self.dev || fd_meta.ino() != self.ino {
             return Err(Error::Storage("audit journal was replaced"));
         }
-        Ok(journal.seen.values().filter(|event| event.outcome == "started")
+        Ok(journal.seen.values().filter(|event|
+            matches!(event.outcome.as_str(), "started" | "indeterminate"))
             .cloned().collect())
     }
 
@@ -199,6 +200,7 @@ impl AuditJournal {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::os::unix::fs::PermissionsExt;
 
     fn event(id: &str, outcome: &str) -> Event {
         Event {
@@ -241,6 +243,35 @@ mod tests {
         wrong_args.arguments_sha256 = "d".repeat(64);
         assert!(transition(&seen, &wrong_args).is_err());
         assert!(transition(&seen, &event(&id, "succeeded")).is_ok());
+    }
+
+    #[test]
+    fn indeterminate_execution_requires_reconciliation_after_restart() {
+        let directory = std::env::temp_dir().join(format!(
+            "homelab-executor-audit-{}", crate::random_hex::<12>().unwrap()
+        ));
+        fs::create_dir(&directory).unwrap();
+        fs::set_permissions(&directory, fs::Permissions::from_mode(0o700)).unwrap();
+        let path = directory.join("executor-actions.jsonl");
+        let id = "d".repeat(32);
+        {
+            let journal = AuditJournal::open(&path).unwrap();
+            journal.record(&id, "infrastructure__service_restart", "jupiter",
+                &"a".repeat(64), "started").unwrap();
+            journal.record(&id, "infrastructure__service_restart", "jupiter",
+                &"a".repeat(64), "indeterminate").unwrap();
+            let pending = journal.unresolved().unwrap();
+            assert_eq!(pending.len(), 1);
+            assert_eq!(pending[0].outcome, "indeterminate");
+        }
+        {
+            let journal = AuditJournal::open(&path).unwrap();
+            let pending = journal.unresolved().unwrap();
+            assert_eq!(pending.len(), 1);
+            assert_eq!(pending[0].id, id);
+            assert_eq!(pending[0].outcome, "indeterminate");
+        }
+        fs::remove_dir_all(directory).unwrap();
     }
 
     #[test]
