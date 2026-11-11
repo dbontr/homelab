@@ -250,6 +250,19 @@ in
         message = "Signed owner assertions may only be forwarded to the Workspace integration.";
       }
       {
+        assertion = lib.all (name: cfg.integrations.${name}.vaultAlias == "")
+          [ "workspace" "learning" "health" ];
+        message = "Federated MCP discovery requires a protected service identity. Human owner vault tickets are restricted to individually authorized operations.";
+      }
+      {
+        assertion = !cfg.integrations.workspace.forwardOwnerAssertion ||
+          (cfg.integrations.workspace.url != "" &&
+            (lib.hasPrefix "https://" cfg.integrations.workspace.url ||
+             lib.hasPrefix "http://127.0.0.1:" cfg.integrations.workspace.url ||
+             lib.hasPrefix "http://localhost:" cfg.integrations.workspace.url));
+        message = "Owner assertion forwarding requires a trusted HTTPS or loopback Workspace endpoint.";
+      }
+      {
         assertion = let
           aliases = [ cfg.capabilityModel.vaultAlias cfg.seerr.vaultAlias ]
             ++ map (route: route.vaultAlias) cfg.capabilityModel.routes
