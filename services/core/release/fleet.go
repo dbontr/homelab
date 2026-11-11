@@ -16,6 +16,14 @@ type HostReleaseAgent interface {
  Revert(context.Context,string)error
 }
 
+// RequestIdentifiedReleaseAgent preserves the caller's immutable executor
+// request identity on host activation and rollback, including after a fleet
+// coordinator restart. Durable fleet operations require this contract.
+type RequestIdentifiedReleaseAgent interface {
+ ActivateWithID(context.Context,string,string)error
+ RevertWithID(context.Context,string,string)error
+}
+
 var fleetHostPattern = regexp.MustCompile("^[a-z][a-z0-9-]{0,62}$")
 
 type FleetTarget struct {
