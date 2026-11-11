@@ -122,10 +122,10 @@ fn map_usb(alias: &str) -> Result<(String, u32), &'static str> {
 
 fn main() {
     let args: Vec<String> = env::args().skip(1).collect();
-    if let [verb, kind, alias, workspace] = args.as_slice() {
-        if verb == "release-device" {
+    if let [version, verb, kind, alias, workspace] = args.as_slice() {
+        if version == "custody-v1" && verb == "release-device" {
             match custody::release_device(kind, alias, workspace) {
-                Ok(()) => println!("released"),
+                Ok(()) => println!("custody-v1\nreleased"),
                 Err(message) => {
                     eprintln!("{message}");
                     std::process::exit(1);
@@ -134,10 +134,10 @@ fn main() {
             return;
         }
     }
-    if let [verb, workspace] = args.as_slice() {
-        if verb == "verify-workspace" {
+    if let [version, verb, workspace] = args.as_slice() {
+        if version == "custody-v1" && verb == "verify-workspace" {
             match custody::verify_workspace(workspace) {
-                Ok(count) => println!("{count}"),
+                Ok(count) => println!("custody-v1\n{count}"),
                 Err(message) => {
                     eprintln!("{message}");
                     std::process::exit(1);
@@ -145,9 +145,9 @@ fn main() {
             }
             return;
         }
-        if verb == "release-workspace" {
+        if version == "custody-v1" && verb == "release-workspace" {
             match custody::release_workspace(workspace) {
-                Ok(count) => println!("{count}"),
+                Ok(count) => println!("custody-v1\n{count}"),
                 Err(message) => {
                     eprintln!("{message}");
                     std::process::exit(1);
@@ -156,17 +156,21 @@ fn main() {
             return;
         }
     }
-    let result = match args.as_slice() {
-        [verb, alias] if verb == "map-usb" => map_usb(alias),
-        [verb, kind, path] if verb == "map-char" => char::map_char(kind, path),
-        [verb, kind, alias, workspace] if verb == "acquire-device" =>
-            custody::acquire(kind, alias, workspace),
-        [verb, kind, alias, workspace] if verb == "verify-device" =>
-            custody::verify(kind, alias, workspace),
-        _ => Err("usage: homelab-native-hardware <map-usb ALIAS | map-char KIND PATH | acquire-device KIND PATH WORKSPACE | verify-device KIND PATH WORKSPACE | release-device KIND PATH WORKSPACE | verify-workspace WORKSPACE | release-workspace WORKSPACE>"),
+    let (custody_protocol, result) = match args.as_slice() {
+        [verb, alias] if verb == "map-usb" => (false, map_usb(alias)),
+        [verb, kind, path] if verb == "map-char" => (false, char::map_char(kind,path)),
+        [version, verb, kind, alias, workspace]
+            if version == "custody-v1" && verb == "acquire-device" =>
+                (true, custody::acquire(kind,alias,workspace)),
+        [version, verb, kind, alias, workspace]
+            if version == "custody-v1" && verb == "verify-device" =>
+                (true, custody::verify(kind,alias,workspace)),
+        _ => (false, Err("usage: homelab-native-hardware <map-usb ALIAS | map-char KIND PATH | custody-v1 acquire-device KIND PATH WORKSPACE | custody-v1 verify-device KIND PATH WORKSPACE | custody-v1 release-device KIND PATH WORKSPACE | custody-v1 verify-workspace WORKSPACE | custody-v1 release-workspace WORKSPACE>")),
     };
     match result {
-        Ok((resolved, group)) => println!("{resolved}\n{group}"),
+        Ok((resolved,group)) if custody_protocol =>
+            println!("custody-v1\n{resolved}\n{group}"),
+        Ok((resolved,group)) => println!("{resolved}\n{group}"),
         Err(message) => {
             eprintln!("{message}");
             std::process::exit(1);
