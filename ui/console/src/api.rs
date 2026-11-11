@@ -211,6 +211,56 @@ pub async fn upload_recipe_image(
         .map_err(|_| "The service returned invalid image data".to_owned())
 }
 
+pub async fn upload_learning_attachment(
+    csrf: &str,
+    owner_kind: &str,
+    owner_id: &str,
+    filename: &str,
+    media_type: &str,
+    contents: Vec<u8>,
+) -> Result<Value, String> {
+    if !matches!(owner_kind, "session" | "problem" | "source")
+        || owner_id.is_empty() || owner_id.len() > 128
+        || !owner_id.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b'_')
+    {
+        return Err("Choose a valid Learning record before attaching a file.".to_owned());
+    }
+    if filename.is_empty() || filename.len() > 250
+        || filename.contains('/') || filename.contains('\\')
+        || filename == "." || filename == ".."
+    {
+        return Err("The attachment has an invalid filename.".to_owned());
+    }
+    if contents.is_empty() || contents.len() > 5 * 1024 * 1024 {
+        return Err("Learning attachments must be between 1 byte and 5 MiB.".to_owned());
+    }
+    if !matches!(
+        media_type,
+        "image/png" | "image/jpeg" | "image/webp" | "image/heic"
+        | "application/pdf" | "text/plain" | "text/markdown"
+    ) {
+        return Err("This Learning attachment type is not supported.".to_owned());
+    }
+    let encoded = js_sys::encode_uri_component(filename).as_string()
+        .ok_or_else(|| "Cannot encode the selected filename.".to_owned())?;
+    let response = reqwest::Client::new()
+        .post(url("/v1/learning/attachments")?)
+        .header("X-CSRF-Token", csrf)
+        .header("X-Learning-Owner-Kind", owner_kind)
+        .header("X-Learning-Owner-ID", owner_id)
+        .header("X-Learning-Filename", encoded)
+        .header("Content-Type", media_type)
+        .body(contents)
+        .send()
+        .await
+        .map_err(|_| "Could not contact the Learning attachment service.".to_owned())?;
+    if !response.status().is_success() {
+        return Err(response_error(response.status()));
+    }
+    response.json::<Value>().await
+        .map_err(|_| "Learning returned invalid saved attachment metadata.".to_owned())
+}
+
 #[derive(Clone, Debug, Deserialize)]
 pub struct BundleImport {
     pub imported: usize,
