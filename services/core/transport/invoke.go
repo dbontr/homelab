@@ -12,6 +12,23 @@ import (
  "github.com/dbontr/homelab-new/system/approval"
 )
 
+// The gateway removes the request identity before canonicalizing the
+// authorized operation arguments. Identity is durable executor metadata.
+func privilegedExecutorTool(name string)bool{
+ switch name{
+ case "infrastructure__workspace_register_image","infrastructure__workspace_propose_program",
+  "infrastructure__workspace_review_program","infrastructure__workspace_update_entry",
+  "infrastructure__workspace_create","infrastructure__workspace_stop",
+  "infrastructure__workspace_build_environment","infrastructure__workspace_register_software",
+  "infrastructure__workspace_revoke_worker","infrastructure__service_start",
+  "infrastructure__service_stop","infrastructure__service_reload",
+  "infrastructure__service_restart","infrastructure__release_activate",
+  "infrastructure__release_revert","cluster__deployment_restart","cluster__deployment_scale":
+  return true
+ default:return false
+ }
+}
+
 func (s *Server) invoke(ctx context.Context,name string,args json.RawMessage,id json.RawMessage) map[string]any {
  if strings.HasPrefix(name,"compute__"){
   name="workspace__"+strings.TrimPrefix(name,"compute__")
@@ -31,25 +48,35 @@ func (s *Server) invoke(ctx context.Context,name string,args json.RawMessage,id 
   if err:=json.Unmarshal(raw,&value);err!=nil{return toolError("invalid fleet reply")}
   return result(value)
  }
- if name=="infrastructure__workspace_register_image" ||
-  name=="infrastructure__workspace_propose_program" ||
-  name=="infrastructure__workspace_review_program" ||
-  name=="infrastructure__workspace_update_entry" ||
-  name=="infrastructure__workspace_create" || name=="infrastructure__workspace_stop" || name=="infrastructure__workspace_build_environment" || name=="infrastructure__workspace_register_software" || name=="infrastructure__workspace_revoke_worker" || name=="infrastructure__service_start" || name=="infrastructure__service_stop" || name=="infrastructure__service_reload" || name=="infrastructure__service_restart" || name=="infrastructure__release_activate" || name=="infrastructure__release_revert" ||
-  name=="cluster__deployment_restart" || name=="cluster__deployment_scale" {
+ if privilegedExecutorTool(name) {
   if s.executorClient==nil{return toolError("independent privileged executor not configured")}
-  decision,err:=s.executorClient.Execute(ctx,name,privilegeTarget(name,args),args)
-  if err!=nil{return toolError("independent privileged executor unavailable")}
+  var fields map[string]json.RawMessage
+  if err:=json.Unmarshal(args,&fields);err!=nil{
+   return toolError("invalid privileged execution arguments")
+  }
+  var requestID string
+  if err:=json.Unmarshal(fields["request_id"],&requestID);err!=nil||
+   !privileged.ValidExecutionRequestID(requestID){
+   return toolError("privileged execution requires a caller-generated 32-character lowercase hexadecimal request_id")
+  }
+  delete(fields,"request_id")
+  scopedArgs,err:=json.Marshal(fields)
+  if err!=nil{return toolError("invalid privileged execution arguments")}
+  canonicalArgs,_,err:=canonicaljson.Object(scopedArgs)
+  if err!=nil{return toolError("invalid privileged execution arguments")}
+  decision,err:=s.executorClient.ExecuteWithID(
+   ctx,requestID,name,privilegeTarget(name,canonicalArgs),canonicalArgs)
+  if err!=nil{return toolError("independent privileged executor unavailable; retain request_id for reconciliation")}
   if !decision.Allowed{
    return result(map[string]any{"authorization_required":true,"reason":decision.Reason,
      "confirmation_id":decision.ConfirmationID,"confirmation_expires_at":decision.ConfirmationExpiresAt,
-     "instructions":"Sign in through the protected owner page and confirm destructive changes there. Retry identical arguments."})
+     "request_id":requestID,"instructions":"Sign in through the protected owner page and confirm destructive changes there. Retry the same request_id and unchanged operation arguments."})
   }
   if decision.State==privileged.ExecutionAccepted{
-   return result(map[string]any{"accepted":true,"state":decision.State,"audit_id":decision.AuditID})
+   return result(map[string]any{"accepted":true,"state":decision.State,"audit_id":decision.AuditID,"request_id":requestID,"replayed":decision.Replayed})
   }
   if decision.State==privileged.ExecutionCompleted{
-   return result(map[string]any{"executed":true,"completed":true,"state":decision.State,"audit_id":decision.AuditID})
+   return result(map[string]any{"executed":true,"completed":true,"state":decision.State,"audit_id":decision.AuditID,"request_id":requestID,"replayed":decision.Replayed})
   }
   return toolError("independent privileged executor returned an invalid execution outcome")
  }
