@@ -70,32 +70,13 @@ pub fn reasoning_graph(value: &Value) -> Value {
 }
 
 #[component]
-pub fn CalibrationPanel(on_question:EventHandler<String>,on_problem:EventHandler<String>)->Element {
-    let mut result=use_signal(||None::<Value>);
-    let mut busy=use_signal(||false);
-    let mut error=use_signal(String::new);
+pub fn CalibrationPanel(report:Option<Value>,on_question:EventHandler<String>,on_problem:EventHandler<String>)->Element {
     rsx! {
         Card {
             title:"Confidence calibration".to_owned(),
             description:"Compare self-reported certainty against checked outcomes; descriptive statistics never award mastery.".to_owned(),
             div{class:"stack",
-                if !error().is_empty() {Notice{message:error()}}
-                button{class:"btn btn-outline",r#type:"button",disabled:busy(),
-                    onclick:move |_|{
-                        if busy(){return}
-                        busy.set(true);error.set(String::new());
-                        spawn(async move{
-                            match mcp_app::call_learning_tool::<Value>(
-                                "get_confidence_calibration",json!({"limit":250})).await {
-                                Ok(value)=>result.set(Some(value)),
-                                Err(message)=>error.set(message),
-                            }
-                            busy.set(false);
-                        });
-                    },
-                    if busy() {"Loading calibration…"}else{"Load calibration evidence"}
-                }
-                if let Some(report)=result(){
+                if let Some(report)=report{
                     for (title,key,kind) in [
                         ("Precommitted multiple-choice answers","choice_accuracy","question"),
                         ("Authenticated checked results","authenticated_result_accuracy","problem")
@@ -313,7 +294,9 @@ pub fn ReasoningEvidence(graph:Value,on_select:EventHandler<String>)->Element{
                             onclick:move |_|{
                                 if busy()||!id_valid(&selection()){return}
                                 let id=selection();
-                                let request=json!({key:id});
+                                let mut params=serde_json::Map::new();
+                                params.insert(key.to_owned(),json!(id));
+                                let request=Value::Object(params);
                                 busy.set(true);error.set(String::new());
                                 spawn(async move{
                                     match mcp_app::call_learning_tool::<Value>(tool,request).await{
