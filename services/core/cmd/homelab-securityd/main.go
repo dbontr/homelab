@@ -88,6 +88,16 @@ func main() {
   for i:=range key{key[i]=0}
   if err!=nil{log.Fatal("cannot open protected credential vault: ",err)}
   if err:=manager.SetVault(vault);err!=nil{log.Fatal(err)}
+  for _,credential:=range vault.List(){
+   if err:=vault.WithCredential(credential.ID,credential.Provider,func(raw []byte)error{
+    if len(raw)==0{return errors.New("empty encrypted credential")}
+    return nil
+   });err!=nil{log.Fatal("encrypted vault record authentication failed: ",err)}
+  }
+ } else if _,err:=os.Lstat("/var/lib/homelab-securityd/credentials.json");err==nil{
+  log.Fatal("encrypted credential state requires a protected vault key")
+ }else if !errors.Is(err,os.ErrNotExist){
+  log.Fatal("cannot inspect protected credential state: ",err)
  }
  if raw:=os.Getenv("HOMELAB_SECURITY_OAUTH_PROVIDERS");raw!=""{
   if os.Getenv("HOMELAB_SECURITY_VAULT_KEY_FILE")==""{
@@ -120,6 +130,16 @@ func main() {
   verifier,err=security.NewAccessVerifier(os.Getenv("HOMELAB_SECURITY_ACCESS_ISSUER"),strings.TrimSpace(string(email)),jwks)
   if err!=nil{log.Fatal("invalid verified owner identity configuration: ",err)}
   if err:=manager.SetAccessVerifier(verifier,gatewayAudience);err!=nil{log.Fatal(err)}
+ }
+ // A protected receipt is required for each implementation transition.
+ // The same state directory and flock remain authoritative after rollback.
+ var migrationReceipt []byte
+ if os.Getenv("HOMELAB_SECURITY_MIGRATION_RECEIPT_FILE")!=""{
+  migrationReceipt,err=readPrivateCredential("HOMELAB_SECURITY_MIGRATION_RECEIPT_FILE")
+  if err!=nil{log.Fatal("migration receipt unavailable: ",err)}
+ }
+ if err:=security.AdmitMigration("/var/lib/homelab-securityd","go",migrationReceipt);err!=nil{
+  log.Fatal("Go security authority selection denied: ",err)
  }
 	group, err := user.LookupGroup("homelab-security-client")
 	if err != nil {
