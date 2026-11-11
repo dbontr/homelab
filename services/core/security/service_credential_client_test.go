@@ -2,6 +2,7 @@ package security
 
 import (
  "context"
+ "encoding/json"
  "io"
  "os"
  "path/filepath"
@@ -16,10 +17,24 @@ func TestScopedVaultCredentialReadReflectsRotationAndRevocation(t *testing.T){
  status:=http.StatusOK
  contentType:="application/octet-stream"
  calls:=0
+ operation,target:="workspace__workspace_create","jupiter"
+ arguments:=json.RawMessage(`{"host":"jupiter"}`)
  srv:=httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){
   calls++
-  if r.Method!=http.MethodGet||r.URL.Path!="/v1/service-credentials/gitlab"{
+  if r.Method!=http.MethodPost||r.URL.Path!="/v1/service-credentials/gitlab"{
    t.Errorf("unexpected vault route %s %s",r.Method,r.URL.Path)
+  }
+  if r.Header.Get("Content-Type")!="application/json"{t.Error("missing JSON credential request")}
+  var body struct{
+   Ticket string `json:"ticket"`
+   Operation string `json:"operation"`
+   Target string `json:"target"`
+   Arguments json.RawMessage `json:"arguments"`
+  }
+  if err:=json.NewDecoder(r.Body).Decode(&body);err!=nil||body.Operation!=operation||
+   body.Target!=target||string(body.Arguments)!=string(arguments)||
+   !serviceCredentialTicket.MatchString(body.Ticket){
+   t.Error("capability authorization context changed",err,body)
   }
   w.Header().Set("Content-Type",contentType)
   w.WriteHeader(status)
@@ -27,25 +42,36 @@ func TestScopedVaultCredentialReadReflectsRotationAndRevocation(t *testing.T){
  }))
  defer srv.Close()
  client:=&RemoteAuthorizationClient{client:srv.Client(),endpoint:srv.URL}
- source,err:=client.TokenSource("gitlab")
+ source,err:=client.ScopedTokenSource("gitlab")
  if err!=nil{t.Fatal(err)}
- first,err:=source()
- if err!=nil||first!=token||calls!=1{t.Fatalf("first vault credential unavailable: %v",err)}
+ cap:=func(suffix string)CredentialTicket{return CredentialTicket{Alias:"gitlab",Ticket:strings.Repeat(suffix,48)}}
+ first,err:=source(context.Background(),cap("a"),operation,target,arguments)
+ if err!=nil||first!=token||calls!=1{t.Fatalf("scoped vault credential unavailable: %v",err)}
  token="glpat-second-owner-vault-credential"
- second,err:=source()
+ second,err:=source(context.Background(),cap("b"),operation,target,arguments)
  if err!=nil||second!=token||calls!=2{t.Fatalf("rotated vault credential unavailable: %v",err)}
  status=http.StatusForbidden
- if _,err:=source();err==nil{t.Fatal("revoked vault access was silently accepted")}
+ if _,err:=source(context.Background(),cap("c"),operation,target,arguments);err==nil{
+  t.Fatal("revoked vault access was silently accepted")
+ }
  status=http.StatusOK
  contentType="text/plain"
- if _,err:=source();err==nil{t.Fatal("non-credential response accepted")}
- contentType="application/octet-stream"
- token=strings.Repeat("x",4097)
- if _,err:=source();err==nil{t.Fatal("oversized vault response accepted")}
- for _,alias:=range []string{"../root","", "gitlab/other"}{
-  if _,err:=client.TokenSource(alias);err==nil{t.Fatalf("unsafe alias accepted: %q",alias)}
+ if _,err:=source(context.Background(),cap("d"),operation,target,arguments);err==nil{
+  t.Fatal("non-credential response accepted")
  }
- if calls!=5{t.Fatalf("invalid alias contacted vault: %d calls",calls)}
+ contentType="application/octet-stream"
+ token=strings.Repeat("x",8193)
+ if _,err:=source(context.Background(),cap("e"),operation,target,arguments);err==nil{
+  t.Fatal("oversized vault response accepted")
+ }
+ for _,alias:=range []string{"../root","", "gitlab/other"}{
+  if _,err:=client.ScopedTokenSource(alias);err==nil{t.Fatalf("unsafe alias accepted: %q",alias)}
+ }
+ if _,err:=client.TokenSource("gitlab");err==nil{t.Fatal("ambient credential source remained enabled")}
+ if _,err:=source(context.Background(),CredentialTicket{Alias:"other",Ticket:strings.Repeat("a",48)},operation,target,arguments);err==nil{
+  t.Fatal("ticket for another alias accepted")
+ }
+ if calls!=5{t.Fatalf("invalid credential scope contacted vault: %d calls",calls)}
 }
 
 func TestVaultClientRequiresCompleteTrustedTLSConfiguration(t *testing.T){
@@ -60,7 +86,7 @@ func TestVaultClientRequiresCompleteTrustedTLSConfiguration(t *testing.T){
   t.Fatal("partially configured vault trust accepted")
  }
  client:=(*RemoteAuthorizationClient)(nil)
- if _,err:=client.ServiceCredential(context.Background(),"gitlab");err==nil{
+ if _,err:=client.ServiceCredential(context.Background(),"gitlab",CredentialTicket{Alias:"gitlab",Ticket:strings.Repeat("a",48)},"workspace__workspace_create","jupiter",json.RawMessage(`{"host":"jupiter"}`));err==nil{
   t.Fatal("nil vault client accepted")
  }
 }
