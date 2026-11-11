@@ -1,0 +1,54 @@
+name: Resolve Rust release dependencies
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/rust-lockfiles.yml"
+      - "services/security-authority/Cargo.toml"
+      - "services/executor/Cargo.toml"
+      - "services/motivation/Cargo.toml"
+      - "ui/console/Cargo.toml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: rust-lockfiles-${{ github.event.pull_request.head.sha }}
+  cancel-in-progress: false
+
+jobs:
+  resolve:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'feature/rust-native-execution-boundaries'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out the feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          persist-credentials: true
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Generate authentic Cargo lockfiles
+        run: |
+          set -euo pipefail
+          cargo generate-lockfile --manifest-path services/security-authority/Cargo.toml
+          cargo generate-lockfile --manifest-path services/executor/Cargo.toml
+          cargo generate-lockfile --manifest-path services/motivation/Cargo.toml
+          cargo generate-lockfile --manifest-path ui/console/Cargo.toml
+          for file in services/security-authority/Cargo.lock services/executor/Cargo.lock services/motivation/Cargo.lock ui/console/Cargo.lock; do
+            test -s "$file"
+            grep -q '^version = 4$' "$file"
+          done
+      - name: Commit reviewed-scope dependency resolution
+        run: |
+          set -euo pipefail
+          git add -f -- services/security-authority/Cargo.lock services/executor/Cargo.lock services/motivation/Cargo.lock ui/console/Cargo.lock
+          if git diff --cached --quiet; then
+            echo 'All Rust dependency locks are current.'
+            exit 0
+          fi
+          git -c user.name='homelab-build' -c user.email='build@users.noreply.github.com' commit -m 'Lock Rust release dependencies for reproducible builds'
+          git push origin "HEAD:${{ github.event.pull_request.head.ref }}"
