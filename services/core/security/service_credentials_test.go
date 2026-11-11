@@ -17,6 +17,9 @@ import (
 func TestServiceCredentialGrantsBindOneVerifiedIdentityAndProvider(t *testing.T){
  manager,key,now:=testSessionManager(t)
  loginAt(t,manager,key,now)
+ manager.rules["service__status"]=OperationPolicy{
+  Operation:"service__status",Targets:[]string{"jupiter"},
+ }
  vault,err:=OpenVault(filepath.Join(t.TempDir(),"vault.json"),bytes.Repeat([]byte("v"),32))
  if err!=nil{t.Fatal(err)}
  handle,err:=vault.Store("gitlab",[]byte("glpat-private-secret-example"))
@@ -24,7 +27,7 @@ func TestServiceCredentialGrantsBindOneVerifiedIdentityAndProvider(t *testing.T)
  if err:=manager.SetVault(vault);err!=nil{t.Fatal(err)}
  grant:=ServiceCredentialGrant{
   ClientDNS:"compute.internal",Alias:"gitlab",Provider:"gitlab",Handle:handle.ID,
-  Operation:"workspace__workspace_create",Target:"jupiter",
+  Operation:"service__status",Target:"jupiter",
  }
  if err:=manager.SetServiceCredentialGrants([]ServiceCredentialGrant{grant});err!=nil{t.Fatal(err)}
  if err:=manager.SetServiceCredentialGrants([]ServiceCredentialGrant{grant});err==nil{
@@ -33,9 +36,12 @@ func TestServiceCredentialGrantsBindOneVerifiedIdentityAndProvider(t *testing.T)
  args:=json.RawMessage(`{"host":"jupiter","image":"debian"}`)
  mint:=func()CredentialTicket{
   t.Helper()
-  issued,err:=manager.issueServiceTickets("local-operator","compute.internal",grant.Operation,grant.Target,args)
-  if err!=nil||len(issued)!=1{t.Fatalf("scoped capability unavailable: %v",err)}
-  return issued[0]
+  decision:=manager.authorizeForServicePeer(
+   "local-operator",manager.client,"compute.internal",grant.Operation,grant.Target,args)
+  if !decision.Allowed||len(decision.CredentialTickets)!=1 {
+   t.Fatalf("scoped capability unavailable: %+v",decision)
+  }
+  return decision.CredentialTickets[0]
  }
  request:=func(cap CredentialTicket,alias,clientDNS,operation,target string,arguments json.RawMessage,verified,extraSAN bool)*httptest.ResponseRecorder{
   t.Helper()
@@ -94,7 +100,8 @@ func TestServiceCredentialGrantsBindOneVerifiedIdentityAndProvider(t *testing.T)
   t.Fatal("revoked vault credential was still available")
  }
  manager.Revoke()
- if _,err:=manager.issueServiceTickets("local-operator","compute.internal",grant.Operation,grant.Target,args);err==nil{
+ if result:=manager.authorizeForServicePeer(
+  "local-operator",manager.client,"compute.internal",grant.Operation,grant.Target,args);result.Allowed {
   t.Fatal("revoked owner session issued a credential capability")
  }
  for _,handler:=range []http.Handler{manager.ClientHandler(),manager.OwnerHandler()}{
