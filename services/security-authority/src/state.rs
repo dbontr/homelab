@@ -28,6 +28,7 @@ struct PersistedAuthenticator {
 
 fn owner_only(metadata: &fs::Metadata) -> bool {
     metadata.is_file()
+        && metadata.nlink() == 1
         && metadata.mode() & 0o077 == 0
         && metadata.uid() == unsafe { libc::geteuid() }
 }
@@ -252,6 +253,23 @@ mod tests {
         assert!(matches!(store.load_authenticator(), Err(Error::Storage)));
         drop(store);
         fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn refuses_shared_state_and_lease_inodes() {
+        let directory = dir();
+        let source = directory.with_extension("source");
+        fs::write(&source, b"{}").unwrap();
+        fs::set_permissions(&source, fs::Permissions::from_mode(0o600)).unwrap();
+        fs::hard_link(&source, directory.join(STATE_NAME)).unwrap();
+        let store = StateStore::acquire(&directory).unwrap();
+        assert_eq!(store.load_authenticator(), Err(Error::Storage));
+        drop(store);
+        fs::remove_file(directory.join(STATE_NAME)).unwrap();
+        fs::hard_link(&source, directory.join(LOCK_NAME)).unwrap();
+        assert!(matches!(StateStore::acquire(&directory), Err(Error::Storage)));
+        fs::remove_dir_all(directory).unwrap();
+        fs::remove_file(source).unwrap();
     }
 
     #[test]
