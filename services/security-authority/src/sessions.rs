@@ -644,6 +644,15 @@ impl Authority {
         if self.service_grants.is_some() {
             return Err(Error::InvalidConfiguration);
         }
+        // Credential scopes may only narrow an existing owner authorization
+        // rule; they cannot invent an additional privileged operation.
+        for grant in &grants {
+            let rule = self.policy.get(&grant.operation)
+                .ok_or(Error::InvalidConfiguration)?;
+            if !rule.targets.iter().any(|target| target == &grant.target) {
+                return Err(Error::InvalidConfiguration);
+            }
+        }
         let vault = self.vault.as_ref().ok_or(Error::InvalidConfiguration)?;
         self.service_grants = Some(ServiceCredentialPolicy::new(grants, vault)?);
         Ok(())
