@@ -170,6 +170,17 @@ func (a *AdminSessions) ClientHandler() http.Handler {
   if err:=readJSON(r,&input);err!=nil{http.Error(w,"invalid request",400);return}
   respondJSON(w,200,a.PreviewFor(principal,a.client,input.Operation,input.Target,input.Arguments))
  })
+ mux.HandleFunc("POST /v1/replay",func(w http.ResponseWriter,r *http.Request){
+  principal,ok:=authenticated(w,r);if !ok{return}
+  var input struct{
+   Operation string `json:"operation"`
+   Target string `json:"target"`
+   Arguments json.RawMessage `json:"arguments"`
+  }
+  if err:=readJSON(r,&input);err!=nil{http.Error(w,"invalid request",400);return}
+  respondJSON(w,200,a.ReplayFor(
+   principal,a.client,input.Operation,input.Target,input.Arguments))
+ })
  mux.HandleFunc("POST /v1/authorize",func(w http.ResponseWriter,r *http.Request){
   principal,ok:=authenticated(w,r);if !ok{return}
   var input struct{
@@ -318,6 +329,15 @@ func (c *AdminClient) request(ctx context.Context, method, path string, input, o
 func (c *AdminClient) Preview(ctx context.Context,operation,target string,args json.RawMessage)(Authorization,error){
  var result Authorization
  err:=c.request(ctx,http.MethodPost,"/v1/preview",map[string]any{"operation":operation,"target":target,"arguments":args},&result)
+ return result,err
+}
+// Replay verifies the current signed owner session and exact operation scope.
+// It never issues a destructive confirmation or a credential capability.
+func (c *AdminClient) Replay(ctx context.Context,operation,target string,args json.RawMessage)(Authorization,error){
+ var result Authorization
+ err:=c.request(ctx,http.MethodPost,"/v1/replay",map[string]any{
+  "operation":operation,"target":target,"arguments":args,
+ },&result)
  return result,err
 }
 func (c *AdminClient) Authorize(ctx context.Context, operation, target string, args json.RawMessage) (Authorization, error) {
