@@ -190,8 +190,9 @@ in
         message = "Selecting the Rust security authority requires a separately approved migration receipt."; }
       { assertion = cfg.migration.receiptFile == null ||
           (lib.hasPrefix "/" cfg.migration.receiptFile &&
-           !(lib.hasPrefix "${toString ../.}" cfg.migration.receiptFile));
-        message = "The migration receipt must be an absolute, protected runtime credential outside the Nix source tree."; }
+           !(lib.hasPrefix "/nix/store/" cfg.migration.receiptFile) &&
+           !(lib.hasInfix "/../" cfg.migration.receiptFile));
+        message = "The migration receipt must be a canonical absolute credential path outside the public Nix store."; }
       { assertion = !cfg.remote.enable ||
           (cfg.remote.listenAddress != null && cfg.remote.certificateFile != null &&
            cfg.remote.keyFile != null && cfg.remote.clientCAFile != null &&
