@@ -27,6 +27,8 @@ pub struct ExecutionRequest {
     pub arguments: Value,
 }
 
+fn is_false(value: &bool) -> bool { !*value }
+
 #[derive(Serialize)]
 pub struct ExecutionResult {
     #[serde(flatten)]
@@ -35,7 +37,7 @@ pub struct ExecutionResult {
     pub state: Option<&'static str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub audit_id: Option<String>,
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    #[serde(default, skip_serializing_if = "is_false")]
     pub replayed: bool,
 }
 impl ExecutionResult {
@@ -169,16 +171,22 @@ impl Executor {
         let request_id = request.request_id;
         let assertion = Zeroizing::new(assertion.to_owned());
         let job = tokio::spawn(async move {
-            let decision = executor.authorization.decision(
-                &operation, &target, &canonical, &assertion, true).await?;
-            if !decision.allowed {
-                return Ok(ExecutionResult::from_decision(decision));
-            }
             let digest = hex::encode(Sha256::digest(&canonical));
             if let Some(outcome) = executor.audit.request_outcome(
                 &request_id, &operation, &target, &digest
             )? {
+                let replay = executor.authorization.replay(
+                    &operation, &target, &canonical, &assertion
+                ).await?;
+                if !replay.allowed {
+                    return Ok(ExecutionResult::from_decision(replay));
+                }
                 return Ok(ExecutionResult::recorded(&outcome, &request_id));
+            }
+            let decision = executor.authorization.decision(
+                &operation, &target, &canonical, &assertion, true).await?;
+            if !decision.allowed {
+                return Ok(ExecutionResult::from_decision(decision));
             }
             // The journal append is the atomic execution-admission point.
             // Competing requests with the same ID cannot both pass it.
