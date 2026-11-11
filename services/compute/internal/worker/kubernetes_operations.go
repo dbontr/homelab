@@ -18,6 +18,9 @@ import (
 )
 
 func (k *Kubernetes) Handle(ctx context.Context, r *Runner, op Operation, c *Client) (map[string]any, error) {
+	if !k.verificationReady() {
+		return nil, errors.New("worker quarantined pending verification Job cleanup")
+	}
 	payload, err := stringPayload(op.Payload)
 	if err != nil {
 		return nil, err
