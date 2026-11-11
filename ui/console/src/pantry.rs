@@ -338,7 +338,7 @@ pub fn Pantry(csrf: String) -> Element {
                                         }
                                         if !candidate.unknown_targets.is_empty() {
                                             p { class: "small muted",
-                                                "Unknown nutrients: {candidate.unknown_targets.join(", ")}"
+                                                {format!("Unknown nutrients: {}", candidate.unknown_targets.join(", "))}
                                             }
                                         }
                                     }
