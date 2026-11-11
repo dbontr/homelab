@@ -298,6 +298,7 @@ func (s *Server) handleMCP(w http.ResponseWriter, r *http.Request, who caller) {
 	case "tools/call":
 		name := asString(msg.Params["name"])
 		args, _ := msg.Params["arguments"].(map[string]any)
+        if args==nil{args=map[string]any{}}
 		var result any
 		var e error
 		if !s.authorizeTool(who, name, args) {
