@@ -70,6 +70,7 @@ type Kubernetes struct {
 
 	verificationMu          sync.RWMutex
 	verificationQuarantined bool
+	verificationEpoch       uint64
 }
 
 func (k *Kubernetes) verificationReady() bool {
@@ -766,6 +767,9 @@ func (k *Kubernetes) ReconcileStaleJobs(ctx context.Context) error {
 	if !kubernetesName.MatchString(k.Worker) {
 		return errors.New("invalid worker name")
 	}
+	k.verificationMu.RLock()
+	startEpoch := k.verificationEpoch
+	k.verificationMu.RUnlock()
 	raw, err := k.checked(ctx, nil, "get", "jobs", "-l",
 		"app.kubernetes.io/managed-by=project-workspace,pwm.dev/kind=job,pwm.dev/worker="+k.Worker, "-o", "json")
 	if err != nil {
@@ -799,7 +803,10 @@ func (k *Kubernetes) ReconcileStaleJobs(ctx context.Context) error {
 	}
 	// Reconciliation is the only operation that clears cleanup quarantine.
 	k.verificationMu.Lock()
+	defer k.verificationMu.Unlock()
+	if k.verificationEpoch != startEpoch {
+		return errors.New("verification cleanup became uncertain during reconciliation")
+	}
 	k.verificationQuarantined = false
-	k.verificationMu.Unlock()
 	return nil
 }
