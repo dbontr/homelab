@@ -27,10 +27,21 @@ the privileged executor's administrative authority.
 | --- | --- | --- |
 | `infrastructure__service_start/stop/reload/restart` | Exact host and Nix-allowlisted noncritical systemd unit | Fixed Rust actuator service verb |
 | `cluster__deployment_restart/scale` | Exact host, namespace and deployment; bounded replica count and optional Kubernetes resource-version precondition | Fixed Rust actuator Kubernetes verb |
-| `infrastructure__workspace_stop/build_environment/register_software/revoke_worker` | Exact host and independently configured project, worker, image, software and package identifiers | Fixed Workspace MCP tool with credential read only after approval |
+| `infrastructure__workspace_create/stop/build_environment/revoke_worker` | Exact host, independently configured project, worker and image-pool identities; bounded CPU, memory, accelerator and display claims | Fixed Workspace MCP tool with credential read only after approval |
+| `infrastructure__workspace_register_image/register_software` | Exact host, image-pool and software identities, approved immutable image digest or approved package list | Register approved OCI images or software through the executor's protected controller credential |
+| `infrastructure__workspace_propose_program/review_program/update_entry` | Exact host and allowlisted program, image or software identity; status transition and revision fencing; source URL and pool association validation | Submit or review software catalog records through the same protected controller credential |
 | `infrastructure__release_stage` | Exact host and clean 40-hex Git revision | Offline Nix build and protected staged manifest |
 | `infrastructure__release_activate/revert` | Exact host and 48-hex staged release ID, existing manifest, active generation and confirmation | Durable NixOS switch with local health checks and rollback |
 | `infrastructure__release_status` and `infrastructure__audit_status` | Signed owner assertion and independent read authorization | Protected journal and unresolved-attempt observation only |
+
+The Nix options `services.homelabExecutor.workspace.images`,
+`imageReferences`, `software`, `programs`, `packages`, `workers`
+and `projects` supply independent resource allowlists. All seven
+workspace families require exact operation-bound owner authorization,
+and catalog writes plus workspace creation require one-use confirmation.
+The gateway neither reads the controller's privileged token nor forwards
+an arbitrary privileged MCP tool to the controller. A release must verify
+both Go and Rust policy implementations against the same deny fixtures.
 
 Every mutation uses a canonical JSON object. The security authority binds authorization to the operation, target, arguments, authenticated owner and current session. Destructive confirmations are bound to one exact canonical digest and cannot be reused. A durable audit-start event precedes each external side effect. A completed command is not sufficient evidence that an asynchronous downstream job has completed.
 
