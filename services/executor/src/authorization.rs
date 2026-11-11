@@ -17,6 +17,7 @@ use url::Url;
 use zeroize::Zeroizing;
 
 use crate::policy::{absolute, bounded_file, required};
+use crate::transport::valid_coordinator_dns;
 use crate::Error;
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
@@ -128,6 +129,9 @@ impl AuthorizationClient {
                 .map_err(|_| Error::Configuration("invalid client identity"))?;
             tls.alpn_protocols = vec![b"http/1.1".to_vec()];
             let server_name = required("HOMELAB_EXECUTOR_AUTH_SERVER_NAME")?;
+            if !valid_coordinator_dns(&server_name) {
+                return Err(Error::Configuration("invalid remote authorization server name"));
+            }
             ServerName::try_from(server_name.clone())
                 .map_err(|_| Error::Configuration("invalid remote authorization server name"))?;
             Source::Remote(Remote { endpoint: url, server_name, tls: Arc::new(tls) })
