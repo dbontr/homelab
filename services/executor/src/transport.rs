@@ -252,7 +252,7 @@ fn private_ip(address: SocketAddr) -> bool {
         IpAddr::V6(ip) => ip.is_unique_local() || ip.is_loopback(),
     }
 }
-fn valid_coordinator_dns(name: &str) -> bool {
+pub(crate) fn valid_coordinator_dns(name: &str) -> bool {
     !name.is_empty() && name.len() <= 253
         && name.parse::<std::net::IpAddr>().is_err()
         && name.split('.').all(|label| {
