@@ -98,7 +98,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             match next {
                 Some(Ok(Ok(()))) => Err("security listener stopped unexpectedly".into()),
                 Some(Ok(Err(e))) => Err(e),
-                Some(Err(e)) => Err(Box::new(e)),
+                Some(Err(e)) => Err(e.into()),
                 None => Err("security service has no listeners".into())
             }
         }
