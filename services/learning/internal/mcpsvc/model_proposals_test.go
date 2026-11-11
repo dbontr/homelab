@@ -43,6 +43,7 @@ func TestProvisionalQuestionAssessmentKeepsCommittedAnswerSealed(t *testing.T) {
     if err!=nil{t.Fatal(err)}
     model:=&proposalModel{reply:`{"verdict":"supported","evaluation":"The selected option matches the committed answer.","confidence":0.8,"reasoning_verdict":"supported","reasoning_evaluation":"The explanation identifies the shared index."}`}
     if err:=svc.SetModelProvider(model,"reviewer-model");err!=nil{t.Fatal(err)}
+    if err:=svc.EnableModelDisclosure();err!=nil{t.Fatal(err)}
     proposed,err:=svc.proposeQuestionAssessment(context.Background(),id)
     if err!=nil{t.Fatal(err)}
     if proposed["model_proposal"]!=true||proposed["mastery_awarded"]!=false||
@@ -79,6 +80,13 @@ func TestModelProposalsRejectMalformedAndNonFiniteResults(t *testing.T) {
     if err:=svc.SetModelProvider(model,"other");err==nil{
         t.Fatal("model provider was changed after configuration")
     }
+    if err:=svc.modelJSON(context.Background(),"policy",map[string]any{},&proposal);err==nil{
+        t.Fatal("configured provider bypassed operator disclosure consent")
+    }
+    if err:=svc.EnableModelDisclosure();err!=nil{t.Fatal(err)}
+    if err:=svc.EnableModelDisclosure();err==nil{
+        t.Fatal("configured model disclosure policy was overwritten")
+    }
     for _,reply:=range []string{
         `{"verdict":"supported","evaluation":"x","confidence":0.5,"unknown":1}`,
         `{"verdict":"supported","evaluation":"x","confidence":0.5} {}`,
@@ -107,6 +115,7 @@ func TestStagedModelExtractionRequiresIndependentAudit(t *testing.T) {
     if err!=nil{t.Fatal(err)}
     model:=&proposalModel{reply:`{"claims":[{"statement":"A derivative measures a local rate of change","context":"calculus","domain":"mathematics","quote":"A derivative measures the local rate of change."}],"chains":[]}`}
     if err:=svc.SetModelProvider(model,"source-extractor");err!=nil{t.Fatal(err)}
+    if err:=svc.EnableModelDisclosure();err!=nil{t.Fatal(err)}
     result,err:=svc.stageSourceExtraction(context.Background(),source["id"].(string))
     if err!=nil{t.Fatal(err)}
     if result["status"]!="pending_audit" || result["requires_review"]!=true ||
