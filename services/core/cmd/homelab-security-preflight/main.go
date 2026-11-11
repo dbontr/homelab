@@ -28,8 +28,11 @@ func read(name string, private bool)([]byte,error){
         return nil,errors.New("invalid protected configuration file")
     }
     mode:=info.Mode().Perm()
-    if private&&mode&0077!=0||!private&&mode&0022!=0{
-        return nil,errors.New("configured file has unsafe permissions")
+    inode,ok:=info.Sys().(*syscall.Stat_t)
+    if !ok||inode.Nlink!=1||
+        (private&&(mode&0077!=0||inode.Uid!=uint32(os.Geteuid())))||
+        (!private&&mode&0022!=0){
+        return nil,errors.New("configured file has unsafe ownership or permissions")
     }
     data,err:=io.ReadAll(io.LimitReader(file,(1<<20)+1))
     if err!=nil||len(data)>1<<20{return nil,errors.New("configured file exceeds size limit")}
