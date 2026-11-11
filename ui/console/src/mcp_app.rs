@@ -72,6 +72,7 @@ struct Bridge {
     _listener: Closure<dyn FnMut(MessageEvent)>,
     pending: Rc<RefCell<HashMap<u32, Pending>>>,
     host_result: Rc<RefCell<Option<Value>>>,
+    host_context: Rc<RefCell<Value>>,
     closed: Rc<Cell<bool>>,
     next_id: u32,
 }
@@ -88,6 +89,8 @@ impl Bridge {
         let pending_messages = pending.clone();
         let host_result = Rc::new(RefCell::new(None::<Value>));
         let observed_result = host_result.clone();
+        let host_context = Rc::new(RefCell::new(Value::Null));
+        let observed_context = host_context.clone();
         let closed = Rc::new(Cell::new(false));
         let closed_for_listener = closed.clone();
         let expected_source = parent.clone();
@@ -117,6 +120,22 @@ impl Bridge {
                 }
             }
             if closed_for_listener.get(){return}
+            if let Ok(message)=serde_json::from_str::<Value>(&raw){
+                if message.get("jsonrpc").and_then(Value::as_str)==Some("2.0") &&
+                    message.get("method").and_then(Value::as_str)==Some(
+                        "ui/notifications/host-context-changed"){
+                    if let Some(params)=message.get("params").and_then(Value::as_object){
+                        let mut active=observed_context.borrow_mut();
+                        if !active.is_object(){*active=json!({});}
+                        if let Some(current)=active.as_object_mut(){
+                            for (key,value) in params{
+                                current.insert(key.clone(),value.clone());
+                            }
+                        }
+                    }
+                    return;
+                }
+            }
             if let Some(value) = decode_host_result(&raw) {
                 observed_result.replace(Some(value));
                 return;
@@ -131,7 +150,7 @@ impl Bridge {
         });
         current.add_event_listener_with_callback("message", listener.as_ref().unchecked_ref())
             .map_err(|_| "MCP Apps message listener unavailable")?;
-        Ok(Self { parent, current, _listener: listener, pending, host_result, closed, next_id: 1 })
+        Ok(Self { parent, current, _listener: listener, pending, host_result, host_context, closed, next_id: 1 })
     }
 
     fn send(&mut self, method: &str, params: Value) -> Result<oneshot::Receiver<Result<Value, String>>, String> {
@@ -207,6 +226,21 @@ pub async fn request(method: &str, params: Value) -> Result<Value, String> {
         .map_err(|_| "MCP Apps request was interrupted".to_owned())?
 }
 
+pub fn host_fullscreen_available() -> bool {
+    BRIDGE.with(|cell| {
+        cell.borrow().as_ref().map(|bridge|{
+            let context=bridge.host_context.borrow();
+            let supported=context.get("availableDisplayModes")
+                .and_then(Value::as_array)
+                .map(|values|values.iter().any(|v|v.as_str()==Some("fullscreen")))
+                .unwrap_or(false);
+            let active=context.get("displayMode").and_then(Value::as_str)
+                ==Some("fullscreen");
+            supported&&!active&&!bridge.closed.get()
+        }).unwrap_or(false)
+    })
+}
+
 // A tool-triggered Learning App receives the originating tool result as a
 // host notification. It is not an authorization token or a grading verdict.
 pub fn take_host_learning_result() -> Option<Value> {
@@ -236,6 +270,12 @@ pub async fn initialize() -> Result<(), String> {
     if result.get("protocolVersion").and_then(Value::as_str) != Some(PROTOCOL) {
         return Err("MCP Apps host did not confirm protocol initialization".to_owned());
     }
+    BRIDGE.with(|cell|{
+        if let Some(bridge)=cell.borrow().as_ref(){
+            let context=result.get("hostContext").cloned().unwrap_or(Value::Null);
+            bridge.host_context.replace(context);
+        }
+    });
     notify_initialized()
 }
 
@@ -362,6 +402,15 @@ mod tests {
         assert!(MAX_REPLY <= 4 * 1024 * 1024);
     }
 
+
+    #[test]
+    fn host_display_mode_is_only_admitted_after_initialization() {
+        let context=json!({"displayMode":"inline",
+            "availableDisplayModes":["inline","fullscreen"]});
+        assert!(context["availableDisplayModes"].as_array()
+            .unwrap().iter().any(|v|v.as_str()==Some("fullscreen")));
+        assert_ne!(context["displayMode"],"fullscreen");
+    }
 
     #[test]
     fn host_result_notifications_are_read_only_and_bounded() {
