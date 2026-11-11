@@ -33,6 +33,16 @@ func TestNativeDeviceCustodyRequiresExactClaims(t *testing.T) {
     if err!=nil||len(granted)!=1{t.Fatalf("explicit USB custody rejected: %+v %v",granted,err)}
 }
 
+func TestNativeDeviceCustodyRejectsTransientUSBBusAliases(t *testing.T) {
+    devices:=[]Device{
+        {ID:"usb-bus",Kind:"usb",Paths:[]string{"/dev/bus/usb/002/013"}},
+    }
+    claims:=[]DeviceClaim{{ID:"usb-bus",Kind:"usb"}}
+    if _,err:=approvedDeviceClaims(claims,devices,true);err==nil{
+        t.Fatal("transient USB bus alias was accepted as a durable physical lease")
+    }
+}
+
 func TestNativeDeviceCustodyRefusesDuplicatePhysicalPaths(t *testing.T) {
     devices:=[]Device{
         {ID:"gpu0",Kind:"gpu",Paths:[]string{"/dev/dri/renderD128"}},
