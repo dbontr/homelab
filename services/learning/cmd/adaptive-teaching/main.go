@@ -65,7 +65,14 @@ func configureLearningModel(svc *mcpsvc.Service) error {
     endpoint := os.Getenv("ADAPTIVE_TEACHING_MODEL_ENDPOINT")
     modelName := os.Getenv("ADAPTIVE_TEACHING_MODEL_NAME")
     tokenFile := os.Getenv("ADAPTIVE_TEACHING_MODEL_TOKEN_FILE")
+    consentPolicy := os.Getenv("ADAPTIVE_TEACHING_MODEL_DISCLOSURE_ENABLED")
+    if consentPolicy != "" && consentPolicy != "0" && consentPolicy != "1" {
+        return errors.New("invalid Learning model disclosure policy")
+    }
     if endpoint == "" && modelName == "" && tokenFile == "" {
+        if consentPolicy == "1" {
+            return errors.New("Learning model disclosure requires a configured provider")
+        }
         return nil
     }
     if endpoint == "" || modelName == "" {
@@ -93,7 +100,9 @@ func configureLearningModel(svc *mcpsvc.Service) error {
                 return errors.New("Learning model redirects disabled")
             }},
     }
-    return svc.SetModelProvider(client,modelName)
+    if err := svc.SetModelProvider(client,modelName); err != nil { return err }
+    if consentPolicy == "1" { return svc.EnableModelDisclosure() }
+    return nil
 }
 
 func loopbackListener(address string) bool {
