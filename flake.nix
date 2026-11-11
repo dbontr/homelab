@@ -53,6 +53,12 @@
         homelab-calendar = import ./packages/calendar.nix {
           pkgs = nixpkgs.legacyPackages.${defaultSystem};
         };
+        homelab-learning = import ./packages/learning.nix {
+          pkgs = nixpkgs.legacyPackages.${defaultSystem};
+        };
+        homelab-health = import ./packages/health.nix {
+          pkgs = nixpkgs.legacyPackages.${defaultSystem};
+        };
 
         homelab-interfaces = import ./packages/interfaces.nix {
           pkgs = nixpkgs.legacyPackages.${defaultSystem};
