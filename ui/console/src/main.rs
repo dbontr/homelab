@@ -27,6 +27,7 @@ mod health_groceries;
 mod workout_companion;
 mod learning_library;
 mod learning_route;
+mod learning_attachments;
 #[cfg(feature = "embedded-app")]
 mod mcp_app;
 
