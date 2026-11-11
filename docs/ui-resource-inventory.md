@@ -68,14 +68,18 @@ component from the owner-session console to an MCP Apps host client. The
 uses JSON-RPC request IDs, bounds each payload and outstanding requests,
 times out unacknowledged calls, and performs the
 `ui/initialize` / `ui/notifications/initialized` handshake.
-The five Health views reuse the same Dioxus components, but call
-`tools/call` through the host rather than exposing the
-owner-session CSRF credential inside the iframe.
+The five Health views reuse Dioxus components and call `tools/call`
+through the host rather than exposing owner-session CSRF credentials.
+The Learning view uses an exact independent Learning tool allowlist. It
+cannot call credential, grading, execution, or answer-key operations.
+The bridge handles host-provided tool results, bounded requests, timeouts,
+explicit resource teardown and parent-window source validation.
 
 `ui/console/build-mcp-apps.sh UNUSED_ABSOLUTE_OUTPUT_DIRECTORY`
-builds the Rust/WebAssembly distribution and generates five resource
-entrypoints with fixed `homelab-mcp-view` markers. The
-source-owned Go Health service verifies every generated asset against
+builds the Rust/WebAssembly distribution and generates six resource
+entrypoints, five Health views and one Learning workspace, with fixed
+`homelab-mcp-view` markers. The source-owned Go services verify every
+generated asset against
 `SHA256SUMS`, refuses symlinks and undeclared bytes, and
 offers public static assets only from the verified bundle.
 
@@ -140,6 +144,46 @@ eligibility within its transaction and refuses stale or unreviewed
 evidence. Import creates concepts and prerequisites only; it does not
 create assessment records or increase mastery.
 
-The embedded Learning App remains responsible for model-mediated
-assessment, source extraction, diagnostics and the full adaptive-teaching
-workflow until the native interfaces achieve functional parity.
+## Learning MCP App release
+
+The Rust Learning MCP App is opt-in through
+`services.adaptiveTeaching.model` for private model proposals and
+`services.adaptiveTeaching.appBundle.directory` with
+`services.adaptiveTeaching.appBundle.origin` for the verified UI bundle.
+The Learning service retains its original embedded HTML resource while
+the app bundle is disabled. With a verified release, the exact same
+`ui://adaptive-teaching/learning-workspace.html` URI returns the
+Learning Dioxus entrypoint and resource-level CSP metadata. Its public
+asset route serves only manifest-verified JavaScript, WebAssembly, CSS
+and static resources. The private MCP listener and its bearer token remain
+separate.
+
+The embedded view supports host-provided graph, reasoning, question,
+session, problem, source, review and practice results. The learner can
+submit an ungraded response and voluntary confidence estimate. The
+session can request explicitly consented, provisional model feedback on
+one independent reasoning step. Reviewed sources can be previewed and
+imported against the store's exact evidence digest without awarding
+mastery. Files attached to an existing session, problem or source travel
+only through approved MCP host tools, with a five-MiB browser limit and
+operation-specific bounded JSON-RPC envelopes. The Learning store verifies
+MIME signatures and SHA-256 integrity before a download is prepared as
+a local browser Blob. The host must permit sandbox downloads before
+download links are operational.
+
+Model calls are disabled unless a private provider endpoint and model
+identifier are configured. The owner must opt into disclosing source
+passages or learner responses for each model proposal. These proposals
+cannot change grades or mastery by themselves: the Learning store remains
+the sole authority for review, grading and learner progress.
+
+The Compute Dioxus console has exact owner-session routes for resource
+planning, workspace creation and teardown, immutable image and software
+catalog registration, and revision-qualified program/catalog review.
+Origin, CSRF, project/device admission and independent privileged
+authorization remain mandatory; no controller bearer credential is
+copied into the browser.
+
+WebAssembly compilation, actual MCP host permission handling, device
+custody and browser accessibility still require acceptance before the
+legacy embedded Learning resource or Compute dashboard is retired.
