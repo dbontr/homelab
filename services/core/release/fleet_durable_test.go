@@ -35,6 +35,16 @@ func(f *durableFake) Revert(_ context.Context,id string)error{
  return nil
 }
 func(f *durableFake) Observe(context.Context)(ReleaseObservation,error){return f.observation,f.observeErr}
+func(f *durableFake) ActivateWithID(ctx context.Context,requestID,releaseID string)error{
+ if !validRemoteExecutionID(requestID){return errors.New("invalid activation execution ID")}
+ return f.Activate(ctx,releaseID)
+}
+func(f *durableFake) RevertWithID(ctx context.Context,requestID,releaseID string)error{
+ if !validRemoteExecutionID(requestID){return errors.New("invalid rollback execution ID")}
+ return f.Revert(ctx,releaseID)
+}
+
+
 
 func TestDurableFleetPersistsIntentAndRequiresResolution(t *testing.T){
  file:=filepath.Join(t.TempDir(),"private","journal.json")
