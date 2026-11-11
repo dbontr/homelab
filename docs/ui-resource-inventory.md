@@ -99,18 +99,37 @@ resolution, browser accessibility, data preservation and fallback behavior
 still require acceptance before enabling this configuration.
 
 
-The standalone Learning library provides read-only Dioxus inspection for
-concept graphs, reasoning-chain provenance, evidence descriptions, sealed
-problem statements, source records, practice history and delayed retrieval
-obligations. Its Go
-owner-session route allows only a fixed set of read operations and requires
-the normal origin, session and CSRF checks. Grading, source modification,
-attachment upload, answer-key disclosure and arbitrary MCP calls remain
-unavailable through this route. The Learning console also presents the next action and diagnostic
-recommendation for the selected learning session. An owner-session view can
-build a revision-fenced prerequisite plan or request a phase transition.
-The Learning store checks pending grading, permitted transitions, plan
-availability, revisions and completion evidence. These operations cannot
-grade answers or award mastery. The richer embedded Learning App continues
-to serve source uploads, interactive grading and model-mediated assessment
-until equivalent native flows satisfy permission and behavior parity.
+## Learning session and original-file custody
+
+The standalone Learning library provides Dioxus inspection for concept
+graphs, reasoning-chain provenance, evidence, problem statements, source
+records, practice history and delayed retrieval obligations. The Go
+owner-session read routes allow only specific Learning inspection tools.
+Grading, answer-key disclosure and general MCP tool execution are excluded.
+
+The Learning console presents the next action and diagnostic recommendation
+for a selected session. The owner can build a prerequisite plan or advance
+a session only with an explicit expected revision. Learning independently
+checks phase transitions, pending grading, prerequisite coverage, and
+completion evidence. These operations cannot award mastery.
+
+An owner can preserve original work against a problem, learning session,
+or source using the same-origin binary upload route
+`POST /v1/learning/attachments`. The source-owned Go transport checks the
+owner-session cookie, Origin, CSRF, permitted MIME type, owner identity and
+a five-MiB file limit. The source receives its filename as a percent-encoded
+header and its bytes as the HTTP body. A separate, narrowly scoped
+Learning call forwards the file to the Learning store; the general MCP
+gateway retains its one-MiB tool-argument ceiling.
+
+`GET /v1/learning/attachments/{kind}/{id}` returns original-file metadata.
+`GET /v1/learning/attachment-originals/{id}` retrieves a stored original
+through the private Learning backend, verifies the reported SHA-256 and
+returns it as an attachment download with `nosniff` and no-store caching.
+The browser transfer limit is five MiB; larger originals retained through
+Learning's other interfaces cannot be downloaded through this route.
+Uploads do not imply interpretation, a correct answer, or mastery.
+
+The embedded Learning App remains responsible for model-mediated
+assessment, source extraction, diagnostics and the full adaptive-teaching
+workflow until the native interfaces achieve functional parity.
