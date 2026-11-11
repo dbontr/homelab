@@ -625,7 +625,16 @@ impl Authority {
         &mut self, assertion: &str, operation: &str, target: &str, args: &[u8],
     ) -> Result<Decision, Error> {
         let principal = self.verified_principal(assertion, &self.gateway_audience)?;
-        let now = unix_now()?;
+        self.replay_at(&principal, &self.client.clone(), operation, target, args, unix_now()?)
+    }
+
+    fn replay_at(
+        &mut self, principal: &str, client: &str, operation: &str,
+        target: &str, args: &[u8], now: i64,
+    ) -> Result<Decision, Error> {
+        if client != self.client {
+            return Ok(Decision::Denied("unauthorized client"));
+        }
         if !self.live(now) || self.session.as_ref()
             .is_none_or(|session| session.principal != principal) {
             return Ok(Decision::Denied("owner authentication required"));
@@ -1390,6 +1399,40 @@ mod tests {
                 "workspace__status", "jupiter", b"{}", |secret| secret.to_vec()),
             Err(Error::Unauthorized)
         );
+    }
+
+    #[test]
+    fn replay_observation_checks_owner_without_consuming_confirmation() {
+        let mut authority = fixture();
+        authority.login_at("principal-a", PASSWORD, &otp(400), 12_000).unwrap();
+        let args = br#"{"host":"jupiter","service":"homelab-platform.service"}"#;
+        let operation = "infrastructure__service_restart";
+        assert_eq!(
+            authority.replay_at("principal-a", "platform-gateway", operation, "jupiter", args, 12_001).unwrap(),
+            Decision::Allowed
+        );
+        assert!(authority.pending.is_empty());
+        assert!(matches!(
+            authority.replay_at("principal-b", "platform-gateway", operation, "jupiter", args, 12_002).unwrap(),
+            Decision::Denied(_)
+        ));
+        assert!(matches!(
+            authority.replay_at("principal-a", "foreign-client", operation, "jupiter", args, 12_002).unwrap(),
+            Decision::Denied(_)
+        ));
+        assert!(matches!(
+            authority.replay_at("principal-a", "platform-gateway", operation, "venus", args, 12_002).unwrap(),
+            Decision::Denied(_)
+        ));
+        assert!(matches!(
+            authority.replay_at("principal-a", "platform-gateway", operation, "jupiter", b"[]", 12_002).unwrap(),
+            Decision::Denied(_)
+        ));
+        authority.revoke_at("principal-a", 12_003);
+        assert!(matches!(
+            authority.replay_at("principal-a", "platform-gateway", operation, "jupiter", args, 12_004).unwrap(),
+            Decision::Denied(_)
+        ));
     }
 
     #[test]
