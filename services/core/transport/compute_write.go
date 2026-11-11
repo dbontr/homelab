@@ -54,6 +54,45 @@ func (s *Server) computeWrite(w http.ResponseWriter,r *http.Request,tool string,
     writeJSON(w,success,data)
 }
 
+// Privileged Compute mutations cannot use direct Workspace tool forwarding.
+// The executor owns its separate controller credential and validates exact
+// host, resource allowlists, owner confirmation and a durable audit record.
+func (s *Server) computeExecutorWrite(w http.ResponseWriter,r *http.Request,operation string,args any){
+    if s.executorClient==nil{
+        writeError(w,http.StatusServiceUnavailable,"independent executor is not configured")
+        return
+    }
+    raw,err:=json.Marshal(args)
+    if err!=nil{writeError(w,400,"invalid privileged Compute arguments");return}
+    ctx:=security.WithAccessAssertion(r.Context(),r.Header.Get("Cf-Access-Jwt-Assertion"))
+    output:=s.invoke(ctx,operation,raw,json.RawMessage("1"))
+    if failed,_:=output["isError"].(bool);failed{
+        writeError(w,http.StatusForbidden,"independent executor did not authorize this operation")
+        return
+    }
+    parts,ok:=output["content"].([]any)
+    if !ok||len(parts)!=1{
+        writeError(w,502,"invalid executor response");return
+    }
+    item,ok:=parts[0].(map[string]any)
+    if !ok{writeError(w,502,"invalid executor response");return}
+    serialized,ok:=item["text"].(string)
+    if !ok||len(serialized)>16<<10{
+        writeError(w,502,"invalid executor response");return
+    }
+    var data map[string]any
+    if json.Unmarshal([]byte(serialized),&data)!=nil||data==nil{
+        writeError(w,502,"invalid executor result");return
+    }
+    if data["authorization_required"]==true{
+        writeJSON(w,http.StatusPreconditionRequired,data);return
+    }
+    if data["accepted"]!=true&&data["completed"]!=true{
+        writeError(w,502,"executor returned no accepted audit outcome");return
+    }
+    writeJSON(w,http.StatusAccepted,data)
+}
+
 type consoleWorkspaceRequest struct{
     ProjectID string `json:"project_id"`
     Image string `json:"image,omitempty"`
@@ -129,7 +168,9 @@ func (s *Server) uiComputeWorkspace(w http.ResponseWriter,r *http.Request){
     if !validConsoleWorkspace(in){
         writeError(w,400,"invalid Compute resource selection");return
     }
-    s.computeWrite(w,r,"workspace_create",in,http.StatusAccepted)
+    // Workspace creation requires a separately reviewed executor action;
+    // a gateway credential is not authority to create a privileged workload.
+    writeError(w,http.StatusNotImplemented,"workspace allocation requires an independent executor operation")
 }
 
 func (s *Server) uiComputeResourcePlan(w http.ResponseWriter,r *http.Request){
@@ -152,22 +193,25 @@ func (s *Server) uiComputeResourcePlan(w http.ResponseWriter,r *http.Request){
 func (s *Server) uiComputeWorkspaceStop(w http.ResponseWriter,r *http.Request){
     workspace:=r.PathValue("workspace")
     var in struct{
+        Host string `json:"host"`
         ProjectID string `json:"project_id"`
         Confirm bool `json:"confirm"`
     }
     if err:=decodeComputeRequest(w,r,&in);err!=nil||!in.Confirm||
+        !consoleProjectID.MatchString(in.Host)||
         !consoleProjectID.MatchString(in.ProjectID)||!learningID.MatchString(workspace){
-        writeError(w,400,"workspace stop requires a valid project and explicit confirmation");return
+        writeError(w,400,"workspace stop requires an exact executor host, project and confirmation");return
     }
-    s.computeWrite(w,r,"workspace_destroy",map[string]any{
-        "project_id":in.ProjectID,"workspace_id":workspace,"confirm":true,
-    },http.StatusAccepted)
+    s.computeExecutorWrite(w,r,"infrastructure__workspace_stop",map[string]any{
+        "host":in.Host,"project_id":in.ProjectID,"workspace_id":workspace,
+    })
 }
 
 type consoleCatalogRequest struct{
     ID string `json:"id,omitempty"`
     ImageID string `json:"image_id,omitempty"`
     SoftwareID string `json:"software_id,omitempty"`
+    Host string `json:"host,omitempty"`
     Image string `json:"image,omitempty"`
     Architecture string `json:"architecture,omitempty"`
     Description string `json:"description,omitempty"`
@@ -225,8 +269,9 @@ func (s *Server) uiComputeCatalog(w http.ResponseWriter,r *http.Request){
         args=map[string]any{"image_id":in.ID,"image":in.Image,
             "description":in.Description,"architecture":in.Architecture}
     case "register-software":
-        if !catalogID(in.ID)||!catalogID(in.ImageID)||len(in.Packages)==0||len(in.Packages)>128||
-           len(in.Description)>2000{
+        if !consoleProjectID.MatchString(in.Host)||
+           !catalogID(in.ID)||!catalogID(in.ImageID)||len(in.Packages)==0||len(in.Packages)>64||
+           len(in.Description)>512{
             writeError(w,400,"invalid software collection");return
         }
         for _,pkg:=range in.Packages{
@@ -234,9 +279,11 @@ func (s *Server) uiComputeCatalog(w http.ResponseWriter,r *http.Request){
                 writeError(w,400,"invalid package name");return
             }
         }
-        tool="pool_register_software"
-        args=map[string]any{"software_id":in.ID,"image_id":in.ImageID,
-            "description":in.Description,"packages":in.Packages}
+        action:=map[string]any{"host":in.Host,"software_id":in.ID,
+            "image_id":in.ImageID,"packages":in.Packages}
+        if in.Description!=""{action["description"]=in.Description}
+        s.computeExecutorWrite(w,r,"infrastructure__workspace_register_software",action)
+        return
     case "propose-program":
         if !catalogID(in.ID)||in.Name==""||len(in.Name)>250||
             len(in.Description)>2000||len(in.SourceURL)>2048{
@@ -270,5 +317,10 @@ func (s *Server) uiComputeCatalog(w http.ResponseWriter,r *http.Request){
     default:
         writeError(w,404,"unknown Compute catalog action");return
     }
-    s.computeWrite(w,r,tool,args,http.StatusAccepted)
+    // Remaining catalog changes require explicit host-executor operations.
+    // A browser session must never forward them directly to the Workspace
+    // root-token endpoint, even when its CSRF token is valid.
+    _=tool
+    _=args
+    writeError(w,http.StatusNotImplemented,"Compute catalog mutation requires an independent executor operation")
 }
