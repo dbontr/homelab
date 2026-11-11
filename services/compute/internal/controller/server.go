@@ -22,6 +22,10 @@ type Server struct {
 	DB               *Database
 	Embedder         *EmbeddingProvider
  EmbeddingTokenSource func()(string,error)
+ VaultBroker *VaultSecretClient
+ VaultGitHubAlias string
+ VaultGitLabAlias string
+ VaultEmbeddingsAlias string
 	AdminToken       string
 	OIDC             *OIDCVerifier
 	AccessVerifier   *OIDCVerifier
@@ -95,6 +99,7 @@ func NewServer(db *Database, token string) (*Server, error) {
  embeddingsAlias:=os.Getenv("PWM_VAULT_EMBEDDINGS_ALIAS")
  brokerURL:=os.Getenv("PWM_VAULT_URL")
  var embeddingsTokenSource func()(string,error)
+ var scopedVault *VaultSecretClient
  if githubAlias!=""||gitlabAlias!=""||embeddingsAlias!=""||brokerURL!=""{
   if brokerURL==""||(githubAlias==""&&gitlabAlias==""&&embeddingsAlias==""){
    return nil,errors.New("owner vault provider aliases and endpoint must be configured together")
@@ -103,22 +108,29 @@ func NewServer(db *Database, token string) (*Server, error) {
    os.Getenv("PWM_VAULT_SERVER_NAME"),os.Getenv("PWM_VAULT_CA_FILE"),
    os.Getenv("PWM_VAULT_CLIENT_CERT_FILE"),os.Getenv("PWM_VAULT_CLIENT_KEY_FILE"))
   if brokerErr!=nil{return nil,brokerErr}
+  scopedVault=broker
   if githubAlias!=""{
    if pat!=""||github.App!=nil{return nil,errors.New("GitHub has conflicting credential authorities")}
    if !vaultSecretAlias.MatchString(githubAlias){return nil,errors.New("invalid GitHub vault alias")}
-   github.TokenSource=func()(string,error){return broker.Credential(githubAlias)}
+   github.TokenSource=func()(string,error){
+    return "",errors.New("GitHub vault access requires an authorized request scope")
+   }
   }
   if gitlabAlias!=""{
    if gitlabPAT!=""{return nil,errors.New("GitLab has conflicting credential authorities")}
    if !vaultSecretAlias.MatchString(gitlabAlias){return nil,errors.New("invalid GitLab vault alias")}
-   gitlab.TokenSource=func()(string,error){return broker.Credential(gitlabAlias)}
+   gitlab.TokenSource=func()(string,error){
+    return "",errors.New("GitLab vault access requires an authorized request scope")
+   }
   }
   if embeddingsAlias!=""{
    if os.Getenv("PWM_EMBEDDINGS_TOKEN_FILE")!=""{
     return nil,errors.New("embeddings have conflicting credential authorities")
    }
    if !vaultSecretAlias.MatchString(embeddingsAlias){return nil,errors.New("invalid embeddings vault alias")}
-   embeddingsTokenSource=func()(string,error){return broker.Credential(embeddingsAlias)}
+   embeddingsTokenSource=func()(string,error){
+    return "",errors.New("embedding vault access requires an authorized request scope")
+   }
   }
  }
  if gitlabAPI:=strings.TrimRight(os.Getenv("PWM_GITLAB_API_URL"),"/");gitlabAPI!=""{
@@ -152,6 +164,10 @@ func NewServer(db *Database, token string) (*Server, error) {
 	return &Server{DB: db, AdminToken: token, OIDC: verifier, AccessVerifier: access, AccessOwnerEmail: accessOwner, PublicURL: publicURL,
 		GitHub: github, GitLab: gitlab, LocalGit: localGit,
   EmbeddingTokenSource: embeddingsTokenSource,
+  VaultBroker: scopedVault,
+  VaultGitHubAlias:githubAlias,
+  VaultGitLabAlias:gitlabAlias,
+  VaultEmbeddingsAlias:embeddingsAlias,
 		AllowedHosts:     configured("PWM_ALLOWED_HOSTS", "127.0.0.1,localhost"),
 		AllowedOrigins:   configured("PWM_ALLOWED_ORIGINS", "http://127.0.0.1,http://localhost"),
 		MaxArtifactBytes: limit}, nil
