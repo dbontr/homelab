@@ -10,7 +10,7 @@
 - [Go HTTP Transport](https://pkg.go.dev/net/http#Transport) — Go project. Used for: private upstream connection timeouts and response-header size limits.
 - [Go tls.X509KeyPair](https://pkg.go.dev/crypto/tls#X509KeyPair) — Go project. Used for: parsing validated PEM key pairs after enforcing private-key file permissions.
 - [Linux flock(2)](https://man7.org/linux/man-pages/man2/flock.2.html) — Linux man-pages project. Used for: nonblocking, process-lifetime advisory locks on state resources before opening service stores.
-- [Linux open(2)](https://man7.org/linux/man-pages/man2/open.2.html) — Linux man-pages project. Used for: O_NOFOLLOW descriptor-bound reads of protected interface and executor credential files.
+- [Linux open(2)](https://man7.org/linux/man-pages/man2/open.2.html) — Linux man-pages project. Used for: O_NOFOLLOW descriptor-bound reads of protected credentials and O_EXCL admission records for cooperating hardware workers.
 - [bytes crate: Bytes::from_owner](https://docs.rs/bytes/latest/bytes/struct.Bytes.html#method.from_owner) — bytes project. Used for: retaining a zeroizing owner of remote credential response buffers until the last HTTP body reference is released.
 - [Rust Standard Library: Command](https://doc.rust-lang.org/std/process/struct.Command.html) — Rust project. Used for: shell-free, explicit-argument privileged command dispatch in the Rust actuator.
 - [RustCrypto PBKDF2](https://docs.rs/pbkdf2/0.12.2/pbkdf2/) — RustCrypto project. Used for: verifying the owner PBKDF2-HMAC-SHA256 credential record in Rust.
@@ -48,6 +48,10 @@
 - [shadcn/ui Theming](https://ui.shadcn.com/docs/theming) — shadcn/ui project. Used for: exact neutral light/dark design tokens, sidebar colors, and radius scale for the Rust/Dioxus console.
 - [Dioxus 0.7 Documentation](https://dioxuslabs.com/learn/0.7/) — Dioxus project. Used for: Rust RSX components, WASM rendering and future desktop packaging.
 - [MCP Apps specification (2026-01-26)](https://github.com/modelcontextprotocol/ext-apps/blob/main/specification/2026-01-26/apps.mdx) — Model Context Protocol project. Used for: embedded view lifecycle, JSON-RPC tool messages, UI resource MIME types and host iframe security contracts.
+- [Go MCP SDK v1.8.0 ResourceContents](https://pkg.go.dev/github.com/modelcontextprotocol/go-sdk@v1.8.0/mcp#ResourceContents) — Model Context Protocol Go SDK maintainers. Used for: resource-level UI CSP metadata and verified Learning MCP App resource publication.
+- [Web Blob API](https://developer.mozilla.org/en-US/docs/Web/API/Blob) — MDN Web Docs. Used for: browser-local, credential-free original-file downloads after Learning verifies source bytes.
+- [URL.createObjectURL()](https://developer.mozilla.org/en-US/docs/Web/API/URL/createObjectURL_static) — MDN Web Docs. Used for: bounded download links created from verified Learning original files.
+- [URL.revokeObjectURL()](https://developer.mozilla.org/en-US/docs/Web/API/URL/revokeObjectURL_static) — MDN Web Docs. Used for: release of previously generated browser download object URLs.
 - [Dioxus 0.7 Handling User Input](https://dioxuslabs.com/learn/0.7/essentials/basics/event_handlers/) — Dioxus project. Used for: browser file selection, `FileData` metadata and asynchronous image reads in the Rust recipe editor.
 - [OpenAI Plugins UI Reference](https://developers.openai.com/plugins/reference) — OpenAI. Used for: opening a vetted owner authentication URL from a ChatGPT component without exposing credentials through tool inputs.
 - [MCP Elicitation — URL Mode](https://modelcontextprotocol.io/specification/2025-11-25/client/elicitation) — MCP project. Used for: treating password and second-factor entry as a trusted out-of-band browser interaction rather than client-side form elicitation.
