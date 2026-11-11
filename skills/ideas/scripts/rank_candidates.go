@@ -16,12 +16,12 @@ import (
 
 type candidate map[string]any
 
-type optionalFloat struct{Value float64;Set bool}
+type optionalFloat struct{Value float64;Provided bool}
 func(o *optionalFloat)String()string{return fmt.Sprintf("%g",o.Value)}
 func(o *optionalFloat)SetValue(value string)error{
  var number float64
  if _,err:=fmt.Sscan(value,&number);err!=nil{return err}
- o.Value=number;o.Set=true;return nil
+ o.Value=number;o.Provided=true;return nil
 }
 func(o *optionalFloat)Set(value string)error{return o.SetValue(value)}
 
@@ -89,7 +89,7 @@ func validateOptions(o options)error{
   if math.IsNaN(v)||math.IsInf(v,0)||v<0||v>1{return errors.New("beta and feasibility_weight must be between 0 and 1")}
  }
  for _,pair:=range []optionalFloat{o.MinCoherence,o.MinTractability}{
-  if pair.Set&&(math.IsNaN(pair.Value)||math.IsInf(pair.Value,0)||pair.Value<0||pair.Value>5){
+  if pair.Provided&&(math.IsNaN(pair.Value)||math.IsInf(pair.Value,0)||pair.Value<0||pair.Value>5){
    return errors.New("minimum scores must be between 0 and 5")
   }
  }
@@ -118,7 +118,7 @@ func optionValueInt(v optionalInt)any{
  return nil
 }
 func optionValueFloat(v optionalFloat)any{
- if v.Set{return v.Value}
+ if v.Provided{return v.Value}
  return nil
 }
 
@@ -130,10 +130,10 @@ func rank(items []candidate,o options)(map[string]any,error){
   reasons:=[]string{}
   coherence,_:=scoreValue(item["coherence"])
   tractability,_:=scoreValue(item["tractability"])
-  if o.MinCoherence.Set&&coherence<o.MinCoherence.Value{
+  if o.MinCoherence.Provided&&coherence<o.MinCoherence.Value{
    reasons=append(reasons,fmt.Sprintf("coherence below %g",o.MinCoherence.Value))
   }
-  if o.MinTractability.Set&&tractability<o.MinTractability.Value{
+  if o.MinTractability.Provided&&tractability<o.MinTractability.Value{
    reasons=append(reasons,fmt.Sprintf("tractability below %g",o.MinTractability.Value))
   }
   if len(reasons)>0{excluded=append(excluded,map[string]any{"candidate":item,"reasons":reasons})}else{eligible=append(eligible,item)}
