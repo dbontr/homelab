@@ -15,7 +15,8 @@ use crate::{valid_hex, valid_host, Error};
 const MAX_AUDIT_BYTES: u64 = 64 << 20;
 
 fn owner_only(metadata: &fs::Metadata) -> bool {
-    metadata.is_file() && metadata.mode() & 0o077 == 0
+    metadata.is_file() && metadata.nlink() == 1
+        && metadata.mode() & 0o077 == 0
         && metadata.uid() == unsafe { libc::geteuid() }
 }
 
@@ -261,6 +262,26 @@ mod tests {
             at: "2026-11-10T18:00:00Z".into(),
             reconciliation_sha256: None,
         }
+    }
+
+    #[test]
+    fn rejects_shared_executor_journal_and_lease_inodes() {
+        let directory = std::env::temp_dir().join(format!(
+            "homelab-executor-hardlink-{}", crate::random_hex::<12>().unwrap()
+        ));
+        fs::create_dir(&directory).unwrap();
+        fs::set_permissions(&directory, fs::Permissions::from_mode(0o700)).unwrap();
+        let source = directory.join("shared");
+        fs::write(&source, b"").unwrap();
+        fs::set_permissions(&source, fs::Permissions::from_mode(0o600)).unwrap();
+        let journal = directory.join("executor-actions.jsonl");
+        fs::hard_link(&source, &journal).unwrap();
+        assert!(AuditJournal::open(&journal).is_err());
+        fs::remove_file(&journal).unwrap();
+        fs::remove_file(directory.join(".executord.lock")).unwrap();
+        fs::hard_link(&source, directory.join(".executord.lock")).unwrap();
+        assert!(AuditJournal::open(&journal).is_err());
+        fs::remove_dir_all(directory).unwrap();
     }
 
     #[test]
