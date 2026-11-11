@@ -219,6 +219,11 @@ func (c *Client) runWithHeartbeatInterval(parent context.Context, runner *Runner
 			}
 			reconciled = true
 		}
+		// Stop claiming work until the next recovery pass fences any Job
+		// whose deletion could not be confirmed.
+		if runner.Kube != nil && !runner.Kube.verificationReady() {
+			return errors.New("Kubernetes worker quarantined pending verification Job cleanup")
+		}
 		var op struct {
 			Operation *Operation `json:"operation"`
 		}
