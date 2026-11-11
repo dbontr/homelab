@@ -53,6 +53,32 @@ func loginAt(t *testing.T, a *AdminSessions, secret []byte, now *time.Time) {
 	}
 }
 
+func TestReplayAuthorizationDoesNotConsumeDestructiveConfirmation(t *testing.T){
+ manager,key,now:=testSessionManager(t)
+ loginAt(t,manager,key,now)
+ args:=json.RawMessage(`{"host":"saturn"}`)
+ decision:=manager.ReplayFor("local-operator","platform-gateway",
+  "cluster__configure","saturn",args)
+ if !decision.Allowed||len(manager.Pending())!=0{
+  t.Fatalf("replay inspection consumed or created a confirmation: %+v",decision)
+ }
+ for _,tc:=range []struct{principal,client,operation,target string;args json.RawMessage}{
+  {"other","platform-gateway","cluster__configure","saturn",args},
+  {"local-operator","other-client","cluster__configure","saturn",args},
+  {"local-operator","platform-gateway","cluster__configure","venus",args},
+  {"local-operator","platform-gateway","unknown","saturn",args},
+  {"local-operator","platform-gateway","cluster__configure","saturn",json.RawMessage(`[]`)},
+ }{
+  got:=manager.ReplayFor(tc.principal,tc.client,tc.operation,tc.target,tc.args)
+  if got.Allowed{t.Fatal("invalid replay policy was authorized",tc)}
+ }
+ manager.Revoke()
+ if manager.ReplayFor("local-operator","platform-gateway",
+  "cluster__configure","saturn",args).Allowed{
+  t.Fatal("revoked owner session authorized a recorded execution")
+ }
+}
+
 func TestTOTPMatchesRFC6238SHA1(t *testing.T) {
 	key := []byte("12345678901234567890")
 	if code := TOTPCode(key, 59/30); code != "287082" {
