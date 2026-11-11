@@ -7,7 +7,7 @@ import (
  "path/filepath"
  "testing"
 
- "github.com/dbontr/personal-health-mcp/internal/health"
+ "github.com/dbontr/homelab-new/system/health/internal/health"
 )
 func TestReadOnlySyncAndIdempotentImport(t *testing.T){
  calls:=0
