@@ -198,10 +198,6 @@ func (a *AdminSessions) issueServiceTicketsLocked(
 // context. Neither an error nor a transport retry can disclose the secret again.
 func (a *AdminSessions) redeemServiceTicket(peer,alias,ticket,operation,target string,args json.RawMessage) ([]byte,error) {
     if !serviceCredentialTicket.MatchString(ticket) {return nil,errors.New("invalid capability")}
-    canonical,_,err:=canonicaljson.Object(args)
-    if err!=nil {return nil,errors.New("invalid capability arguments")}
-    digest:=sha256.Sum256(canonical)
-    argumentsSHA:=hex.EncodeToString(digest[:])
     a.mu.Lock()
     defer a.mu.Unlock()
     now:=a.now().UTC()
@@ -209,6 +205,12 @@ func (a *AdminSessions) redeemServiceTicket(peer,alias,ticket,operation,target s
     a.pruneCredentialTickets(now)
     issued,exists:=a.serviceCredentialTickets[ticket]
     delete(a.serviceCredentialTickets,ticket)
+    // Consume before parsing arguments. An incorrect or ambiguous request
+    // cannot retry the same capability after the context check fails.
+    canonical,_,err:=canonicaljson.Object(args)
+    if err!=nil {return nil,errors.New("invalid capability arguments")}
+    digest:=sha256.Sum256(canonical)
+    argumentsSHA:=hex.EncodeToString(digest[:])
     if !exists || !now.Before(issued.Expires) ||
         issued.PeerDNS!=peer || issued.Alias!=alias ||
         issued.Operation!=operation || issued.Target!=target ||
