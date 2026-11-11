@@ -1,5 +1,5 @@
 { pkgs }:
-pkgs.buildGoModule {
+(pkgs.buildGoModule.override { go = pkgs.go_1_27; }) {
   pname = "homelab-interfaces";
   version = "0.1.0";
   src = ../.;
