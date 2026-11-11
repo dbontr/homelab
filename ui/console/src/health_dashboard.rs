@@ -273,8 +273,8 @@ pub fn HealthDashboard(csrf: String) -> Element {
                                     svg {
                                         class: "health-metric-plot",
                                         role: "img",
-                                        aria_label: "Observed health metric plotted against recorded timestamps",
-                                        viewBox: "0 0 800 200",
+                                        "aria-label": "Observed health metric plotted against recorded timestamps",
+                                        view_box: "0 0 800 200",
                                         preserve_aspect_ratio: "xMidYMid meet",
                                         line {
                                             x1: "35", y1: "175", x2: "765", y2: "175",
