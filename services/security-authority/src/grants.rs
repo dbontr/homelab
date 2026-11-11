@@ -27,12 +27,20 @@ fn valid_name(name: &str) -> bool {
         && name.bytes().skip(1).all(|c| c.is_ascii_alphanumeric() || matches!(c, b'_' | b'-'))
 }
 
-fn valid_dns(name: &str) -> bool {
-    !name.is_empty()
-        && name.len() <= 253
-        && !name.bytes().any(|c| {
-            matches!(c, b'/' | b'?' | b'#' | b':' | b'@' | b'\\' | b' ' | b'\n' | b'\r' | b'\t' | 0)
-        })
+// A peer identity is a canonical ASCII DNS name, not a wildcard or URL.
+// Keep certificate SAN and credential-grant validation identical.
+pub(crate) fn valid_service_dns(name: &str) -> bool {
+    if name.is_empty() || name.len() > 253 {
+        return false;
+    }
+    name.split('.').all(|label| {
+        let bytes = label.as_bytes();
+        (1..=63).contains(&bytes.len())
+            && bytes.first().is_some_and(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
+            && bytes.last().is_some_and(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
+            && bytes.iter().all(|byte| byte.is_ascii_lowercase()
+                || byte.is_ascii_digit() || *byte == b'-')
+    })
 }
 
 fn valid_revision(value: &str) -> bool {
@@ -54,7 +62,7 @@ pub(crate) struct VerifiedServiceIdentity {
 
 impl VerifiedServiceIdentity {
     pub(crate) fn from_authenticated_peer(dns: String) -> Result<Self, Error> {
-        if !valid_dns(&dns) {
+        if !valid_service_dns(&dns) {
             return Err(Error::Unauthorized);
         }
         Ok(Self { dns })
@@ -81,7 +89,7 @@ impl ServiceCredentialPolicy {
         }
         let mut entries = BTreeMap::new();
         for grant in grants {
-            if !valid_dns(&grant.client_dns)
+            if !valid_service_dns(&grant.client_dns)
                 || !valid_name(&grant.alias)
                 || !valid_name(&grant.provider)
                 || !valid_handle(&grant.handle)
@@ -147,6 +155,21 @@ mod tests {
         fs::create_dir(&path).unwrap();
         fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
         path
+    }
+
+    #[test]
+    fn service_dns_names_must_be_canonical() {
+        for name in ["worker.internal", "executor-1.saturn.internal", "jupiter", "node09.lab"] {
+            assert!(valid_service_dns(name), "valid peer identity rejected: {name}");
+        }
+        for name in ["", ".", ".worker", "worker.", "worker..internal", "-worker.internal",
+            "worker-.internal", "worker.*", "*.internal", "WORKER.internal", "worker_internal",
+            "https://worker.internal", "worker.internal:443", "worker/internal",
+            "white space.internal", "worker\\n.internal", "worker\\r.internal"] {
+            assert!(!valid_service_dns(name), "invalid peer identity accepted: {name:?}");
+        }
+        assert!(!valid_service_dns(&format!("{}.internal", "a".repeat(64))));
+        assert!(!valid_service_dns(&format!("{}.internal", "a".repeat(250))));
     }
 
     #[test]
