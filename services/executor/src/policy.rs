@@ -112,8 +112,12 @@ pub struct WorkspacePolicy {
     pub workers: Vec<String>,
     #[serde(rename = "Images")]
     pub images: Vec<String>,
+    #[serde(default, rename = "ImageReferences")]
+    pub image_references: Vec<String>,
     #[serde(rename = "Software")]
     pub software: Vec<String>,
+    #[serde(default, rename = "Programs")]
+    pub programs: Vec<String>,
     #[serde(rename = "Packages")]
     pub packages: Vec<String>,
 }
@@ -234,7 +238,8 @@ impl WorkspacePolicy {
             || !(url.scheme() == "https" || (url.scheme() == "http" && loopback)) {
             return Err(Error::Configuration("Workspace must use an exact private MCP endpoint"));
         }
-        let all = [&self.projects, &self.workers, &self.images, &self.software, &self.packages];
+        let all = [&self.projects, &self.workers, &self.images, &self.software, &self.packages,
+            &self.programs];
         if all.iter().all(|names| names.is_empty()) {
             return Err(Error::Configuration("Workspace resource policy is empty"));
         }
@@ -245,6 +250,15 @@ impl WorkspacePolicy {
                 if !valid_workspace_name(name, i == 4) || !seen.insert(name) {
                     return Err(Error::Configuration("Workspace resource policy has invalid identifiers"));
                 }
+            }
+        }
+        if self.image_references.len()>64 {
+            return Err(Error::Configuration("Workspace image reference policy exceeds limit"));
+        }
+        let mut seen = BTreeSet::new();
+        for reference in &self.image_references {
+            if !valid_workspace_image_reference(reference) || !seen.insert(reference) {
+                return Err(Error::Configuration("Workspace image references must be unique immutable digests"));
             }
         }
         Ok(())
@@ -500,7 +514,9 @@ mod tests {
             projects: vec!["research".into()],
             workers: vec!["jupiter".into()],
             images: vec!["approved-image".into()],
+            image_references: Vec::new(),
             software: Vec::new(),
+            programs: Vec::new(),
             packages: Vec::new(),
         };
         let accepted = json!({
