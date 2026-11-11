@@ -5,7 +5,7 @@ description: Develop, review, debug, refactor and organize software with product
 
 # Development
 
-Skill version: `1.5.0`.
+Skill version: `1.6.0`.
 
 
 Produce software that looks like the intended final design, not the visible history of an AI conversation.
@@ -82,7 +82,7 @@ Do not remove legitimate product functionality merely because it uses AI. Source
 
 Before deleting an existing AI-specific artifact, verify that no applicable law, license, organization policy, repository contract, or required tooling depends on it. If no such requirement exists, delete the artifact and update references to it. Never falsify provenance or rewrite published history solely to conceal a fact that must remain part of an audit, legal, or release record.
 
-Run `scripts/ai_residue_check.py` against the final repository when Python is available. The checker is a working-tree precheck, not a substitute for reviewing commit, pull-request, release, or provider metadata.
+Run `go run scripts/ai_residue_check.go` against the final repository when Go is available. The checker is a working-tree precheck, not a substitute for reviewing commit, pull-request, release, or provider metadata.
 
 ## Maintain the repository reference ledger
 
@@ -248,25 +248,27 @@ Do not narrate obvious code or the editing process.
 
 Bad:
 
-```python
-# Loop through all users
-
-for user in users:
-    ...
+```go
+// Loop through each user.
+for _, user := range users {
+    process(user)
+}
 ```
 
 Bad:
 
-```python
-# Updated implementation to use the new cache approach requested earlier.
-
+```go
+// Updated cache after the last discussion.
+cache.Refresh()
 ```
 
 Better:
 
-```python
-# Preserve insertion order because downstream signatures are order-sensitive.
-
+```go
+// Preserve insertion order because downstream signatures are order-sensitive.
+for _, entry := range entries {
+    encode(entry)
+}
 ```
 
 Keep documentation proportional to the repository's existing style.
@@ -284,7 +286,7 @@ For technical prose:
 - use approved project, industry, or subject-field technical nouns and technical verbs for necessary software terminology
 - keep source-code tokens, identifiers, protocol literals, file paths, CLI flags, URLs, schema fields, and required third-party wording unchanged unless their owning contract permits edits
 - preserve modality, uncertainty, scope, exceptions, safety conditions, numbers, units, identifiers, causal meaning, and version constraints
-- run `scripts/ste100_check.py` as a mechanical precheck when Python is available
+- run `go run scripts/ste100_check.go` as a mechanical precheck when Go is available
 - complete a rule-by-rule and dictionary review against the authoritative Issue 9 standard before calling text verified
 
 Use these compliance labels precisely:
@@ -383,6 +385,39 @@ Respect generated-file conventions. Modify the source of truth rather than hand-
 
 Do not regenerate unrelated files merely to create visible activity. Keep lockfile, formatter, snapshot, and generated-code churn limited to what the actual change requires.
 
+## Durable conversation continuity
+
+For substantial work that may outlast the model's available context, use the
+unified MCP's revisioned `continuity_checkpoint`, `continuity_status`, and
+`continuity_handoff` tools when they are available. Use an existing stable
+project or conversation key, record the exact repository branch, source commit,
+verified results, unresolved problems, and the next safe action. Save a
+checkpoint after a meaningful milestone or before a risky multi-step task, not
+only after the host begins truncating conversation history.
+
+Never present a token count as an exact ChatGPT context measurement unless a
+trusted host provides it. The MCP's usage estimate is caller-reported and may
+be unknown; do not synthesize token measurements. On a new chat, read the
+handoff and recheck current Git and tool state before resuming. The skill
+cannot create or switch ChatGPT conversations. For operational details, read
+[conversation continuity](references/conversation-continuity.md).
+
+Owner authorization and credential custody remain separate from handoffs.
+Never include bearer credentials, one-use operation tickets, session proofs,
+private files, or administrator unlock material in a checkpoint. An operation
+request ID may be retained for reconciliation, but it is not authorization to
+repeat an uncertain side effect.
+
+## Skill utility implementation
+
+Use Go (standard library by default) for repository scanners, text checks,
+JSON validation, and deterministic candidate ranking. Use Rust for a
+genuine OS-security boundary or a native performance requirement. All
+bundled command-line utilities are Go source and can run without Python.
+Execute the source with `go run` in the skill root. Do not confuse a
+tool-generated check result with independently verified security or writing
+compliance.
+
 ## Completion workflow
 
 For any code task, perform these passes as applicable:
@@ -394,8 +429,8 @@ For any code task, perform these passes as applicable:
 5. **Subtract**: review the change specifically for code or structure that can be deleted, reused, collapsed, or replaced by repository, standard-library, native-platform, or already-installed capabilities without weakening requirements.
 6. **Review the diff**: inspect the actual changed-file set for accidental churn, duplicate paths, generated noise, local-machine leakage, secrets, temporary files, or unrelated edits.
 7. **Verify correctness proportionally to risk**: run relevant tests, regression coverage, type checks, linters, builds, security checks, migration checks, or targeted runtime checks. High-risk paths such as authentication, authorization, money, data loss, concurrency, persistence, cryptography, migrations, and public API contracts require stronger evidence than trivial local changes.
-8. **Maintain references**: create or update root `REFERENCES.md`, remove stale entries, and run `scripts/references_page_check.py` when available.
-9. **Remove AI-development residue**: delete unnecessary assistant-specific files and scan the final working tree with `scripts/ai_residue_check.py` when available. Review commit, pull-request, release, and provider metadata separately for AI attribution or conversational residue.
+8. **Maintain references**: create or update root `REFERENCES.md`, remove stale entries, and run `go run scripts/references_page_check.go` when available.
+9. **Remove AI-development residue**: delete unnecessary assistant-specific files and scan the final working tree with `go run scripts/ai_residue_check.go` when available. Review commit, pull-request, release, and provider metadata separately for AI attribution or conversational residue.
 10. **Verify technical English**: when durable technical prose changed, target ASD-STE100 Issue 9, run the bundled mechanical precheck when available, and use `verified` only after the authoritative rule, dictionary, and technical-term checks pass.
 11. **Review architecture and complexity budget**: confirm the final state is simpler or at least no more complicated than necessary, and that every new dependency, abstraction, configuration surface, and file has a concrete reason to exist.
 12. **Report privately**: summarize material changes and verification in chat without injecting that report into the repository.
