@@ -148,8 +148,13 @@ fn notify_initialized() -> Result<(), String> {
 }
 
 pub async fn initialize() -> Result<(), String> {
+    let app_name = if selected_view().as_deref() == Some("learning") {
+        "Homelab Learning"
+    } else {
+        "Homelab Health"
+    };
     let result = request("ui/initialize", json!({
-        "appInfo":{"name":"Homelab Health","version":"0.1.0"},
+        "appInfo":{"name":app_name,"version":"0.1.0"},
         "appCapabilities":{"availableDisplayModes":["inline","fullscreen"]},
         "protocolVersion":PROTOCOL
     })).await?;
@@ -182,6 +187,50 @@ pub async fn call_tool<T: DeserializeOwned>(name: &str, arguments: Value) -> Res
     serde_json::from_value(value).map_err(|_| "Health returned an incompatible response".to_owned())
 }
 
+// The Learning iframe may access only domain-owned study and learner-response
+// operations. Direct grading, answer-key reads, arbitrary backend tools, and
+// privileged operations remain outside the browser capability.
+const LEARNING_APP_TOOLS: &[&str] = &[
+    "get_learning_summary", "get_graph", "get_concept",
+    "list_learning_sessions", "get_learning_session", "start_learning_session",
+    "get_pending_learning_question", "get_learning_question",
+    "answer_learning_question", "next_learning_action",
+    "recommend_session_probe", "get_reasoning_graph", "get_reasoning_chain",
+    "list_problems", "get_problem", "get_review_queue",
+    "list_learning_sources", "search_learning_sources",
+    "list_practice_sessions", "get_practice_session",
+    "preview_source_curriculum", "import_source_curriculum",
+    "propose_question_model_assessment", "propose_step_model_assessment",
+];
+
+pub async fn call_learning_tool<T: DeserializeOwned>(
+    name: &str, arguments: Value
+) -> Result<T, String> {
+    if selected_view().as_deref() != Some("learning")
+        || !LEARNING_APP_TOOLS.contains(&name) {
+        return Err("This operation is not available in the Learning App".to_owned());
+    }
+    let result = request("tools/call", json!({"name":name,"arguments":arguments})).await?;
+    if result.get("isError").and_then(Value::as_bool) == Some(true) {
+        let message = result.pointer("/content/0/text").and_then(Value::as_str)
+            .unwrap_or("Learning did not accept the request");
+        return Err(message.chars().take(240).collect());
+    }
+    let value = if let Some(content) = result.get("structuredContent") {
+        content.clone()
+    } else {
+        let text = result.pointer("/content/0/text").and_then(Value::as_str)
+            .ok_or("Learning tool returned no data")?;
+        if text.len() > MAX_REPLY {
+            return Err("Learning tool response is too large".to_owned());
+        }
+        serde_json::from_str(text)
+            .map_err(|_| "Learning returned invalid JSON")?
+    };
+    serde_json::from_value(value)
+        .map_err(|_| "Learning returned an incompatible response".to_owned())
+}
+
 fn selected_view() -> Option<String> {
     let document = web_sys::window()?.document()?;
     document.query_selector("meta[name=\"homelab-mcp-view\"]").ok()??
@@ -212,7 +261,8 @@ pub fn Embedded() -> Element {
                 Some("workout-editor") => rsx! { crate::workout_planner::WorkoutPlanner { csrf: String::new() } },
                 Some("groceries") => rsx! { crate::health_groceries::HealthGroceries { csrf: String::new() } },
                 Some("workout-companion") => rsx! { crate::workout_companion::WorkoutCompanion { csrf: String::new() } },
-                _ => rsx! { Notice { message: "Unknown Health App resource".to_owned() } },
+                Some("learning") => rsx! { crate::embedded_learning::LearningApp {} },
+                _ => rsx! { Notice { message: "Unknown MCP App resource".to_owned() } },
             }
         }
     }
