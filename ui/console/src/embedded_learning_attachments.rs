@@ -82,6 +82,7 @@ pub fn EmbeddedAttachments(owner_kind:String, owner_id:String)->Element{
     let mut files=use_signal(||None::<Value>);
     let mut download_url=use_signal(String::new);
     let mut download_name=use_signal(String::new);
+    let mut preview_mime=use_signal(String::new);
     rsx!{
         Card{
             title:"Original Learning files".to_owned(),
@@ -180,6 +181,18 @@ pub fn EmbeddedAttachments(owner_kind:String, owner_id:String)->Element{
                                             "{file.get("mime_type").and_then(Value::as_str).unwrap_or("unknown")} · "
                                             "{file.get("size_bytes").and_then(Value::as_u64).unwrap_or(0)} bytes"
                                         }
+                                        if let Some(annotations)=file.get("annotations").and_then(Value::as_array){
+                                            for (index,annotation) in annotations.iter().enumerate(){
+                                                p{key:"annotation-{index}",class:"small muted",
+                                                    {annotation.get("method").and_then(Value::as_str).unwrap_or("Annotation")}
+                                                    ": "
+                                                    {annotation.get("text").and_then(Value::as_str).unwrap_or("")}
+                                                    if let Some(uncertainty)=annotation.get("uncertainty").and_then(Value::as_str){
+                                                        " · uncertainty: {uncertainty}"
+                                                    }
+                                                }
+                                            }
+                                        }
                                         if let Some(id)=file.get("id").and_then(Value::as_str){
                                             button{class:"btn btn-outline btn-sm",r#type:"button",disabled:busy(),
                                                 onclick:{
@@ -213,6 +226,7 @@ pub fn EmbeddedAttachments(owner_kind:String, owner_id:String)->Element{
                                                                                             let _=web_sys::Url::revoke_object_url(&download_url());
                                                                                         }
                                                                                         download_url.set(url);
+                                                                                        preview_mime.set(mime.to_owned());
                                                                                         download_name.set(original.get("filename")
                                                                                             .and_then(Value::as_str).unwrap_or("original").to_owned());
                                                                                         notice.set("Original is ready for download.".to_owned());
@@ -240,8 +254,21 @@ pub fn EmbeddedAttachments(owner_kind:String, owner_id:String)->Element{
                     }
                 }
                 if !download_url().is_empty(){
+                    if preview_mime().starts_with("image/"){
+                        img{src:"{download_url()}",alt:"{download_name()}",
+                            style:"display:block;max-width:100%;max-height:420px;object-fit:contain"}
+                    }
                     a{class:"btn btn-outline",href:"{download_url()}",download:"{download_name()}",
                         "Download verified original"}
+                    button{class:"btn btn-outline",r#type:"button",
+                        onclick:move |_|{
+                            let _=web_sys::Url::revoke_object_url(&download_url());
+                            download_url.set(String::new());
+                            download_name.set(String::new());
+                            preview_mime.set(String::new());
+                        },
+                        "Close original preview"
+                    }
                 }
             }
         }
