@@ -130,7 +130,7 @@ pub fn Projects() -> Element {
     let mut data = use_resource(|| async { api::get::<Value>("/v1/engineering/projects").await });
     let mut filter = use_signal(String::new);
     let mut selected = use_signal(||None::<String>);
-    let mut jobs = use_resource(||{
+    let mut jobs = use_resource(move ||{
         let project=selected();
         async move{
             match project{
@@ -139,7 +139,7 @@ pub fn Projects() -> Element {
             }
         }
     });
-    let mut workspaces = use_resource(||{
+    let mut workspaces = use_resource(move ||{
         let project=selected();
         async move{
             match project{
@@ -148,7 +148,7 @@ pub fn Projects() -> Element {
             }
         }
     });
-    let mut artifacts = use_resource(||{
+    let mut artifacts = use_resource(move ||{
         let project=selected();
         async move{
             match project{
@@ -642,8 +642,8 @@ pub fn Media() -> Element {
                         tbody {
                             for (index,request) in records.iter().enumerate(){
                                 tr {key:"{index}",
-                                    td {"{api::property(request,&["title","name","mediaType","type"])}"}
-                                    td {class:"mono muted","{api::property(request,&["mediaId","id"])}"}
+                                    td {{api::property(request,&["title","name","mediaType","type"])}}
+                                    td {class:"mono muted",{api::property(request,&["mediaId","id"])}}
                                     td {Badge{text:api::property(request,&["status","state"])}}
                                 }
                             }
