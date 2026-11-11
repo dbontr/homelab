@@ -32,6 +32,7 @@ type ModelRoute struct {
  LocalOnly bool `json:"local_only"`
  Token string `json:"-"`
  TokenSource func()(string,error) `json:"-"`
+ ScopedTokenSource func(context.Context,string,string,json.RawMessage)(string,error) `json:"-"`
 }
 
 type ModelRouter struct {
@@ -59,10 +60,15 @@ func NewModelRouter(specs []ModelRoute)(*ModelRouter,error){
     return nil,errors.New("local-only route cannot use a remote provider")
    }
   }
-  if spec.Token!=""&&spec.TokenSource!=nil{return nil,errors.New("model route has conflicting credential sources")}
+  sources:=0
+  if spec.Token!=""{sources++}
+  if spec.TokenSource!=nil{sources++}
+  if spec.ScopedTokenSource!=nil{sources++}
+  if sources>1{return nil,errors.New("model route has conflicting credential sources")}
   author,err:=NewModelAuthor(spec.Endpoint,spec.Model,spec.Token)
   if err!=nil{return nil,err}
   author.TokenSource=spec.TokenSource
+  author.ScopedTokenSource=spec.ScopedTokenSource
   router.routes[spec.Purpose]=author
  }
  return router,nil
@@ -93,7 +99,11 @@ func (r *ModelRouter) ContinueWorkflowStages(ctx context.Context,project,objecti
 // AllowsAutomaticContinuation is an owner-visible admission check. It avoids
 // persisting plans that are guaranteed to fail at the first model continuation.
 func (r *ModelRouter) AllowsAutomaticContinuation(shareEvidence bool)bool{
- return r!=nil&&r.routes["continuation"]!=nil&&(!shareEvidence||r.routes["evidence"]!=nil)
+ if r==nil||r.routes["continuation"]==nil{return false}
+ if r.routes["continuation"].ScopedTokenSource!=nil{return false}
+ if shareEvidence&&(r.routes["evidence"]==nil||
+  r.routes["evidence"].ScopedTokenSource!=nil){return false}
+ return true
 }
 
 func (r *ModelRouter) SupportsEvidence()bool{
