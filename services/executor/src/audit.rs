@@ -60,13 +60,21 @@ pub struct Event {
     pub arguments_sha256: String,
     pub outcome: String,
     pub at: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reconciliation_sha256: Option<String>,
 }
 impl Event {
     fn valid(&self) -> bool {
         valid_hex(&self.id, 32) && valid_hex(&self.arguments_sha256, 64)
             && !self.operation.is_empty() && self.operation.len() <= 128
             && valid_host(&self.target)
-            && matches!(self.outcome.as_str(), "started" | "accepted" | "succeeded" | "failed" | "indeterminate")
+            && matches!(self.outcome.as_str(), "started" | "accepted" | "succeeded" | "failed"
+                | "indeterminate" | "reconciled")
+            && if self.outcome == "reconciled" {
+                self.reconciliation_sha256.as_deref().is_some_and(|digest| valid_hex(digest, 64))
+            } else {
+                self.reconciliation_sha256.is_none()
+            }
             && DateTime::parse_from_rfc3339(&self.at).is_ok_and(|date| date.year() > 1)
     }
 }
@@ -95,7 +103,12 @@ fn transition(seen: &BTreeMap<String, Event>, current: &Event) -> Result<(), Err
         .map_err(|_| Error::Storage("invalid audit time"))?;
     let after = DateTime::parse_from_rfc3339(&current.at)
         .map_err(|_| Error::Storage("invalid audit time"))?;
-    if prior.outcome != "started" || prior.operation != current.operation
+    let valid_prior = if current.outcome == "reconciled" {
+        matches!(prior.outcome.as_str(), "started" | "indeterminate")
+    } else {
+        prior.outcome == "started"
+    };
+    if !valid_prior || prior.operation != current.operation
         || prior.target != current.target || prior.arguments_sha256 != current.arguments_sha256
         || after < before {
         return Err(Error::Storage("contradictory audit transition"));
@@ -167,7 +180,33 @@ impl AuditJournal {
     {
         let entry = Event { id: id.into(), operation: operation.into(), target: target.into(),
             arguments_sha256: digest.into(), outcome: outcome.into(),
-            at: Utc::now().to_rfc3339() };
+            at: Utc::now().to_rfc3339(), reconciliation_sha256: None };
+        self.append_event(entry)
+    }
+
+    /// A trusted local recovery tool can append a resolution only after an
+    /// operator records separate evidence for a started or uncertain attempt.
+    pub fn reconcile(&self, id: &str, evidence_sha256: &str) -> Result<(), Error> {
+        if !valid_hex(evidence_sha256, 64) {
+            return Err(Error::Denied("invalid reconciliation evidence digest"));
+        }
+        let original = {
+            let journal = self.inner.lock().unwrap_or_else(|_| std::process::abort());
+            if journal.faulted { return Err(Error::Storage("audit journal is in an uncertain state")); }
+            journal.seen.get(id).cloned().ok_or(Error::Denied("audit attempt not found"))?
+        };
+        if !matches!(original.outcome.as_str(), "started" | "indeterminate") {
+            return Err(Error::Denied("audit attempt is already resolved"));
+        }
+        self.append_event(Event {
+            id: original.id, operation: original.operation, target: original.target,
+            arguments_sha256: original.arguments_sha256, outcome: "reconciled".into(),
+            at: Utc::now().to_rfc3339(),
+            reconciliation_sha256: Some(evidence_sha256.into()),
+        })
+    }
+
+    fn append_event(&self, entry: Event) -> Result<(), Error> {
         if !entry.valid() { return Err(Error::Denied("invalid audit event")); }
         let raw = serde_json::to_vec(&entry).map_err(|_| Error::Storage("audit encoding failed"))?;
         if raw.len() > 1024 { return Err(Error::Storage("audit record too large")); }
@@ -220,6 +259,7 @@ mod tests {
             arguments_sha256: "a".repeat(64),
             outcome: outcome.into(),
             at: "2026-11-10T18:00:00Z".into(),
+            reconciliation_sha256: None,
         }
     }
 
