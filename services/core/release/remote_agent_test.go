@@ -84,6 +84,42 @@ func TestRemoteAgentAuthenticatesTransportAndScopesArguments(t *testing.T){
  if err:=agent.Activate(context.Background(),"../../etc/passwd");err==nil{t.Fatal("unscoped release ID accepted")}
 }
 
+func TestRemoteReleaseAgentPreservesCallerIdentityAndChecksReceipt(t *testing.T){
+ releaseID:=strings.Repeat("a",48)
+ requestID:=strings.Repeat("b",32)
+ calls:=0
+ mismatch:=false
+ handler:=http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){
+  calls++
+  var input struct{RequestID string `json:"request_id"`}
+  if err:=json.NewDecoder(r.Body).Decode(&input);err!=nil||input.RequestID!=requestID{
+   t.Error("remote agent changed caller request identity",err)
+  }
+  receipt:=requestID
+  if mismatch{receipt=strings.Repeat("c",32)}
+  w.Header().Set("Content-Type","application/json")
+  _=json.NewEncoder(w).Encode(map[string]any{
+   "allowed":true,"state":"completed","audit_id":receipt,
+  })
+ })
+ cfg,closeServer:=remoteFixture(t,handler)
+ defer closeServer()
+ agent,err:=NewRemoteReleaseAgent(cfg)
+ if err!=nil{t.Fatal(err)}
+ for i:=0;i<2;i++{
+  if err:=agent.ActivateWithID(context.Background(),requestID,releaseID);err!=nil{t.Fatal(err)}
+ }
+ if calls!=2{t.Fatal("explicit request ID was not propagated")}
+ mismatch=true
+ if err:=agent.RevertWithID(context.Background(),requestID,releaseID);err==nil{
+  t.Fatal("unrelated audit receipt was accepted")
+ }
+ if err:=agent.ActivateWithID(context.Background(),"bad-id",releaseID);err==nil{
+  t.Fatal("invalid request ID reached host")
+ }
+ if calls!=3{t.Fatal("bad request identity contacted host")}
+}
+
 func TestRemoteAgentFailsClosedWithoutIdentityOrTrust(t *testing.T){
  cfg,closeServer:=remoteFixture(t,http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){_,_=w.Write([]byte(`{"allowed":true}`))}))
  defer closeServer()
