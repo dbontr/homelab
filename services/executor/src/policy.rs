@@ -101,6 +101,14 @@ fn valid_workspace_name(value: &str, package: bool) -> bool {
             || (package && c == b'+'))
 }
 
+// Controller resource IDs are not interchangeable with host and job names.
+fn valid_workspace_resource_id(value: &str) -> bool {
+    value.len()>=2 && value.len()<=63
+        && value.as_bytes()[0].is_ascii_lowercase()
+        && value.bytes().all(|b| b.is_ascii_lowercase()
+            || b.is_ascii_digit() || b==b'-')
+}
+
 fn valid_workspace_device_identity(value: &str) -> bool {
     !value.is_empty() && value.len() <= 128
         && value.as_bytes()[0].is_ascii_alphanumeric()
@@ -408,10 +416,10 @@ impl WorkspacePolicy {
             if names.len() > 64 { return Err(Error::Configuration("Workspace resource policy too large")); }
             let mut seen = BTreeSet::new();
             for name in names {
-                let accepted = if i == 6 {
-                    valid_workspace_device_identity(name)
-                } else {
-                    valid_workspace_name(name, i == 4)
+                let accepted = match i {
+                    4 => valid_workspace_name(name, true),
+                    6 => valid_workspace_device_identity(name),
+                    _ => valid_workspace_resource_id(name),
                 };
                 if !accepted || !seen.insert(name) {
                     return Err(Error::Configuration("Workspace resource policy has invalid identifiers"));
