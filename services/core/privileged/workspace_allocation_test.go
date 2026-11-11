@@ -7,6 +7,7 @@ func TestWorkspaceAllocationRequiresOperatorResourceLists(t *testing.T){
         Projects:[]string{"research"},
         Images:[]string{"approved-image"},
         Workers:[]string{"jupiter"},
+        Devices:[]string{"jtag"},
     }
     accepted:=map[string]any{
         "host":"saturn","project_id":"research",
@@ -56,5 +57,18 @@ func TestWorkspaceAllocationRequiresOperatorResourceLists(t *testing.T){
     device["usb_node"]="outside"
     if _,_,err:=policy.operationArgs("infrastructure__workspace_create",device);err==nil{
         t.Fatal("unapproved USB worker was accepted")
+    }
+    device["usb_node"]="jupiter"
+    device["usb_device_id"]="unlisted"
+    if _,_,err:=policy.operationArgs("infrastructure__workspace_create",device);err==nil{
+        t.Fatal("unapproved USB device was accepted")
+    }
+    delete(device,"usb_passthrough")
+    delete(device,"usb_node")
+    delete(device,"usb_device_id")
+    device["hardware"]=map[string]any{"fpga":1}
+    device["node_id"]=""
+    if _,_,err:=policy.operationArgs("infrastructure__workspace_create",device);err==nil{
+        t.Fatal("FPGA claim without an approved exact worker was accepted")
     }
 }
