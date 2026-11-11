@@ -73,8 +73,8 @@ fn checked_lsblk(binary: &str, flags: &[&str], device: &Path) -> Result<String, 
 }
 
 fn disk_unused(device: &Path) -> Result<(), &'static str> {
-    let binary = env::var("HOMELAB_NATIVE_LSBLK")
-        .unwrap_or_else(|_| "/run/current-system/sw/bin/lsblk".to_owned());
+    let binary = option_env!("HOMELAB_NATIVE_LSBLK_BIN")
+        .ok_or("trusted USB disk inspector is not packaged")?;
     if checked_lsblk(&binary, &["-dnro", "TYPE"], device)?.trim() != "disk" {
         return Err("USB mapping must identify a whole disk");
     }
