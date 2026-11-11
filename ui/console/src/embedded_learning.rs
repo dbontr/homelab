@@ -259,11 +259,36 @@ pub fn LearningApp() -> Element {
             }
         }
         if panel()==Panel::Question {
-            EmbeddedAnswer {
-                question:result(),
-                on_saved:move |_|{
-                    result.set(None);
-                    notice.set("The original response was saved. An independent assessment remains necessary.".to_owned());
+            if let Some(question)=result(){
+                if question.get("concept").is_some() &&
+                    question.get("question").and_then(Value::as_str).is_some() &&
+                    question.get("status").is_none(){
+                    crate::embedded_learning_workflows::OpenQuestion{
+                        question:question.clone()
+                    }
+                }else{
+                    EmbeddedAnswer {
+                        question:Some(question.clone()),
+                        on_saved:move |record:Value|{
+                            result.set(Some(record));
+                            notice.set("Learner answer recorded. Independent grading is required.".to_owned());
+                        }
+                    }
+                }
+                if let Some(session_id)=question.get("session_id").and_then(Value::as_str){
+                    if valid_identity(session_id) {
+                        button{class:"btn btn-outline",r#type:"button",
+                            onclick:{
+                                let session_id=session_id.to_owned();
+                                move |_|{
+                                    panel.set(Panel::Sessions);
+                                    selected_id.set(session_id.clone());
+                                    result.set(None);
+                                }
+                            },
+                            "Return to learning session"
+                        }
+                    }
                 }
             }
         }
@@ -546,8 +571,22 @@ fn EmbeddedProblem(problem:Option<Value>)->Element {
     }
 }
 
+// The host owns grading. The browser forwards only an identifier for an
+// already committed learner response, never a correct option or sealed rubric.
+fn committed_question_review_request(record:&Value)->Result<Value,String>{
+    let id=record.get("id").and_then(Value::as_str).unwrap_or("");
+    if !valid_identity(id)||record.get("status").and_then(Value::as_str)!=Some("answered"){
+        return Err("Only an answered committed question can be graded.".to_owned());
+    }
+    Ok(json!({"role":"user","content":[{"type":"text",
+        "text":format!(
+            "Grade committed Adaptive Teaching question {id}. Read the saved answer, its committed hidden key, and its learner-authored explanation through the Learning service. Evaluate the option and reasoning independently. Call grade_learning_question with supported verdicts and evaluation. This diagnostic grade does not automatically award durable mastery."
+        )
+    }]}))
+}
+
 #[component]
-fn EmbeddedAnswer(question: Option<Value>,on_saved:EventHandler<()>) -> Element {
+fn EmbeddedAnswer(question: Option<Value>,on_saved:EventHandler<Value>) -> Element {
     let mut model_consent=use_signal(||false);
     let mut model_proposal=use_signal(||None::<Value>);
     let mut answer=use_signal(String::new);
@@ -556,6 +595,7 @@ fn EmbeddedAnswer(question: Option<Value>,on_saved:EventHandler<()>) -> Element 
     let mut assisted=use_signal(||false);
     let mut busy=use_signal(||false);
     let mut error=use_signal(String::new);
+    let mut grading_status=use_signal(String::new);
     let Some(question)=question else {return rsx!{}};
     let id=field(&question,&["id"]);
     let status=field(&question,&["status"]);
@@ -567,8 +607,32 @@ fn EmbeddedAnswer(question: Option<Value>,on_saved:EventHandler<()>) -> Element 
             description:"A correct option without supported reasoning is not evidence of mastery.".to_owned(),
             div{class:"card-body stack",
                 p{ {field(&question,&["prompt"])} }
+                if !error().is_empty(){Notice{message:error()}}
+                if !grading_status().is_empty(){
+                    p{class:"small muted",role:"status","{grading_status()}"}
+                }
                 if status=="answered"{
                     div{class:"alert",role:"status","Response saved. Await independent assessment."}
+                    button {class:"btn btn-outline",r#type:"button",disabled:busy(),
+                        onclick:{
+                            let record=question.clone();
+                            move |_|{
+                                if busy(){return}
+                                let request=match committed_question_review_request(&record){
+                                    Ok(v)=>v,Err(msg)=>{error.set(msg);return}
+                                };
+                                busy.set(true);error.set(String::new());
+                                spawn(async move{
+                                    match mcp_app::request("ui/message",request).await{
+                                        Ok(_)=>grading_status.set(
+                                            "Grading requested from the MCP host. Reload the record to inspect the recorded verdict.".to_owned()),
+                                        Err(msg)=>error.set(msg),
+                                    }
+                                    busy.set(false);
+                                });
+                            }
+                        },"Request independent grading"
+                    }
                     p{ {field(&question,&["learner_response"])} }
                     p{class:"small muted",{field(&question,&["learner_reasoning"])}}
                     label{class:"inline-row",
@@ -605,10 +669,23 @@ fn EmbeddedAnswer(question: Option<Value>,on_saved:EventHandler<()>) -> Element 
                             "{serde_json::to_string_pretty(&value).unwrap_or_default()}"
                         }
                     }
+                }else if status=="graded"{
+                    div{class:"alert",role:"status",
+                        strong{"Recorded assessment"}
+                        p{"Answer: " {field(&question,&["verdict"])}}
+                        p{"Reasoning: " {field(&question,&["reasoning_verdict"])}}
+                        p{{field(&question,&["evaluation"])}}
+                        if let Some(explanation)=question.get("reasoning_evaluation")
+                            .and_then(Value::as_str){
+                            p{"{explanation}"}
+                        }
+                    }
+                    p{class:"small muted",
+                        "A recorded diagnostic result is not sufficient evidence of long-term mastery."
+                    }
                 }else if status!="pending" {
                     p{class:"small muted","This question is not awaiting a learner answer."}
                 }else{
-                    if !error().is_empty(){Notice{message:error()}}
                     form{
                         class:"task-editor-fields",
                         onsubmit:{
@@ -633,7 +710,21 @@ fn EmbeddedAnswer(question: Option<Value>,on_saved:EventHandler<()>) -> Element 
                                 spawn(async move{
                                     match mcp_app::call_learning_tool::<Value>(
                                         "answer_learning_question",params).await{
-                                        Ok(_)=>on_saved.call(()),
+                                        Ok(saved)=>{
+                                            on_saved.call(saved.clone());
+                                            match committed_question_review_request(&saved){
+                                                Ok(request)=>{
+                                                    match mcp_app::request("ui/message",request).await{
+                                                        Ok(_)=>grading_status.set(
+                                                            "Grading requested from the MCP host.".to_owned()),
+                                                        Err(message)=>error.set(
+                                                            format!("Answer saved; grading request was not sent: {message}")),
+                                                    }
+                                                }
+                                                Err(message)=>error.set(
+                                                    format!("Answer saved; grading request could not be prepared: {message}")),
+                                            }
+                                        }
                                         Err(message)=>error.set(message),
                                     }
                                     busy.set(false);
@@ -1010,6 +1101,18 @@ fn EmbeddedSource(source_id:String)->Element{
 #[cfg(test)]
 mod tests{
     use super::*;
+    #[test]
+    fn grading_request_uses_only_committed_question_identity() {
+        let value=json!({"id":"question_12","status":"answered",
+            "learner_response":"A","sealed_key":"B"});
+        let request=committed_question_review_request(&value).unwrap();
+        let text=request.pointer("/content/0/text").and_then(Value::as_str).unwrap();
+        assert!(text.contains("question_12"));
+        assert!(!text.contains("sealed_key"));
+        assert!(committed_question_review_request(
+            &json!({"id":"question_12","status":"pending"})).is_err());
+    }
+
     #[test]
     fn problem_review_request_is_bound_to_immutable_draft() {
         let problem=json!({
