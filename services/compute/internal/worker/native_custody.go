@@ -32,7 +32,7 @@ func nativeCustodyCommand(ctx context.Context, verb string, args ...string) (str
     if ctx==nil {return "",errors.New("device custody requires a request context")}
     cmdCtx,cancel:=context.WithTimeout(ctx,20*time.Second)
     defer cancel()
-    argv:=append([]string{verb},args...)
+    argv:=append([]string{"custody-v1",verb},args...)
     command:=exec.CommandContext(cmdCtx,binary,argv...)
     command.Env=[]string{"LC_ALL=C"}
     for _,pair:=range []struct{source,target string}{
@@ -51,7 +51,33 @@ func nativeCustodyCommand(ctx context.Context, verb string, args ...string) (str
     if err!=nil||len(output)>512{
         return "",fmt.Errorf("native device %s failed",verb)
     }
-    return strings.TrimSpace(string(output)),nil
+    wire:=strings.TrimSpace(string(output))
+    if !strings.HasPrefix(wire,"custody-v1\n"){
+        return "",errors.New("native device custody returned an incompatible protocol version")
+    }
+    payload:=strings.TrimPrefix(wire,"custody-v1\n")
+    switch verb {
+    case "acquire-device","verify-device":
+        fields:=strings.Split(payload,"\n")
+        if len(fields)!=2||!filepath.IsAbs(fields[0])||
+            !strings.HasPrefix(fields[0],"/dev/"){
+            return "",errors.New("native device custody returned invalid device identity")
+        }
+        if _,err:=strconv.ParseUint(fields[1],10,32);err!=nil{
+            return "",errors.New("native device custody returned invalid device group")
+        }
+    case "verify-workspace","release-workspace":
+        if _,err:=strconv.ParseUint(payload,10,16);err!=nil{
+            return "",errors.New("native device custody returned invalid count")
+        }
+    case "release-device":
+        if payload!="released"{
+            return "",errors.New("native device custody did not confirm the exact release")
+        }
+    default:
+        return "",errors.New("unknown native custody action")
+    }
+    return payload,nil
 }
 
 func approvedDeviceClaims(claims []DeviceClaim,devices []Device,allowUSB bool) ([]nativeDeviceLease,error){
