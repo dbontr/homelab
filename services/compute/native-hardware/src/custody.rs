@@ -15,7 +15,7 @@ fn valid_workspace(value: &str) -> bool {
 
 fn directory() -> Result<PathBuf, &'static str> {
     let path = env::var("HOMELAB_NATIVE_CUSTODY_DIR")
-        .unwrap_or_else(|_| "/run/homelab-device-leases".to_owned());
+        .unwrap_or_else(|_| "/var/lib/homelab-device-leases".to_owned());
     if path != "/run/homelab-device-leases" &&
         path != "/var/lib/homelab-device-leases" {
         return Err("device custody must use an operator-owned state directory");
