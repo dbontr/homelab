@@ -48,6 +48,13 @@ func(c *RemoteAuthorizationClient)Authorize(ctx context.Context,operation,target
  return c.requestDecision(ctx,"/v1/authorize",operation,target,arguments)
 }
 
+// Replay validates the current owner and resource scope without consuming a
+// destructive confirmation. Only a matching durable executor record can turn
+// this read-only decision into a recorded execution disposition.
+func(c *RemoteAuthorizationClient)Replay(ctx context.Context,operation,target string,arguments json.RawMessage)(Authorization,error){
+ return c.requestDecision(ctx,"/v1/replay",operation,target,arguments)
+}
+
 // Preview consults the same independent policy without consuming approval.
 func(c *RemoteAuthorizationClient)Preview(ctx context.Context,operation,target string,arguments json.RawMessage)(Authorization,error){
  return c.requestDecision(ctx,"/v1/preview",operation,target,arguments)
@@ -172,6 +179,7 @@ func(a *AdminSessions)ServeAuthorizationTLS(ctx context.Context,address string,s
  mux:=http.NewServeMux()
  mux.Handle("POST /v1/authorize",authorizedOperation)
  mux.Handle("POST /v1/preview",authorizedOperation)
+ mux.Handle("POST /v1/replay",authorizedOperation)
  mux.Handle("POST /v1/service-credentials/{alias}",a.ServiceCredentialHandler())
  server:=&http.Server{Handler:mux,ReadHeaderTimeout:5*time.Second,ReadTimeout:10*time.Second,WriteTimeout:10*time.Second}
  stopped:=make(chan struct{})
