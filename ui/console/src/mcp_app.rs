@@ -395,6 +395,35 @@ mod tests {
     use super::*;
 
     #[test]
+    fn learning_app_retains_all_legacy_study_operations_without_grading_authority() {
+        let legacy_tools=[
+            "advance_learning_session","answer_learning_question",
+            "build_learning_plan","get_attachment","get_concept",
+            "get_confidence_calibration","get_graph","get_learning_question",
+            "get_learning_session","get_practice_session","get_problem",
+            "get_problem_solution","get_proposition","get_reasoning_chain",
+            "get_reasoning_graph","get_review_queue","get_translation_reviews",
+            "list_attachments","list_learning_sessions","list_learning_sources",
+            "list_practice_sessions","list_problems","next_extraction",
+            "recommend_practice","recommend_session_probe","save_problem_draft",
+            "set_learning_target","upload_attachment"
+        ];
+        for name in legacy_tools {
+            assert!(LEARNING_APP_TOOLS.contains(&name),
+                "the embedded Learning interface cannot invoke {name}");
+        }
+        for denied in [
+            "grade_learning_question","finish_problem","record_assessment",
+            "record_learning_step","open_learning_question","record_problem_hint",
+            "audit_extraction","review_reasoning_chain","inspect_attachment",
+            "infrastructure__workspace_create",
+        ] {
+            assert!(!LEARNING_APP_TOOLS.contains(&denied),
+                "Learning UI acquired server-owned assessment or execution power: {denied}");
+        }
+    }
+
+    #[test]
     fn host_requests_are_bounded() {
         assert_eq!(PROTOCOL, "2026-01-26");
         assert!(MAX_PENDING <= 32);
