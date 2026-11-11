@@ -102,13 +102,27 @@ func name(id string) (string, error) {
 	return "pwm-" + id, nil
 }
 
+// Docker custody and the native release verifier must inspect the same
+// local daemon. Explicit CLI selection overrides a configured remote
+// context when raw hardware passthrough is enabled.
+func dockerInvocationArgs(args ...string) []string {
+    if !nativeCustodySelected(){return args}
+    pinned:=make([]string,0,len(args)+2)
+    pinned=append(pinned,"--host","unix:///var/run/docker.sock")
+    return append(pinned,args...)
+}
+
 func (r *Runner) docker(ctx context.Context, timeout time.Duration, input io.Reader, args ...string) ([]byte, []byte, int, error) {
 	if _, err := exec.LookPath("docker"); err != nil {
 		return nil, nil, -1, errors.New("Docker is not installed")
 	}
 	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	cmd := exec.CommandContext(runCtx, "docker", args...)
+	cmd := exec.CommandContext(runCtx, "docker", dockerInvocationArgs(args...)...)
+    if nativeCustodySelected(){
+        cmd.Env=append(os.Environ(),
+            "DOCKER_HOST=unix:///var/run/docker.sock","DOCKER_CONTEXT=")
+    }
 	cmd.Stdin = input
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &limitWriter{Writer: &stdout, Limit: 512 * 1024}
@@ -331,7 +345,11 @@ func (r *Runner) streamDocker(ctx context.Context, input io.Reader, args ...stri
 	os.Remove(file.Name()) // anonymous temporary data; never persists in the source tree
 	runCtx, cancel := context.WithTimeout(ctx, 2*time.Hour)
 	defer cancel()
-	cmd := exec.CommandContext(runCtx, "docker", args...)
+	cmd := exec.CommandContext(runCtx, "docker", dockerInvocationArgs(args...)...)
+    if nativeCustodySelected(){
+        cmd.Env=append(os.Environ(),
+            "DOCKER_HOST=unix:///var/run/docker.sock","DOCKER_CONTEXT=")
+    }
 	cmd.Stdin = input
 	var stderr bytes.Buffer
 	cmd.Stderr = &limitWriter{Writer: &stderr, Limit: 4096}
