@@ -240,7 +240,9 @@ func (e *Executor) Execute(ctx context.Context, operation, target string, args j
 		outcome = "succeeded"
 	}
 	if err != nil {
-		outcome = "failed"
+		// A command can have applied its side effect before reporting failure.
+		// The caller must reconcile this attempt before retrying.
+		outcome = "indeterminate"
 	}
 	if auditErr := e.cfg.Audit.Record(auditID, operation, target, argumentDigest, outcome); auditErr != nil {
 		return deny("privileged outcome is uncertain: audit unavailable"), errors.Join(err, auditErr)
