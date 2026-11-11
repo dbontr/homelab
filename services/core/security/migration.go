@@ -51,12 +51,62 @@ func validMigrationHex(value string, size int) bool {
 }
 
 func migrationJSON(raw []byte, target any) error {
+    // Go's JSON struct decoder accepts case-insensitive field names and
+    // duplicate keys. The Rust authority rejects both, so parse the exact
+    // field set before decoding a shared migration or replay record.
+    var expected []string
+    var required []string
+    switch target.(type){
+    case *migrationReceipt:
+        expected=[]string{"version","target","authenticator_sha256",
+            "vault_sha256","parent_marker_sha256","nonce"}
+        required=[]string{"version","target","authenticator_sha256","nonce"}
+    case *migrationSelection:
+        expected=[]string{"version","target","receipt_sha256"}
+        required=expected
+    case *authenticatorState:
+        expected=[]string{"version","last_totp_step","failures","locked_until"}
+        required=expected
+    default:
+        return errors.New("unsupported migration record")
+    }
+    allowed:=make(map[string]bool,len(expected))
+    for _,name:=range expected{allowed[name]=true}
     decoder:=json.NewDecoder(bytes.NewReader(raw))
-    decoder.DisallowUnknownFields()
-    if err:=decoder.Decode(target);err!=nil{return err}
+    first,err:=decoder.Token()
+    if err!=nil||first!=json.Delim('{'){
+        return errors.New("migration record must be an object")
+    }
+    seen:=make(map[string]bool,len(expected))
+    for decoder.More(){
+        token,err:=decoder.Token()
+        if err!=nil{return err}
+        name,ok:=token.(string)
+        if !ok||!allowed[name]||seen[name]{
+            return errors.New("unknown or repeated migration record field")
+        }
+        seen[name]=true
+        var value json.RawMessage
+        if err:=decoder.Decode(&value);err!=nil{return err}
+        if bytes.Equal(value,[]byte("null"))&&
+            name!="vault_sha256"&&name!="parent_marker_sha256"{
+            return errors.New("required migration field cannot be null")
+        }
+    }
+    last,err:=decoder.Token()
+    if err!=nil||last!=json.Delim('}'){
+        return errors.New("migration object is not closed")
+    }
     var remaining any
-    if err:=decoder.Decode(&remaining);err!=io.EOF{return errors.New("trailing migration data")}
-    return nil
+    if err:=decoder.Decode(&remaining);err!=io.EOF{
+        return errors.New("trailing migration data")
+    }
+    for _,name:=range required{
+        if !seen[name]{return errors.New("required migration field missing")}
+    }
+    strict:=json.NewDecoder(bytes.NewReader(raw))
+    strict.DisallowUnknownFields()
+    return strict.Decode(target)
 }
 
 func protectedMigrationFile(path string, limit int) ([]byte,bool,error) {
