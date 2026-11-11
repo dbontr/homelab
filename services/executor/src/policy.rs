@@ -101,6 +101,157 @@ fn valid_workspace_name(value: &str, package: bool) -> bool {
             || (package && c == b'+'))
 }
 
+fn valid_workspace_image_reference(reference: &str) -> bool {
+    let Some((name,digest)) = reference.split_once("@sha256:") else { return false };
+    name.len()>=3 && name.len()<=190 && digest.len()==64
+        && !name.starts_with('/') && !name.ends_with('/')
+        && !name.contains("//")
+        && name.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit()
+            || matches!(b,b'.'|b'/'|b'_'|b'-'|b':'))
+        && digest.bytes().all(|b|b.is_ascii_digit()||(b'a'..=b'f').contains(&b))
+}
+
+fn valid_workspace_program_metadata(platform:&str,distribution:&str,source_url:&str)->bool{
+    match platform {
+        "linux-container" if distribution=="apt" || distribution=="oci" => {},
+        "windows-native" | "macos-native" if distribution=="native" => {},
+        _ => return false,
+    }
+    let Ok(url)=Url::parse(source_url) else {return false};
+    source_url.len()<=512 && url.scheme()=="https" && url.host_str().is_some()
+        && url.username().is_empty() && url.password().is_none()
+        && url.fragment().is_none()
+        && !source_url.bytes().any(|c|c==0||c.is_ascii_whitespace()||c==b'\\')
+}
+
+fn valid_workspace_catalog_keys(fields:&Map<String,Value>, allowed:&[&str])->bool{
+    fields.keys().all(|key|key=="host"||allowed.contains(&key.as_str()))
+}
+
+#[derive(serde::Serialize,serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct WorkspaceCatalogAction {
+    host: String,
+    #[serde(default)] image_id:String,
+    #[serde(default)] image:String,
+    #[serde(default)] architecture:String,
+    #[serde(default)] description:String,
+    #[serde(default)] id:String,
+    #[serde(default)] name:String,
+    #[serde(default)] version:String,
+    #[serde(default)] platform:String,
+    #[serde(default)] distribution:String,
+    #[serde(default)] source_url:String,
+    #[serde(default)] license_notes:String,
+    #[serde(default)] review_note:String,
+    #[serde(default)] status:String,
+    #[serde(default)] pool_kind:String,
+    #[serde(default)] pool_id:String,
+    #[serde(default)] kind:String,
+    #[serde(default)] reason:String,
+    #[serde(default)] expected_revision:u32,
+}
+
+impl WorkspaceCatalogAction {
+    fn validated(policy:&WorkspacePolicy,action:&str,fields:&Map<String,Value>)
+        -> Result<(String,Value),Error>
+    {
+        if serde_json::to_vec(fields).map_err(|_|Error::Denied("invalid catalog JSON"))?
+            .len()>16<<10 {
+            return Err(Error::Denied("Workspace catalog request exceeds limit"));
+        }
+        let input:Self=serde_json::from_value(Value::Object(fields.clone()))
+            .map_err(|_|Error::Denied("invalid Workspace catalog arguments"))?;
+        if !valid_workspace_name(&input.host,false){
+            return Err(Error::Denied("exact executor host required"));
+        }
+        let allowed_id = |id:&str,items:&Vec<String>| -> bool {
+            valid_workspace_name(id,false) && items.iter().any(|s|s==id)
+        };
+        match action {
+            "infrastructure__workspace_register_image" =>{
+                if !valid_workspace_catalog_keys(fields,&["image_id","image","description","architecture"])
+                    || !allowed_id(&input.image_id,&policy.images)
+                    || !valid_workspace_image_reference(&input.image)
+                    || !policy.image_references.contains(&input.image)
+                    || input.description.len()>512
+                    || !matches!(input.architecture.as_str(),""|"amd64"|"arm64"){
+                    return Err(Error::Denied("image is outside exact operator catalog"));
+                }
+                Ok(("pool_register_image".into(),serde_json::json!({
+                    "image_id":input.image_id,"image":input.image,
+                    "architecture":input.architecture,"description":input.description
+                })))
+            }
+            "infrastructure__workspace_propose_program"=>{
+                if !valid_workspace_catalog_keys(fields,
+                    &["id","name","description","version","platform","distribution","source_url","license_notes"])
+                    || !allowed_id(&input.id,&policy.programs)
+                    || input.name.trim().is_empty()||input.name.len()>128
+                    || input.description.len()>1024||input.version.len()>64
+                    || input.license_notes.len()>1024
+                    || !valid_workspace_program_metadata(
+                        &input.platform,&input.distribution,&input.source_url) {
+                    return Err(Error::Denied("program proposal outside operator policy"));
+                }
+                Ok(("pool_propose_program".into(),serde_json::json!({
+                    "id":input.id,"name":input.name,"description":input.description,
+                    "version":input.version,"platform":input.platform,
+                    "distribution":input.distribution,"source_url":input.source_url,
+                    "license_notes":input.license_notes
+                })))
+            }
+            "infrastructure__workspace_review_program"=>{
+                let status=input.status.as_str();
+                let valid_status=matches!(status,"reviewed"|"available"|"disabled"|"rejected"|"retired");
+                let valid_pool=if status=="available" {
+                    match input.pool_kind.as_str() {
+                        "image"=>allowed_id(&input.pool_id,&policy.images),
+                        "software"=>allowed_id(&input.pool_id,&policy.software),
+                        _=>false,
+                    }
+                } else {
+                    input.pool_kind.is_empty()&&input.pool_id.is_empty()
+                };
+                if !valid_workspace_catalog_keys(fields,
+                    &["id","status","review_note","pool_kind","pool_id","expected_revision"])
+                    || !allowed_id(&input.id,&policy.programs)
+                    || input.expected_revision==0||input.expected_revision>1_000_000
+                    || input.review_note.trim().is_empty()||input.review_note.len()>512
+                    || !valid_status||!valid_pool {
+                    return Err(Error::Denied("program review outside operator policy"));
+                }
+                Ok(("pool_review_program".into(),serde_json::json!({
+                    "id":input.id,"status":input.status,
+                    "review_note":input.review_note,
+                    "pool_kind":input.pool_kind,"pool_id":input.pool_id,
+                    "expected_revision":input.expected_revision,
+                })))
+            }
+            "infrastructure__workspace_update_entry"=>{
+                let valid_entry=match input.kind.as_str(){
+                    "image"=>allowed_id(&input.id,&policy.images),
+                    "software"=>allowed_id(&input.id,&policy.software),
+                    _=>false,
+                };
+                if !valid_workspace_catalog_keys(fields,
+                    &["kind","id","status","reason","expected_revision"])
+                    || !valid_entry || input.expected_revision==0
+                    || input.expected_revision>1_000_000
+                    || input.reason.trim().is_empty()||input.reason.len()>512
+                    || !matches!(input.status.as_str(),"active"|"disabled"|"retired"){
+                    return Err(Error::Denied("catalog transition outside operator policy"));
+                }
+                Ok(("pool_update_entry".into(),serde_json::json!({
+                    "kind":input.kind,"id":input.id,"status":input.status,
+                    "reason":input.reason,"expected_revision":input.expected_revision,
+                })))
+            }
+            _=>Err(Error::Denied("unregistered Workspace catalog action")),
+        }
+    }
+}
+
 #[derive(Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct WorkspacePolicy {
@@ -274,6 +425,12 @@ impl WorkspacePolicy {
             Ok(value)
         };
         let value = match name {
+            "infrastructure__workspace_register_image"
+            | "infrastructure__workspace_propose_program"
+            | "infrastructure__workspace_review_program"
+            | "infrastructure__workspace_update_entry" =>{
+                return WorkspaceCatalogAction::validated(self,name,fields);
+            }
             "infrastructure__workspace_create" => {
                 let request = WorkspaceAllocation::checked(fields,self)?;
                 ("workspace_create",request)
