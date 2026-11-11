@@ -5,6 +5,7 @@ import (
     "io"
     "math"
     "net/http"
+    "net/url"
     "strings"
 
     "github.com/dbontr/homelab-new/system/security"
@@ -248,6 +249,17 @@ func validImmutableImage(image string) bool {
     return true
 }
 
+func validConsoleProgramDistribution(platform,distribution string)bool{
+    return platform=="linux-container"&&(distribution=="apt"||distribution=="oci")||
+        (platform=="windows-native"||platform=="macos-native")&&distribution=="native"
+}
+func validConsoleProgramSource(raw string)bool{
+    if len(raw)>512||strings.ContainsAny(raw," \t\n\r\\") {return false}
+    uri,err:=url.Parse(raw)
+    return err==nil&&uri.Scheme=="https"&&uri.Hostname()!=""&&
+        uri.User==nil&&uri.Fragment==""
+}
+
 func catalogID(id string) bool {
     return id!=""&&len(id)<=80&&id[0]>='a'&&id[0]<='z'&&
         strings.IndexFunc(id,func(r rune)bool{
@@ -260,71 +272,96 @@ func (s *Server) uiComputeCatalog(w http.ResponseWriter,r *http.Request){
     if err:=decodeComputeRequest(w,r,&in);err!=nil{
         writeError(w,400,"invalid Compute catalog request");return
     }
+    if !consoleProjectID.MatchString(in.Host) {
+        writeError(w,400,"independent executor host is required")
+        return
+    }
     operation:=r.PathValue("operation")
+    action:=map[string]any{"host":in.Host}
     tool:=""
-    var args any
     switch operation{
     case "register-image":
-        if !catalogID(in.ID)||len(in.Image)>256||in.Image==""||len(in.Description)>2000||
-            !validImmutableImage(in.Image){
-            writeError(w,400,"register an immutable image digest and valid catalog ID");return
+        if !catalogID(in.ID)||len(in.Image)>256||len(in.Description)>512||
+            !validImmutableImage(in.Image)||
+            in.Architecture!=""&&in.Architecture!="amd64"&&in.Architecture!="arm64"{
+            writeError(w,400,"image registration requires an approved immutable digest");return
         }
-        tool="pool_register_image"
-        args=map[string]any{"image_id":in.ID,"image":in.Image,
-            "description":in.Description,"architecture":in.Architecture}
+        tool="infrastructure__workspace_register_image"
+        action["image_id"]=in.ID
+        action["image"]=in.Image
+        action["description"]=in.Description
+        action["architecture"]=in.Architecture
     case "register-software":
-        if !consoleProjectID.MatchString(in.Host)||
-           !catalogID(in.ID)||!catalogID(in.ImageID)||len(in.Packages)==0||len(in.Packages)>64||
-           len(in.Description)>512{
+        if !catalogID(in.ID)||!catalogID(in.ImageID)||len(in.Packages)==0||
+            len(in.Packages)>64||len(in.Description)>512{
             writeError(w,400,"invalid software collection");return
         }
         for _,pkg:=range in.Packages{
-            if pkg==""||len(pkg)>128||strings.ContainsAny(pkg," \t\n\r;/$"){
+            if pkg==""||len(pkg)>80||strings.ContainsAny(pkg," \t\r\n;/$"){
                 writeError(w,400,"invalid package name");return
             }
         }
-        action:=map[string]any{"host":in.Host,"software_id":in.ID,
-            "image_id":in.ImageID,"packages":in.Packages}
+        tool="infrastructure__workspace_register_software"
+        action["software_id"]=in.ID
+        action["image_id"]=in.ImageID
+        action["packages"]=in.Packages
         if in.Description!=""{action["description"]=in.Description}
-        s.computeExecutorWrite(w,r,"infrastructure__workspace_register_software",action)
-        return
     case "propose-program":
-        if !catalogID(in.ID)||in.Name==""||len(in.Name)>250||
-            len(in.Description)>2000||len(in.SourceURL)>2048{
-            writeError(w,400,"invalid program catalog proposal");return
+        if !catalogID(in.ID)||strings.TrimSpace(in.Name)==""||len(in.Name)>128||
+            len(in.Description)>1024||len(in.Version)>64||
+            len(in.LicenseNotes)>1024||len(in.SourceURL)>512||
+            !validConsoleProgramSource(in.SourceURL)||
+            !validConsoleProgramDistribution(in.Platform,in.Distribution){
+            writeError(w,400,"program proposal metadata is invalid");return
         }
-        tool="pool_propose_program"
-        args=map[string]any{"id":in.ID,"name":in.Name,"version":in.Version,
-            "platform":in.Platform,"distribution":in.Distribution,
-            "source_url":in.SourceURL,"license_notes":in.LicenseNotes,
-            "description":in.Description}
+        tool="infrastructure__workspace_propose_program"
+        action["id"]=in.ID
+        action["name"]=in.Name
+        action["version"]=in.Version
+        action["platform"]=in.Platform
+        action["distribution"]=in.Distribution
+        action["description"]=in.Description
+        action["source_url"]=in.SourceURL
+        action["license_notes"]=in.LicenseNotes
     case "review-program":
         if !catalogID(in.ID)||in.ExpectedRevision<1||
+            in.ExpectedRevision>1_000_000||strings.TrimSpace(in.ReviewNote)==""||
+            len(in.ReviewNote)>512||
             (in.Status!="reviewed"&&in.Status!="available"&&in.Status!="disabled"&&
-             in.Status!="rejected"&&in.Status!="retired"){
+                in.Status!="rejected"&&in.Status!="retired"){
             writeError(w,400,"invalid versioned program review");return
         }
-        tool="pool_review_program"
-        args=map[string]any{"id":in.ID,"status":in.Status,"review_note":in.ReviewNote,
-            "pool_kind":in.PoolKind,"pool_id":in.PoolID,
-            "expected_revision":in.ExpectedRevision}
+        if in.Status=="available"{
+            if (in.PoolKind!="image"&&in.PoolKind!="software")||
+                !catalogID(in.PoolID){
+                writeError(w,400,"available program requires an approved catalog entry");return
+            }
+        } else if in.PoolKind!=""||in.PoolID!=""{
+            writeError(w,400,"only available programs may reference a pool");return
+        }
+        tool="infrastructure__workspace_review_program"
+        action["id"]=in.ID
+        action["status"]=in.Status
+        action["review_note"]=in.ReviewNote
+        action["pool_kind"]=in.PoolKind
+        action["pool_id"]=in.PoolID
+        action["expected_revision"]=in.ExpectedRevision
     case "update-entry":
         if !catalogID(in.ID)||in.ExpectedRevision<1||
+            in.ExpectedRevision>1_000_000||
             strings.TrimSpace(in.Reason)==""||len(in.Reason)>512||
             (in.Kind!="image"&&in.Kind!="software")||
             (in.Status!="active"&&in.Status!="disabled"&&in.Status!="retired"){
             writeError(w,400,"invalid versioned catalog state change");return
         }
-        tool="pool_update_entry"
-        args=map[string]any{"kind":in.Kind,"id":in.ID,"status":in.Status,
-            "expected_revision":in.ExpectedRevision,"reason":in.Reason}
+        tool="infrastructure__workspace_update_entry"
+        action["kind"]=in.Kind
+        action["id"]=in.ID
+        action["status"]=in.Status
+        action["expected_revision"]=in.ExpectedRevision
+        action["reason"]=in.Reason
     default:
         writeError(w,404,"unknown Compute catalog action");return
     }
-    // Remaining catalog changes require explicit host-executor operations.
-    // A browser session must never forward them directly to the Workspace
-    // root-token endpoint, even when its CSRF token is valid.
-    _=tool
-    _=args
-    writeError(w,http.StatusNotImplemented,"Compute catalog mutation requires an independent executor operation")
+    s.computeExecutorWrite(w,r,tool,action)
 }
