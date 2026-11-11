@@ -138,7 +138,7 @@ func validConsoleWorkspace(req consoleWorkspaceRequest) bool {
         return false
     }
     for kind,quantity:=range req.Hardware{
-        if kind!="gpu"&&kind!="npu"&&kind!="fpga"&&kind!="usb" || quantity<0||quantity>8{
+        if kind!="gpu"&&kind!="npu"&&kind!="fpga"&&kind!="usb" || quantity<0||quantity>2{
             return false
         }
     }
