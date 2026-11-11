@@ -28,15 +28,14 @@ fn layout(data:&Value)->(Vec<GraphNode>,Vec<(usize,usize,String)>) {
         if id.is_empty()||id.len()>128||indexes.contains_key(id){continue}
         let title=item.get("title").and_then(Value::as_str).unwrap_or(id)
             .chars().take(28).collect::<String>();
-        let ring=index/24;
-        let within=index%24;
-        let ring_start=ring*24;
-        let slots=(count-ring_start).min(24).max(1);
-        let angle=std::f64::consts::TAU*(within as f64/slots as f64)
-            -std::f64::consts::FRAC_PI_2;
-        let radius=70.0+70.0*ring as f64;
-        let x=WIDTH/2.0+radius*angle.cos();
-        let y=HEIGHT/2.0+radius*angle.sin();
+        // A bounded sunflower layout keeps all 200 nodes within the
+        // viewport. Dense graphs use the accessible text controls for labels.
+        let angle=index as f64*2.399_963_229_728_653;
+        let radius=if count==1 {0.0} else {
+            ((index as f64+0.5)/count as f64).sqrt()
+        };
+        let x=WIDTH/2.0+radius*(WIDTH/2.0-42.0)*angle.cos();
+        let y=HEIGHT/2.0+radius*(HEIGHT/2.0-42.0)*angle.sin();
         let level=item.pointer("/mastery/level").and_then(Value::as_u64).unwrap_or(0);
         indexes.insert(id.to_owned(),nodes.len());
         nodes.push(GraphNode{id:id.to_owned(),title,x,y,level});
@@ -90,10 +89,12 @@ pub fn LearningGraph(data:Value,on_select:EventHandler<String>)->Element{
                             cx:"{node.x}",cy:"{node.y}",r:"10",
                             fill:if node.level>=3{"#1e7d6b"}else{"#929eab"},
                         }
-                        text{
-                            x:"{node.x+15.0}",y:"{node.y+3.0}",
-                            fill:"currentColor",font_size:"11",
-                            "{node.title}"
+                        if nodes.len()<=20 {
+                            text{
+                                x:"{node.x+15.0}",y:"{node.y+3.0}",
+                                fill:"currentColor",font_size:"11",
+                                "{node.title}"
+                            }
                         }
                     }
                 }
@@ -120,6 +121,18 @@ pub fn LearningGraph(data:Value,on_select:EventHandler<String>)->Element{
 #[cfg(test)]
 mod tests{
     use super::*;
+    #[test]
+    fn largest_graph_fits_the_viewport() {
+        let nodes=(0..250).map(|i|serde_json::json!({
+            "id":format!("concept-{i}"),"title":format!("Concept {i}")
+        })).collect::<Vec<_>>();
+        let (layout_nodes,_)=layout(&serde_json::json!({"nodes":nodes}));
+        assert_eq!(layout_nodes.len(),200);
+        assert!(layout_nodes.iter().all(|n|
+            n.x>=20.0&&n.x<=WIDTH-20.0&&
+            n.y>=20.0&&n.y<=HEIGHT-20.0));
+    }
+
     #[test]
     fn graph_links_are_restricted_to_known_nodes(){
         let input=serde_json::json!({
