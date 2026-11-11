@@ -3,6 +3,8 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"io"
@@ -131,8 +133,68 @@ func main() {
   if err!=nil{log.Fatal("invalid verified owner identity configuration: ",err)}
   if err:=manager.SetAccessVerifier(verifier,gatewayAudience);err!=nil{log.Fatal(err)}
  }
- // A protected receipt is required for each implementation transition.
- // The same state directory and flock remain authoritative after rollback.
+ // All protected interfaces are validated before the selection marker
+ // changes or any socket can accept a request.
+ group,err:=user.LookupGroup("homelab-security-client")
+ if err!=nil{log.Fatal("security client group is unavailable: ",err)}
+ gid,err:=strconv.Atoi(group.Gid)
+ if err!=nil||gid<=0{log.Fatal("invalid security client group identifier")}
+ var portal *security.BrowserPortal
+ var webGroupID int
+ if origin:=os.Getenv("HOMELAB_SECURITY_BROWSER_ORIGIN");origin!=""{
+  if verifier==nil{log.Fatal("browser login requires independent Access identity verification")}
+  browserAudience:=os.Getenv("HOMELAB_SECURITY_ACCESS_BROWSER_AUD")
+  if browserAudience==""||browserAudience==gatewayAudience{
+   log.Fatal("browser login needs a dedicated audience")
+  }
+  portal,err=security.NewBrowserPortal(manager,origin,func(assertion string)(string,error){
+   return verifier.Verify(assertion,browserAudience)
+  })
+  if err!=nil{log.Fatal("invalid protected browser origin: ",err)}
+  group,groupErr:=user.LookupGroup("homelab-security-browser")
+  if groupErr!=nil{log.Fatal("browser socket group unavailable: ",groupErr)}
+  webGroupID,err=strconv.Atoi(group.Gid)
+  if err!=nil||webGroupID<=0{log.Fatal("invalid browser socket group")}
+ }
+ remoteListen:=os.Getenv("HOMELAB_SECURITY_REMOTE_LISTEN")
+ var remoteCert tls.Certificate
+ var remoteRoots *x509.CertPool
+ var remoteClients,credentialClients []string
+ if remoteListen!=""{
+  remoteCert,err=security.LoadTLSIdentity(
+   os.Getenv("HOMELAB_SECURITY_REMOTE_CERT"),os.Getenv("HOMELAB_SECURITY_REMOTE_KEY"))
+  if err!=nil{log.Fatal("remote security certificate unavailable: ",err)}
+  remoteRoots,err=security.LoadTLSRoots(os.Getenv("HOMELAB_SECURITY_REMOTE_CLIENT_CA"))
+  if err!=nil{log.Fatal("remote security client trust unavailable: ",err)}
+  if err:=json.Unmarshal([]byte(os.Getenv("HOMELAB_SECURITY_REMOTE_CLIENT_IDENTITIES")),&remoteClients);
+   err!=nil||len(remoteClients)==0{log.Fatal("invalid trusted executor identity list")}
+  if raw:=os.Getenv("HOMELAB_SECURITY_REMOTE_CREDENTIAL_CLIENT_IDENTITIES");raw!=""{
+   if err:=json.Unmarshal([]byte(raw),&credentialClients);err!=nil{
+    log.Fatal("invalid credential-only TLS identity list")
+   }
+  }
+  seen:=make(map[string]bool,len(remoteClients)+len(credentialClients))
+  if len(remoteClients)+len(credentialClients)>16{log.Fatal("too many trusted remote peers")}
+  for _,identity:=range append(append([]string{},remoteClients...),credentialClients...){
+   if !security.ValidServiceDNS(identity)||seen[identity]{
+    log.Fatal("invalid or duplicated remote certificate identity")
+   }
+   seen[identity]=true
+  }
+ }
+ oauthCallback:=false
+ if raw:=os.Getenv("HOMELAB_SECURITY_OAUTH_PROVIDERS");raw!=""{
+  var providers []security.Provider
+  if err:=json.Unmarshal([]byte(raw),&providers);err!=nil{
+   log.Fatal("invalid OAuth providers")
+  }
+  for _,provider:=range providers{
+   if provider.RedirectURL!=""{oauthCallback=true}
+  }
+ }
+ // The current authority retains exclusive state custody throughout release
+ // selection. The marker is published only after the complete configuration
+ // has been checked and before any listener can open.
  var migrationReceipt []byte
  if os.Getenv("HOMELAB_SECURITY_MIGRATION_RECEIPT_FILE")!=""{
   migrationReceipt,err=readPrivateCredential("HOMELAB_SECURITY_MIGRATION_RECEIPT_FILE")
@@ -141,71 +203,25 @@ func main() {
  if err:=security.AdmitMigration("/var/lib/homelab-securityd","go",migrationReceipt);err!=nil{
   log.Fatal("Go security authority selection denied: ",err)
  }
-	group, err := user.LookupGroup("homelab-security-client")
-	if err != nil {
-		log.Fatal("security client group is unavailable: ", err)
-	}
-	gid, err := strconv.Atoi(group.Gid)
-	if err != nil || gid <= 0 {
-		log.Fatal("invalid security client group identifier")
-	}
-	dir := "/run/homelab-securityd"
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
-	failures := make(chan error, 4)
-	go func() {
-		failures <- manager.ServeSockets(ctx, filepath.Join(dir, "owner.sock"), filepath.Join(dir, "client.sock"), gid)
-	}()
- if managerOAuth:=os.Getenv("HOMELAB_SECURITY_OAUTH_PROVIDERS");managerOAuth!=""{
-  // Device-code-only providers do not require a TCP callback listener.
-  // The callback is enabled only for an explicitly configured browser flow.
-  var providers []security.Provider
-  if err:=json.Unmarshal([]byte(managerOAuth),&providers);err!=nil{log.Fatal("invalid OAuth providers")}
-  for _,provider:=range providers{
-   if provider.RedirectURL!=""{
-    go func(){failures<-manager.ServeOAuthCallback(ctx)}()
-    break
-   }
-  }
+ dir:="/run/homelab-securityd"
+ ctx,stop:=signal.NotifyContext(context.Background(),syscall.SIGINT,syscall.SIGTERM)
+ defer stop()
+ failures:=make(chan error,5)
+ go func(){
+  failures<-manager.ServeSockets(ctx,filepath.Join(dir,"owner.sock"),filepath.Join(dir,"client.sock"),gid)
+ }()
+ if oauthCallback{
+  go func(){failures<-manager.ServeOAuthCallback(ctx)}()
  }
-	if origin := os.Getenv("HOMELAB_SECURITY_BROWSER_ORIGIN"); origin != "" {
-		if verifier==nil{log.Fatal("browser login requires independent Access identity verification")}
-  browserAudience:=os.Getenv("HOMELAB_SECURITY_ACCESS_BROWSER_AUD")
-  if browserAudience==""||browserAudience==gatewayAudience{log.Fatal("browser login needs a dedicated audience")}
-  portal, err := security.NewBrowserPortal(manager, origin,func(assertion string)(string,error){
-   return verifier.Verify(assertion,browserAudience)
-  })
-		if err != nil {
-			log.Fatal("invalid protected browser origin: ", err)
-		}
-		group, err := user.LookupGroup("homelab-security-browser")
-		if err != nil {
-			log.Fatal("browser socket group unavailable: ", err)
-		}
-		webGroupID, err := strconv.Atoi(group.Gid)
-		if err != nil || webGroupID <= 0 {
-			log.Fatal("invalid browser socket group")
-		}
-		go func() {
-			failures <- portal.ServeBrowserSocket(ctx, "/run/homelab-security-browser/browser.sock", webGroupID)
-		}()
-	}
- if listen:=os.Getenv("HOMELAB_SECURITY_REMOTE_LISTEN");listen!=""{
-  cert,err:=security.LoadTLSIdentity(os.Getenv("HOMELAB_SECURITY_REMOTE_CERT"),os.Getenv("HOMELAB_SECURITY_REMOTE_KEY"))
-  if err!=nil{log.Fatal("remote security certificate unavailable: ",err)}
-  roots,err:=security.LoadTLSRoots(os.Getenv("HOMELAB_SECURITY_REMOTE_CLIENT_CA"))
-  if err!=nil{log.Fatal("remote security client trust unavailable: ",err)}
-  var clients []string
-  if err:=json.Unmarshal([]byte(os.Getenv("HOMELAB_SECURITY_REMOTE_CLIENT_IDENTITIES")),&clients);err!=nil||len(clients)==0{
-   log.Fatal("invalid trusted executor identity list")
-  }
-  var credentialClients []string
-  if raw:=os.Getenv("HOMELAB_SECURITY_REMOTE_CREDENTIAL_CLIENT_IDENTITIES");raw!=""{
-   if err:=json.Unmarshal([]byte(raw),&credentialClients);err!=nil{
-    log.Fatal("invalid credential-only TLS identity list")
-   }
-  }
-  go func(){failures<-manager.ServeAuthorizationTLS(ctx,listen,cert,roots,clients,credentialClients)}()
+ if portal!=nil{
+  go func(){
+   failures<-portal.ServeBrowserSocket(ctx,"/run/homelab-security-browser/browser.sock",webGroupID)
+  }()
+ }
+ if remoteListen!=""{
+  go func(){
+   failures<-manager.ServeAuthorizationTLS(ctx,remoteListen,remoteCert,remoteRoots,remoteClients,credentialClients)
+  }()
  }
 	log.Print("independent owner authentication sockets starting")
 	err = <-failures
