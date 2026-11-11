@@ -4,6 +4,7 @@ import (
  "bytes"
  "crypto/tls"
  "errors"
+ "net"
  "net/http"
  "regexp"
  "strings"
@@ -52,7 +53,7 @@ var serviceCredentialName=regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]{0,63}$`)
 // ValidServiceDNS accepts one canonical ASCII host identity, never a wildcard,
 // URL, or DNS name with an ambiguous spelling.
 func ValidServiceDNS(name string) bool {
- if name=="" || len(name)>253 { return false }
+ if name=="" || len(name)>253 || net.ParseIP(name)!=nil { return false }
  for _,label:=range strings.Split(name,".") {
   if len(label)==0 || len(label)>63 { return false }
   for i:=0;i<len(label);i++ {
