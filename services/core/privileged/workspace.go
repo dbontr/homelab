@@ -69,6 +69,7 @@ func(p *WorkspacePolicy)validate()error{
   for _,value:=range values{
    pattern:=workspaceIdentifier
    if i==4{pattern=workspacePackage}
+   if i==6{pattern=workspaceDeviceIdentity}
    if !pattern.MatchString(value)||seen[value]{return errors.New("invalid Workspace resource allowlist")}
    seen[value]=true
   }
