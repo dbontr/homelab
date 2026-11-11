@@ -87,7 +87,7 @@ func (k *Kubernetes) verificationManifest(op Operation, repository, revision, ac
 
 // A separate read-only Job executes only fixed, revision-bound build/test tools.
 // The worker holds the project lease; no credential or host device is mounted.
-func (k *Kubernetes) VerifyNativeCheck(ctx context.Context, op Operation, data map[string]any) (map[string]any, error) {
+func (k *Kubernetes) VerifyNativeCheck(ctx context.Context, op Operation, data map[string]any) (output map[string]any, resultErr error) {
     if len(data) != 4 || data["sandbox_check"] != true {
         return nil, errors.New("native verification requires an exact request")
     }
@@ -115,10 +115,17 @@ func (k *Kubernetes) VerifyNativeCheck(ctx context.Context, op Operation, data m
         return nil, fmt.Errorf("create constrained verification Job: %w", err)
     }
     defer func() {
+        // A timed-out or cancelled request must not release its worker lease
+        // while a verification Job might still be executing.
         cleanup, cancel := context.WithTimeout(context.Background(), 30*time.Second)
         defer cancel()
-        _, _ = k.checked(cleanup, nil, "delete", "job", name,
-            "--cascade=foreground", "--wait=true", "--timeout=25s")
+        if _, cleanupErr := k.checked(cleanup, nil, "delete", "job", name,
+            "--cascade=foreground", "--wait=true", "--timeout=25s",
+            "--ignore-not-found=true"); cleanupErr != nil {
+            output = nil
+            resultErr = errors.Join(resultErr,
+                fmt.Errorf("native verification job cleanup is unconfirmed: %w", cleanupErr))
+        }
     }()
     deadline, cancel := context.WithTimeout(ctx, 11*time.Minute)
     defer cancel()
