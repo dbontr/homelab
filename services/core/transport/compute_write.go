@@ -94,6 +94,7 @@ func (s *Server) computeExecutorWrite(w http.ResponseWriter,r *http.Request,oper
 }
 
 type consoleWorkspaceRequest struct{
+    Host string `json:"host,omitempty"`
     ProjectID string `json:"project_id"`
     Image string `json:"image,omitempty"`
     Environment string `json:"environment,omitempty"`
@@ -168,9 +169,12 @@ func (s *Server) uiComputeWorkspace(w http.ResponseWriter,r *http.Request){
     if !validConsoleWorkspace(in){
         writeError(w,400,"invalid Compute resource selection");return
     }
-    // Workspace creation requires a separately reviewed executor action;
-    // a gateway credential is not authority to create a privileged workload.
-    writeError(w,http.StatusNotImplemented,"workspace allocation requires an independent executor operation")
+    if !consoleProjectID.MatchString(in.Host)||
+        in.ImagePoolID==""||in.Image!=""||in.Environment!=""{
+        writeError(w,400,"workspace creation requires an exact executor host and approved image pool")
+        return
+    }
+    s.computeExecutorWrite(w,r,"infrastructure__workspace_create",in)
 }
 
 func (s *Server) uiComputeResourcePlan(w http.ResponseWriter,r *http.Request){
