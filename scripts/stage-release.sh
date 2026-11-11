@@ -81,49 +81,66 @@ if [[ ! "$revision" =~ ^[a-f0-9]{40}$ ||
   printf '%s\n' 'Release source must be an exact clean Git revision' >&2
   exit 1
 fi
+stage=""
+snapshot_parent=""
+source_root=""
+cleanup() {
+  if [[ -n "$source_root" ]]; then
+    git -c core.hooksPath=/dev/null -C "$root" worktree remove --force -- "$source_root" >/dev/null 2>&1 || true
+  fi
+  local temporary
+  for temporary in "$stage" "$snapshot_parent"; do
+    if [[ -z "$temporary" || ! -d "$temporary" || -L "$temporary" ]]; then
+      continue
+    fi
+    chmod -R u+w -- "$temporary" 2>/dev/null || true
+    rm -rf -- "$temporary"
+  done
+}
+trap cleanup EXIT
+stage=$(mktemp -d "$parent/.homelab-release.XXXXXXXX")
+snapshot_parent=$(mktemp -d "$parent/.homelab-source.XXXXXXXX")
+source_root="$snapshot_parent/checkout"
+# A detached worktree ensures that verification and compilation use one Git
+# commit even when another process edits the operator's working directory.
+# Suppress checkout hooks: a release build must not execute local Git hooks.
+if ! git -c core.hooksPath=/dev/null -C "$root" worktree add --detach -- "$source_root" "$revision" >/dev/null 2>&1; then
+  printf '%s\n' 'Unable to create isolated checkout of the requested source revision' >&2
+  exit 1
+fi
 printf 'Verifying locally pinned source at %s\n' "$revision"
 if [[ "$mode" == complete ]]; then
-  bash "$root/scripts/verify-offline.sh" --all
+  bash "$source_root/scripts/verify-offline.sh" --all
 elif [[ "$component" == homelab-console ]]; then
   (
-    cd "$root/ui/console"
+    cd "$source_root/ui/console"
     cargo fmt --all -- --check
     cargo test --offline
     cargo check --offline --target wasm32-unknown-unknown
   )
 elif [[ "$component" == homelab-motivation ]]; then
   (
-    cd "$root/services/motivation"
+    cd "$source_root/services/motivation"
     cargo fmt --all -- --check
     cargo test --locked --offline
     cargo clippy --locked --offline --all-targets -- -D warnings
   )
 else
   (
-    cd "$root/$source_module"
+    cd "$source_root/$source_module"
     go test ./...
     go test -race ./...
     go vet ./...
   )
 fi
 
-stage=$(mktemp -d "$parent/.homelab-release.XXXXXXXX")
-cleanup() {
-  if [[ -z "$stage" || ! -d "$stage" || -L "$stage" ]]; then
-    return
-  fi
-  # Verification can fail after the staged release becomes read-only.
-  chmod -R u+w -- "$stage" 2>/dev/null || true
-  rm -rf -- "$stage"
-}
-trap cleanup EXIT
 mkdir -p "$stage/bin" "$stage/console"
 
 build_go() {
   local directory=$1 package=$2 name=$3
   printf 'Building %s\n' "$name"
   (
-    cd "$root/$directory"
+    cd "$source_root/$directory"
     go build -trimpath -buildvcs=false -o "$stage/bin/$name" "$package"
   )
 }
@@ -132,7 +149,7 @@ build_motivation() {
   local target="$stage/.motivation-target"
   printf '%s\n' 'Building homelab-motivation'
   (
-    cd "$root/services/motivation"
+    cd "$source_root/services/motivation"
     CARGO_TARGET_DIR="$target" cargo build --locked --offline --release
   )
   install -m 0700 "$target/release/homelab-motivation" "$stage/bin/homelab-motivation"
@@ -171,7 +188,7 @@ fi
 
 if [[ "$mode" == complete || "$component" == homelab-console ]]; then
   (
-    cd "$root/ui/console"
+    cd "$source_root/ui/console"
     dx bundle --web --release --out-dir "$stage/console-bundle"
   )
   if [[ ! -f "$stage/console-bundle/public/index.html" ]]; then
@@ -201,7 +218,18 @@ find "$stage/bin" -type f -exec chmod 0555 {} +
 find "$stage/bin" "$stage/console" -type d -exec chmod 0555 {} +
 chmod 0444 "$stage/RELEASE" "$stage/SHA256SUMS"
 chmod 0555 "$stage"
-bash "$root/scripts/verify-release.sh" "$stage"
+# Fail if a build or verification step changed a tracked source file.
+# Build outputs belong in the release staging area or external caches.
+if [[ "$(git -C "$source_root" rev-parse --verify 'HEAD^{commit}')" != "$revision" ||
+      -n "$(git -C "$source_root" status --porcelain --untracked-files=all)" ]]; then
+  printf '%s\n' 'Pinned source checkout changed during release construction' >&2
+  exit 1
+fi
+bash "$source_root/scripts/verify-release.sh" "$stage"
+git -c core.hooksPath=/dev/null -C "$root" worktree remove --force -- "$source_root"
+source_root=""
+rmdir -- "$snapshot_parent"
+snapshot_parent=""
 mv -- "$stage" "$destination"
 stage=""
 printf 'Staged source-built release: %s\n' "$destination"
