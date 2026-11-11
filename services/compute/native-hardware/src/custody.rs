@@ -58,7 +58,7 @@ fn physical_key(kind: &str, alias: &str, number: u64) -> String {
 }
 
 fn private_record(path: &Path) -> Result<String, &'static str> {
-    let mut file = fs::File::open(path).map_err(|_| "device custody record unavailable")?;
+    let file = fs::File::open(path).map_err(|_| "device custody record unavailable")?;
     let opened = file.metadata().map_err(|_| "device custody metadata unavailable")?;
     let named = fs::symlink_metadata(path).map_err(|_| "device custody path unavailable")?;
     if !named.file_type().is_file() || !opened.is_file() ||
