@@ -114,6 +114,30 @@ fn read_owner(path: &Path) -> Result<String, &'static str> {
     Ok(owner.to_owned())
 }
 
+// Rollback removes exactly one newly acquired record. A previous workspace's
+// record is never released merely because a later multi-device claim failed.
+pub(crate) fn release_device(kind: &str, alias: &str, workspace: &str)
+    -> Result<(), &'static str> {
+    if !valid_workspace(workspace) || !matches!(kind, "usb" | "gpu" | "npu" | "fpga") {
+        return Err("invalid device custody release identity");
+    }
+    let root = directory()?;
+    let record = root.join(key(kind,alias));
+    if read_owner(&record)? != workspace {
+        return Err("device custody belongs to another workspace");
+    }
+    let contents = fs::read_to_string(&record)
+        .map_err(|_| "cannot read device custody record")?;
+    let lines: Vec<&str> = contents.lines().collect();
+    if lines.len() != 6 || lines[2] != kind || lines[3] != alias {
+        return Err("device custody identity does not match the requested release");
+    }
+    fs::remove_file(&record).map_err(|_| "cannot release device custody")?;
+    fs::File::open(&root).and_then(|dir| dir.sync_all())
+        .map_err(|_| "cannot sync released custody")?;
+    Ok(())
+}
+
 pub(crate) fn release_workspace(workspace: &str) -> Result<usize, &'static str> {
     if !valid_workspace(workspace) {
         return Err("device custody requires an exact workspace identifier");
