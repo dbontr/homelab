@@ -177,7 +177,7 @@ func(s *Store)ContinuityHandoff(key string)(map[string]any,error){
  fmt.Fprintf(&b,"Continue this work from the recorded checkpoint. Verify current repository state before modifying files.\n\n")
  fmt.Fprintf(&b,"Conversation key: %s\n",checkpoint.Key)
  if checkpoint.ProjectID!=""{fmt.Fprintf(&b,"Project: %s\n",checkpoint.ProjectID)}
- fmt.Fprintf(&b,"Objective: %s\n\nConfirmed working summary:\n%s\n",
+ fmt.Fprintf(&b,"Objective: %s\n\nRecorded working summary (verify against evidence):\n%s\n",
   checkpoint.Objective,checkpoint.Summary)
  if len(checkpoint.NextSteps)>0{
   b.WriteString("\nNext steps:\n")
