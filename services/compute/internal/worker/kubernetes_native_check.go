@@ -127,6 +127,7 @@ func (k *Kubernetes) VerifyNativeCheck(ctx context.Context, op Operation, data m
             "--ignore-not-found=true"); cleanupErr != nil {
             k.verificationMu.Lock()
             k.verificationQuarantined = true
+            k.verificationEpoch++
             k.verificationMu.Unlock()
             output = nil
             resultErr = errors.Join(resultErr,
