@@ -115,8 +115,8 @@ elif [[ "$component" == homelab-console ]]; then
   (
     cd "$source_root/ui/console"
     cargo fmt --all -- --check
-    cargo test --offline
-    cargo check --offline --target wasm32-unknown-unknown
+    cargo test --locked --offline
+    cargo check --locked --offline --target wasm32-unknown-unknown
   )
 elif [[ "$component" == homelab-motivation ]]; then
   (
