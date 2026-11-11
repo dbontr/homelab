@@ -1,6 +1,6 @@
 //! Trusted security-daemon configuration and exclusive state initialization.
 use std::env;
-use std::fs::OpenOptions;
+use std::fs::{self, OpenOptions};
 use std::io::Read;
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
@@ -47,12 +47,27 @@ pub fn configured_file(name: &str, private: bool) -> Result<Vec<u8>, Error> {
     Ok(raw)
 }
 
+fn require_authenticator_record(directory: &Path) -> Result<(), Error> {
+    let metadata = fs::symlink_metadata(directory.join("authenticator.json"))
+        .map_err(|_| Error::Storage)?;
+    if !metadata.is_file() || metadata.file_type().is_symlink()
+        || metadata.nlink() != 1
+        || metadata.mode() & 0o077 != 0
+        || metadata.uid() != unsafe { libc::geteuid() }
+    {
+        return Err(Error::Storage);
+    }
+    Ok(())
+}
+
 pub struct Settings {
     pub authority: Authority,
     pub browser_origin: Option<String>,
 }
 
 pub fn initialize(directory: &Path) -> Result<Settings, Error> {
+    // Switching the authority must not reset replay or lockout history.
+    require_authenticator_record(directory)?;
     let verifier = configured_file("HOMELAB_SECURITY_PASSWORD_FILE", true)?;
     let verifier: PassphraseRecord =
         serde_json::from_slice(&verifier).map_err(|_| Error::InvalidConfiguration)?;
@@ -129,6 +144,28 @@ pub fn initialize(directory: &Path) -> Result<Settings, Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn startup_requires_a_protected_authenticator_record() {
+        use std::os::unix::fs::PermissionsExt;
+        let mut id = [0u8; 12];
+        getrandom::fill(&mut id).unwrap();
+        let dir = std::env::temp_dir().join(format!("security-bootstrap-test-{}", hex::encode(id)));
+        fs::create_dir(&dir).unwrap();
+        fs::set_permissions(&dir, fs::Permissions::from_mode(0o700)).unwrap();
+        assert_eq!(require_authenticator_record(&dir), Err(Error::Storage));
+        let record = dir.join("authenticator.json");
+        fs::write(&record, br#"{"version":1}"#).unwrap();
+        fs::set_permissions(&record, fs::Permissions::from_mode(0o600)).unwrap();
+        assert_eq!(require_authenticator_record(&dir), Ok(()));
+        fs::remove_file(&record).unwrap();
+        let shared = dir.join("shared.json");
+        fs::write(&shared, b"{}").unwrap();
+        fs::set_permissions(&shared, fs::Permissions::from_mode(0o600)).unwrap();
+        fs::hard_link(&shared, &record).unwrap();
+        assert_eq!(require_authenticator_record(&dir), Err(Error::Storage));
+        fs::remove_dir_all(dir).unwrap();
+    }
+
     #[test]
     fn credential_paths_must_be_absolute() {
         let missing = configured_file("HOMELAB_SECURITY_TEST_UNSET", true);
