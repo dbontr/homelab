@@ -139,6 +139,37 @@ func (s *Server) uiLearningAttachmentUpload(w http.ResponseWriter,r *http.Reques
 	writeJSON(w,http.StatusCreated,result)
 }
 
+func checkedLearningOriginal(record map[string]any) ([]byte,string,string,error) {
+	encoded,ok:=record["base64"].(string)
+	if !ok||len(encoded)>((learningBrowserAttachmentLimit+2)/3)*4+16{
+		return nil,"","",errors.New("original exceeds browser transfer limit")
+	}
+	body,err:=base64.StdEncoding.Strict().DecodeString(encoded)
+	if err!=nil||len(body)==0||len(body)>learningBrowserAttachmentLimit{
+		return nil,"","",errors.New("invalid original attachment bytes")
+	}
+	length,ok:=record["size_bytes"].(float64)
+	if !ok||length!=float64(len(body)){
+		return nil,"","",errors.New("original attachment size mismatch")
+	}
+	expected,ok:=record["sha256"].(string)
+	digest:=sha256.Sum256(body)
+	if !ok||hex.EncodeToString(digest[:])!=expected||
+		record["integrity_verified"]!=true{
+		return nil,"","",errors.New("original attachment integrity mismatch")
+	}
+	mediaType,ok:=record["mime_type"].(string)
+	if !ok||!learningAttachmentMIME[mediaType]{
+		return nil,"","",errors.New("unsupported original MIME type")
+	}
+	filename,ok:=record["filename"].(string)
+	if !ok||len(filename)==0||len(filename)>250||filename=="."||filename==".."||
+		strings.ContainsAny(filename,"/\\\x00\r\n"){
+		return nil,"","",errors.New("invalid stored attachment filename")
+	}
+	return body,mediaType,filename,nil
+}
+
 func (s *Server) uiLearningAttachmentOriginal(w http.ResponseWriter,r *http.Request){
 	id:=r.PathValue("id")
 	if !learningID.MatchString(id){
@@ -152,31 +183,9 @@ func (s *Server) uiLearningAttachmentOriginal(w http.ResponseWriter,r *http.Requ
 		writeError(w,http.StatusBadGateway,"Learning could not retrieve the original")
 		return
 	}
-	encoded,ok:=record["base64"].(string)
-	if !ok||len(encoded)>((learningBrowserAttachmentLimit+2)/3)*4+16{
-		writeError(w,http.StatusBadGateway,"original exceeds the browser transfer limit")
-		return
-	}
-	body,err:=base64.StdEncoding.Strict().DecodeString(encoded)
-	if err!=nil||len(body)==0||len(body)>learningBrowserAttachmentLimit{
-		writeError(w,http.StatusBadGateway,"invalid original attachment")
-		return
-	}
-	expected,ok:=record["sha256"].(string)
-	digest:=sha256.Sum256(body)
-	if !ok||hex.EncodeToString(digest[:])!=expected||
-		record["integrity_verified"]!=true{
-		writeError(w,http.StatusBadGateway,"original attachment integrity could not be verified")
-		return
-	}
-	mediaType,ok:=record["mime_type"].(string)
-	if !ok||!learningAttachmentMIME[mediaType]{
-		writeError(w,http.StatusBadGateway,"original has unsupported MIME type")
-		return
-	}
-	filename,ok:=record["filename"].(string)
-	if !ok||len(filename)==0||len(filename)>250{
-		writeError(w,http.StatusBadGateway,"original filename unavailable")
+	body,mediaType,filename,err:=checkedLearningOriginal(record)
+	if err!=nil{
+		writeError(w,http.StatusBadGateway,"Learning original failed integrity validation")
 		return
 	}
 	w.Header().Set("Content-Type",mediaType)
