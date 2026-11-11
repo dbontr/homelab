@@ -98,6 +98,10 @@ func NewServer(db *Database, token string) (*Server, error) {
  gitlabAlias:=os.Getenv("PWM_VAULT_GITLAB_ALIAS")
  embeddingsAlias:=os.Getenv("PWM_VAULT_EMBEDDINGS_ALIAS")
  brokerURL:=os.Getenv("PWM_VAULT_URL")
+ if githubAlias!=""&&(githubAlias==gitlabAlias||githubAlias==embeddingsAlias)||
+  gitlabAlias!=""&&gitlabAlias==embeddingsAlias{
+  return nil,errors.New("distinct provider origins require distinct vault credential aliases")
+ }
  var embeddingsTokenSource func()(string,error)
  var scopedVault *VaultSecretClient
  if githubAlias!=""||gitlabAlias!=""||embeddingsAlias!=""||brokerURL!=""{
