@@ -131,6 +131,16 @@ func verifyNativeLeases(ctx context.Context,workspace string,leases []nativeDevi
     return nil
 }
 
+func verifyNativeWorkspace(ctx context.Context,workspace string)error{
+    if !nativeCustodySelected(){return nil}
+    output,err:=nativeCustodyCommand(ctx,"verify-workspace",workspace)
+    if err!=nil{return err}
+    if _,err:=strconv.ParseUint(output,10,16);err!=nil{
+        return errors.New("native custody helper returned invalid verification receipt")
+    }
+    return nil
+}
+
 func releaseNativeWorkspace(workspace string) error {
     if !nativeCustodySelected(){return nil}
     ctx,cancel:=context.WithTimeout(context.Background(),20*time.Second)
