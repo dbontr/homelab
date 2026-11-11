@@ -277,6 +277,7 @@ const LEARNING_APP_TOOLS: &[&str] = &[
     "preview_source_curriculum", "import_source_curriculum",
     "list_attachments", "get_attachment", "upload_attachment",
     "propose_question_model_assessment", "propose_step_model_assessment",
+    "stage_model_source_extraction",
 ];
 
 pub async fn call_learning_tool<T: DeserializeOwned>(
