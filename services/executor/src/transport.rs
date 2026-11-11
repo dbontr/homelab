@@ -253,7 +253,9 @@ fn private_ip(address: SocketAddr) -> bool {
     }
 }
 fn valid_coordinator_dns(name: &str) -> bool {
-    !name.is_empty() && name.len() <= 253 && name.split('.').all(|label| {
+    !name.is_empty() && name.len() <= 253
+        && name.parse::<std::net::IpAddr>().is_err()
+        && name.split('.').all(|label| {
         let bytes = label.as_bytes();
         (1..=63).contains(&bytes.len())
             && bytes.first().is_some_and(|b| b.is_ascii_lowercase() || b.is_ascii_digit())
@@ -350,7 +352,7 @@ mod tests {
         assert!(valid_coordinator_dns("saturn"));
         for name in ["", ".", "release.", ".release", "release..internal", "*",
             "*.internal", "-release.internal", "release-.internal",
-            "Release.internal", "release_internal", "release.internal:443",
+            "Release.internal", "release_internal", "127.0.0.1", "release.internal:443",
             "release/internal", "release\\n.internal", "https://release.internal"] {
             assert!(!valid_coordinator_dns(name), "invalid coordinator identity: {name:?}");
         }
