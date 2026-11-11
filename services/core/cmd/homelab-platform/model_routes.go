@@ -23,10 +23,10 @@ type modelRouteSpec struct {
  LocalOnly bool `json:"local_only"`
 }
 
-// authorizedModelToken requests a fresh owner decision for each model
-// completion. The scoped ticket is bound to the request digest, selected
-// model, and the caller's independently verified owner assertion.
-func authorizedModelToken(vault *security.RemoteAuthorizationClient,alias string)(
+// authorizedVaultToken requests an independent owner decision for a single
+// provider operation. The scoped ticket is bound to its canonical arguments,
+// target, and the caller's signed owner assertion.
+func authorizedVaultToken(vault *security.RemoteAuthorizationClient,alias string)(
  func(context.Context,string,string,json.RawMessage)(string,error),error,
 ){
  if vault==nil{return nil,errors.New("model vault is not configured")}
@@ -85,7 +85,7 @@ func configuredCapabilityPlanner(vaultClients ...*security.RemoteAuthorizationCl
    var source func(context.Context,string,string,json.RawMessage)(string,error)
    if spec.VaultAlias!=""{
     var err error
-    source,err=authorizedModelToken(vault,spec.VaultAlias)
+    source,err=authorizedVaultToken(vault,spec.VaultAlias)
     if err!=nil{return nil,err}
    }
    token:=""
@@ -113,7 +113,7 @@ func configuredCapabilityPlanner(vaultClients ...*security.RemoteAuthorizationCl
  var source func(context.Context,string,string,json.RawMessage)(string,error)
  if vaultAlias!=""{
   var err error
-  source,err=authorizedModelToken(vault,vaultAlias)
+  source,err=authorizedVaultToken(vault,vaultAlias)
   if err!=nil{return nil,err}
  }
  token:=""
