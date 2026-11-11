@@ -86,6 +86,11 @@ in
         default = [];
         description = "Exact certificate DNS identities permitted to request operation authorization.";
       };
+      credentialClientDNS = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = [];
+        description = "Additional certificate DNS identities permitted only to request explicitly granted vault credentials.";
+      };
       serviceCredentialGrants = lib.mkOption {
         default = [];
         description = "Exact service identity and opaque vault handle bindings for mutually authenticated credential reads. Never put credential values in this configuration.";
@@ -163,9 +168,14 @@ in
            cfg.remote.keyFile != null && cfg.remote.clientCAFile != null &&
            cfg.remote.allowedClientDNS != [] && cfg.access.gatewayAudience != "");
         message = "Remote authorization needs exact client identities, TLS credentials, a private listener and signed owner verification."; }
+      { assertion = !cfg.remote.enable ||
+          (lib.length cfg.remote.allowedClientDNS + lib.length cfg.remote.credentialClientDNS <= 16 &&
+           lib.intersectLists cfg.remote.allowedClientDNS cfg.remote.credentialClientDNS == []);
+        message = "Remote certificate identities must be disjoint between authorization and credential-only roles and limited to sixteen peers."; }
       { assertion = cfg.remote.serviceCredentialGrants == [] ||
           (cfg.remote.enable && cfg.vaultKeyFile != null &&
-           lib.all (grant: lib.elem grant.clientDNS cfg.remote.allowedClientDNS) cfg.remote.serviceCredentialGrants);
+           lib.all (grant: lib.elem grant.clientDNS
+             (cfg.remote.allowedClientDNS ++ cfg.remote.credentialClientDNS)) cfg.remote.serviceCredentialGrants);
         message = "Service credentials require independent vault custody, private remote TLS, and an explicitly allowed client certificate identity."; }
       { assertion = cfg.owner != ""; message = "Security daemon requires an owner identity."; }
       { assertion = cfg.passwordVerifierFile != null && cfg.totpSecretFile != null;
@@ -230,6 +240,7 @@ in
         HOMELAB_SECURITY_REMOTE_KEY = "/run/credentials/homelab-securityd.service/remote-key";
         HOMELAB_SECURITY_REMOTE_CLIENT_CA = "/run/credentials/homelab-securityd.service/remote-client-ca";
         HOMELAB_SECURITY_REMOTE_CLIENT_IDENTITIES = builtins.toJSON cfg.remote.allowedClientDNS;
+        HOMELAB_SECURITY_REMOTE_CREDENTIAL_CLIENT_IDENTITIES = builtins.toJSON cfg.remote.credentialClientDNS;
         HOMELAB_SECURITY_SERVICE_CREDENTIAL_GRANTS = if cfg.remote.serviceCredentialGrants == []
           then "" else builtins.toJSON (map (grant: {
             client_dns = grant.clientDNS;
