@@ -268,6 +268,8 @@ pub async fn call_tool<T: DeserializeOwned>(name: &str, arguments: Value) -> Res
 const LEARNING_APP_TOOLS: &[&str] = &[
     "get_learning_summary", "get_graph", "get_concept",
     "list_learning_sessions", "get_learning_session", "start_learning_session",
+    "build_learning_plan", "advance_learning_session", "save_problem_draft",
+    "set_learning_target",
     "get_pending_learning_question", "get_learning_question",
     "answer_learning_question", "next_learning_action",
     "recommend_session_probe", "get_reasoning_graph", "get_reasoning_chain",
