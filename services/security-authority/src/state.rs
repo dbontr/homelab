@@ -266,6 +266,7 @@ mod tests {
         assert_eq!(store.load_authenticator(), Err(Error::Storage));
         drop(store);
         fs::remove_file(directory.join(STATE_NAME)).unwrap();
+        fs::remove_file(directory.join(LOCK_NAME)).unwrap();
         fs::hard_link(&source, directory.join(LOCK_NAME)).unwrap();
         assert!(matches!(StateStore::acquire(&directory), Err(Error::Storage)));
         fs::remove_dir_all(directory).unwrap();
