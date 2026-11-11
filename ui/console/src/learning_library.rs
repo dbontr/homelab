@@ -563,7 +563,9 @@ fn ReviewQueue(csrf: String) -> Element {
 #[component]
 fn SourceList(csrf: String) -> Element {
     let attachments_csrf = csrf.clone();
+    let curriculum_csrf = csrf.clone();
     let mut selected_source = use_signal(String::new);
+    let mut selected_curriculum = use_signal(String::new);
     let mut sources=use_resource(move || {
         let token=csrf.clone();
         async move {
@@ -595,6 +597,7 @@ fn SourceList(csrf: String) -> Element {
                                         th { "Coverage" }
                                         th { "Imported" }
                                         th { "Files" }
+                                        th { "Curriculum" }
                                     } }
                                     tbody {
                                         for item in all {
@@ -614,6 +617,17 @@ fn SourceList(csrf: String) -> Element {
                                                         "Originals"
                                                     }
                                                 }
+                                                td {
+                                                    button {
+                                                        class: "btn btn-outline btn-sm",
+                                                        r#type: "button",
+                                                        onclick: {
+                                                            let id = label(&item, &["id"]);
+                                                            move |_| selected_curriculum.set(id.clone())
+                                                        },
+                                                        "Review curriculum"
+                                                    }
+                                                }
                                             }
                                         }
                                     }
@@ -630,6 +644,14 @@ fn SourceList(csrf: String) -> Element {
                 csrf: attachments_csrf.clone(),
                 owner_kind: "source".to_owned(),
                 owner_id: selected_source(),
+            }
+        }
+        if !selected_curriculum().is_empty() {
+            SourceCurriculum {
+                key: "{selected_curriculum()}",
+                csrf: curriculum_csrf.clone(),
+                source_id: selected_curriculum(),
+                on_imported: move |_| sources.restart(),
             }
         }
     }
