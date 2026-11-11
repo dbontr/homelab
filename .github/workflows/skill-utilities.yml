@@ -4,11 +4,13 @@ on:
   pull_request:
     paths:
       - "skills/**"
+      - "REFERENCES.md"
       - "services/compute/skills/**"
       - ".github/workflows/skill-utilities.yml"
   push:
     paths:
       - "skills/**"
+      - "REFERENCES.md"
       - "services/compute/skills/**"
       - ".github/workflows/skill-utilities.yml"
 
