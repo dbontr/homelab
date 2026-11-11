@@ -174,8 +174,8 @@ fn HistoryChart(measurement: Measurement) -> Element {
                                 svg {
                                     class: "monitoring-sparkline",
                                     role: "img",
-                                    aria_label: "Recorded history for {series_name(series)}",
-                                    viewBox: "0 0 700 160",
+                                    "aria-label": "Recorded history for {series_name(series)}",
+                                    view_box: "0 0 700 160",
                                     preserve_aspect_ratio: "none",
                                     line { x1: "8", y1: "141", x2: "692", y2: "141", stroke: "currentColor", stroke_opacity: "0.15" }
                                     path { d: "{line_path(&series.points)}", fill: "none", stroke: "currentColor",
@@ -246,7 +246,7 @@ pub fn Monitoring() -> Element {
                 "Refresh"
             }
         }
-        div { class: "tabs monitoring-tabs", role: "tablist", aria_label: "Monitoring views",
+        div { class: "tabs monitoring-tabs", role: "tablist", "aria-label": "Monitoring views",
             for (tab, label) in [
                 (Section::Overview,"Overview"), (Section::Charts,"History"),
                 (Section::Targets,"Collectors"), (Section::Alerts,"Alerts"), (Section::Logs,"Logs")
