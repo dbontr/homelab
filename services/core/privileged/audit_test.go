@@ -8,6 +8,7 @@ import (
  "path/filepath"
  "strings"
  "testing"
+ "time"
 
  "github.com/dbontr/homelab-new/system/security"
 )
@@ -121,5 +122,55 @@ func TestExecutorDoesNotClaimFailedEffectWasNotApplied(t *testing.T){
  pending,err:=journal.Unresolved()
  if err!=nil||len(pending)!=1||pending[0].Outcome!="indeterminate"{
   t.Fatalf("executor lost an uncertain side effect: %+v, %v",pending,err)
+ }
+}
+
+func TestGoAuditResumesAfterRustEvidenceReconciliation(t *testing.T){
+ dir:=privateAuditDir(t)
+ path:=filepath.Join(dir,"executor-actions.jsonl")
+ id:=strings.Repeat("a",32)
+ digest:=strings.Repeat("b",64)
+ evidence:=strings.Repeat("c",64)
+ at:=time.Now().UTC()
+ started:=auditEntry{ID:id,Operation:"infrastructure__service_restart",
+  Target:"saturn",ArgumentsSHA256:digest,Outcome:"started",At:at}
+ unknown:=started
+ unknown.Outcome="indeterminate"
+ reconciled:=started
+ reconciled.Outcome="reconciled"
+ reconciled.ReconciliationSHA256=evidence
+ writeJournal:=func(entries ...auditEntry){
+  t.Helper()
+  lines:=make([]string,0,len(entries))
+  for _,entry:=range entries{
+   raw,err:=json.Marshal(entry)
+   if err!=nil{t.Fatal(err)}
+   lines=append(lines,string(raw))
+  }
+  if err:=os.WriteFile(path,[]byte(strings.Join(lines,"\n")+"\n"),0600);err!=nil{
+   t.Fatal(err)
+  }
+ }
+ writeJournal(started,unknown,reconciled)
+ journal,err:=OpenAuditJournal(path)
+ if err!=nil{t.Fatal("Go cannot read evidence-bound Rust reconciliation:",err)}
+ unresolved,err:=journal.Unresolved()
+ if err!=nil||len(unresolved)!=0{t.Fatalf("resolved event remains blocked: %+v %v",unresolved,err)}
+ if err:=journal.Record(strings.Repeat("d",32),started.Operation,started.Target,digest,"started");err!=nil{
+  t.Fatal("reconciled action cannot begin an independently authorized attempt:",err)
+ }
+ if err:=journal.Close();err!=nil{t.Fatal(err)}
+ reconciled.ReconciliationSHA256="wrong"
+ writeJournal(started,unknown,reconciled)
+ if journal,err:=OpenAuditJournal(path);err==nil{
+  journal.Close()
+  t.Fatal("invalid evidence digest accepted")
+ }
+ reconciled.ReconciliationSHA256=evidence
+ reconciled.Target="venus"
+ writeJournal(started,unknown,reconciled)
+ if journal,err:=OpenAuditJournal(path);err==nil{
+  journal.Close()
+  t.Fatal("substituted target accepted in reconciliation")
  }
 }
