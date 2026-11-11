@@ -314,6 +314,75 @@ mod tests {
     }
 
     #[test]
+    fn request_identity_replays_only_its_durable_exact_scope() {
+        let directory = std::env::temp_dir().join(format!(
+            "homelab-executor-request-{}", crate::random_hex::<12>().unwrap()
+        ));
+        fs::create_dir(&directory).unwrap();
+        fs::set_permissions(&directory, fs::Permissions::from_mode(0o700)).unwrap();
+        let path = directory.join("executor-actions.jsonl");
+        let id = "a".repeat(32);
+        let digest = "b".repeat(64);
+        {
+            let journal = AuditJournal::open(&path).unwrap();
+            assert!(journal.request_outcome(
+                &id, "infrastructure__service_restart", "jupiter", &digest
+            ).unwrap().is_none());
+            journal.record(&id, "infrastructure__service_restart", "jupiter",
+                &digest, "started").unwrap();
+            assert_eq!(journal.request_outcome(
+                &id, "infrastructure__service_restart", "jupiter", &digest
+            ).unwrap().as_deref(), Some("started"));
+            assert!(journal.request_outcome(
+                &id, "infrastructure__service_restart", "venus", &digest
+            ).is_err());
+            assert!(journal.request_outcome(
+                &id, "infrastructure__service_stop", "jupiter", &digest
+            ).is_err());
+            assert!(journal.request_outcome(
+                &id, "infrastructure__service_restart", "jupiter", &"c".repeat(64)
+            ).is_err());
+            journal.record(&id, "infrastructure__service_restart", "jupiter",
+                &digest, "succeeded").unwrap();
+        }
+        {
+            let journal = AuditJournal::open(&path).unwrap();
+            assert_eq!(journal.request_outcome(
+                &id, "infrastructure__service_restart", "jupiter", &digest
+            ).unwrap().as_deref(), Some("succeeded"));
+            assert!(journal.record(&id, "infrastructure__service_restart",
+                "jupiter", &digest, "started").is_err());
+        }
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn concurrent_requests_cannot_share_a_durable_start_identity() {
+        let directory = std::env::temp_dir().join(format!(
+            "homelab-executor-concurrent-{}", crate::random_hex::<12>().unwrap()
+        ));
+        fs::create_dir(&directory).unwrap();
+        fs::set_permissions(&directory, fs::Permissions::from_mode(0o700)).unwrap();
+        let path = directory.join("executor-actions.jsonl");
+        let journal = std::sync::Arc::new(AuditJournal::open(&path).unwrap());
+        let mut workers = Vec::new();
+        for _ in 0..8 {
+            let journal = journal.clone();
+            workers.push(std::thread::spawn(move || journal.record(
+                &"d".repeat(32), "infrastructure__service_restart",
+                "jupiter", &"e".repeat(64), "started"
+            ).is_ok()));
+        }
+        assert_eq!(workers.into_iter().filter(|job| job.join().unwrap()).count(), 1);
+        assert_eq!(journal.request_outcome(
+            &"d".repeat(32), "infrastructure__service_restart",
+            "jupiter", &"e".repeat(64)
+        ).unwrap().as_deref(), Some("started"));
+        drop(journal);
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
     fn complete_outcome_requires_one_matching_start() {
         let id = "b".repeat(32);
         let mut seen = BTreeMap::new();
