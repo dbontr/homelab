@@ -145,6 +145,17 @@ impl StateStore {
             return Err(Error::Storage);
         }
         FileExt::try_lock_exclusive(&lease).map_err(|_| Error::Storage)?;
+        // Check that the locked descriptor remains the inode available at
+        // the canonical path. Otherwise another process could lock a
+        // replacement file and claim the same state directory.
+        let locked = lease.metadata().map_err(|_| Error::Storage)?;
+        let named = fs::symlink_metadata(directory.join(LOCK_NAME))
+            .map_err(|_| Error::Storage)?;
+        if !owner_only(&named)
+            || named.dev() != locked.dev() || named.ino() != locked.ino()
+        {
+            return Err(Error::Storage);
+        }
         Ok(Self {
             directory: directory.to_owned(),
             _lease: Some(lease),
