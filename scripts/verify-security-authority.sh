@@ -3,6 +3,8 @@ set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 crate="$root/services/security-authority"
+temporary_dir="$(mktemp -d)"
+trap 'rm -rf "$temporary_dir"' EXIT
 
 if ! command -v cargo >/dev/null 2>&1; then
   printf 'Rust Cargo is required for authority acceptance.\n' >&2
@@ -32,7 +34,7 @@ fi
   cd "$root/services/core"
   GOWORK=off GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local go test -race -count=5 ./security -run 'TestSecurityAuthority'
   GOWORK=off GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local go test -race -count=1 ./security ./privileged ./cmd/homelab-security-preflight
-  GOWORK=off GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local go build ./cmd/homelab-security-preflight
+  GOWORK=off GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local go build -o "$temporary_dir/homelab-security-preflight" ./cmd/homelab-security-preflight
 )
 
 if command -v nix >/dev/null 2>&1; then
