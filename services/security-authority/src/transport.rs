@@ -172,6 +172,15 @@ fn arguments(input: &OperationInput) -> &[u8] {
     input.arguments.as_ref().map_or(b"{}" as &[u8], |raw| raw.get().as_bytes())
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CredentialRedeemInput {
+    ticket: String,
+    operation: String,
+    target: String,
+    arguments: Box<RawValue>,
+}
+
 async fn session_owner_get(State(shared): State<Shared>) -> Response {
     json_reply(StatusCode::OK, shared.with_authority(Authority::local_status))
 }
@@ -294,7 +303,10 @@ async fn session_client_delete(State(shared): State<Shared>, headers: HeaderMap)
     }
 }
 
-async fn operation_response(shared: Shared, headers: HeaderMap, raw: Bytes, consume: bool) -> Response {
+async fn operation_response(
+    shared: Shared, headers: HeaderMap, raw: Bytes, consume: bool,
+    peer: Option<&crate::grants::VerifiedServiceIdentity>,
+) -> Response {
     let Ok(assertion) = owner_assertion(&headers) else {
         return protected_status("independent owner identity required", StatusCode::FORBIDDEN);
     };
@@ -304,32 +316,43 @@ async fn operation_response(shared: Shared, headers: HeaderMap, raw: Bytes, cons
     let args = arguments(&input);
     let result = shared.with_authority(|auth| {
         if consume {
-            auth.authorize_gateway(assertion, &input.operation, &input.target, args)
+            match peer {
+                Some(peer) => auth.authorize_remote_gateway(
+                    assertion, peer, &input.operation, &input.target, args
+                ),
+                None => auth.authorize_gateway(
+                    assertion, &input.operation, &input.target, args
+                ).map(AuthorizationWire::from),
+            }
         } else {
-            auth.preview_gateway(assertion, &input.operation, &input.target, args)
+            auth.preview_gateway(
+                assertion, &input.operation, &input.target, args
+            ).map(AuthorizationWire::from)
         }
     });
     match result {
-        Ok(decision) => {
+        Ok(wire) => {
             if consume {
-                audit(match &decision {
-                    Decision::Allowed => "operation_authorized",
-                    Decision::Denied(_) => "operation_denied",
-                    Decision::Confirmation { .. } => "operation_confirmation_required",
+                audit(if wire.allowed {
+                    "operation_authorized"
+                } else if wire.confirmation_id.is_some() {
+                    "operation_confirmation_required"
+                } else {
+                    "operation_denied"
                 });
             }
-            json_reply(StatusCode::OK, AuthorizationWire::from(decision))
+            json_reply(StatusCode::OK, wire)
         },
         Err(_) => protected_status("independent owner identity required", StatusCode::FORBIDDEN),
     }
 }
 
 async fn operation_client_preview(State(shared): State<Shared>, headers: HeaderMap, raw: Bytes) -> Response {
-    operation_response(shared, headers, raw, false).await
+    operation_response(shared, headers, raw, false, None).await
 }
 
 async fn operation_client_authorize(State(shared): State<Shared>, headers: HeaderMap, raw: Bytes) -> Response {
-    operation_response(shared, headers, raw, true).await
+    operation_response(shared, headers, raw, true, None).await
 }
 
 pub fn owner_router(shared: Shared) -> Router {
@@ -354,7 +377,7 @@ async fn remote_authorize(
     if !peer.may_authorize {
         return protected_status("remote operation authorization denied", StatusCode::FORBIDDEN);
     }
-    operation_response(shared, headers, raw, true).await
+    operation_response(shared, headers, raw, true, Some(&peer.identity)).await
 }
 
 async fn remote_preview(
@@ -366,16 +389,24 @@ async fn remote_preview(
     if !peer.may_authorize {
         return protected_status("remote operation authorization denied", StatusCode::FORBIDDEN);
     }
-    operation_response(shared, headers, raw, false).await
+    operation_response(shared, headers, raw, false, Some(&peer.identity)).await
 }
 
 async fn remote_service_credential(
     axum::Extension(peer): axum::Extension<crate::remote::VerifiedPeer>,
     State(shared): State<Shared>,
     RoutePath(alias): RoutePath<String>,
+    headers: HeaderMap,
+    raw: Bytes,
 ) -> Response {
+    let Ok(input) = json_input::<CredentialRedeemInput>(&headers, &raw) else {
+        return protected_status("invalid credential redemption", StatusCode::BAD_REQUEST);
+    };
     let credential = shared.with_authority(|authority| {
-        authority.use_service_credential(&peer.identity, &alias, |secret| Zeroizing::new(secret.to_vec()))
+        authority.use_service_credential(
+            &peer.identity, &alias, &input.ticket, &input.operation, &input.target,
+            input.arguments.get().as_bytes(), |secret| Zeroizing::new(secret.to_vec())
+        )
     });
     let Ok(bytes) = credential else {
         return protected_status("service credential access denied", StatusCode::FORBIDDEN);
@@ -395,7 +426,7 @@ pub fn remote_router(shared: Shared) -> Router {
     Router::new()
         .route("/v1/authorize", post(remote_authorize))
         .route("/v1/preview", post(remote_preview))
-        .route("/v1/service-credentials/{alias}", get(remote_service_credential))
+        .route("/v1/service-credentials/{alias}", post(remote_service_credential))
         .layer(DefaultBodyLimit::max(MAX_JSON_BYTES))
         .layer(middleware::from_fn(private_headers))
         .with_state(shared)
