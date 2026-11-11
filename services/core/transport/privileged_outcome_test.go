@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"path/filepath"
+    "strings"
 	"sync/atomic"
 	"testing"
 
@@ -26,8 +27,16 @@ func TestPrivilegedToolResponsesPreserveExecutionState(t *testing.T) {
 			http.NotFound(w, r)
 			return
 		}
+        var request struct{ RequestID string `json:"request_id"` }
+        if err:=json.NewDecoder(r.Body).Decode(&request);err!=nil||
+          !privileged.ValidExecutionRequestID(request.RequestID){
+          t.Error("gateway sent an invalid request identity",err)
+        }
+        receipt:=outcome.Load().(string)
+        receipt=strings.ReplaceAll(receipt,strings.Repeat("a",32),request.RequestID)
+        receipt=strings.ReplaceAll(receipt,strings.Repeat("b",32),request.RequestID)
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(outcome.Load().(string)))
+		_, _ = w.Write([]byte(receipt))
 	})}
 	defer srv.Close()
 	go func() { _ = srv.Serve(listener) }()
@@ -39,7 +48,7 @@ func TestPrivilegedToolResponsesPreserveExecutionState(t *testing.T) {
 	call := func() map[string]any {
 		t.Helper()
 		return server.invoke(context.Background(), "infrastructure__service_restart",
-			json.RawMessage(`{"host":"saturn","service":"homelab-platform.service"}`), json.RawMessage("1"))
+			json.RawMessage(`{"host":"saturn","service":"homelab-platform.service","request_id":"`+strings.Repeat("c",32)+`"}`), json.RawMessage("1"))
 	}
 	decode := func(response map[string]any) map[string]any {
 		t.Helper()
