@@ -37,6 +37,20 @@ func migrationTestReceipt(t *testing.T,dir,target string,parent *string)[]byte{
     return raw
 }
 
+func TestMigrationSharedRustReceiptFixture(t *testing.T){
+    raw:=rustAuthorityFixture(t,"migration-receipt.json")
+    receipt,err:=migrationReceiptCheck(raw,"rust")
+    if err!=nil{t.Fatal(err)}
+    if receipt.AuthenticatorSHA256!=strings.Repeat("a",64)||
+        receipt.Nonce!=strings.Repeat("b",32)||
+        receipt.VaultSHA256!=nil||receipt.ParentMarkerSHA256!=nil{
+        t.Fatal("migration receipt diverged from shared Rust schema")
+    }
+    if _,err:=migrationReceiptCheck(raw,"go");err==nil{
+        t.Fatal("shared receipt lost its exact target binding")
+    }
+}
+
 func TestMigrationCutoverAndRollbackPreserveCurrentReplayAndVault(t *testing.T){
     dir:=migrationTestState(t)
     credential:=[]byte(`{"credential":"encrypted-fixture-placeholder"}`)
