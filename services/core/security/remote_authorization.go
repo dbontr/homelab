@@ -94,7 +94,12 @@ func(a *AdminSessions)ServeAuthorizationTLS(ctx context.Context,address string,s
  if err!=nil{return errors.New("invalid remote authorization listener")}
  ip:=net.ParseIP(host)
  if ip==nil||!(ip.IsPrivate()||ip.IsLoopback()){return errors.New("authorization must bind to an explicit private IP")}
- for _,client:=range allowedClients{if client==""||strings.ContainsAny(client," /\\:;"){return errors.New("invalid authorized client identity")}}
+ allowed:=make(map[string]struct{},len(allowedClients))
+ for _,client:=range allowedClients{
+  if !ValidServiceDNS(client){return errors.New("invalid authorized client identity")}
+  if _,exists:=allowed[client];exists{return errors.New("duplicate authorized client identity")}
+  allowed[client]=struct{}{}
+ }
  listen,err:=net.Listen("tcp",address)
  if err!=nil{return err}
  defer listen.Close()
@@ -102,8 +107,9 @@ func(a *AdminSessions)ServeAuthorizationTLS(ctx context.Context,address string,s
   MinVersion:tls.VersionTLS13,ClientAuth:tls.RequireAndVerifyClientCert,ClientCAs:clientRoots,
   Certificates:[]tls.Certificate{serverCert},
   VerifyConnection:func(state tls.ConnectionState)error{
-   if len(state.VerifiedChains)==0||len(state.PeerCertificates)==0{return errors.New("unverified executor identity")}
-   for _,dns:=range allowedClients{if state.PeerCertificates[0].VerifyHostname(dns)==nil{return nil}}
+   dns,verified:=verifiedServiceDNS(&state)
+   if !verified{return errors.New("unverified or ambiguous executor identity")}
+   if _,ok:=allowed[dns];ok{return nil}
    return errors.New("unapproved executor identity")
   },
  }
