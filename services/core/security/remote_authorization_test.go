@@ -69,6 +69,7 @@ func TestRemoteAuthorizerRequiresVerifiedIdentityAndExactArguments(t *testing.T)
    string(request.Arguments)!=`{"host":"jupiter","release_id":"`+id+`"}`{
    t.Error("authorization scope changed",request);w.WriteHeader(403);return
   }
+  w.Header().Set("Content-Type","application/json")
   _=json.NewEncoder(w).Encode(Authorization{Allowed:true})
  }))
  defer closeServer()
@@ -135,6 +136,41 @@ func TestRemoteAuthorizationEnforcesEntireResponseBoundary(t *testing.T){
     t.Fatalf("malformed or oversized response admitted: %+v %v",decision,err)
    }
   })
+ }
+}
+
+func TestRemoteCredentialCapabilitiesHaveExactResponseShape(t *testing.T){
+ var response string
+ cfg,_,_,stop:=remoteAuthFixture(t,http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){
+  w.Header().Set("Content-Type","application/json")
+  _,_=w.Write([]byte(response))
+ }))
+ defer stop()
+ client,err:=NewRemoteAuthorizationClient(cfg)
+ if err!=nil{t.Fatal(err)}
+ ctx:=WithAccessAssertion(context.Background(),"signed-owner")
+ operation:="workspace__workspace_create"
+ args:=json.RawMessage(`{"host":"jupiter"}`)
+ ticket:=strings.Repeat("a",48)
+ response=`{"allowed":true,"credential_tickets":[{"alias":"workspace","ticket":"`+ticket+`"}]}`
+ allowed,err:=client.Authorize(ctx,operation,"jupiter",args)
+ if err!=nil||!allowed.Allowed||len(allowed.CredentialTickets)!=1{
+  t.Fatal("valid scoped capability was refused",err)
+ }
+ for _,invalid:=range []string{
+  `{"allowed":false,"reason":"denied","credential_tickets":[{"alias":"workspace","ticket":"`+ticket+`"}]}`,
+  `{"allowed":true,"credential_tickets":[{"alias":"workspace","ticket":"malformed"}]}`,
+  `{"allowed":true,"credential_tickets":[{"alias":"workspace","ticket":"`+ticket+`"},{"alias":"workspace","ticket":"`+ticket+`"}]}`,
+  `{"allowed":true,"reason":"denied","credential_tickets":[{"alias":"workspace","ticket":"`+ticket+`"}]}`,
+ }{
+  response=invalid
+  if _,err:=client.Authorize(ctx,operation,"jupiter",args);err==nil{
+   t.Fatal("malformed credential capability was accepted")
+  }
+ }
+ response=`{"allowed":true,"credential_tickets":[{"alias":"workspace","ticket":"`+ticket+`"}]}`
+ if _,err:=client.Preview(ctx,operation,"jupiter",args);err==nil{
+  t.Fatal("credential capability was issued for a nonconsuming preview")
  }
 }
 
