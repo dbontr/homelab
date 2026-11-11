@@ -6,7 +6,7 @@ use crate::components::{Card, Empty, Heading, Notice};
 use crate::mcp_app;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Panel { Graph, Sessions, Question, Problems, Sources, Reviews, Practice, Reasoning }
+enum Panel { Graph, Sessions, Question, Problems, Sources, Reviews, Practice, Reasoning, Calibration }
 
 impl Panel {
     fn label(self) -> &'static str {
@@ -19,6 +19,7 @@ impl Panel {
             Self::Reviews => "Review queue",
             Self::Practice => "Practice",
             Self::Reasoning => "Reasoning",
+            Self::Calibration => "Confidence",
         }
     }
 
@@ -31,6 +32,7 @@ impl Panel {
             "sources"=>Some(Self::Sources),
             "practice"=>Some(Self::Practice),
             "reasoning"=>Some(Self::Reasoning),
+            "calibration"=>Some(Self::Calibration),
             _=>None,
         }
     }
@@ -49,11 +51,12 @@ impl Panel {
             Self::Problems if valid => Ok(("get_problem",json!({"problem_id":id}))),
             Self::Problems => Ok(("list_problems",json!({"limit":50}))),
             Self::Sources => Ok(("list_learning_sources",json!({"limit":80}))),
-            Self::Reviews => Ok(("get_review_queue",json!({"limit":80}))),
+            Self::Reviews => Ok(("get_review_queue",json!({"limit":80,"include_upcoming":true}))),
             Self::Practice if valid => Ok(("get_practice_session",json!({"session_id":id}))),
             Self::Practice => Ok(("list_practice_sessions",json!({"limit":50}))),
             Self::Reasoning if valid => Ok(("get_reasoning_chain",json!({"chain_id":id}))),
-            Self::Reasoning => Ok(("get_reasoning_graph",json!({"limit":80}))),
+            Self::Reasoning => Ok(("get_reasoning_graph",json!({"limit":160}))),
+            Self::Calibration => Ok(("get_confidence_calibration",json!({"limit":250}))),
         }
     }
 }
@@ -100,7 +103,8 @@ pub fn LearningApp() -> Element {
         }
         div { class:"health-plan-list",role:"group",aria_label:"Learning sections",
             for section in [Panel::Graph,Panel::Sessions,Panel::Question,
-                Panel::Problems,Panel::Sources,Panel::Reviews,Panel::Practice,Panel::Reasoning] {
+                Panel::Problems,Panel::Sources,Panel::Reviews,Panel::Practice,
+                Panel::Reasoning,Panel::Calibration] {
                 button {
                     class:if panel()==section{"btn btn-primary"}else{"btn btn-outline"},
                     aria_pressed:panel()==section,
@@ -210,13 +214,19 @@ pub fn LearningApp() -> Element {
                             data:data.clone(),
                             on_select:move |id:String|{
                                 selected_id.set(id);
-                                result.set(None);
                             }
                         }
                     }
-                    if list_records(&data).is_empty(){
+                    if panel()==Panel::Reasoning && data.get("propositions").is_some() {
+                        crate::embedded_learning_insights::ReasoningEvidence{
+                            graph:data.clone(),
+                            on_select:move |id:String|selected_id.set(id)
+                        }
+                    }
+                    if list_records(&data).is_empty() && panel()!=Panel::Calibration {
+                        
                         pre { class:"mono small", "{serde_json::to_string_pretty(&data).unwrap_or_default()}" }
-                    }else{
+                    }else if panel()!=Panel::Calibration && panel()!=Panel::Reasoning{
                         div { class:"task-items",
                             for (index,record) in list_records(&data).iter().enumerate(){
                                 div { class:"task-item",key:"{index}",
@@ -257,8 +267,34 @@ pub fn LearningApp() -> Element {
                 }
             }
         }
+        if panel()==Panel::Calibration {
+            crate::embedded_learning_insights::CalibrationPanel{
+                report:result(),
+                on_question:move |id:String|{
+                    panel.set(Panel::Question);selected_id.set(id);result.set(None);
+                },
+                on_problem:move |id:String|{
+                    panel.set(Panel::Problems);selected_id.set(id);result.set(None);
+                }
+            }
+        }
+        if panel()==Panel::Graph && valid_identity(&selected_id()) {
+            crate::embedded_learning_insights::ConceptEvidence {
+                key:"{selected_id()}",id:selected_id()
+            }
+        }
         if panel()==Panel::Problems {
             EmbeddedProblem {key:"{selected_id()}",problem:result()}
+            if let Some(problem)=result(){
+                if problem.get("statement").and_then(Value::as_str).is_some() {
+                    crate::embedded_learning_workflows::ProblemAssistance{
+                        key:"{selected_id()}",problem:problem.clone()
+                    }
+                    crate::embedded_learning_workflows::TeacherConversation{
+                        key:"{selected_id()}",kind:"problem".to_owned(),record_id:selected_id()
+                    }
+                }
+            }
         }
         if panel()==Panel::Sessions {
             EmbeddedSession {key:"{selected_id()}",
@@ -266,9 +302,44 @@ pub fn LearningApp() -> Element {
                 session_id:selected_id(),
                 on_saved:move |_|{result.set(None);notice.set("Learning session action accepted.".to_owned());}
             }
+            if let Some(session)=result(){
+                if session.get("phase").and_then(Value::as_str).is_some(){
+                    crate::embedded_learning_workflows::DiagnosticWorkflow{
+                        key:"{selected_id()}",session:session.clone(),
+                        on_question:move |id:String|{
+                            panel.set(Panel::Question);selected_id.set(id);result.set(None);
+                        }
+                    }
+                    crate::embedded_learning_workflows::TeacherConversation{
+                        key:"{selected_id()}",kind:"learning session".to_owned(),
+                        record_id:selected_id()
+                    }
+                }
+            }
+        }
+        if panel()==Panel::Practice {
+            if let Some(practice)=result(){
+                if practice.get("state").and_then(Value::as_str).is_some(){
+                    crate::embedded_learning_workflows::PracticeWorkflow{
+                        key:"{selected_id()}",session:practice.clone(),
+                        on_problem:move |id:String|{
+                            panel.set(Panel::Problems);selected_id.set(id);result.set(None);
+                        }
+                    }
+                    crate::embedded_learning_workflows::TeacherConversation{
+                        key:"{selected_id()}",kind:"practice session".to_owned(),
+                        record_id:selected_id()
+                    }
+                }
+            }
         }
         if panel()==Panel::Sources {
             EmbeddedSource { source_id:selected_id() }
+            if valid_identity(&selected_id()){
+                crate::embedded_learning_workflows::SourceProgress{
+                    key:"{selected_id()}",source_id:selected_id()
+                }
+            }
         }
         if let Some(kind)=match panel(){
             Panel::Sessions=>Some("session"),
