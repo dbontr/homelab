@@ -33,7 +33,7 @@ pub fn Icon(name: String) -> Element {
         svg {
             width: "16",
             height: "16",
-            viewBox: "0 0 24 24",
+            view_box: "0 0 24 24",
             fill: "none",
             stroke: "currentColor",
             stroke_width: "1.8",
