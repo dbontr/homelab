@@ -11,7 +11,7 @@ pub fn Learning(csrf: String) -> Element {
     let mut sessions=use_resource(||async{api::get::<Value>("/v1/learning/sessions").await});
     let mut reviews=use_resource(||async{api::get::<Value>("/v1/learning/reviews").await});
     let mut selected=use_signal(||None::<String>);
-    let mut detail=use_resource(||{
+    let mut detail=use_resource(move ||{
         let id=selected();
         async move{
             match id{
@@ -20,7 +20,7 @@ pub fn Learning(csrf: String) -> Element {
             }
         }
     });
-    let mut pending=use_resource(||{
+    let mut pending=use_resource(move ||{
         let id=selected();
         async move{
             match id{
@@ -481,7 +481,7 @@ pub fn Health(csrf: String) -> Element{
                     health_busy.set(true);health_error.set(String::new());
                     spawn(async move{
                         match api::write::<Value,_>(reqwest::Method::POST,"/v1/health/records",&token,&request).await{
-                            Ok(_)=>{obs_value.set(String::new);records.restart();},
+                            Ok(_)=>{obs_value.set(String::new());records.restart();},
                             Err(error)=>health_error.set(error),
                         }
                         health_busy.set(false);
