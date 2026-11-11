@@ -173,7 +173,7 @@ fn dangerous(name: &str) -> bool {
                     | "credential" | "credentials" | "trust" | "rollback"
                     | "reinstall" | "merge" | "deploy" | "apply" | "force"
                     | "configure" | "cleanup" | "restore" | "clear" | "recover"
-                    | "grant" | "create" | "update" | "patch"
+                    | "grant" | "create" | "propose" | "review" | "update" | "patch"
             )
         })
 }
