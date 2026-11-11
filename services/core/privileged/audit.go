@@ -142,18 +142,15 @@ func(j *AuditJournal)checkInode()error{
  return nil
 }
 
-func(j *AuditJournal)Record(id,operation,target,digest,outcome string)error{
- if j==nil{return errors.New("audit journal unavailable")}
- entry:=auditEntry{ID:id,Operation:operation,Target:target,
-  ArgumentsSHA256:digest,Outcome:outcome,At:time.Now().UTC()}
+// appendLocked checks custody, transitions, replay barriers and durability.
+// Callers hold j.mu; a failed write or sync disables further journal use.
+func(j *AuditJournal)appendLocked(entry auditEntry)error{
+ if j.faulted{return errors.New("audit journal is in an uncertain state")}
  if !validAuditEntry(entry){return errors.New("invalid audit event")}
  raw,err:=json.Marshal(entry)
  if err!=nil{return err}
  if len(raw)>1024{return errors.New("audit event exceeds bound")}
  raw=append(raw,'\n')
- j.mu.Lock()
- defer j.mu.Unlock()
- if j.faulted{return errors.New("audit journal is in an uncertain state")}
  if err:=j.checkInode();err!=nil{j.faulted=true;return err}
  previous,exists:=j.seen[entry.ID]
  if entry.Outcome=="started" {
@@ -166,10 +163,15 @@ func(j *AuditJournal)Record(id,operation,target,digest,outcome string)error{
    }
   }
  }else{
-  if !exists||previous.Outcome!="started"||previous.Operation!=entry.Operation||
+  validPrevious:=exists&&previous.Outcome=="started"
+  if entry.Outcome=="reconciled"{
+   validPrevious=exists&&(previous.Outcome=="started"||
+    previous.Outcome=="indeterminate"||previous.Outcome=="failed")
+  }
+  if !validPrevious||previous.Operation!=entry.Operation||
    previous.Target!=entry.Target||previous.ArgumentsSHA256!=entry.ArgumentsSHA256||
    entry.At.Before(previous.At){
-   return errors.New("audit outcome has no matching unfinished operation")
+   return errors.New("audit outcome has no matching unresolved operation")
   }
  }
  stat,err:=j.file.Stat()
@@ -187,6 +189,43 @@ func(j *AuditJournal)Record(id,operation,target,digest,outcome string)error{
  }
  j.seen[entry.ID]=entry
  return nil
+}
+
+func(j *AuditJournal)Record(id,operation,target,digest,outcome string)error{
+ if j==nil{return errors.New("audit journal unavailable")}
+ if outcome=="reconciled" {
+  return errors.New("operator reconciliation requires separate evidence")
+ }
+ entry:=auditEntry{ID:id,Operation:operation,Target:target,
+  ArgumentsSHA256:digest,Outcome:outcome,At:time.Now().UTC()}
+ j.mu.Lock();defer j.mu.Unlock()
+ return j.appendLocked(entry)
+}
+
+// Reconcile is intended only for a trusted root recovery command that has
+// acquired the executor's process-lifetime state lease. It appends an evidence
+// digest, not a claim that an unknown operation succeeded.
+func(j *AuditJournal)Reconcile(id,evidenceSHA256 string)error{
+ if j==nil{return errors.New("audit journal unavailable")}
+ if len(evidenceSHA256)!=64||evidenceSHA256!=strings.ToLower(evidenceSHA256){
+  return errors.New("invalid reconciliation evidence digest")
+ }
+ if _,err:=hex.DecodeString(evidenceSHA256);err!=nil{return err}
+ j.mu.Lock();defer j.mu.Unlock()
+ if j.faulted{return errors.New("audit journal is in an uncertain state")}
+ previous,ok:=j.seen[id]
+ if !ok||!matchesUnresolved(previous.Outcome){
+  return errors.New("audit identity is not unresolved")
+ }
+ entry:=previous
+ entry.Outcome="reconciled"
+ entry.ReconciliationSHA256=evidenceSHA256
+ entry.At=time.Now().UTC()
+ return j.appendLocked(entry)
+}
+
+func matchesUnresolved(outcome string)bool{
+ return outcome=="started"||outcome=="indeterminate"||outcome=="failed"
 }
 
 // Unresolved returns attempts that can have taken effect but have no
