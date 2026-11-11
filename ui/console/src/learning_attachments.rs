@@ -142,7 +142,7 @@ pub fn LearningAttachments(csrf: String, owner_kind: String, owner_id: String) -
                                                     }
                                                     td { {api::property(&file,&["mime_type"])} }
                                                     td { class: "muted",
-                                                        "{api::property(&file,&["size_bytes"])} bytes"
+                                                        {format!("{} bytes", api::property(&file,&["size_bytes"]))}
                                                     }
                                                     td {
                                                         if let Some(id) = file.get("id").and_then(Value::as_str).filter(|id|
