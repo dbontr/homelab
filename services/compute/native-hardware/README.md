@@ -27,13 +27,18 @@ The Docker compatibility worker can enable the Rust custody boundary with
 `PWM_NATIVE_DEVICE_CUSTODY=1` after an operator selects an immutable absolute
 `PWM_NATIVE_HARDWARE_HELPER`. The worker's systemd unit provisions the
 private, persistent `/var/lib/homelab-device-leases` directory. The helper
-enforces exact workspace IDs and creates exclusive, sync'd records for each
-approved USB or accelerator alias before any container is created. Device
-identity is checked against the record before and after Docker allocation.
-Partial acquisitions can be rolled back by exact alias. After workspace stop,
-the worker independently confirms the managed container is absent before
-releasing its native records. If cleanup or identity checks are uncertain,
-records remain reserved and recovery requires confirmed removal.
+enforces exact workspace IDs and creates synchronized, owner-only records for
+each approved device alias **and its kernel device number** before any
+container is created. Two aliases for the same kernel device cannot acquire
+separate reservations. The physical record is written first; interrupted
+acquisition or incomplete release leaves it reserved until reconciliation.
+Kernel identity and both matching records are checked before and after
+Docker allocation. Durable USB custody requires a serial or disk **by-id**
+alias; bus addresses are inspection-only because they may be reassigned
+after removal. After workspace stop, the worker independently confirms
+the managed container is absent before releasing the alias and physical
+records. Missing devices or uncertain cleanup remain reserved until a
+separate recovery action confirms container absence.
 
 The helper does not issue controller leases, terminate containers, or accept
 credentials. CDI and Kubernetes device-plugin resources continue under
@@ -42,7 +47,8 @@ host-path helper. The host policy and worker authorization still distinguish
 SSH inspection-only devices from enrolled compute devices.
 
 Durable admission records serialize cooperating workers using the same
-protected directory, not arbitrary root processes or tools that bypass it.
+protected directory and independent physical-device keys, not arbitrary
+root processes or tools that bypass the custody service.
 The container runtime still accepts device paths rather than inherited,
 pinned file descriptors, so a sufficiently privileged host actor can replace
 a device between an identity check and Docker's kernel mapping. Physical
