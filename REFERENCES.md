@@ -28,6 +28,9 @@
 - [Rust Standard Library: PermissionsExt](https://doc.rust-lang.org/std/os/unix/fs/trait.PermissionsExt.html) — Rust project. Used for: rejecting writable Nix policy files in the Rust actuator.
 - [Go archive/zip Package](https://pkg.go.dev/archive/zip) — Go project. Used for: portable recipe bundle generation and bounded ZIP entry reading.
 - [Model Context Protocol Specification](https://modelcontextprotocol.io/specification/2025-06-18) — MCP project; 2025-06-18. Used for: stateless JSON-RPC transport, tool discovery, and tool calls.
+- [OpenAI Responses API compaction](https://developers.openai.com/api/docs/guides/compaction) — OpenAI. Used for: model-host-controlled context compaction and separation from human-readable durable handoffs.
+- [OpenAI Responses conversation state](https://developers.openai.com/api/docs/guides/conversation-state) — OpenAI. Used for: context-window accounting and preserving API conversation state.
+- [OpenAI Responses input token counting](https://developers.openai.com/api/reference/resources/responses/subresources/input_tokens/methods/count) — OpenAI. Used for: optional host-supplied token measurements rather than MCP-only guesses.
 - [RFC 5545: Internet Calendaring and Scheduling Core Object Specification](https://www.rfc-editor.org/rfc/rfc5545) — IETF. Used for: the read-only iCalendar parser; recurrence support is partial.
 - [kubectl rollout restart](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_rollout/kubectl_rollout_restart/) — Kubernetes project. Used for: validated deployment restart arguments in the privileged executor.
 - [kubectl scale](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_scale/) — Kubernetes project. Used for: bounded replica count adjustments in the privileged executor.
