@@ -11,7 +11,7 @@ use tokio::process::Command;
 use zeroize::Zeroizing;
 
 use crate::audit::AuditJournal;
-use crate::authorization::{AuthorizationClient, Decision};
+use crate::authorization::{AuthorizationClient, CredentialTicket, Decision};
 use crate::canonical::canonical_arguments;
 use crate::policy::{Action, Policy};
 use crate::release::{Manifest, ReleaseController};
@@ -103,14 +103,20 @@ impl Executor {
         result
     }
 
-    async fn perform(&self, action: Action) -> Result<&'static str, Error> {
+    async fn perform(
+        &self, action: Action, operation: &str, target: &str,
+        canonical: &[u8], tickets: &[CredentialTicket],
+    ) -> Result<&'static str, Error> {
         match action {
             Action::Actuator(args) => {
                 self.actuator(&args).await?;
                 Ok("accepted")
             }
             Action::Workspace { tool, arguments } => {
-                workspace::call(&self.policy, &self.authorization, &tool, arguments).await?;
+                workspace::call(
+                    &self.policy, &self.authorization, &tool, arguments,
+                    operation, target, canonical, tickets
+                ).await?;
                 Ok("accepted")
             }
             Action::Release { release_id, activate } => {
@@ -151,7 +157,9 @@ impl Executor {
             let id = random_hex::<16>()?;
             let digest = hex::encode(Sha256::digest(&canonical));
             executor.audit.record(&id,&operation,&target,&digest,"started")?;
-            let result = executor.perform(action).await;
+            let result = executor.perform(
+                action, &operation, &target, &canonical, &decision.credential_tickets
+            ).await;
             let outcome = match &result {
                 Ok("completed") => "succeeded",
                 Ok(_) => "accepted",
