@@ -85,10 +85,11 @@ func TestLearningQuestionAnswerPreservesConfidenceAndReasoning(t *testing.T) {
 }
 
 func TestReviewedSourceCurriculumRequiresMatchingDigestAndConfirmation(t *testing.T) {
-    requests := make(chan struct{
-        Name string
-        Arguments map[string]any
-    },4)
+    type curriculumCall struct {
+        Name string `json:"name"`
+        Arguments map[string]any `json:"arguments"`
+    }
+    requests := make(chan curriculumCall, 4)
     backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
         var call rpcRequest
         if err := json.NewDecoder(r.Body).Decode(&call); err != nil {
@@ -101,10 +102,7 @@ func TestReviewedSourceCurriculumRequiresMatchingDigestAndConfirmation(t *testin
         case "tools/list":
             _,_ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"preview_source_curriculum"},{"name":"import_source_curriculum"}]}}`))
         case "tools/call":
-            var params struct{
-                Name string `json:"name"`
-                Arguments map[string]any `json:"arguments"`
-            }
+            var params curriculumCall
             if err := json.Unmarshal(call.Params,&params);err!=nil{
                 t.Error(err)
                 w.WriteHeader(http.StatusBadRequest)
