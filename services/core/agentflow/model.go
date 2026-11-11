@@ -3,6 +3,8 @@ package agentflow
 import (
 	"bytes"
 	"context"
+    "crypto/sha256"
+    "encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -22,6 +24,9 @@ type ModelAuthor struct {
 	Model    string
 	Token    string
  TokenSource func()(string,error)
+ // ScopedTokenSource authorizes a model request under the current owner
+ // assertion and binds the credential to a digest of its exact prompt.
+ ScopedTokenSource func(context.Context,string,string,json.RawMessage)(string,error)
 	Client   *http.Client
 }
 
@@ -187,13 +192,26 @@ func (m *ModelAuthor) completeJSON(ctx context.Context, system, user string) (st
 	}
 	req.Header.Set("Content-Type", "application/json")
  token:=m.Token
- if m.TokenSource!=nil{
-  if token!=""{return "",errors.New("conflicting model credential sources")}
+ sources:=0
+ if token!=""{sources++}
+ if m.TokenSource!=nil{sources++}
+ if m.ScopedTokenSource!=nil{sources++}
+ if sources>1{return "",errors.New("conflicting model credential sources")}
+ if m.ScopedTokenSource!=nil{
+  requestHash:=sha256.Sum256(body)
+  scoped,err:=json.Marshal(map[string]string{
+   "model":m.Model,"request_sha256":hex.EncodeToString(requestHash[:]),
+  })
+  if err!=nil{return "",errors.New("invalid model credential scope")}
+  token,err=m.ScopedTokenSource(ctx,"model__completion",m.Model,scoped)
+  if err!=nil{return "",errors.New("model operation credential denied")}
+ }else if m.TokenSource!=nil{
   var err error
   token,err=m.TokenSource()
-  if err!=nil||len(token)<20||strings.ContainsAny(token,"\x00\r\n\t "){
-   return "",errors.New("model credential unavailable")
-  }
+  if err!=nil{return "",errors.New("model credential unavailable")}
+ }
+ if sources>0&&(len(token)<20||strings.ContainsAny(token,"\x00\r\n\t ")){
+  return "",errors.New("invalid model credential")
  }
  if token!=""{req.Header.Set("Authorization","Bearer "+token)}
 	res, err := m.Client.Do(req)
