@@ -20,12 +20,14 @@
   services.homelabInterfaces = {
     mcp = {
       enable = true;
+      listenAddress = "127.0.0.1:8401";
       clientTokenFile = "/srv/homelab/secrets/homelab-mcp-client.token";
       serviceTokenFile = "/srv/homelab/secrets/homelab-mcp-service.token";
       allowedOrigins = [ "https://chatgpt.com" "https://chat.openai.com" ];
     };
     api = {
       enable = true;
+      listenAddress = "127.0.0.1:8402";
       clientTokenFile = "/srv/homelab/secrets/homelab-api-client.token";
       serviceTokenFile = "/srv/homelab/secrets/homelab-api-service.token";
       allowedOrigins = [ "https://dbontr.me" ];
