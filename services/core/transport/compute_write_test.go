@@ -26,7 +26,7 @@ func TestComputeBrowserWritesRequireIndependentAuthorization(t *testing.T) {
         }
     }))
     defer backend.Close()
-    token:=strings.Repeat("c",40)
+    token:=strings.Repeat("a",40)
     h:=makeTestServer(t,[]Backend{{Name:"workspace",URL:backend.URL,Token:strings.Repeat("k",32)}})
 
     for _,tc:=range []struct{path,body string;want int}{
