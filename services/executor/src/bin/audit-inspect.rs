@@ -1,6 +1,6 @@
 //! Trusted host-console inspection and evidence-bound audit reconciliation.
 //! The active Go or Rust executor must first release its state lease.
-use std::fs::{self, OpenOptions};
+use std::fs::OpenOptions;
 use std::io::Read;
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
@@ -34,7 +34,7 @@ fn read_evidence(path: &Path) -> Result<Vec<u8>, &'static str> {
             matches!(component, std::path::Component::ParentDir)) {
         return Err("evidence path must be absolute and unambiguous");
     }
-    let mut file = OpenOptions::new().read(true)
+    let file = OpenOptions::new().read(true)
         .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
         .open(path).map_err(|_| "operator evidence file unavailable")?;
     let metadata = file.metadata().map_err(|_| "operator evidence metadata unavailable")?;
