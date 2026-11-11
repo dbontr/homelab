@@ -3,6 +3,7 @@ use std::collections::BTreeSet;
 use std::fmt;
 
 use serde::de::{self, MapAccess, SeqAccess, Visitor};
+use serde::de::Error as _;
 use serde::Deserialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
