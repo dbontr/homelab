@@ -246,8 +246,7 @@ pub fn prepare(state: &Path, destination: &Path, target: &str) -> Result<(), Err
             let md = fs::symlink_metadata(binary).map_err(|_| Error::Storage)?;
             if !md.is_file() || md.file_type().is_symlink()
                 || md.mode() & 0o022 != 0
-                || !matches!(md.uid(), 0 if unsafe { libc::geteuid() } != 0)
-                    && md.uid() != unsafe { libc::geteuid() }
+                || (md.uid() != 0 && md.uid() != unsafe { libc::geteuid() })
             {
                 return Err(Error::Storage);
             }
