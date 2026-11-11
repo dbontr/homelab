@@ -23,7 +23,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: rust-lockfiles-${{ github.ref }}
+  group: rust-lockfiles-${{ github.event.pull_request.head.ref || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
@@ -70,7 +70,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
       - name: Commit reviewed-scope lockfiles
-        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        if: github.event_name != 'schedule'
         run: |
           set -euo pipefail
           git add -f -- services/security-authority/Cargo.lock services/executor/Cargo.lock services/motivation/Cargo.lock ui/console/Cargo.lock
