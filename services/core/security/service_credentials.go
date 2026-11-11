@@ -2,6 +2,7 @@ package security
 
 import (
  "bytes"
+ "crypto/tls"
  "errors"
  "net/http"
  "regexp"
@@ -106,16 +107,20 @@ func(a *AdminSessions)SetServiceCredentialGrants(grants []ServiceCredentialGrant
  return nil
 }
 
-func verifiedServicePeer(request *http.Request)(string,bool){
- if request.TLS==nil||len(request.TLS.VerifiedChains)==0||
-  len(request.TLS.PeerCertificates)==0{return "",false}
- peer:=request.TLS.PeerCertificates[0]
+func verifiedServiceDNS(state *tls.ConnectionState)(string,bool){
+ if state==nil||len(state.VerifiedChains)==0||
+  len(state.PeerCertificates)==0{return "",false}
+ peer:=state.PeerCertificates[0]
  if peer==nil||len(peer.DNSNames)!=1{return "",false}
  dns:=peer.DNSNames[0]
  if !ValidServiceDNS(dns)||peer.VerifyHostname(dns)!=nil{return "",false}
+ return dns,true
+}
+
+func verifiedServicePeer(request *http.Request)(string,bool){
  // The authorization listener checks the peer's cert chain and configured
  // identity allowlist at connection establishment.
- return dns,true
+ return verifiedServiceDNS(request.TLS)
 }
 
 // ServiceCredentialHandler is mounted solely on the private mTLS listener.
