@@ -243,7 +243,13 @@ in
       export HOMELAB_RELEASE_SYSTEMCTL=${lib.escapeShellArg ("${pkgs.systemd}/bin/systemctl")}
       export HOMELAB_RELEASE_HEALTH_FILE=${lib.escapeShellArg (pkgs.writeText "homelab-release-health.json" (builtins.toJSON cfg.healthServices))}
       exec ${cfg.package}/bin/homelab-release "$@"
-    '') ] ++ lib.optional (cfg.implementation == "rust") rustPackage;
+    '') ] ++ lib.optionals (cfg.implementation == "rust") [
+      rustPackage
+      (pkgs.writeShellScriptBin "homelab-audit-inspect" ''
+        export HOMELAB_EXECUTOR_RELEASE_STATE=${lib.escapeShellArg cfg.stateDirectory}
+        exec ${rustPackage}/bin/audit-inspect "$@"
+      '')
+    ];
     systemd.services.homelab-executord = {
       description = "Restricted local infrastructure executor";
       wantedBy = [ "multi-user.target" ];
