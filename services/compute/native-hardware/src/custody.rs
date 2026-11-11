@@ -138,6 +138,44 @@ pub(crate) fn release_device(kind: &str, alias: &str, workspace: &str)
     Ok(())
 }
 
+// Every request that touches an existing workspace rechecks its active raw
+// devices. Device removal, alias replacement, or a malformed lease denies
+// further work until the controller has stopped and reconciled the container.
+pub(crate) fn verify_workspace(workspace: &str) -> Result<usize, &'static str> {
+    if !valid_workspace(workspace) {
+        return Err("device custody requires an exact workspace identifier");
+    }
+    let root = directory()?;
+    let mut count = 0usize;
+    let entries = fs::read_dir(root)
+        .map_err(|_| "device custody inventory unavailable")?;
+    for entry in entries {
+        let entry = entry.map_err(|_| "device custody inventory unavailable")?;
+        let path = entry.path();
+        if path.extension().and_then(|ext| ext.to_str()) != Some("lease") {
+            return Err("unexpected device custody entry");
+        }
+        let owner = read_owner(&path)?;
+        if owner != workspace { continue; }
+        let contents = fs::read_to_string(&path)
+            .map_err(|_| "cannot read device custody record")?;
+        let rows: Vec<&str> = contents.lines().collect();
+        if rows.len() != 6 {
+            return Err("device custody record is incomplete");
+        }
+        let kind = rows[2];
+        let alias = rows[3];
+        if key(kind,alias) != path.file_name().and_then(|name| name.to_str())
+            .unwrap_or("") {
+            return Err("device custody key does not match its contents");
+        }
+        verify(kind,alias,workspace)?;
+        count += 1;
+        if count > 64 { return Err("too many device custody records"); }
+    }
+    Ok(count)
+}
+
 pub(crate) fn release_workspace(workspace: &str) -> Result<usize, &'static str> {
     if !valid_workspace(workspace) {
         return Err("device custody requires an exact workspace identifier");
