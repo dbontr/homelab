@@ -38,7 +38,7 @@ Every mutation uses a canonical JSON object. The security authority binds author
 
 The security service owns `/run/homelab-securityd/client.sock` and the inaccessible-to-gateway owner socket. The executor owns `/run/homelab-executord/execute.sock`; the platform joins only its constrained client group when explicitly configured. Optional remote authorization and release listeners use TLS 1.3, configured trust roots and exact certificate DNS identities. No listener accepts an HTTP-supplied peer-identity substitute.
 
-The security service holds `.securityd.lock` for its lifetime. The executor holds `/var/lib/homelab-releases/.executord.lock` while serving requests. A separate release journal lock serializes staging and activation. Both Go and Rust implementations use the same owner lease, so a failed cutover cannot produce two managed writers. A service restart invalidates in-memory approvals, and an unfinished audit-start record remains unresolved rather than being interpreted as a failed or retriable operation.
+The security service holds `.securityd.lock` for its lifetime. The executor holds `/var/lib/homelab-releases/.executord.lock` while serving requests. A separate release journal lock serializes staging and activation. Both Go and Rust implementations use the same owner lease, so a failed cutover cannot produce two managed writers. A service restart invalidates in-memory approvals. An unfinished audit-start record or an indeterminate result after dispatch remains unresolved and requires owner reconciliation rather than being treated as a failed or safely retriable operation.
 
 ## Source and release boundaries
 
