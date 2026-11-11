@@ -165,7 +165,6 @@ pub fn Motivation(csrf: String) -> Element {
                                     option { value: "", "No linked goal" }
                                     for known in known_goals {
                                         option {
-                                            key: field(&known, "id"),
                                             value: field(&known, "id"),
                                             {field(&known, "title")}
                                         }
