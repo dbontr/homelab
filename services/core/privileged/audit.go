@@ -206,6 +206,29 @@ func(j *AuditJournal)appendLocked(entry auditEntry)error{
  return nil
 }
 
+// RequestOutcome reads the durable disposition for an exact caller request.
+// A reused identity with a different scope never inherits the prior approval.
+// The journal inode and fault state are checked before returning any result.
+func (j *AuditJournal) RequestOutcome(id,operation,target,digest string)(string,bool,error){
+ if j==nil{return "",false,errors.New("audit journal unavailable")}
+ if len(id)!=32||len(digest)!=64||id!=strings.ToLower(id)||
+  digest!=strings.ToLower(digest){
+  return "",false,errors.New("invalid execution request identity")
+ }
+ if _,err:=hex.DecodeString(id);err!=nil{return "",false,err}
+ if _,err:=hex.DecodeString(digest);err!=nil{return "",false,err}
+ j.mu.Lock()
+ defer j.mu.Unlock()
+ if j.faulted{return "",false,errors.New("audit journal is in an uncertain state")}
+ if err:=j.checkInode();err!=nil{j.faulted=true;return "",false,err}
+ entry,found:=j.seen[id]
+ if !found{return "",false,nil}
+ if entry.Operation!=operation||entry.Target!=target||entry.ArgumentsSHA256!=digest{
+  return "",false,errors.New("execution request identity reused for another operation")
+ }
+ return entry.Outcome,true,nil
+}
+
 func(j *AuditJournal)Record(id,operation,target,digest,outcome string)error{
  if j==nil{return errors.New("audit journal unavailable")}
  if outcome=="reconciled" {
