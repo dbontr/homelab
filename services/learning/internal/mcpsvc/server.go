@@ -24,6 +24,7 @@ type Service struct {
 	Server *mcp.Server
     model teacheval.CompletionClient
     modelName string
+    modelDisclosureEnabled bool
     bundle *LearningAppBundle
 }
 
