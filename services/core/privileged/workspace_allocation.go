@@ -66,12 +66,16 @@ func(p *WorkspacePolicy)allocationArgs(fields map[string]any)(map[string]any,err
     if input.MinGPUMemoryMB>0&&input.Hardware["gpu"]==0{
         return nil,errors.New("GPU memory requires an approved GPU request")
     }
+    if input.Hardware["fpga"]>0&&input.NodeID==""{
+        return nil,errors.New("FPGA claims require an exact enrolled compute worker")
+    }
     if input.Hardware==nil{input.Hardware=make(map[string]int)}
     if input.USBPassthrough{
         if input.Hardware["usb"]>1 ||input.USBNode==""||
             !workspaceIdentifier.MatchString(input.USBNode)||
             !containsID(p.Workers,input.USBNode)||
             !workspaceDeviceIdentity.MatchString(input.USBDeviceID)||
+            !containsID(p.Devices,input.USBDeviceID)||
             input.NodeID!=""&&input.NodeID!=input.USBNode{
             return nil,errors.New("USB passthrough requires exact allowlisted worker and device")
         }
