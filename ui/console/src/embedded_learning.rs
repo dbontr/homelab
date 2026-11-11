@@ -217,8 +217,11 @@ pub fn LearningApp() -> Element {
                 }
             }
         }
+        if panel()==Panel::Problems {
+            EmbeddedProblem {key:"{selected_id()}",problem:result()}
+        }
         if panel()==Panel::Sessions {
-            EmbeddedSession {
+            EmbeddedSession {key:"{selected_id()}",
                 session:result(),
                 session_id:selected_id(),
                 on_saved:move |_|{result.set(None);notice.set("Learning session action accepted.".to_owned());}
@@ -236,6 +239,121 @@ pub fn LearningApp() -> Element {
             if valid_identity(&selected_id()){
                 crate::embedded_learning_attachments::EmbeddedAttachments{
                     owner_kind:kind.to_owned(),owner_id:selected_id()
+                }
+            }
+        }
+    }
+}
+
+#[component]
+fn EmbeddedProblem(problem:Option<Value>)->Element {
+    let mut draft=use_signal(String::new);
+    let mut reasoning=use_signal(String::new);
+    let mut confidence=use_signal(String::new);
+    let mut busy=use_signal(||false);
+    let mut error=use_signal(String::new);
+    let mut receipt=use_signal(||None::<Value>);
+    let Some(problem)=problem else{return rsx!{}};
+    let shown=receipt().as_ref().and_then(|value|value.get("problem")).cloned()
+        .unwrap_or(problem);
+    let id=field(&shown,&["id"]);
+    if !valid_identity(&id)||shown.get("statement").and_then(Value::as_str).is_none() {
+        return rsx!{};
+    }
+    let open=shown.get("status").and_then(Value::as_str)==Some("open");
+    let last=shown.get("drafts").and_then(Value::as_array)
+        .and_then(|drafts|drafts.last()).cloned();
+    rsx!{
+        Card {
+            title:field(&shown,&["title"]),
+            description:"Independent problem drafts are saved as immutable revisions.".to_owned(),
+            div{class:"card-body stack",
+                p{{field(&shown,&["statement"])}}
+                p{class:"small muted",
+                    "Status: " {field(&shown,&["status"])}
+                    " · Mode: " {field(&shown,&["mode"])}
+                }
+                if !error().is_empty(){Notice{message:error()}}
+                if let Some(confirmation)=receipt(){
+                    div{class:"alert",role:"status",
+                        p{"Draft saved. No review, final verdict or mastery credit was recorded."}
+                        p{class:"mono small","Revision: " {field(&confirmation,&["draft_id"])}}
+                    }
+                }
+                if open {
+                    if let Some(previous)=last {
+                        button {class:"btn btn-outline",r#type:"button",disabled:busy(),
+                            onclick:move |_|{
+                                draft.set(previous.get("body").and_then(Value::as_str)
+                                    .unwrap_or("").to_owned());
+                                reasoning.set(previous.get("learner_reasoning")
+                                    .and_then(Value::as_str).unwrap_or("").to_owned());
+                                confidence.set(previous.get("self_confidence")
+                                    .and_then(Value::as_f64).map(|x|x.to_string())
+                                    .unwrap_or_default());
+                                receipt.set(None);
+                            },
+                            "Continue last saved draft"
+                        }
+                    }
+                    form{class:"task-editor-fields",
+                        onsubmit:{
+                            let id=id.clone();
+                            move |event|{
+                                event.prevent_default();
+                                let body=draft();
+                                let explanation=reasoning();
+                                let confidence_text=confidence();
+                                let estimate=if confidence_text.is_empty(){None}
+                                    else{confidence_text.parse::<f64>().ok()};
+                                if busy()||!valid_identity(&id)||body.trim().is_empty()
+                                    ||body.len()>16000||explanation.len()>16000
+                                    ||!confidence_text.is_empty()&&estimate.is_none(){
+                                    error.set("Enter an independent solution and valid confidence.".to_owned());
+                                    return;
+                                }
+                                let params=json!({"problem_id":id,"draft":body,
+                                    "learner_reasoning":explanation,
+                                    "self_confidence":estimate});
+                                busy.set(true);error.set(String::new());receipt.set(None);
+                                spawn(async move{
+                                    match mcp_app::call_learning_tool::<Value>(
+                                        "save_problem_draft",params).await{
+                                        Ok(saved)=>receipt.set(Some(saved)),
+                                        Err(message)=>error.set(message),
+                                    }
+                                    busy.set(false);
+                                });
+                            }
+                        },
+                        label{class:"form-row",
+                            span{class:"label","My solution"}
+                            textarea{class:"field",rows:"6",required:true,maxlength:"16000",
+                                disabled:busy(),value:"{draft()}",
+                                oninput:move |event|draft.set(event.value())}
+                        }
+                        label{class:"form-row",
+                            span{class:"label","Independent reasoning (optional)"}
+                            textarea{class:"field",rows:"4",maxlength:"16000",
+                                disabled:busy(),value:"{reasoning()}",
+                                oninput:move |event|reasoning.set(event.value())}
+                        }
+                        label{class:"form-row",
+                            span{class:"label","Self-reported confidence"}
+                            select{class:"field",disabled:busy(),value:"{confidence()}",
+                                onchange:move |event|confidence.set(event.value()),
+                                option{value:"","Not specified"}
+                                option{value:"0","0%"}
+                                option{value:"0.25","25%"}
+                                option{value:"0.5","50%"}
+                                option{value:"0.75","75%"}
+                                option{value:"1","100%"}
+                            }
+                        }
+                        button{class:"btn btn-primary",disabled:busy(),"Save independent draft"}
+                    }
+                }else{
+                    p{class:"small muted","This problem is closed; saved evidence remains available for review."}
                 }
             }
         }
