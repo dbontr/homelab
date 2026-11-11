@@ -135,7 +135,7 @@ pub fn LearningAttachments(csrf: String, owner_kind: String, owner_id: String) -
                                                         if let Some(notes) = file.get("annotations").and_then(Value::as_array) {
                                                             for note in notes.iter().take(5) {
                                                                 p { class: "small muted",
-                                                                    "{api::property(note,&["method"])}: {api::property(note,&["text"])}"
+                                                                    {format!("{}: {}", api::property(note,&["method"]), api::property(note,&["text"]))}
                                                                 }
                                                             }
                                                         }
