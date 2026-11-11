@@ -750,12 +750,37 @@ mod tests {
     }
 
     #[test]
+    fn usb_device_allowlist_accepts_controller_identity_syntax() {
+        assert!(valid_workspace_device_identity("jtag:1"));
+        assert!(valid_workspace_device_identity("Usb-A_3.2"));
+        for bad in ["", "-usb", "/dev/bus/usb/001/002", "usb 1"] {
+            assert!(!valid_workspace_device_identity(bad));
+        }
+        assert!(!valid_workspace_device_identity(&"x".repeat(129)));
+        let policy = WorkspacePolicy {
+            endpoint: "https://workspace.example/mcp".into(),
+            projects: vec!["research".into()],
+            workers: vec![],
+            devices: vec!["jtag:1".into()],
+            images: vec![],
+            image_references: vec![],
+            software: vec![],
+            programs: vec![],
+            packages: vec![],
+        };
+        assert!(policy.validate().is_ok());
+        let mut invalid = policy.clone();
+        invalid.devices = vec!["/dev/bus/usb".into()];
+        assert!(invalid.validate().is_err());
+    }
+
+    #[test]
     fn workspace_allocation_is_limited_to_operator_resources() {
         let policy = WorkspacePolicy {
             endpoint: "https://workspace.example/mcp".into(),
             projects: vec!["research".into()],
             workers: vec!["jupiter".into()],
-            devices: vec!["jtag".into()],
+            devices: vec!["jtag:1".into()],
             images: vec!["approved-image".into()],
             image_references: Vec::new(),
             software: Vec::new(),
@@ -798,7 +823,7 @@ mod tests {
         usb.insert("hardware".into(),json!({"usb":1}));
         usb.insert("usb_passthrough".into(),json!(true));
         usb.insert("usb_node".into(),json!("jupiter"));
-        usb.insert("usb_device_id".into(),json!("jtag"));
+        usb.insert("usb_device_id".into(),json!("jtag:1"));
         assert!(policy.operation("infrastructure__workspace_create",&usb).is_ok());
         usb.insert("usb_node".into(),json!("outside"));
         assert!(policy.operation("infrastructure__workspace_create",&usb).is_err());
