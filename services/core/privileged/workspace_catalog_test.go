@@ -16,6 +16,26 @@ func catalogPolicy() *WorkspacePolicy {
         Packages:[]string{"git"},
     }
 }
+func TestWorkspaceUSBDeviceAllowlistMatchesControllerSyntax(t *testing.T) {
+    policy:=&WorkspacePolicy{
+        Endpoint:"https://controller.example/mcp",
+        TokenSource:func()(string,error){return strings.Repeat("a",40),nil},
+        Projects:[]string{"research"},
+        Devices:[]string{"jtag:1"},
+    }
+    if err:=policy.validate();err!=nil{
+        t.Fatalf("controller-compatible device identity rejected: %v",err)
+    }
+    for _,identity:=range []string{
+        "/dev/bus/usb/001/002","device id","-device",strings.Repeat("j",129),
+    }{
+        policy.Devices=[]string{identity}
+        if err:=policy.validate();err==nil{
+            t.Errorf("invalid device policy identity accepted: %q",identity)
+        }
+    }
+}
+
 func TestWorkspaceCatalogUsesExactOperatorResourceNames(t *testing.T){
     policy:=catalogPolicy()
     cases:=[]struct{
