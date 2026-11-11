@@ -27,6 +27,18 @@ in {
       default = null;
       description = "Runtime path to an owner-only MCP bearer token, kept outside the Nix store.";
     };
+    appBundle = {
+      directory = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Verified immutable Rust/WASM Learning MCP App release directory.";
+      };
+      origin = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Exact public HTTPS origin serving verified Learning App assets.";
+      };
+    };
     model = {
       endpoint = lib.mkOption {
         type = lib.types.nullOr lib.types.str;
@@ -100,6 +112,15 @@ in {
         message = "Learning model requires endpoint and name together, and credentials require an endpoint.";
       }
       {
+        assertion = (cfg.appBundle.directory == null) == (cfg.appBundle.origin == null);
+        message = "Learning App requires verified assets and their public origin together.";
+      }
+      {
+        assertion = cfg.appBundle.origin == null ||
+          builtins.match "https://[A-Za-z0-9.-]+(:[0-9]+)?" cfg.appBundle.origin != null;
+        message = "Learning App assets require an exact HTTPS origin.";
+      }
+      {
         assertion = cfg.model.endpoint == null ||
           builtins.match "https://[^/?#]+/v1/chat/completions" cfg.model.endpoint != null ||
           builtins.match "http://(127[.]0[.]0[.]1|localhost|\\[::1\\])(:[0-9]+)?/v1/chat/completions" cfg.model.endpoint != null;
@@ -150,6 +171,9 @@ in {
           "ADAPTIVE_TEACHING_ALLOWED_HOSTS=${cfg.allowedHosts}"
           "ADAPTIVE_TEACHING_ALLOWED_ORIGINS=${cfg.allowedOrigins}"
           "ADAPTIVE_TEACHING_BEARER_TOKEN_FILE=/run/adaptive-teaching/mcp_token"
+        ] ++ lib.optionals (cfg.appBundle.directory != null) [
+          "ADAPTIVE_TEACHING_APP_BUNDLE_DIRECTORY=${cfg.appBundle.directory}"
+          "ADAPTIVE_TEACHING_APP_BUNDLE_ORIGIN=${cfg.appBundle.origin}"
         ] ++ lib.optionals (cfg.model.endpoint != null) [
           "ADAPTIVE_TEACHING_MODEL_ENDPOINT=${cfg.model.endpoint}"
           "ADAPTIVE_TEACHING_MODEL_NAME=${cfg.model.name}"
