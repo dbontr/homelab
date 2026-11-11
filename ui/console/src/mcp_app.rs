@@ -18,11 +18,12 @@ use crate::components::{Loading, Notice};
 const PROTOCOL: &str = "2026-01-26";
 const MAX_REQUEST: usize = 256 * 1024;
 const MAX_REPLY: usize = 4 * 1024 * 1024;
+const MAX_FILE_TRANSFER: usize = 8 * 1024 * 1024;
 const MAX_PENDING: usize = 32;
 
 
 fn decode_response(raw: &str) -> Option<(u32, Result<Value, String>)> {
-    if raw.len() > MAX_REPLY { return None; }
+    if raw.len() > MAX_FILE_TRANSFER { return None; }
     let message: Value = serde_json::from_str(raw).ok()?;
     if message.get("jsonrpc").and_then(Value::as_str) != Some("2.0") {
         return None;
@@ -61,6 +62,7 @@ fn decode_host_result(raw:&str)->Option<Value>{
 
 struct Pending {
     reply: oneshot::Sender<Result<Value, String>>,
+    max_reply: usize,
     _timeout: Timeout,
 }
 
@@ -97,7 +99,7 @@ impl Bridge {
             }
             let Ok(raw) = JSON::stringify(&event.data()) else { return };
             let Some(raw) = raw.as_string() else { return };
-            if raw.len() > MAX_REPLY { return; }
+            if raw.len() > MAX_FILE_TRANSFER { return; }
             if let Ok(value) = serde_json::from_str::<Value>(&raw) {
                 if value.get("jsonrpc").and_then(Value::as_str)==Some("2.0")
                     && value.get("method").and_then(Value::as_str)==Some("ui/resource-teardown") {
@@ -121,6 +123,10 @@ impl Bridge {
             }
             let Some((id, response)) = decode_response(&raw) else { return };
             let Some(pending) = pending_messages.borrow_mut().remove(&id) else { return };
+            if raw.len() > pending.max_reply {
+                let _ = pending.reply.send(Err("MCP Apps response exceeds its operation limit".to_owned()));
+                return;
+            }
             let _ = pending.reply.send(response);
         });
         current.add_event_listener_with_callback("message", listener.as_ref().unchecked_ref())
@@ -138,9 +144,18 @@ impl Bridge {
         let id = self.next_id;
         self.next_id = self.next_id.checked_add(1)
             .ok_or_else(|| "MCP Apps request limit reached".to_owned())?;
+        let upload = method=="tools/call" &&
+            params.get("name").and_then(Value::as_str)==Some("upload_attachment") &&
+            selected_view().as_deref()==Some("learning");
+        let download = method=="tools/call" &&
+            params.get("name").and_then(Value::as_str)==Some("get_attachment") &&
+            params.pointer("/arguments/include_original").and_then(Value::as_bool)==Some(true) &&
+            selected_view().as_deref()==Some("learning");
+        let max_request = if upload {MAX_FILE_TRANSFER} else {MAX_REQUEST};
+        let max_reply = if download {MAX_FILE_TRANSFER} else {MAX_REPLY};
         let request = json!({"jsonrpc":"2.0","id":id,"method":method,"params":params});
         let text = request.to_string();
-        if text.len() > MAX_REQUEST { return Err("MCP Apps request is too large".to_owned()); }
+        if text.len() > max_request { return Err("MCP Apps request is too large".to_owned()); }
         let payload = JSON::parse(&text)
             .map_err(|_| "Unable to encode MCP Apps request")?;
         let (sender, receiver) = oneshot::channel();
@@ -150,7 +165,7 @@ impl Bridge {
                 let _ = pending.reply.send(Err("MCP Apps host did not respond".to_owned()));
             }
         });
-        self.pending.borrow_mut().insert(id, Pending { reply: sender, _timeout: timer });
+        self.pending.borrow_mut().insert(id, Pending { reply: sender, max_reply, _timeout: timer });
         if self.parent.post_message(&payload, "*").is_err() {
             self.pending.borrow_mut().remove(&id);
             return Err("MCP Apps host connection failed".to_owned());
@@ -260,6 +275,7 @@ const LEARNING_APP_TOOLS: &[&str] = &[
     "list_learning_sources", "search_learning_sources",
     "list_practice_sessions", "get_practice_session",
     "preview_source_curriculum", "import_source_curriculum",
+    "list_attachments", "get_attachment", "upload_attachment",
     "propose_question_model_assessment", "propose_step_model_assessment",
 ];
 
