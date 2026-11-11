@@ -252,6 +252,15 @@ fn private_ip(address: SocketAddr) -> bool {
         IpAddr::V6(ip) => ip.is_unique_local() || ip.is_loopback(),
     }
 }
+fn valid_coordinator_dns(name: &str) -> bool {
+    !name.is_empty() && name.len() <= 253 && name.split('.').all(|label| {
+        let bytes = label.as_bytes();
+        (1..=63).contains(&bytes.len())
+            && bytes.first().is_some_and(|b| b.is_ascii_lowercase() || b.is_ascii_digit())
+            && bytes.last().is_some_and(|b| b.is_ascii_lowercase() || b.is_ascii_digit())
+            && bytes.iter().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || *b == b'-')
+    })
+}
 fn certificate_dns(certificate: &[u8]) -> Result<String, Error> {
     let (_, cert) = parse_x509_certificate(certificate)
         .map_err(|_| Error::Denied("invalid coordinator certificate"))?;
@@ -261,7 +270,9 @@ fn certificate_dns(certificate: &[u8]) -> Result<String, Error> {
     let names = san.value.general_names.iter().filter_map(|v|
         if let GeneralName::DNSName(name) = v { Some((*name).to_owned()) } else { None }
     ).collect::<Vec<_>>();
-    if names.len() != 1 { return Err(Error::Denied("ambiguous coordinator DNS identity")); }
+    if names.len() != 1 || !valid_coordinator_dns(&names[0]) {
+        return Err(Error::Denied("invalid or ambiguous coordinator DNS identity"));
+    }
     Ok(names[0].clone())
 }
 impl Remote {
@@ -272,9 +283,7 @@ impl Remote {
             .map_err(|_| Error::Configuration("invalid remote executor listener"))?;
         if !private_ip(address) { return Err(Error::Configuration("remote executor must bind a private IP")); }
         let expected_peer = required("HOMELAB_EXECUTOR_REMOTE_COORDINATOR")?;
-        if expected_peer.is_empty() || expected_peer.len() > 253 ||
-            expected_peer.bytes().any(|b| b.is_ascii_whitespace() ||
-                matches!(b, b'/' | b'\\' | b':' | b'@' | b';' | 0)) {
+        if !valid_coordinator_dns(&expected_peer) {
             return Err(Error::Configuration("invalid coordinator DNS identity"));
         }
         let server_cert = bounded_file(&absolute("HOMELAB_EXECUTOR_REMOTE_CERT")?, 1<<20,false)?;
@@ -328,5 +337,23 @@ impl Remote {
                 let _ = tokio::time::timeout(Duration::from_secs(3*60*60),connection).await;
             });
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn coordinator_identity_rejects_wildcards_and_non_dns_names() {
+        assert!(valid_coordinator_dns("release.saturn.internal"));
+        assert!(valid_coordinator_dns("saturn"));
+        for name in ["", ".", "release.", ".release", "release..internal", "*",
+            "*.internal", "-release.internal", "release-.internal",
+            "Release.internal", "release_internal", "release.internal:443",
+            "release/internal", "release\\n.internal", "https://release.internal"] {
+            assert!(!valid_coordinator_dns(name), "invalid coordinator identity: {name:?}");
+        }
+        assert!(!valid_coordinator_dns(&format!("{}.internal", "a".repeat(64))));
     }
 }
