@@ -1,4 +1,4 @@
-{ pkgs, ... }:
+{ config, pkgs, ... }:
 {
   # Each listener owns its own credential and runs on loopback.
   services.homelabPlatform = {
@@ -6,7 +6,12 @@
     tokenFile = "/srv/homelab/secrets/homelab-platform.token";
     securityClientSocket = "/run/homelab-securityd/client.sock";
     executorSocket = "/run/homelab-executord/execute.sock";
-    consolePassphraseFile = "/var/lib/homelab-console/verifier.json";
+    consoleAccess = {
+      issuer = config.services.homelabSecurity.access.issuer;
+      audience = config.homelab.access.consoleAudTag;
+      ownerEmailFile = config.services.homelabSecurity.access.ownerEmailFile;
+      jwksFile = config.services.homelabSecurity.access.jwksFile;
+    };
     allowedOrigins = [
       "https://dbontr.me"
       "https://chatgpt.com"
