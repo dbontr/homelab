@@ -19,8 +19,14 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
-      - name: Check out source
+      - name: Check out exact source commit
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Record source commit
+        id: source
+        run: echo "revision=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - name: Install Rust and WebAssembly target
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -67,11 +73,11 @@ jobs:
           dx bundle --web --release --out-dir "$RUNNER_TEMP/console-bundle"
           test -s "$RUNNER_TEMP/console-bundle/public/index.html"
           find "$RUNNER_TEMP/console-bundle/public" -type f -name '*.wasm' -size +0c -print | grep -q .
-          printf '%s\n' "$GITHUB_SHA" > "$RUNNER_TEMP/console-bundle/public/SOURCE_REVISION"
+          git rev-parse HEAD > "$RUNNER_TEMP/console-bundle/public/SOURCE_REVISION"
       - name: Upload source-bound console artifact
         uses: actions/upload-artifact@v4
         with:
-          name: homelab-console-${{ github.sha }}
+          name: homelab-console-${{ steps.source.outputs.revision }}
           path: ${{ runner.temp }}/console-bundle/public/
           if-no-files-found: error
           retention-days: 7
