@@ -9,8 +9,6 @@ import (
     "testing"
 
     "github.com/dbontr/homelab-new/system/internal/motivationhttp"
-    "github.com/dbontr/homelab-new/system/security"
-    "github.com/dbontr/homelab-new/system/session"
     "github.com/dbontr/homelab-new/system/store"
 )
 
@@ -34,19 +32,16 @@ func TestMotivationBrowserRoutesRequireOwnerSessionAndCSRF(t *testing.T) {
     if err!=nil {t.Fatal(err)}
     server,err:=New(db,strings.Repeat("a",40),nil)
     if err!=nil {t.Fatal(err)}
-    record,err:=security.HashPassphrase([]byte("independent-console-passphrase"))
-    if err!=nil {t.Fatal(err)}
-    manager,err:=session.New(record)
-    if err!=nil {t.Fatal(err)}
+    manager, accessAssertion := accessTransportFixture(t)
     server.SetSessions(manager)
     server.SetMotivation(client)
     if err:=server.SetAllowedOrigins([]string{"https://console.example"});err!=nil {t.Fatal(err)}
     handler:=server.Handler()
-    call:=func(method,path,body string,cookie *http.Cookie,csrf string)*httptest.ResponseRecorder{
+    call:=func(method,path,body string,identity *accessTestIdentity,csrf string)*httptest.ResponseRecorder{
         req:=httptest.NewRequest(method,path,strings.NewReader(body))
         req.Host="console.example"
         req.Header.Set("Origin","https://console.example")
-        if cookie!=nil {req.AddCookie(cookie)}
+        if identity!=nil {req.Header.Set("Cf-Access-Jwt-Assertion",identity.Value)}
         if body!="" {req.Header.Set("Content-Type","application/json")}
         if csrf!="" {req.Header.Set("X-CSRF-Token",csrf)}
         writer:=httptest.NewRecorder()
@@ -54,15 +49,13 @@ func TestMotivationBrowserRoutesRequireOwnerSessionAndCSRF(t *testing.T) {
         return writer
     }
     if w:=call("GET","/v1/motivation/state","",nil,"");w.Code!=401 {t.Fatalf("unauthenticated read: %d",w.Code)}
-    login:=call("POST","/ui/session",`{"passphrase":"independent-console-passphrase"}`,nil,"")
-    if login.Code!=200 {t.Fatalf("login: %d %s",login.Code,login.Body.String())}
-    cookie:=login.Result().Cookies()[0]
-    state:=call("GET","/ui/session","",cookie,"")
+    identity := &accessTestIdentity{Value: accessAssertion}
+    state:=call("GET","/ui/session","",identity,"")
     var sessionState struct { CSRF string `json:"csrf_token"` }
     if err:=json.Unmarshal(state.Body.Bytes(),&sessionState);err!=nil {t.Fatal(err)}
     if sessionState.CSRF=="" {t.Fatal("CSRF missing")}
     for _,path:=range []string{"/v1/motivation/state","/v1/motivation/metrics"} {
-        if w:=call("GET",path,"",cookie,"");w.Code!=200 {
+        if w:=call("GET",path,"",identity,"");w.Code!=200 {
             t.Fatalf("authenticated read %s: %d %s",path,w.Code,w.Body.String())
         }
     }
@@ -73,15 +66,15 @@ func TestMotivationBrowserRoutesRequireOwnerSessionAndCSRF(t *testing.T) {
         {"POST","/v1/motivation/focus"},{"POST","/v1/motivation/focus/end"},
     }
     for _,item:=range cases {
-        if w:=call(item.method,item.path,"{}",cookie,"");w.Code!=401 {
+        if w:=call(item.method,item.path,"{}",identity,"");w.Code!=401 {
             t.Fatalf("CSRF bypass for %s %s: %d",item.method,item.path,w.Code)
         }
-        if w:=call(item.method,item.path,"{}",cookie,sessionState.CSRF);w.Code!=200 {
+        if w:=call(item.method,item.path,"{}",identity,sessionState.CSRF);w.Code!=200 {
             t.Fatalf("authorized call %s %s: %d %s",item.method,item.path,w.Code,w.Body.String())
         }
     }
     if len(calls)!=10 {t.Fatalf("expected ten authorized upstream calls, got %v",calls)}
-    if w:=call("POST","/mcp",`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`,cookie,sessionState.CSRF);w.Code!=401 {
+    if w:=call("POST","/mcp",`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`,identity,sessionState.CSRF);w.Code!=401 {
         t.Fatal("browser session reached MCP")
     }
 }
