@@ -33,8 +33,9 @@ func TestUnadvertisedBackendToolIsNeverForwarded(t *testing.T){
   t.Fatalf("privileged tool must not be forwarded: %s",w.Body.String())
  }
  w=request(s.Handler(),"POST","/v1/tools/workspace__unadvertised/call",`{"arguments":{}}`,strings.Repeat("t",40))
- if calls!=0||!strings.Contains(w.Body.String(),"not advertised"){
-  t.Fatalf("unadvertised tool forwarded: %s",w.Body.String())
+ if calls!=0||!strings.Contains(w.Body.String(),`"isError":true`)||
+  !(strings.Contains(w.Body.String(),"not advertised")||strings.Contains(w.Body.String(),"executor-side authorization")){
+  t.Fatalf("unadvertised tool was not rejected locally: %s",w.Body.String())
  }
 }
 
