@@ -50,7 +50,7 @@ func TestRecipeSagePreviewAndImportAuthorization(t *testing.T) {
 		handler.ServeHTTP(w, req)
 		return w
 	}
-	identity := &accessTestIdentity{Value: accessAssertion}
+	accessToken := &accessTestIdentity{Value: accessAssertion}
 	var identity struct {
 		CSRF string `json:"csrf_token"`
 	}
