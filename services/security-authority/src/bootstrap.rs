@@ -31,7 +31,7 @@ pub fn configured_file(name: &str, private: bool) -> Result<Vec<u8>, Error> {
     {
         return Err(Error::InvalidConfiguration);
     }
-    let mut file = OpenOptions::new()
+    let file = OpenOptions::new()
         .read(true)
         .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
         .open(path)
