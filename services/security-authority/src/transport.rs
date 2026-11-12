@@ -887,7 +887,14 @@ fn save_console_verifier(record: &PassphraseRecord) -> Result<(), Error> {
         fs::rename(&temporary, &destination).map_err(|_| Error::Storage)?;
         fs::File::open(directory)
             .and_then(|dir| dir.sync_all())
-            .map_err(|_| Error::Storage)
+            .map_err(|_| Error::Storage)?;
+        let mut refresh = OpenOptions::new()
+            .write(true)
+            .truncate(true)
+            .open(directory.join("refresh.trigger"))
+            .map_err(|_| Error::Storage)?;
+        refresh.write_all(b"1").map_err(|_| Error::Storage)?;
+        refresh.sync_all().map_err(|_| Error::Storage)
     })();
     if result.is_err() {
         let _ = fs::remove_file(&temporary);
