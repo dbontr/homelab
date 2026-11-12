@@ -1,0 +1,51 @@
+name: Normalize Rust source formatting
+
+on:
+  push:
+    branches:
+      - feature/rust-native-execution-boundaries
+    paths:
+      - ".github/workflows/rust-format-repair.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: rust-format-repair-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  normalize:
+    if: github.repository == 'dbontr/homelab' && github.ref == 'refs/heads/feature/rust-native-execution-boundaries'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out the exact draft branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/rust-native-execution-boundaries
+          persist-credentials: true
+      - name: Install Rust and rustfmt
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Format existing source without executing project code
+        shell: bash
+        run: |
+          set -euo pipefail
+          for crate in services/security-authority services/executor services/motivation ui/console; do
+            cargo fmt --all --manifest-path "$crate/Cargo.toml"
+          done
+          git diff --check
+      - name: Publish only reviewed Rust source formatting
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add -u -- services/security-authority/src services/executor/src services/motivation/src ui/console/src
+          if git diff --cached --quiet; then
+            echo "All Rust sources already satisfy rustfmt."
+            exit 0
+          fi
+          git -c user.name=homelab-build -c user.email=build@users.noreply.github.com commit -m "Normalize Rust source with rustfmt"
+          git push origin HEAD:feature/rust-native-execution-boundaries
