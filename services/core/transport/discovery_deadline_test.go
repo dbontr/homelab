@@ -58,10 +58,14 @@ func namesInDiscovery(list []map[string]any)([]string,map[string]int){
 func TestToolDiscoveryKeepsHealthyLocalAndRemoteToolsDuringBackendOutage(t *testing.T){
  fast:=discoveryBackend(t,"health_food_search","USDA lookup")
  defer fast.Close()
+ releaseBlocked := make(chan struct{})
  blocked:=httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter,r *http.Request){
-  <-r.Context().Done()
+  select {
+  case <-r.Context().Done():
+  case <-releaseBlocked:
+  }
  }))
- defer blocked.Close()
+ defer func() { close(releaseBlocked); blocked.Close() }()
  gateway:=discoveryServer(t,[]Backend{
   {Name:"health",URL:fast.URL},
   {Name:"learning",URL:blocked.URL},
