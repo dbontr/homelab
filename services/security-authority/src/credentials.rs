@@ -23,33 +23,6 @@ pub struct PassphraseRecord {
     pub digest: String,
 }
 
-impl PassphraseRecord {
-    /// Generate a distinct, unpredictable browser-console credential and its verifier.
-    /// The plaintext belongs only in the authenticated enrollment response.
-    pub fn generate_console_secret() -> Result<(Self, Zeroizing<String>), Error> {
-        use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-
-        let mut random = [0u8; 32];
-        getrandom::fill(&mut random).map_err(|_| Error::Storage)?;
-        let password = Zeroizing::new(URL_SAFE_NO_PAD.encode(random));
-        random.zeroize();
-
-        let mut salt = [0u8; 24];
-        getrandom::fill(&mut salt).map_err(|_| Error::Storage)?;
-        let mut digest = [0u8; 32];
-        pbkdf2_hmac::<Sha256>(password.as_bytes(), &salt, MIN_ITERATIONS, &mut digest);
-        let record = Self {
-            version: 1,
-            iterations: MIN_ITERATIONS,
-            salt: STANDARD_NO_PAD.encode(salt),
-            digest: STANDARD_NO_PAD.encode(digest),
-        };
-        salt.zeroize();
-        digest.zeroize();
-        Ok((record, password))
-    }
-}
-
 pub struct Factors {
     salt: [u8; 24],
     digest: [u8; 32],
@@ -211,20 +184,6 @@ impl Default for AuthenticatorState {
 mod tests {
     use super::*;
 
-    #[test]
-    fn console_secret_has_a_distinct_valid_pbkdf2_verifier() {
-        let (a, password_a) = PassphraseRecord::generate_console_secret().unwrap();
-        let (b, password_b) = PassphraseRecord::generate_console_secret().unwrap();
-        assert_eq!(password_a.len(), 43);
-        assert_ne!(password_a.as_str(), password_b.as_str());
-        assert_ne!(a.salt, b.salt);
-        let salt = STANDARD_NO_PAD.decode(a.salt.as_bytes()).unwrap();
-        let digest = STANDARD_NO_PAD.decode(a.digest.as_bytes()).unwrap();
-        let mut derived = [0u8; 32];
-        pbkdf2_hmac::<Sha256>(password_a.as_bytes(), &salt, a.iterations, &mut derived);
-        assert_eq!(derived.as_slice(), digest.as_slice());
-        derived.zeroize();
-    }
     const PASSPHRASE: &str = "correct horse battery staple";
     fn fixture() -> Factors {
         Factors::new(
