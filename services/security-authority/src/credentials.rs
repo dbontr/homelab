@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use sha1::Sha1;
 use sha2::Sha256;
 use subtle::ConstantTimeEq;
-use zeroize::Zeroize;
+use zeroize::{Zeroize, Zeroizing};
 
 use crate::Error;
 
@@ -21,6 +21,38 @@ pub struct PassphraseRecord {
     pub iterations: u32,
     pub salt: String,
     pub digest: String,
+}
+
+impl PassphraseRecord {
+    /// Generate a distinct, unpredictable browser-console credential and its verifier.
+    /// The plaintext belongs only in the authenticated enrollment response.
+    pub fn generate_console_secret() -> Result<(Self, Zeroizing<String>), Error> {
+        use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+
+        let mut random = [0u8; 32];
+        getrandom::fill(&mut random).map_err(|_| Error::Storage)?;
+        let password = Zeroizing::new(URL_SAFE_NO_PAD.encode(random));
+        random.zeroize();
+
+        let mut salt = [0u8; 24];
+        getrandom::fill(&mut salt).map_err(|_| Error::Storage)?;
+        let mut digest = [0u8; 32];
+        pbkdf2_hmac::<Sha256>(
+            password.as_bytes(),
+            &salt,
+            MIN_ITERATIONS,
+            &mut digest,
+        );
+        let record = Self {
+            version: 1,
+            iterations: MIN_ITERATIONS,
+            salt: STANDARD_NO_PAD.encode(salt),
+            digest: STANDARD_NO_PAD.encode(digest),
+        };
+        salt.zeroize();
+        digest.zeroize();
+        Ok((record, password))
+    }
 }
 
 pub struct Factors {
