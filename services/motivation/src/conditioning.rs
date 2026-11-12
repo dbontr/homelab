@@ -131,15 +131,14 @@ impl Engine {
         if !valid_checkins(std::slice::from_ref(&proposed), self.state.next_id) {
             return Err(Error::Invalid("invalid engagement check-in"));
         }
-        if let Some(id) = proposed.intervention_id {
-            if !self
+        if let Some(id) = proposed.intervention_id
+            && !self
                 .state
                 .interventions
                 .iter()
                 .any(|e| e.id == id && !e.cancelled)
-            {
-                return Err(Error::Invalid("invalid intervention reference"));
-            }
+        {
+            return Err(Error::Invalid("invalid intervention reference"));
         }
         if self
             .state
