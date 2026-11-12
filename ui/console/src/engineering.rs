@@ -116,7 +116,7 @@ fn RunDetail(run: Value, csrf: String) -> Element {
                         tbody {
                             for step in &steps {
                                 tr {
-                                    td { "{text(step, "kind")}" }
+                                    td { {text(step, "kind")} }
                                     td { Badge { text: text(step, "status") } }
                                     td { "{text(step, "attempts")}" }
                                 }
