@@ -104,12 +104,14 @@ valid_system "$previous" || fail "current NixOS system is not a valid rollback t
 
 unit="homelab-cutover-$(date +%s)"
 runner="/run/$unit-runner"
+bash_bin=$(readlink -f -- "$(command -v bash)") || fail "cannot resolve the Bash runtime"
+[[ -x "$bash_bin" ]] || fail "Bash runtime is unavailable"
 install -m 0700 -- "$0" "$runner"
 printf '%s\n' "$previous" > /run/homelab-previous-system
 systemd-run --no-block --unit="$unit" --collect \
   --property=Type=oneshot --property=TimeoutStartSec=25min \
   --property=StandardOutput=journal --property=StandardError=journal \
-  "$runner" --run "$candidate" "$previous"
+  "$bash_bin" "$runner" --run "$candidate" "$previous"
 printf 'Detached trial started: %s\n' "$unit"
 printf 'Inspect with: journalctl -u %s --no-pager\n' "$unit"
 printf 'Previous system: %s\n' "$previous"
