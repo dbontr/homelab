@@ -3,15 +3,23 @@ package mcp
 import (
  "encoding/json"
  "path/filepath"
+ "os"
  "strings"
  "testing"
  "time"
 
  "github.com/dbontr/homelab-new/system/health/internal/health"
 )
+func privateHealthToolDir(t *testing.T) string {
+ t.Helper()
+ directory:=t.TempDir()
+ if err:=os.Chmod(directory,0700);err!=nil{t.Fatal(err)}
+ return directory
+}
+
 func healthServer(t *testing.T) *Server {
  t.Helper()
- db,err:=health.Open(filepath.Join(t.TempDir(),"health.db"))
+ db,err:=health.Open(filepath.Join(privateHealthToolDir(t),"health.db"))
  if err!=nil{t.Fatal(err)}
  t.Cleanup(func(){_ =db.Close()})
  return New(nil,db)
