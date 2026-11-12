@@ -1,6 +1,6 @@
 # References
 
-- [NixOS Manual](https://nixos.org/manual/nixos/stable/) — NixOS project. Used for: declarative host configuration, systemd services, and state directories.
+- [NixOS Manual](https://nixos.org/manual/nixos/stable/) — NixOS project. Used for: declarative host configuration, systemd services, and state directories, controlled system generation activation, and rollback.
 - [Nix Flake Reference](https://nixos.org/manual/nix/stable/command-ref/new-cli/nix3-flake) — Nix project. Used for: pinned, reproducible host composition.
 - [SQLite Foreign Key Support](https://www.sqlite.org/foreignkeys.html) — SQLite project. Used for: transactional research claim and source-evidence ownership constraints.
 - [Go Documentation](https://go.dev/doc/) — Go project. Used for: Go services, HTTP handling, and file persistence.
@@ -68,7 +68,6 @@
 - [RFC 7518: JSON Web Algorithms](https://www.rfc-editor.org/rfc/rfc7518) — IETF. Used for: RS256 verification with pinned RSA signing keys.
 - [RFC 7517: JSON Web Key](https://www.rfc-editor.org/rfc/rfc7517) — IETF. Used for: locally provisioned Cloudflare Access JWKS key validation.
 - [Cloudflare Access application tokens](https://developers.cloudflare.com/cloudflare-one/identity/authorization-cookie/validating-json/) — Cloudflare. Used for: application-audience JWT verification at the independent security boundary.
-- [NixOS systemd switching](https://nixos.org/manual/nixos/stable/#sec-changing-config) — NixOS project. Used for: locally staged system generation activation and controlled rollback.
 - [OWASP Session Management Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html) — OWASP. Used for: short-lived browser sessions, HttpOnly/Secure/SameSite cookies, credential separation and session invalidation.
 - [Dioxus Styling and Assets](https://dioxuslabs.com/learn/0.7/essentials/ui/styling/) — Dioxus project. Used for: RSX, CSS assets and native SVG controls in the Rust console.
 - [RFC 9110: HTTP Semantics, If-Match](https://www.rfc-editor.org/rfc/rfc9110#section-13.1.1) — IETF. Used for: revision-qualified deletion of first-party recipe records.
