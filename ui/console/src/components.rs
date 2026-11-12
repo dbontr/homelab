@@ -80,7 +80,7 @@ pub fn Empty(title: String, description: String) -> Element {
 #[component]
 pub fn Notice(message: String) -> Element {
     rsx! {
-        div { class: "alert error", data_slot: "alert", role: "alert",
+        div { class: "alert error", role: "alert",
             Icon { name: "alert".to_owned() }
             span { "{message}" }
         }
@@ -90,19 +90,17 @@ pub fn Notice(message: String) -> Element {
 #[component]
 pub fn Badge(text: String) -> Element {
     rsx! {
-        span { class: "badge muted", data_slot: "badge", "{text}" }
+        span { class: "badge muted", "{text}" }
     }
 }
 
 #[component]
 pub fn Card(title: String, description: String, children: Element) -> Element {
     rsx! {
-        section { class: "card", data_slot: "card",
-            div { class: "card-header", data_slot: "card-header",
-                h2 { class: "card-title", data_slot: "card-title", "{title}" }
-                p { class: "card-description", data_slot: "card-description", "{description}" }
+        section { class: "card", div { class: "card-header", h2 { class: "card-title", "{title}" }
+                p { class: "card-description", "{description}" }
             }
-            div { class: "card-body", data_slot: "card-content", {children} }
+            div { class: "card-body", {children} }
         }
     }
 }
