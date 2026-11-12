@@ -126,34 +126,6 @@ pub async fn get<T: DeserializeOwned>(path: &str) -> Result<T, String> {
         .map_err(|_| "The service returned invalid data".to_owned())
 }
 
-pub async fn login(passphrase: &str) -> Result<(), String> {
-    let response = reqwest::Client::new()
-        .post(url("/ui/session")?)
-        .json(&serde_json::json!({"passphrase": passphrase}))
-        .send()
-        .await
-        .map_err(|_| "Could not connect to the session service".to_owned())?;
-    if response.status().is_success() {
-        Ok(())
-    } else {
-        Err(response_error(response.status()))
-    }
-}
-
-pub async fn logout(csrf: &str) -> Result<(), String> {
-    let response = reqwest::Client::new()
-        .delete(url("/ui/session")?)
-        .header("X-CSRF-Token", csrf)
-        .send()
-        .await
-        .map_err(|_| "Could not contact the session service".to_owned())?;
-    if response.status().is_success() {
-        Ok(())
-    } else {
-        Err(response_error(response.status()))
-    }
-}
-
 #[cfg(not(feature = "embedded-app"))]
 pub async fn write<T: DeserializeOwned, P: Serialize>(
     method: Method,
