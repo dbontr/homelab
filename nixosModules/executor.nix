@@ -344,9 +344,7 @@ in
         ProtectKernelTunables = !cfg.allowReleaseActivation;
         ProtectKernelModules = !cfg.allowReleaseActivation;
         ProtectControlGroups = !cfg.allowReleaseActivation;
-        # The Rust Unix listener assigns its socket to the restricted gateway group.
-        # No other Linux capability is granted without explicit release activation.
-        CapabilityBoundingSet = lib.mkIf (!cfg.allowReleaseActivation) "CAP_CHOWN";
+        CapabilityBoundingSet = lib.mkIf (!cfg.allowReleaseActivation) "";
         RestrictAddressFamilies = [ "AF_UNIX" ] ++ lib.optionals (cfg.kubernetes.enable || cfg.allowReleaseActivation || cfg.remote.enable || cfg.authorization.remote.enable || cfg.workspace.enable) [ "AF_INET" "AF_INET6" ];
         RestrictNamespaces = !cfg.allowReleaseActivation;
         RestrictSUIDSGID = true;
