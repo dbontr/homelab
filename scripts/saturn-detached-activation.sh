@@ -85,7 +85,22 @@ if [[ "$#" -eq 3 && "$1" == "--run" ]]; then
 
   if [[ "$status" -ne 0 ]]; then
     printf 'ROLLBACK to %s\n' "$previous" >&2
-    timeout 420 "$previous/bin/switch-to-configuration" test ||
+    rollback_status=0
+    timeout 420 "$previous/bin/switch-to-configuration" test || rollback_status=1
+    previous_go=$(readlink -f -- /tmp/saturn-security-system 2>/dev/null || :)
+    if [[ "$previous" == "$previous_go" &&
+          -f /var/lib/homelab-securityd/.authority-selection.json ]] &&
+          grep -q '"target":"rust"' /var/lib/homelab-securityd/.authority-selection.json; then
+      if [[ "$rollback_status" -ne 0 ]] ||
+          ! systemctl is-active --quiet homelab-securityd; then
+        printf 'Rust selection is committed; generating a Go recovery receipt.\n' >&2
+        timeout 420 /run/current-system/sw/bin/bash \
+          /srv/homelab-migration-src/scripts/saturn-security-recover-go.sh ||
+          fail "receipt-backed Go recovery failed; inspect through NanoKVM"
+        rollback_status=0
+      fi
+    fi
+    [[ "$rollback_status" -eq 0 ]] ||
       fail "automatic rollback failed; inspect the system through NanoKVM"
     fail "trial failed and the previous NixOS configuration was restored"
   fi
