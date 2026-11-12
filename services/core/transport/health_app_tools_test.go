@@ -76,19 +76,19 @@ func TestOwnerHealthBrowserToolsRequireOriginSessionAndCSRF(t *testing.T) {
     if got := call("POST",operation,request,"https://console.example",nil,""); got.Code != 401 {
         t.Fatalf("anonymous Health operation accepted: %d",got.Code)
     }
-    identity := &accessTestIdentity{Value: accessAssertion}
-    status := call("GET","/ui/session","","https://console.example",identity,"")
+    accessToken := &accessTestIdentity{Value: accessAssertion}
+    status := call("GET","/ui/session","","https://console.example",accessToken,"")
     var identity struct { CSRF string `json:"csrf_token"` }
     if err := json.Unmarshal(status.Body.Bytes(),&identity); err != nil || identity.CSRF == "" {
         t.Fatalf("no owner CSRF token: %v",err)
     }
-    if got := call("POST",operation,request,"https://console.example",identity,""); got.Code != 401 {
+    if got := call("POST",operation,request,"https://console.example",accessToken,""); got.Code != 401 {
         t.Fatalf("Health route omitted CSRF: %d",got.Code)
     }
-    if got := call("POST",operation,request,"https://invalid.example",identity,identity.CSRF); got.Code != 403 {
+    if got := call("POST",operation,request,"https://invalid.example",accessToken,identity.CSRF); got.Code != 403 {
         t.Fatalf("Health route ignored allowed origin: %d",got.Code)
     }
-    if got := call("POST",operation,request,"https://console.example",identity,identity.CSRF); got.Code != 502 {
+    if got := call("POST",operation,request,"https://console.example",accessToken,identity.CSRF); got.Code != 502 {
         t.Fatalf("allowlisted Health backend call did not reach unavailable backend: %d %s",got.Code,got.Body.String())
     }
     for _, path := range []string{
@@ -97,13 +97,13 @@ func TestOwnerHealthBrowserToolsRequireOriginSessionAndCSRF(t *testing.T) {
         "/v1/health/app-tools/security_session_open/call",
         "/v1/health/app-tools/health_plan_list/extra/call",
     } {
-        got := call("POST",path,request,"https://console.example",identity,identity.CSRF)
+        got := call("POST",path,request,"https://console.example",accessToken,identity.CSRF)
         if got.Code != 401 && got.Code != 404 {
             t.Fatalf("nonallowlisted browser tool %q returned %d",path,got.Code)
         }
     }
     react := call("POST","/v1/health/reaction-test",`{"trials_ms":[250,200,300,350,225]}`,
-        "https://console.example",identity,identity.CSRF)
+        "https://console.example",accessToken,identity.CSRF)
     if react.Code != 502 {
         t.Fatalf("reaction endpoint not authorized up to missing Health backend: %d",react.Code)
     }
