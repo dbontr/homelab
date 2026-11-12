@@ -17,6 +17,8 @@ concurrency:
 jobs:
   bundle:
     runs-on: ubuntu-24.04
+    outputs:
+      revision: ${{ steps.source.outputs.revision }}
     timeout-minutes: 45
     steps:
       - name: Check out exact source commit
@@ -81,3 +83,50 @@ jobs:
           path: ${{ runner.temp }}/console-bundle/public/
           if-no-files-found: error
           retention-days: 7
+
+  publish:
+    needs: bundle
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'feature/rust-native-execution-boundaries'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Check out publishing repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: true
+      - name: Receive the verified static bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: homelab-console-${{ needs.bundle.outputs.revision }}
+          path: ${{ runner.temp }}/static-console
+      - name: Publish static assets to the release branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          source="$RUNNER_TEMP/static-console"
+          test -s "$source/index.html"
+          test -s "$source/SOURCE_REVISION"
+          test "$(cat "$source/SOURCE_REVISION")" = "${{ needs.bundle.outputs.revision }}"
+          if git fetch origin refs/heads/artifacts/console:refs/remotes/origin/artifacts/console; then
+            git switch --detach refs/remotes/origin/artifacts/console
+          else
+            git switch --orphan console-artifacts
+          fi
+          git rm -rf --ignore-unmatch .
+          git clean -fdx
+          cp -a "$source/." .
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Static assets match the published source revision."
+            exit 0
+          fi
+          git -c user.name=homelab-build \
+              -c user.email=build@users.noreply.github.com \
+              commit -m "Publish source-bound console assets"
+          git push origin HEAD:refs/heads/artifacts/console
