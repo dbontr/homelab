@@ -760,11 +760,7 @@ fn browser_page(shared: &Shared, assertion: &str, message: &str) -> Response {
             html.push_str("</div>");
         }
         html.push_str("</section>");
-        html.push_str("<section><h2>Console sign-in</h2><p>Issue a separate console password after re-entering the administrator factors. The new password appears only in the response to this form and replaces the previous console password.</p>");
-        html.push_str(&format!(
-            "<form method=\"post\" action=\"/console-credential\"><input type=\"hidden\" name=\"csrf\" value=\"{}\"><label>Administrator password<input name=\"password\" type=\"password\" autocomplete=\"current-password\" required></label><label>Authenticator code<input name=\"totp\" pattern=\"[0-9]{{6}}\" inputmode=\"numeric\" required></label><button type=\"submit\">Issue console password</button></form></section>",
-            csrf
-        ));
+
     } else {
         html.push_str(&format!("<section><h2>Sign in</h2><form method=\"post\" action=\"/login\"><input type=\"hidden\" name=\"csrf\" value=\"{}\"><label>Password<input name=\"password\" type=\"password\" required></label><label>Authenticator code<input name=\"totp\" pattern=\"[0-9]{{6}}\" inputmode=\"numeric\" required></label><button type=\"submit\">Unlock administration</button></form></section>", csrf));
     }
@@ -989,7 +985,6 @@ pub fn browser_router(shared: Shared) -> Router {
         .route("/", get(browser_get))
         .route("/login", post(browser_login))
         .route("/close", post(browser_close))
-        .route("/console-credential", post(browser_console_credential))
         .route("/confirm/{id}", post(browser_confirm))
         .layer(DefaultBodyLimit::max(4096))
         .layer(middleware::from_fn(private_headers))
