@@ -66,6 +66,7 @@ pub fn KnowledgeApproval(run_id: String, proposal: Value, csrf: String) -> Eleme
                                     let url=format!("/v1/engineering/runs/{run}/knowledge/{id}/approve");
                                     busy.set(true);
                                     error.set(String::new());
+                                    let token = token.clone();
                                     spawn(async move{
                                         match api::write::<Value,_>(Method::POST,&url,&token,&json!({})).await {
                                             Ok(_)=>approved.set(true),
