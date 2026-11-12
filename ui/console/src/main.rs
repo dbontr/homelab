@@ -151,8 +151,6 @@ fn App() -> Element {
     let mut page = use_signal(|| Page::Overview);
     let mut dark = use_signal(|| false);
     let mut mobile_open = use_signal(|| false);
-    let mut passphrase = use_signal(String::new);
-    let mut login_error = use_signal(String::new);
     let mut session = use_resource(|| async { api::get::<api::Session>("/ui/session").await });
     let authenticated = matches!(
         session.cloned(),
@@ -166,7 +164,6 @@ fn App() -> Element {
         .and_then(Result::ok)
         .and_then(|value| value.csrf_token)
         .unwrap_or_default();
-    let logout_csrf = csrf.clone();
 
     rsx! {
         document::Stylesheet { href: CSS }
@@ -178,51 +175,19 @@ fn App() -> Element {
                 div { class: "login-layout",
                     section { class: "card login-card",
                         div { class: "card-header",
-                            div { class: "brand-mark", Icon { name: "compute".to_owned() } }
-                            h1 { class: "card-title", "Homelab" }
+                            div { class: "brand-mark", Icon { name: "shield".to_owned() } }
+                            h1 { class: "card-title", "Access required" }
                             p { class: "card-description",
-                                "Sign in to view your computing and personal workspaces."
+                                "Your Cloudflare Access identity must be verified to use the Homelab console."
                             }
                         }
                         div { class: "card-body",
                             if let Some(Err(error)) = session.cloned() {
                                 components::Notice { message: error }
                             }
-                            if !login_error().is_empty() {
-                                components::Notice { message: login_error() }
-                            }
-                            form {
-                                class: "login-form",
-                                onsubmit: move |event| {
-                                    event.prevent_default();
-                                    let password = passphrase();
-                                    passphrase.set(String::new());
-                                    spawn(async move {
-                                        match api::login(&password).await {
-                                            Ok(()) => {
-                                                login_error.set(String::new());
-                                                session.restart();
-                                            }
-                                            Err(message) => login_error.set(message),
-                                        }
-                                    });
-                                },
-                                div { class: "form-row",
-                                    label { class: "label", for: "owner-passphrase", "Owner passphrase" }
-                                    input {
-                                        id: "owner-passphrase",
-                                        class: "field",
-                                        type: "password",
-                                        autocomplete: "current-password",
-                                        required: true,
-                                        value: "{passphrase}",
-                                        oninput: move |event| passphrase.set(event.value()),
-                                    }
-                                }
-                                button { class: "btn btn-primary", type: "submit", "Sign in" }
-                            }
+                            a { class: "btn btn-primary", href: "/", "Continue with Cloudflare Access" }
                             p { class: "login-footer",
-                                "Authentication stays within the trusted Homelab service. No MCP token is stored in this browser."
+                                "Privileged infrastructure operations require separate administrator authorization."
                             }
                         }
                     }
@@ -332,17 +297,10 @@ fn App() -> Element {
                                         Icon { name: "moon".to_owned() }
                                     }
                                 }
-                                button {
+                                a {
                                     class: "btn btn-outline btn-sm",
-                                    onclick: move |_| {
-                                        let csrf = logout_csrf.clone();
-                                        spawn(async move {
-                                            match api::logout(&csrf).await {
-                                                Ok(()) => session.restart(),
-                                                Err(message) => login_error.set(message),
-                                            }
-                                        });
-                                    },
+                                    href: "/cdn-cgi/access/logout",
+                                    title: "End Cloudflare Access session",
                                     Icon { name: "logout".to_owned() }
                                     "Sign out"
                                 }
