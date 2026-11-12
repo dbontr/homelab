@@ -239,6 +239,7 @@ pub fn USDANutrition(
                                 let path = format!("/v1/recipes/{id}/usda-apply");
                                 busy.set(true);
                                 error.set(String::new());
+                                let digest = digest.clone();
                                 spawn(async move {
                                     match api::write::<Value, _>(
                                         Method::POST, &path, &token,
