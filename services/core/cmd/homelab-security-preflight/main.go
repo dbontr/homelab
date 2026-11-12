@@ -30,7 +30,7 @@ func read(name string, private bool)([]byte,error){
     mode:=info.Mode().Perm()
     inode,ok:=info.Sys().(*syscall.Stat_t)
     if !ok||inode.Nlink!=1||
-        (private&&(mode&0077!=0||inode.Uid!=uint32(os.Geteuid())))||
+        (private&&(!security.PrivateCredentialFileAllowed(path,info.Mode(),inode.Uid)))||
         (!private&&mode&0022!=0){
         return nil,errors.New("configured file has unsafe ownership or permissions")
     }
