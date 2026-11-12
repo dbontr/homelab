@@ -7,6 +7,7 @@
     ../../nixosModules/console.nix
     ../../nixosModules/interfaces.nix
     ./shared.nix
+    ./security-authority.nix
     ./domain-services.nix
     ./cloudflare.nix
     ./mcp-ingress.nix
