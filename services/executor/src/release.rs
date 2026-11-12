@@ -196,7 +196,7 @@ impl ReleaseController {
 
     fn read<T: for<'a> Deserialize<'a>>(&self, name: &str) -> Result<T, Error> {
         let path = self.policy.state_dir.join(name);
-        let mut file = OpenOptions::new()
+        let file = OpenOptions::new()
             .read(true)
             .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
             .open(path)
