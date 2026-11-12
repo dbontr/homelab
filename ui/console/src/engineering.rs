@@ -118,7 +118,7 @@ fn RunDetail(run: Value, csrf: String) -> Element {
                                 tr {
                                     td { {text(step, "kind")} }
                                     td { Badge { text: text(step, "status") } }
-                                    td { "{text(step, "attempts")}" }
+                                    td { {text(step, "attempts")} }
                                 }
                             }
                         }
@@ -128,12 +128,12 @@ fn RunDetail(run: Value, csrf: String) -> Element {
                     h3 { "Source review" }
                     div { class: "inline-row",
                         Badge { text: text(&review, "verdict") }
-                        span { "Risk: {text(&review, "risk")}" }
+                        span { {format!("Risk: {}", text(&review, "risk"))} }
                     }
                     if !findings.is_empty() {
                         ul {
                             for finding in findings {
-                                li { "{finding.as_str().unwrap_or("")}" }
+                                li { {finding.as_str().unwrap_or("").to_string()} }
                             }
                         }
                     }
