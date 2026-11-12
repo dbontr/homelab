@@ -52,29 +52,29 @@ func TestRecipeRoutesAndScopedBrowserWrites(t *testing.T) {
 	recipe.Title = "Updated rice bowl"
 	serialized, err := json.Marshal(recipe)
 	if err != nil { t.Fatal(err) }
-	if response := call("PUT", "/v1/recipes/"+recipe.ID, string(serialized), identity, sessionInfo.CSRF); response.Code != http.StatusOK {
+	if response := call("PUT", "/v1/recipes/"+recipe.ID, string(serialized), accessToken, sessionInfo.CSRF); response.Code != http.StatusOK {
 		t.Fatalf("recipe update: %d %s", response.Code, response.Body.String())
 	}
 	if response := call("GET", "/v1/recipes/"+recipe.ID+"/history", "", nil, ""); response.Code != http.StatusUnauthorized {
 		t.Fatalf("anonymous recipe history accepted: %d", response.Code)
 	}
-	history := call("GET", "/v1/recipes/"+recipe.ID+"/history", "", identity, "")
+	history := call("GET", "/v1/recipes/"+recipe.ID+"/history", "", accessToken, "")
 	var versions []recipes.Recipe
 	if history.Code != http.StatusOK || json.Unmarshal(history.Body.Bytes(), &versions) != nil ||
 		len(versions) != 2 || versions[0].Revision != 2 || versions[1].Revision != 1 {
 		t.Fatalf("recipe history: %d %s", history.Code, history.Body.String())
 	}
 	restoreRequest := `{"source_revision":1,"expected_revision":2}`
-	if response := call("POST", "/v1/recipes/"+recipe.ID+"/restore", restoreRequest, identity, ""); response.Code != 401 {
+	if response := call("POST", "/v1/recipes/"+recipe.ID+"/restore", restoreRequest, accessToken, ""); response.Code != 401 {
 		t.Fatalf("restore without CSRF accepted: %d", response.Code)
 	}
-	restored := call("POST", "/v1/recipes/"+recipe.ID+"/restore", restoreRequest, identity, sessionInfo.CSRF)
+	restored := call("POST", "/v1/recipes/"+recipe.ID+"/restore", restoreRequest, accessToken, sessionInfo.CSRF)
 	var restoredRecipe recipes.Recipe
 	if restored.Code != 200 || json.Unmarshal(restored.Body.Bytes(), &restoredRecipe) != nil ||
 		restoredRecipe.Title != "Rice bowl" || restoredRecipe.Revision != 3 {
 		t.Fatalf("restore failed: %d %s", restored.Code, restored.Body.String())
 	}
-	if response := call("POST", "/v1/recipes/"+recipe.ID+"/restore", restoreRequest, identity, sessionInfo.CSRF); response.Code != 409 {
+	if response := call("POST", "/v1/recipes/"+recipe.ID+"/restore", restoreRequest, accessToken, sessionInfo.CSRF); response.Code != 409 {
 		t.Fatalf("stale restore accepted: %d", response.Code)
 	}
 	if r:=call("POST","/v1/tasks",`{"title":"Owner task"}`,accessToken,sessionInfo.CSRF);r.Code!=201 {
