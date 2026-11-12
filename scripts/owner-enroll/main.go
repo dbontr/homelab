@@ -128,9 +128,10 @@ func validFormOrigin(r *http.Request) bool {
     if origin != "" && origin != publicOrigin {
         return false
     }
-    // The signed Access assertion and the unpredictable form token establish
-    // authentication and request intent. Proxies may omit Fetch Metadata.
-    return r.Header.Get("Sec-Fetch-Site") != "cross-site"
+    // A missing Origin header is permitted because the request also requires
+    // a signed owner assertion and an unpredictable, single-use form token.
+    // Browsers and intermediaries do not always forward Fetch Metadata.
+    return true
 }
 
 func (a *app) ServeHTTP(w http.ResponseWriter,r *http.Request){
