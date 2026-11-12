@@ -59,7 +59,7 @@ fn target_ok(target: &str) -> bool {
 }
 
 fn protected(path: &Path, limit: usize) -> Result<Option<Vec<u8>>, Error> {
-    let mut file = match OpenOptions::new()
+    let file = match OpenOptions::new()
         .read(true)
         .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
         .open(path)
