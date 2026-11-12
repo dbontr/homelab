@@ -24,7 +24,7 @@ func TestRecipeImageHTTPAccessAndContentRestrictions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	db, err := recipes.Open(filepath.Join(t.TempDir(), "recipes.json"))
+	db, err := recipes.Open(filepath.Join(t.TempDir(), "recipes", "recipes.json"))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -22,7 +22,7 @@ func TestRecipeSagePreviewAndImportAuthorization(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	db, err := recipes.Open(filepath.Join(base, "recipes.json"))
+	db, err := recipes.Open(filepath.Join(base, "recipes", "recipes.json"))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -18,7 +18,7 @@ func TestRecipeRoutesAndScopedBrowserWrites(t *testing.T) {
 	if err != nil { t.Fatal(err) }
 	s, err := New(tasks, strings.Repeat("t", 40), nil)
 	if err != nil { t.Fatal(err) }
-	recipeStore, err := recipes.Open(filepath.Join(dir, "recipes.json"))
+	recipeStore, err := recipes.Open(filepath.Join(dir, "recipes", "recipes.json"))
 	if err != nil { t.Fatal(err) }
 	s.SetRecipes(recipeStore)
 	manager, accessAssertion := accessTransportFixture(t)

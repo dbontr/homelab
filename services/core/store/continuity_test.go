@@ -88,8 +88,10 @@ func TestContextPressureThresholdsAreReportedNotClaimedMeasured(t *testing.T){
    ReservedOutputTokens:tc.reserve,
   })
   if got.Status!=tc.want{t.Fatalf("unexpected pressure: %+v",got)}
-  if tc.limit>0&&got.Source!="caller_reported_unverified"{
-   t.Fatal("reported token usage was described as authoritative")
+  wantSource:="unavailable"
+  if tc.input+tc.reserve>0{wantSource="caller_reported_unverified"}
+  if got.Source!=wantSource{
+   t.Fatalf("unexpected context source: got %q, want %q",got.Source,wantSource)
   }
  }
 }

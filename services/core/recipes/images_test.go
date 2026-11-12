@@ -116,7 +116,7 @@ func TestRecipeImageInputValidationAndTampering(t *testing.T) {
 }
 
 func TestRecipeImageRejectsUnsafeStorageDirectory(t *testing.T) {
-	root := t.TempDir()
+	root := filepath.Join(t.TempDir(), "recipes")
 	store, err := Open(filepath.Join(root, "recipes.json"))
 	if err != nil {
 		t.Fatal(err)
