@@ -106,7 +106,7 @@ fn RunDetail(run: Value, csrf: String) -> Element {
                     }
                 }
                 if let Some(cleanup) = run.get("cleanup") {
-                    p { class:"muted", "Workspace cleanup: {text(cleanup, "status")}" }
+                    p { class:"muted", {format!("Workspace cleanup: {}", text(cleanup, "status"))} }
                 }
                 SourcePreviews { run_id:text(&run,"id") }
                 h3 { "Execution and verification" }
