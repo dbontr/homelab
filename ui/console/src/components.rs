@@ -97,7 +97,9 @@ pub fn Badge(text: String) -> Element {
 #[component]
 pub fn Card(title: String, description: String, children: Element) -> Element {
     rsx! {
-        section { class: "card", div { class: "card-header", h2 { class: "card-title", "{title}" }
+        section { class: "card",
+            div { class: "card-header",
+                h2 { class: "card-title", "{title}" }
                 p { class: "card-description", "{description}" }
             }
             div { class: "card-body", {children} }
