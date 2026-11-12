@@ -18,7 +18,7 @@ func TestFleetIPCForwardsOwnerAssertionWithoutPrivilegedKeys(t *testing.T){
  socket:=filepath.Join(dir,"fleet.sock")
  ctx,cancel:=context.WithCancel(context.Background())
  done:=make(chan error,1)
- go func(){done<-s.ServeSocket(ctx,socket,1000)}()
+ go func(){done<-s.ServeSocket(ctx,socket,os.Geteuid())}()
  defer func(){cancel();if err:=<-done;err!=nil{t.Error(err)}}()
  for i:=0;i<100;i++{
   if _,err:=os.Lstat(socket);err==nil{break}
