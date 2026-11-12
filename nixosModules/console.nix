@@ -34,6 +34,13 @@ in
         ++ lib.optional (cfg.enable && cfg.replaceHomepage) {
           assertion = lib.elem cfg.publicOrigin config.services.homelabPlatform.allowedOrigins;
           message = "The console's publicOrigin must be included in homelabPlatform.allowedOrigins for browser login.";
+        }
+        ++ lib.optional (cfg.enable && cfg.replaceHomepage) {
+          assertion =
+            config.services.homelabPlatform.consolePassphraseFile != null &&
+            config.services.homelabPlatform.consolePassphraseFile !=
+              lib.attrByPath [ "services" "homelabSecurity" "passwordVerifierFile" ] null config;
+          message = "Homepage replacement requires a dedicated browser verifier, distinct from the privileged administrator verifier.";
         };
     }
     (lib.mkIf (cfg.enable && cfg.replaceHomepage) {
