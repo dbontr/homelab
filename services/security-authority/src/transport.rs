@@ -1052,6 +1052,7 @@ mod tests {
         assert!(!shared.take_csrf("verified-principal", &accepted));
         let owner = owner_router(shared.clone());
         let gateway = client_router(shared.clone());
+        let browser = browser_router(shared.clone());
         let remote = remote_router(shared);
 
         let request = Request::builder()
@@ -1083,6 +1084,16 @@ mod tests {
             .unwrap();
         assert_eq!(
             gateway.clone().oneshot(request).await.unwrap().status(),
+            StatusCode::FORBIDDEN
+        );
+
+        let request = Request::builder()
+            .uri("/console-credential")
+            .method("POST")
+            .body(Body::empty())
+            .unwrap();
+        assert_eq!(
+            browser.oneshot(request).await.unwrap().status(),
             StatusCode::FORBIDDEN
         );
 
