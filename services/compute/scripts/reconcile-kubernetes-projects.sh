@@ -68,6 +68,17 @@ while IFS= read -r project; do
       "$scratch/nodes.json" >/dev/null; then
       continue
     fi
+    # With IfNotPresent, a mutable worker tag is safe only when this node
+    # already holds the exact image. Digest-pinned images may be pulled from
+    # an approved registry by containerd.
+    if [[ ! "$PWM_WORKER_IMAGE" =~ @sha256:[0-9a-f]{64}$ ]]; then
+      if ! kubectl get node "$host" -o json |
+        jq -e --arg image "$PWM_WORKER_IMAGE"           'any(.status.images[]?.names[]?; . == $image)' >/dev/null; then
+        printf 'Worker image %s is not cached on %s; publish a digest-pinned registry image or import the verified image before enrollment\n' \
+          "$PWM_WORKER_IMAGE" "$host" >&2
+        continue
+      fi
+    fi
     node="worker-$key-$host"
     instance="p-$key-$host"
     namespace="pwm-$key-$host"
