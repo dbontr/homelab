@@ -138,3 +138,29 @@ jobs:
           path: ${{ runner.temp }}/nix-*.log
           if-no-files-found: warn
           retention-days: 7
+
+  helm-legacy-values:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.20.2
+      - name: Check chart and legacy optional-hardware values
+        shell: bash
+        run: |
+          set -euo pipefail
+          chart=services/compute/deploy/helm/project-workspace
+          controller="ghcr.io/dbontr/homelab/controller@sha256:$(printf '%064d' 0)"
+          worker="ghcr.io/dbontr/homelab/worker@sha256:$(printf '%064d' 0)"
+          helm lint "$chart" --strict
+          helm template verify "$chart" --set controller.enabled=true \
+            --set-string "controller.image=$controller" --set-json 'hardware=null' \
+            > "$RUNNER_TEMP/controller-without-hardware.yaml"
+          grep -q '^kind: PersistentVolumeClaim$' "$RUNNER_TEMP/controller-without-hardware.yaml"
+          helm template verify "$chart" --set worker.enabled=true \
+            --set-string "worker.image=$worker" \
+            --set-json 'hardware={"nvidia":null,"intelNpu":null}' \
+            > "$RUNNER_TEMP/worker-without-plugins.yaml"
+          grep -q '^kind: Deployment$' "$RUNNER_TEMP/worker-without-plugins.yaml"

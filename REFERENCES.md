@@ -1,5 +1,6 @@
 # References
 
+- [Helm Upgrade](https://helm.sh/docs/helm/helm_upgrade/) — Helm project. Used for: immutable release upgrades, retained release values, atomic rollback, and compatibility with older optional chart settings.
 - [NixOS Manual](https://nixos.org/manual/nixos/stable/) — NixOS project. Used for: declarative host configuration, systemd services, and state directories, controlled system generation activation, and rollback.
 - [Nix Flake Reference](https://nixos.org/manual/nix/stable/command-ref/new-cli/nix3-flake) — Nix project. Used for: pinned, reproducible host composition.
 - [SQLite Foreign Key Support](https://www.sqlite.org/foreignkeys.html) — SQLite project. Used for: transactional research claim and source-evidence ownership constraints.

@@ -1,4 +1,5 @@
-{{- if .Values.hardware.nvidia.enabled }}
+{{- /* Legacy Helm releases may not contain the optional hardware settings. */ -}}
+{{- if and .Values.hardware .Values.hardware.nvidia .Values.hardware.nvidia.enabled }}
 {{- if empty .Values.hardware.nvidia.nodeSelector }}
 {{- fail "hardware.nvidia.nodeSelector must select explicitly approved GPU worker nodes" }}
 {{- end }}
