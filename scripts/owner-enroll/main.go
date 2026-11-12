@@ -128,14 +128,9 @@ func validFormOrigin(r *http.Request) bool {
     if origin != "" && origin != publicOrigin {
         return false
     }
-    switch r.Header.Get("Sec-Fetch-Site") {
-    case "same-origin":
-        return true
-    case "":
-        return origin == publicOrigin
-    default:
-        return false
-    }
+    // The signed Access assertion and the unpredictable form token establish
+    // authentication and request intent. Proxies may omit Fetch Metadata.
+    return r.Header.Get("Sec-Fetch-Site") != "cross-site"
 }
 
 func (a *app) ServeHTTP(w http.ResponseWriter,r *http.Request){
