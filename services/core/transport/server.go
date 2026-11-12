@@ -107,8 +107,6 @@ func(s *Server) Handler()http.Handler{
  motivationhttp.Register(mux,s.motivation)
  mux.HandleFunc("GET /healthz",func(w http.ResponseWriter,_ *http.Request){writeJSON(w,200,map[string]string{"status":"ok"})})
  mux.HandleFunc("GET /ui/session",s.uiSession)
- mux.HandleFunc("POST /ui/session",s.uiSession)
- mux.HandleFunc("DELETE /ui/session",s.uiSession)
  mux.HandleFunc("GET /v1/engineering/projects",s.uiProjects)
  mux.HandleFunc("GET /v1/engineering/projects/{project}/jobs",s.uiWorkspaceProjectView)
  mux.HandleFunc("GET /v1/engineering/projects/{project}/workspaces",s.uiWorkspaceProjectView)
