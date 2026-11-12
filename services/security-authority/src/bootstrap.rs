@@ -230,12 +230,24 @@ mod tests {
         fs::set_permissions(&credential, fs::Permissions::from_mode(0o440)).unwrap();
         let metadata = fs::metadata(&credential).unwrap();
         assert!(!protected_credential_custody(&credential, &metadata, None));
-        assert!(protected_credential_custody(&credential, &metadata, Some(&dir)));
+        assert!(protected_credential_custody(
+            &credential,
+            &metadata,
+            Some(&dir)
+        ));
         let other = dir.join("unrelated");
-        assert!(!protected_credential_custody(&credential, &metadata, Some(&other)));
+        assert!(!protected_credential_custody(
+            &credential,
+            &metadata,
+            Some(&other)
+        ));
         fs::set_permissions(&credential, fs::Permissions::from_mode(0o444)).unwrap();
         let metadata = fs::metadata(&credential).unwrap();
-        assert!(!protected_credential_custody(&credential, &metadata, Some(&dir)));
+        assert!(!protected_credential_custody(
+            &credential,
+            &metadata,
+            Some(&dir)
+        ));
         fs::remove_dir_all(dir).unwrap();
     }
 
