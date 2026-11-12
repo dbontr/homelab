@@ -35,6 +35,7 @@
 - [kubectl rollout restart](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_rollout/kubectl_rollout_restart/) — Kubernetes project. Used for: validated deployment restart arguments in the privileged executor.
 - [kubectl scale](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_scale/) — Kubernetes project. Used for: bounded replica count adjustments in the privileged executor.
 - [Kubernetes Documentation](https://kubernetes.io/docs/) — Kubernetes project. Used for: scheduled compute workers and workload isolation.
+- [K3s Embedded Registry Mirror](https://docs.k3s.io/installation/registry-mirror) — K3s project. Used for: verified peer-to-peer image-cache eligibility, mirrored-registry enrollment and compute-node image distribution acceptance.
 - [Seerr API: Create New Request](https://docs.seerr.dev/api/create-new-request/) — Seerr project. Used for: media request payloads and supported movie/TV media types.
 - [Seerr OpenAPI](https://github.com/seerr-team/seerr/blob/develop/seerr-api.yml) — Seerr project. Used for: authenticated media search, request listing, and API key headers.
 - [RFC 7636: Proof Key for Code Exchange by OAuth Public Clients](https://www.rfc-editor.org/rfc/rfc7636) — IETF. Used for: OAuth authorization-code PKCE and one-time state.
