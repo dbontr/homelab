@@ -5,10 +5,18 @@ import (
  "net/http"
  "net/http/httptest"
  "path/filepath"
+ "os"
  "testing"
 
  "github.com/dbontr/homelab-new/system/health/internal/health"
 )
+func privateGoogleHealthDir(t *testing.T) string {
+ t.Helper()
+ directory:=t.TempDir()
+ if err:=os.Chmod(directory,0700);err!=nil{t.Fatal(err)}
+ return directory
+}
+
 func TestReadOnlySyncAndIdempotentImport(t *testing.T){
  calls:=0
  upstream:=httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){
@@ -22,7 +30,7 @@ func TestReadOnlySyncAndIdempotentImport(t *testing.T){
  defer upstream.Close()
  c,err:=New(Config{AccessToken:"testtoken",BaseURL:upstream.URL+"/v4",HTTP:upstream.Client()})
  if err!=nil{t.Fatal(err)}
- db,err:=health.Open(filepath.Join(t.TempDir(),"health.db"));if err!=nil{t.Fatal(err)}
+ db,err:=health.Open(filepath.Join(privateGoogleHealthDir(t),"health.db"));if err!=nil{t.Fatal(err)}
  defer db.Close()
  result,err:=c.Sync(context.Background(),db,"heart-rate","", "",1)
  if err!=nil||result.Imported!=1{t.Fatalf("first import: %+v %v",result,err)}
