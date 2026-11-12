@@ -70,6 +70,11 @@ in
       };
       services.homepage-dashboard.enable =
         lib.mkIf cfg.replaceHomepage (lib.mkForce false);
+      # The upstream Homepage NixOS module contributes an unconditional
+      # systemd service fragment even when its feature switch is disabled.
+      # Disable that unit explicitly to avoid a fragment without ExecStart.
+      systemd.services.homepage-dashboard.enable =
+        lib.mkIf cfg.replaceHomepage (lib.mkForce false);
     })
   ];
 }
