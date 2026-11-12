@@ -2,12 +2,11 @@ package recipes
 
 import (
 	"errors"
-	"path/filepath"
-	"testing"
+		"testing"
 )
 
 func TestRecipeHistoryRestoreAndPersistence(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "recipes.json")
+	path := privateRecipeTestPath(t, "recipes.json")
 	db, err := Open(path)
 	if err != nil {
 		t.Fatal(err)
@@ -63,7 +62,7 @@ func TestRecipeHistoryRestoreAndPersistence(t *testing.T) {
 		t.Fatalf("history lost on restart: %+v %v", persisted, err)
 	}
 	archive := reopened.Export()
-	destination, err := Open(filepath.Join(t.TempDir(), "import.json"))
+	destination, err := Open(privateRecipeTestPath(t, "import.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,7 +76,7 @@ func TestRecipeHistoryRestoreAndPersistence(t *testing.T) {
 }
 
 func TestRecipeHistoryRetentionAndInvalidArchive(t *testing.T) {
-	db, err := Open(filepath.Join(t.TempDir(), "recipes.json"))
+	db, err := Open(privateRecipeTestPath(t, "recipes.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +104,7 @@ func TestRecipeHistoryRetentionAndInvalidArchive(t *testing.T) {
 	}
 	doc := db.Export()
 	doc.History[record.ID][0].ID = "wrong"
-	target, err := Open(filepath.Join(t.TempDir(), "import.json"))
+	target, err := Open(privateRecipeTestPath(t, "import.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,7 +114,7 @@ func TestRecipeHistoryRetentionAndInvalidArchive(t *testing.T) {
 }
 
 func TestRecipeHistoryIsRemovedOnDeletion(t *testing.T) {
-	db, err := Open(filepath.Join(t.TempDir(), "recipes.json"))
+	db, err := Open(privateRecipeTestPath(t, "recipes.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
