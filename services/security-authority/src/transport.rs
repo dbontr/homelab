@@ -2,9 +2,9 @@
 use std::collections::BTreeMap;
 use std::ffi::CString;
 use std::fs::{self, OpenOptions};
+use std::io::Write;
 use std::os::unix::fs::{FileTypeExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
-use std::io::Write;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -906,12 +906,17 @@ async fn browser_console_credential(
     let Some(origin) = shared.browser_origin.as_deref() else {
         return protected_status("owner browser unavailable", StatusCode::FORBIDDEN);
     };
-    if headers.get(header::ORIGIN).and_then(|value| value.to_str().ok()) != Some(origin)
+    if headers
+        .get(header::ORIGIN)
+        .and_then(|value| value.to_str().ok())
+        != Some(origin)
         || headers
             .get("sec-fetch-site")
             .and_then(|value| value.to_str().ok())
             .is_some_and(|value| value != "same-origin")
-        || headers.get(header::CONTENT_TYPE).and_then(|value| value.to_str().ok())
+        || headers
+            .get(header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
             != Some("application/x-www-form-urlencoded")
         || raw.len() > 4096
     {
@@ -923,7 +928,10 @@ async fn browser_console_credential(
     let Ok(form) = serde_urlencoded::from_bytes::<BTreeMap<String, String>>(&raw) else {
         return protected_status("invalid owner form", StatusCode::BAD_REQUEST);
     };
-    if !shared.take_csrf(&principal, form.get("csrf").map(String::as_str).unwrap_or("")) {
+    if !shared.take_csrf(
+        &principal,
+        form.get("csrf").map(String::as_str).unwrap_or(""),
+    ) {
         return protected_status("invalid owner form", StatusCode::FORBIDDEN);
     }
     let password = Zeroizing::new(form.get("password").cloned().unwrap_or_default());
@@ -932,17 +940,25 @@ async fn browser_console_credential(
         if !authority.browser_status(assertion)?.active {
             return Err(Error::Unauthorized);
         }
-        authority.login_browser(assertion, &password, &totp).map(|_| ())
+        authority
+            .login_browser(assertion, &password, &totp)
+            .map(|_| ())
     });
     if approved.is_err() {
         audit("console_credential_denied");
         return protected_status("owner authentication required", StatusCode::FORBIDDEN);
     }
     let Ok((record, secret)) = PassphraseRecord::generate_console_secret() else {
-        return protected_status("console credential unavailable", StatusCode::SERVICE_UNAVAILABLE);
+        return protected_status(
+            "console credential unavailable",
+            StatusCode::SERVICE_UNAVAILABLE,
+        );
     };
     if save_console_verifier(&record).is_err() {
-        return protected_status("console credential unavailable", StatusCode::SERVICE_UNAVAILABLE);
+        return protected_status(
+            "console credential unavailable",
+            StatusCode::SERVICE_UNAVAILABLE,
+        );
     }
     audit("console_credential_issued");
     let mut response = Html(format!(
