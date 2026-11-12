@@ -1,9 +1,7 @@
 name: Build Rust console
 
 on:
-  push:
-    branches:
-      - feature/rust-native-execution-boundaries
+  pull_request:
     paths:
       - ".github/workflows/console-release.yml"
       - "ui/console/**"
