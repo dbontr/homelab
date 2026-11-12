@@ -16,6 +16,7 @@ import (
     "io"
     "log"
     "net/http"
+    "net/url"
     "os"
     "path/filepath"
     "strings"
@@ -118,14 +119,25 @@ func verifiedJWT(token string) bool {
     return false
 }
 
-// validateEnrollmentForm binds enrollment to the unpredictable token issued
-// through the authenticated owner-only page. HTTP origin metadata is not used
-// as an authorization signal because reverse proxies can alter or omit it.
+// validateEnrollmentForm binds enrollment to the one-time token issued on the
+// authenticated page. The reverse proxy may alter request metadata, so form
+// parsing does not depend on Origin, Fetch Metadata or Content-Type headers.
 func validateEnrollmentForm(r *http.Request, token string) bool {
-    if err := r.ParseForm(); err != nil {
+    body, err := io.ReadAll(r.Body)
+    if err != nil {
         return false
     }
-    return subtle.ConstantTimeCompare([]byte(r.PostForm.Get("csrf")), []byte(token)) == 1
+    values, err := url.ParseQuery(string(body))
+    if err != nil {
+        return false
+    }
+    for _, field := range []string{"csrf", "password", "confirm", "totp"} {
+        if len(values[field]) != 1 {
+            return false
+        }
+    }
+    r.PostForm = values
+    return subtle.ConstantTimeCompare([]byte(values.Get("csrf")), []byte(token)) == 1
 }
 
 func (a *app) ServeHTTP(w http.ResponseWriter,r *http.Request){
