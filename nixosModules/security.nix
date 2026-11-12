@@ -261,6 +261,10 @@ in
       };
     };
     environment.systemPackages = [ cfg.package ] ++ lib.optional (cfg.implementation == "rust") rustPackage;
+    # Browser ingress needs traversal by nginx without exposing the owner socket directory.
+    systemd.tmpfiles.rules = lib.optionals cfg.browser.enable [
+      "d /run/homelab-security-browser 0750 homelab-security homelab-security-browser -"
+    ];
     systemd.services.homelab-securityd = {
       description = "Independent owner authentication and privileged-session policy";
       wantedBy = [ "multi-user.target" ];
@@ -310,7 +314,7 @@ in
         SupplementaryGroups = [ "homelab-security-client" ] ++ lib.optional cfg.browser.enable "homelab-security-browser";
         StateDirectory = "homelab-securityd";
         StateDirectoryMode = "0700";
-        RuntimeDirectory = [ "homelab-securityd" ] ++ lib.optional cfg.browser.enable "homelab-security-browser";
+        RuntimeDirectory = [ "homelab-securityd" ];
         RuntimeDirectoryMode = "0750";
         LoadCredential = [
           "password:${cfg.passwordVerifierFile}"
