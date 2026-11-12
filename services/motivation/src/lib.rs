@@ -248,22 +248,20 @@ impl Engine {
             .file_name()
             .ok_or(Error::Invalid("state filename required"))?;
         let path = dir.join(name);
-        if let Ok(meta) = fs::symlink_metadata(&path) {
-            if !meta.is_file()
+        if let Ok(meta) = fs::symlink_metadata(&path)
+            && (!meta.is_file()
                 || meta.file_type().is_symlink()
-                || meta.permissions().mode() & 0o077 != 0
-            {
-                return Err(Error::Invalid("state file must be a private regular file"));
-            }
+                || meta.permissions().mode() & 0o077 != 0)
+        {
+            return Err(Error::Invalid("state file must be a private regular file"));
         }
         let lock_path = path.with_extension("lock");
-        if let Ok(meta) = fs::symlink_metadata(&lock_path) {
-            if !meta.is_file()
+        if let Ok(meta) = fs::symlink_metadata(&lock_path)
+            && (!meta.is_file()
                 || meta.file_type().is_symlink()
-                || meta.permissions().mode() & 0o077 != 0
-            {
-                return Err(Error::Invalid("lock file must be a private regular file"));
-            }
+                || meta.permissions().mode() & 0o077 != 0)
+        {
+            return Err(Error::Invalid("lock file must be a private regular file"));
         }
         let lock = OpenOptions::new()
             .read(true)
