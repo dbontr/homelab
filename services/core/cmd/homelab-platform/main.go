@@ -27,7 +27,6 @@ import (
     "github.com/dbontr/homelab-new/system/privileged"
     "github.com/dbontr/homelab-new/system/release"
     "github.com/dbontr/homelab-new/system/session"
-    "encoding/json"
     "github.com/dbontr/homelab-new/system/transport"
 )
 
@@ -147,12 +146,22 @@ func main(){
     server.SetProfiles(registry)
     recipeStore,e:=recipes.Open(recipeFile);if e!=nil{log.Fatal(e)}
     server.SetRecipes(recipeStore)
-    if file:=os.Getenv("HOMELAB_CONSOLE_PASSPHRASE_FILE");file!=""{
-        b,e:=os.ReadFile(file);if e!=nil{log.Fatal(e)}
-        var record security.PassphraseRecord
-        if e:=json.Unmarshal(b,&record);e!=nil{log.Fatal(e)}
-        manager,e:=session.New(record);if e!=nil{log.Fatal(e)}
+    if audience:=os.Getenv("HOMELAB_CONSOLE_ACCESS_AUDIENCE");audience!="" {
+        issuer:=os.Getenv("HOMELAB_CONSOLE_ACCESS_ISSUER")
+        ownerFile:=os.Getenv("HOMELAB_CONSOLE_ACCESS_OWNER_FILE")
+        jwksFile:=os.Getenv("HOMELAB_CONSOLE_ACCESS_JWKS_FILE")
+        if issuer==""||ownerFile==""||jwksFile=="" {log.Fatal("incomplete console Access configuration")}
+        owner,e:=os.ReadFile(ownerFile);if e!=nil{log.Fatal("console owner identity unavailable: ",e)}
+        jwks,e:=os.ReadFile(jwksFile);if e!=nil{log.Fatal("console signing keys unavailable: ",e)}
+        verifier,e:=security.NewAccessVerifier(issuer,strings.TrimSpace(string(owner)),jwks)
+        if e!=nil{log.Fatal("console Access verification: ",e)}
+        manager,e:=session.New(verifier,audience,token)
+        if e!=nil{log.Fatal("console Access session: ",e)}
         server.SetSessions(manager)
+    }else if os.Getenv("HOMELAB_CONSOLE_ACCESS_ISSUER")!="" ||
+        os.Getenv("HOMELAB_CONSOLE_ACCESS_OWNER_FILE")!="" ||
+        os.Getenv("HOMELAB_CONSOLE_ACCESS_JWKS_FILE")!="" {
+        log.Fatal("incomplete console Access configuration")
     }
     if file:=os.Getenv("HOMELAB_DEVICES_FILE");file!=""{
         catalog,e:=devices.Load(file);if e!=nil{log.Fatal(e)}
