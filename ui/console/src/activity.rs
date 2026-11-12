@@ -44,16 +44,14 @@ pub struct Resource {
 #[component]
 pub fn Activity() -> Element {
     let mut filter = use_signal(|| "all".to_owned());
-    let mut selected = use_signal(|| Option::<(String,String)>::None);
-    let mut feed = use_resource(|| async {
-        api::get::<Feed>("/v1/activity?limit=200").await
-    });
+    let mut selected = use_signal(|| Option::<(String, String)>::None);
+    let mut feed = use_resource(|| async { api::get::<Feed>("/v1/activity?limit=200").await });
     let resource = use_resource(move || {
         let selected = selected();
         async move {
             match selected {
                 None => Ok(None),
-                Some((kind,id)) => {
+                Some((kind, id)) => {
                     let path = format!("/v1/resources/{kind}/{id}");
                     api::get::<Resource>(&path).await.map(Some)
                 }

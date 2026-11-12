@@ -5,74 +5,104 @@ use dioxus::prelude::*;
 use serde_json::Value;
 use std::collections::HashMap;
 
-const WIDTH:f64=880.0;
-const HEIGHT:f64=520.0;
+const WIDTH: f64 = 880.0;
+const HEIGHT: f64 = 520.0;
 
 #[derive(Clone)]
-struct GraphNode{
-    id:String,
-    title:String,
-    x:f64,
-    y:f64,
-    level:u64,
+struct GraphNode {
+    id: String,
+    title: String,
+    x: f64,
+    y: f64,
+    level: u64,
 }
 
-fn layout(data:&Value)->(Vec<GraphNode>,Vec<(usize,usize,String)>) {
-    let raw=data.get("nodes").and_then(Value::as_array)
-        .cloned().unwrap_or_default();
-    let count=raw.len().min(200);
-    let mut nodes=Vec::with_capacity(count);
-    let mut indexes=HashMap::new();
-    for (index,item) in raw.into_iter().take(count).enumerate() {
-        let Some(id)=item.get("id").and_then(Value::as_str) else{continue};
-        if id.is_empty()||id.len()>128||indexes.contains_key(id){continue}
-        let title=item.get("title").and_then(Value::as_str).unwrap_or(id)
-            .chars().take(28).collect::<String>();
+fn layout(data: &Value) -> (Vec<GraphNode>, Vec<(usize, usize, String)>) {
+    let raw = data
+        .get("nodes")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let count = raw.len().min(200);
+    let mut nodes = Vec::with_capacity(count);
+    let mut indexes = HashMap::new();
+    for (index, item) in raw.into_iter().take(count).enumerate() {
+        let Some(id) = item.get("id").and_then(Value::as_str) else {
+            continue;
+        };
+        if id.is_empty() || id.len() > 128 || indexes.contains_key(id) {
+            continue;
+        }
+        let title = item
+            .get("title")
+            .and_then(Value::as_str)
+            .unwrap_or(id)
+            .chars()
+            .take(28)
+            .collect::<String>();
         // A bounded sunflower layout keeps all 200 nodes within the
         // viewport. Dense graphs use the accessible text controls for labels.
-        let angle=index as f64*2.399_963_229_728_653;
-        let radius=if count==1 {0.0} else {
-            ((index as f64+0.5)/count as f64).sqrt()
+        let angle = index as f64 * 2.399_963_229_728_653;
+        let radius = if count == 1 {
+            0.0
+        } else {
+            ((index as f64 + 0.5) / count as f64).sqrt()
         };
-        let x=WIDTH/2.0+radius*(WIDTH/2.0-42.0)*angle.cos();
-        let y=HEIGHT/2.0+radius*(HEIGHT/2.0-42.0)*angle.sin();
-        let level=item.pointer("/mastery/level").and_then(Value::as_u64).unwrap_or(0);
-        indexes.insert(id.to_owned(),nodes.len());
-        nodes.push(GraphNode{id:id.to_owned(),title,x,y,level});
+        let x = WIDTH / 2.0 + radius * (WIDTH / 2.0 - 42.0) * angle.cos();
+        let y = HEIGHT / 2.0 + radius * (HEIGHT / 2.0 - 42.0) * angle.sin();
+        let level = item
+            .pointer("/mastery/level")
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
+        indexes.insert(id.to_owned(), nodes.len());
+        nodes.push(GraphNode {
+            id: id.to_owned(),
+            title,
+            x,
+            y,
+            level,
+        });
     }
-    let mut edges=Vec::new();
-    if let Some(raw_edges)=data.get("edges").and_then(Value::as_array){
+    let mut edges = Vec::new();
+    if let Some(raw_edges) = data.get("edges").and_then(Value::as_array) {
         for item in raw_edges.iter().take(600) {
-            let source=item.get("source").and_then(Value::as_str);
-            let target=item.get("target").and_then(Value::as_str);
-            if let (Some(a),Some(b))=(source.and_then(|s|indexes.get(s)),
-                target.and_then(|s|indexes.get(s))) {
-                if a!=b{
-                    let kind=item.get("kind").and_then(Value::as_str)
-                        .unwrap_or("related").to_owned();
-                    edges.push((*a,*b,kind));
+            let source = item.get("source").and_then(Value::as_str);
+            let target = item.get("target").and_then(Value::as_str);
+            if let (Some(a), Some(b)) = (
+                source.and_then(|s| indexes.get(s)),
+                target.and_then(|s| indexes.get(s)),
+            ) {
+                if a != b {
+                    let kind = item
+                        .get("kind")
+                        .and_then(Value::as_str)
+                        .unwrap_or("related")
+                        .to_owned();
+                    edges.push((*a, *b, kind));
                 }
             }
         }
     }
-    (nodes,edges)
+    (nodes, edges)
 }
 
 #[component]
-pub fn LearningGraph(data:Value,on_select:EventHandler<String>)->Element{
-    let mut zoom=use_signal(||1.0_f64);
-    let mut pan_x=use_signal(||0.0_f64);
-    let mut pan_y=use_signal(||0.0_f64);
-    let mut search=use_signal(String::new);
-    let (nodes,edges)=layout(&data);
-    let scale=zoom().clamp(0.5,3.0);
-    let width=WIDTH/scale;
-    let height=HEIGHT/scale;
-    let x=(WIDTH-width)/2.0+pan_x();
-    let y=(HEIGHT-height)/2.0+pan_y();
-    let bounds=format!("{x:.2} {y:.2} {width:.2} {height:.2}");
-    let term=search().trim().to_lowercase();
-    if nodes.is_empty(){return rsx!{p{class:"small muted","No graph nodes are available."}}}
+pub fn LearningGraph(data: Value, on_select: EventHandler<String>) -> Element {
+    let mut zoom = use_signal(|| 1.0_f64);
+    let mut pan_x = use_signal(|| 0.0_f64);
+    let mut pan_y = use_signal(|| 0.0_f64);
+    let mut search = use_signal(String::new);
+    let (nodes, edges) = layout(&data);
+    let scale = zoom().clamp(0.5, 3.0);
+    let width = WIDTH / scale;
+    let height = HEIGHT / scale;
+    let x = (WIDTH - width) / 2.0 + pan_x();
+    let y = (HEIGHT - height) / 2.0 + pan_y();
+    let bounds = format!("{x:.2} {y:.2} {width:.2} {height:.2}");
+    let term = search().trim().to_lowercase();
+    if nodes.is_empty() {
+        return rsx! {p{class:"small muted","No graph nodes are available."}};
+    }
     rsx! {
         div{class:"stack",
             p{class:"small muted",
@@ -155,32 +185,38 @@ pub fn LearningGraph(data:Value,on_select:EventHandler<String>)->Element{
 }
 
 #[cfg(test)]
-mod tests{
+mod tests {
     use super::*;
     #[test]
     fn largest_graph_fits_the_viewport() {
-        let nodes=(0..250).map(|i|serde_json::json!({
-            "id":format!("concept-{i}"),"title":format!("Concept {i}")
-        })).collect::<Vec<_>>();
-        let (layout_nodes,_)=layout(&serde_json::json!({"nodes":nodes}));
-        assert_eq!(layout_nodes.len(),200);
-        assert!(layout_nodes.iter().all(|n|
-            n.x>=20.0&&n.x<=WIDTH-20.0&&
-            n.y>=20.0&&n.y<=HEIGHT-20.0));
+        let nodes = (0..250)
+            .map(|i| {
+                serde_json::json!({
+                    "id":format!("concept-{i}"),"title":format!("Concept {i}")
+                })
+            })
+            .collect::<Vec<_>>();
+        let (layout_nodes, _) = layout(&serde_json::json!({"nodes":nodes}));
+        assert_eq!(layout_nodes.len(), 200);
+        assert!(
+            layout_nodes
+                .iter()
+                .all(|n| n.x >= 20.0 && n.x <= WIDTH - 20.0 && n.y >= 20.0 && n.y <= HEIGHT - 20.0)
+        );
     }
 
     #[test]
-    fn graph_links_are_restricted_to_known_nodes(){
-        let input=serde_json::json!({
+    fn graph_links_are_restricted_to_known_nodes() {
+        let input = serde_json::json!({
             "nodes":[{"id":"a","title":"A","mastery":{"level":3}},
                 {"id":"b","title":"B"}],
             "edges":[{"source":"a","target":"b","kind":"requires"},
                 {"source":"a","target":"outside","kind":"explains"}],
         });
-        let (nodes,edges)=layout(&input);
-        assert_eq!(nodes.len(),2);
-        assert_eq!(edges.len(),1);
-        assert_eq!(edges[0].2,"requires");
-        assert_eq!(nodes[0].level,3);
+        let (nodes, edges) = layout(&input);
+        assert_eq!(nodes.len(), 2);
+        assert_eq!(edges.len(), 1);
+        assert_eq!(edges[0].2, "requires");
+        assert_eq!(nodes[0].level, 3);
     }
 }

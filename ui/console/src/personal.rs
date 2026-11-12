@@ -7,43 +7,51 @@ use crate::components::{Card, Empty, Heading, Loading, Notice};
 #[component]
 pub fn Learning(csrf: String) -> Element {
     let csrf = use_signal(|| csrf);
-    let mut summary=use_resource(||async{api::get::<Value>("/v1/learning/summary").await});
-    let mut sessions=use_resource(||async{api::get::<Value>("/v1/learning/sessions").await});
-    let mut reviews=use_resource(||async{api::get::<Value>("/v1/learning/reviews").await});
-    let mut selected=use_signal(||None::<String>);
-    let mut detail=use_resource(move ||{
-        let id=selected();
-        async move{
-            match id{
-                Some(session_id)=>api::get::<Value>(&format!("/v1/learning/sessions/{session_id}")).await,
-                None=>Ok(Value::Null)
+    let mut summary = use_resource(|| async { api::get::<Value>("/v1/learning/summary").await });
+    let mut sessions = use_resource(|| async { api::get::<Value>("/v1/learning/sessions").await });
+    let mut reviews = use_resource(|| async { api::get::<Value>("/v1/learning/reviews").await });
+    let mut selected = use_signal(|| None::<String>);
+    let mut detail = use_resource(move || {
+        let id = selected();
+        async move {
+            match id {
+                Some(session_id) => {
+                    api::get::<Value>(&format!("/v1/learning/sessions/{session_id}")).await
+                }
+                None => Ok(Value::Null),
             }
         }
     });
-    let mut pending=use_resource(move ||{
-        let id=selected();
-        async move{
-            match id{
-                Some(session_id)=>api::get::<Value>(&format!("/v1/learning/sessions/{session_id}/pending")).await,
-                None=>Ok(Value::Null)
+    let mut pending = use_resource(move || {
+        let id = selected();
+        async move {
+            match id {
+                Some(session_id) => {
+                    api::get::<Value>(&format!("/v1/learning/sessions/{session_id}/pending")).await
+                }
+                None => Ok(Value::Null),
             }
         }
     });
-    let mut goal=use_signal(String::new);
-    let mut target=use_signal(String::new);
-    let mut mode=use_signal(||"learn".to_owned());
-    let mut busy=use_signal(||false);
-    let mut error=use_signal(String::new);
-    let mut notice=use_signal(String::new);
-    let current_question=pending.cloned().and_then(Result::ok).and_then(|value|
-        if value.get("pending").and_then(Value::as_bool)==Some(true) {
+    let mut goal = use_signal(String::new);
+    let mut target = use_signal(String::new);
+    let mut mode = use_signal(|| "learn".to_owned());
+    let mut busy = use_signal(|| false);
+    let mut error = use_signal(String::new);
+    let mut notice = use_signal(String::new);
+    let current_question = pending.cloned().and_then(Result::ok).and_then(|value| {
+        if value.get("pending").and_then(Value::as_bool) == Some(true) {
             value.get("question").cloned()
-        } else {None}
-    );
-    let current_question_id = current_question.as_ref()
+        } else {
+            None
+        }
+    });
+    let current_question_id = current_question
+        .as_ref()
         .and_then(|question| question.get("id").and_then(Value::as_str))
-        .unwrap_or("").to_owned();
-    rsx!{
+        .unwrap_or("")
+        .to_owned();
+    rsx! {
         Heading{
             title:"Learning".to_owned(),
             description:"Build durable understanding through independent reasoning and delayed reassessment.".to_owned(),
@@ -252,32 +260,33 @@ pub fn Learning(csrf: String) -> Element {
 }
 
 #[component]
-pub fn Health(csrf: String) -> Element{
+pub fn Health(csrf: String) -> Element {
     let csrf = use_signal(|| csrf);
-    let mut proposals=use_resource(||async{api::get::<Value>("/v1/health/food-proposals").await});
-    let mut health_busy=use_signal(||false);
-    let mut health_error=use_signal(String::new);
-    let mut plans=use_resource(||async{api::get::<Value>("/v1/health/plans").await});
-    let mut records=use_resource(||async{api::get::<Value>("/v1/health/records").await});
-    let mut goals=use_resource(||async{api::get::<Value>("/v1/health/goals").await});
-    let mut sets=use_resource(||async{api::get::<Value>("/v1/health/training-sets").await});
-    let mut exercise=use_signal(String::new);
-    let mut activity=use_signal(||"strength".to_owned());
-    let mut training_plan=use_signal(String::new);
-    let mut training_session=use_signal(String::new);
-    let mut set_number=use_signal(||"1".to_owned());
-    let mut repetitions=use_signal(||"8".to_owned());
-    let mut load=use_signal(String::new);
-    let mut duration=use_signal(String::new);
-    let mut distance=use_signal(String::new);
-    let mut rpe=use_signal(String::new);
-    let mut progression=use_signal(||None::<Value>);
-    let mut obs_domain=use_signal(||"biometric".to_owned());
-    let mut obs_metric=use_signal(||"weight".to_owned());
-    let mut obs_value=use_signal(String::new);
-    let mut obs_unit=use_signal(||"kg".to_owned());
-    let mut obs_method=use_signal(||"measured".to_owned());
-    rsx!{
+    let mut proposals =
+        use_resource(|| async { api::get::<Value>("/v1/health/food-proposals").await });
+    let mut health_busy = use_signal(|| false);
+    let mut health_error = use_signal(String::new);
+    let mut plans = use_resource(|| async { api::get::<Value>("/v1/health/plans").await });
+    let mut records = use_resource(|| async { api::get::<Value>("/v1/health/records").await });
+    let mut goals = use_resource(|| async { api::get::<Value>("/v1/health/goals").await });
+    let mut sets = use_resource(|| async { api::get::<Value>("/v1/health/training-sets").await });
+    let mut exercise = use_signal(String::new);
+    let mut activity = use_signal(|| "strength".to_owned());
+    let mut training_plan = use_signal(String::new);
+    let mut training_session = use_signal(String::new);
+    let mut set_number = use_signal(|| "1".to_owned());
+    let mut repetitions = use_signal(|| "8".to_owned());
+    let mut load = use_signal(String::new);
+    let mut duration = use_signal(String::new);
+    let mut distance = use_signal(String::new);
+    let mut rpe = use_signal(String::new);
+    let mut progression = use_signal(|| None::<Value>);
+    let mut obs_domain = use_signal(|| "biometric".to_owned());
+    let mut obs_metric = use_signal(|| "weight".to_owned());
+    let mut obs_value = use_signal(String::new);
+    let mut obs_unit = use_signal(|| "kg".to_owned());
+    let mut obs_method = use_signal(|| "measured".to_owned());
+    rsx! {
         Heading{
             title:"Health".to_owned(),
             description:"Training plans, recorded observations, and nutrient goals.".to_owned(),
@@ -680,17 +689,26 @@ fn valid_learning_answer(question: &Value, response: &str) -> bool {
     let Some(id) = question.get("id").and_then(Value::as_str) else {
         return false;
     };
-    if id.is_empty() || id.len() > 128
-        || !id.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
-        || response.trim().is_empty() || response.len() > 12000
+    if id.is_empty()
+        || id.len() > 128
+        || !id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+        || response.trim().is_empty()
+        || response.len() > 12000
         || question.get("status").and_then(Value::as_str) != Some("pending")
     {
         return false;
     }
     match question.get("response_kind").and_then(Value::as_str) {
-        Some("multiple_choice") => question.get("options").and_then(Value::as_array)
-            .is_some_and(|options| options.iter().any(|option|
-                option.get("id").and_then(Value::as_str) == Some(response))),
+        Some("multiple_choice") => question
+            .get("options")
+            .and_then(Value::as_array)
+            .is_some_and(|options| {
+                options
+                    .iter()
+                    .any(|option| option.get("id").and_then(Value::as_str) == Some(response))
+            }),
         Some("free_response") => true,
         _ => false,
     }
@@ -705,18 +723,30 @@ fn LearningQuestion(question: Value, csrf: String, on_saved: EventHandler<()>) -
     let mut busy = use_signal(|| false);
     let mut error = use_signal(String::new);
 
-    let id = question.get("id").and_then(Value::as_str).unwrap_or("").to_owned();
+    let id = question
+        .get("id")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_owned();
     let status = question.get("status").and_then(Value::as_str).unwrap_or("");
-    let multiple_choice = question.get("response_kind").and_then(Value::as_str)
-        == Some("multiple_choice");
-    let options = question.get("options").and_then(Value::as_array).cloned()
+    let multiple_choice =
+        question.get("response_kind").and_then(Value::as_str) == Some("multiple_choice");
+    let options = question
+        .get("options")
+        .and_then(Value::as_array)
+        .cloned()
         .unwrap_or_default();
-    let saved_response = question.get("learner_response").and_then(Value::as_str)
+    let saved_response = question
+        .get("learner_response")
+        .and_then(Value::as_str)
         .unwrap_or("");
-    let saved_option = options.iter()
+    let saved_option = options
+        .iter()
         .find(|option| option.get("id").and_then(Value::as_str) == Some(saved_response))
         .and_then(|option| option.get("label").and_then(Value::as_str));
-    let saved_confidence = question.get("self_confidence").and_then(Value::as_f64)
+    let saved_confidence = question
+        .get("self_confidence")
+        .and_then(Value::as_f64)
         .map(|value| format!("{:.0}%", value * 100.0));
 
     rsx! {
@@ -911,7 +941,10 @@ mod learning_question_tests {
         let mut question = serde_json::json!({
             "id": "question_2", "status": "pending", "response_kind": "free_response"
         });
-        assert!(valid_learning_answer(&question, "A derivation with explicit assumptions"));
+        assert!(valid_learning_answer(
+            &question,
+            "A derivation with explicit assumptions"
+        ));
         assert!(!valid_learning_answer(&question, "  "));
         assert!(!valid_learning_answer(&question, &"a".repeat(12001)));
         question["response_kind"] = serde_json::json!("unrecognized");

@@ -20,8 +20,11 @@ pub enum Error {
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let message = match self {
-            Self::Configuration(m) | Self::Denied(m) | Self::Unavailable(m)
-            | Self::Storage(m) | Self::Protocol(m) => m,
+            Self::Configuration(m)
+            | Self::Denied(m)
+            | Self::Unavailable(m)
+            | Self::Storage(m)
+            | Self::Protocol(m) => m,
         };
         f.write_str(message)
     }
@@ -36,10 +39,15 @@ pub fn random_hex<const N: usize>() -> Result<String, Error> {
 }
 
 pub fn valid_host(s: &str) -> bool {
-    !s.is_empty() && s.len() <= 63 && s.as_bytes()[0].is_ascii_lowercase()
-        && s.bytes().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'-')
+    !s.is_empty()
+        && s.len() <= 63
+        && s.as_bytes()[0].is_ascii_lowercase()
+        && s.bytes()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'-')
 }
 
 pub fn valid_hex(s: &str, length: usize) -> bool {
-    s.len() == length && s.bytes().all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
+    s.len() == length
+        && s.bytes()
+            .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
 }

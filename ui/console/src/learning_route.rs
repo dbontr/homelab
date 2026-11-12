@@ -1,14 +1,16 @@
 use dioxus::prelude::*;
 use reqwest::Method;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::api;
 use crate::components::{Card, Empty, Loading, Notice};
 
 fn valid_session_id(id: &str) -> bool {
-    !id.is_empty() && id.len() <= 128 && id.bytes().all(|c|
-        c.is_ascii_alphanumeric() || c == b'-' || c == b'_'
-    )
+    !id.is_empty()
+        && id.len() <= 128
+        && id
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b'_')
 }
 
 fn next_phases(current: &str) -> &'static [&'static str] {
@@ -27,7 +29,10 @@ fn permits_plan(phase: &str) -> bool {
 }
 
 fn expected_revision(record: &Value) -> Option<i64> {
-    record.get("revision")?.as_i64().filter(|revision| *revision >= 0)
+    record
+        .get("revision")?
+        .as_i64()
+        .filter(|revision| *revision >= 0)
 }
 
 // A phase change is revision-fenced, and the Learning store verifies
@@ -78,13 +83,15 @@ pub fn LearningRoute(
     let phase = api::property(&detail, &["phase"]);
     let revision = expected_revision(&detail);
     let choices = next_phases(&phase);
-    let has_ungraded_question = detail.get("pending_question")
+    let has_ungraded_question = detail
+        .get("pending_question")
         .filter(|question| !question.is_null())
         .is_some_and(|question| question.get("status").and_then(Value::as_str) != Some("graded"));
     let steps = api::list(&detail, &["steps"]);
     let build_allowed = permits_plan(&phase) && !has_ungraded_question && revision.is_some();
     let transition_allowed = choices.contains(&target_phase().as_str())
-        && !has_ungraded_question && revision.is_some()
+        && !has_ungraded_question
+        && revision.is_some()
         && (target_phase() != "complete" || confirm_complete());
 
     rsx! {
@@ -313,7 +320,10 @@ mod tests {
         assert_eq!(next_phases("plan"), &["diagnose", "teach"]);
         assert_eq!(next_phases("teach"), &["plan", "practice"]);
         assert_eq!(next_phases("practice"), &["teach", "reassess"]);
-        assert_eq!(next_phases("reassess"), &["practice", "complete", "diagnose"]);
+        assert_eq!(
+            next_phases("reassess"),
+            &["practice", "complete", "diagnose"]
+        );
         assert!(next_phases("complete").is_empty());
         assert!(next_phases("arbitrary").is_empty());
     }

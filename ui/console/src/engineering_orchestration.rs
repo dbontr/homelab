@@ -1,12 +1,17 @@
 use dioxus::prelude::*;
 use reqwest::Method;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::api;
 use crate::components::{Card, Notice};
 
 fn entries(value: &str) -> Vec<String> {
-    value.lines().map(str::trim).filter(|line| !line.is_empty()).map(str::to_owned).collect()
+    value
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .map(str::to_owned)
+        .collect()
 }
 
 #[component]
@@ -105,7 +110,10 @@ pub fn TeamCreate(csrf: String) -> Element {
 #[component]
 pub fn DependencyGraph(members: Vec<Value>) -> Element {
     let mut selected = use_signal(String::new);
-    let chosen = members.iter().find(|item| api::property(item,&["key"]) == selected()).cloned();
+    let chosen = members
+        .iter()
+        .find(|item| api::property(item, &["key"]) == selected())
+        .cloned();
     rsx! {
         div { class:"engineering-graph", role:"group", aria_label:"Agent dependency graph",
             for member in &members {
@@ -153,9 +161,9 @@ pub fn TeamIntegration(team: Value, csrf: String) -> Element {
     let mut submitting = use_signal(|| false);
     let mut result = use_signal(String::new);
     let mut error = use_signal(String::new);
-    let id = api::property(&team,&["id"]);
-    let branch = api::property(&team,&["base_branch"]);
-    let revision = api::property(&team,&["revision"]);
+    let id = api::property(&team, &["id"]);
+    let branch = api::property(&team, &["base_branch"]);
+    let revision = api::property(&team, &["revision"]);
     rsx! {
         form { class:"form-stack",
             onsubmit:move |event|{

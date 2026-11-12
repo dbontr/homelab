@@ -2,8 +2,8 @@
 use std::collections::BTreeSet;
 use std::fmt;
 
-use serde::de::{self, MapAccess, SeqAccess, Visitor};
 use serde::de::Error as _;
+use serde::de::{self, MapAccess, SeqAccess, Visitor};
 use serde::Deserialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -100,7 +100,11 @@ pub fn canonical_arguments(raw: &[u8]) -> Result<Vec<u8>, Error> {
     if raw.len() > 1 << 20 {
         return Err(Error::InvalidArguments);
     }
-    let raw = if raw.is_empty() { b"{}".as_slice() } else { raw };
+    let raw = if raw.is_empty() {
+        b"{}".as_slice()
+    } else {
+        raw
+    };
     let mut validator = serde_json::Deserializer::from_slice(raw);
     NoRepeatedKeys::deserialize(&mut validator).map_err(|_| Error::InvalidArguments)?;
     validator.end().map_err(|_| Error::InvalidArguments)?;
@@ -141,9 +145,9 @@ mod tests {
 
     #[test]
     fn preserves_arbitrary_precision_numbers_and_exponents() {
-        let output = canonical_arguments(
-            br#"{"v":1234567890123456789012345678901234567890,"x":1.234e-12}"#,
-        ).unwrap();
+        let output =
+            canonical_arguments(br#"{"v":1234567890123456789012345678901234567890,"x":1.234e-12}"#)
+                .unwrap();
         assert_eq!(
             output,
             br#"{"v":1234567890123456789012345678901234567890,"x":1.234e-12}"#

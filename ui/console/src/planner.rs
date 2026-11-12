@@ -101,12 +101,10 @@ pub fn Planner() -> Element {
     let mut daily_minutes = use_signal(|| 180_i32);
     let mut start_hour = use_signal(|| 9_i32);
     let mut day_minutes = use_signal(String::new);
-    let mut delegations = use_resource(|| async {
-        api::get::<DelegationReport>("/v1/tasks/delegations").await
-    });
-    let mut review = use_resource(|| async {
-        api::get::<TaskReview>("/v1/planning/review?days=7").await
-    });
+    let mut delegations =
+        use_resource(|| async { api::get::<DelegationReport>("/v1/tasks/delegations").await });
+    let mut review =
+        use_resource(|| async { api::get::<TaskReview>("/v1/planning/review?days=7").await });
     let mut plan = use_resource(move || {
         let minutes = daily_minutes();
         let hour = start_hour();
@@ -117,16 +115,22 @@ pub fn Planner() -> Element {
                 String::new()
             } else {
                 let values: Vec<&str> = custom.split(',').map(str::trim).collect();
-                if values.len()!=7 || values.iter().any(|v| {
-                    v.parse::<i32>().map_or(true, |n| n != 0 && (n < 30 || n > 480) || n < 0)
-                }) {
-                    return Err("Provide seven daily capacities: zero or 30–480 minutes each.".to_owned());
+                if values.len() != 7
+                    || values.iter().any(|v| {
+                        v.parse::<i32>()
+                            .map_or(true, |n| n != 0 && (n < 30 || n > 480) || n < 0)
+                    })
+                {
+                    return Err(
+                        "Provide seven daily capacities: zero or 30–480 minutes each.".to_owned(),
+                    );
                 }
                 format!("&day_minutes={}", values.join(","))
             };
             api::get::<WeeklyPlan>(&format!(
                 "/v1/planning/week?daily_minutes={minutes}&start_hour={hour}{day_filter}"
-            )).await
+            ))
+            .await
         }
     });
     rsx! {

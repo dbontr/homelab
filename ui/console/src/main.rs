@@ -1,49 +1,49 @@
-mod api;
-mod components;
-mod recipes;
-mod pantry;
-mod usda_nutrition;
-mod tasks;
-mod personal;
-mod views;
-mod monitoring;
-mod calendar;
-mod planner;
-mod books;
 mod activity;
-mod engineering;
-mod engineering_create;
-mod compute_manage;
-mod engineering_orchestration;
-mod engineering_knowledge;
-mod engineering_diff;
-mod knowledge;
-mod workflows;
-mod motivation;
+mod api;
+mod books;
+mod calendar;
 mod cognitive;
-mod health_tools;
-mod health_dashboard;
-mod workout_planner;
-mod health_groceries;
-mod workout_companion;
-mod learning_library;
-mod learning_route;
-mod learning_attachments;
-#[cfg(feature = "embedded-app")]
-mod mcp_app;
+mod components;
+mod compute_manage;
 #[cfg(feature = "embedded-app")]
 mod embedded_learning;
 #[cfg(feature = "embedded-app")]
-mod embedded_learning_graph;
-#[cfg(feature = "embedded-app")]
 mod embedded_learning_attachments;
+#[cfg(feature = "embedded-app")]
+mod embedded_learning_graph;
 #[cfg(feature = "embedded-app")]
 mod embedded_learning_insights;
 #[cfg(feature = "embedded-app")]
 mod embedded_learning_workflows;
+mod engineering;
+mod engineering_create;
+mod engineering_diff;
+mod engineering_knowledge;
+mod engineering_orchestration;
+mod health_dashboard;
+mod health_groceries;
+mod health_tools;
+mod knowledge;
+mod learning_attachments;
+mod learning_library;
+mod learning_route;
+#[cfg(feature = "embedded-app")]
+mod mcp_app;
+mod monitoring;
+mod motivation;
+mod pantry;
+mod personal;
+mod planner;
+mod recipes;
+mod tasks;
+mod usda_nutrition;
+mod views;
+mod workflows;
+mod workout_companion;
+mod workout_planner;
 
-use dioxus::prelude::*;
 use components::Icon;
+use dioxus::prelude::*;
 
 static CSS: Asset = asset!("/assets/main.css");
 
@@ -154,7 +154,13 @@ fn App() -> Element {
     let mut passphrase = use_signal(String::new);
     let mut login_error = use_signal(String::new);
     let mut session = use_resource(|| async { api::get::<api::Session>("/ui/session").await });
-    let authenticated = matches!(session.cloned(), Some(Ok(api::Session { authenticated: true, .. })));
+    let authenticated = matches!(
+        session.cloned(),
+        Some(Ok(api::Session {
+            authenticated: true,
+            ..
+        }))
+    );
     let csrf = session
         .cloned()
         .and_then(Result::ok)

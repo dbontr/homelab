@@ -55,15 +55,19 @@ fn validate(plan: &Plan) -> Result<(), String> {
         if session.id.is_empty() || !ids.insert(&session.id) {
             return Err("Session IDs must be unique and nonempty.".to_owned());
         }
-        if session.title.trim().is_empty() ||
-            session.date.len() != 10 || !session.date.as_bytes().get(4).is_some_and(|b| *b == b'-') ||
-            !session.date.as_bytes().get(7).is_some_and(|b| *b == b'-') {
+        if session.title.trim().is_empty()
+            || session.date.len() != 10
+            || !session.date.as_bytes().get(4).is_some_and(|b| *b == b'-')
+            || !session.date.as_bytes().get(7).is_some_and(|b| *b == b'-')
+        {
             return Err("Each session requires a title and a calendar date.".to_owned());
         }
-        if session.exercises.iter().any(|exercise|
-            exercise.name.trim().is_empty() || exercise.sets < 0 || exercise.repetitions < 0)
-        {
-            return Err("Every exercise needs a name and nonnegative sets and repetitions.".to_owned());
+        if session.exercises.iter().any(|exercise| {
+            exercise.name.trim().is_empty() || exercise.sets < 0 || exercise.repetitions < 0
+        }) {
+            return Err(
+                "Every exercise needs a name and nonnegative sets and repetitions.".to_owned(),
+            );
         }
     }
     Ok(())
@@ -80,7 +84,10 @@ fn add_session(plan: &mut Plan) {
         count += 1;
     };
     plan.sessions.push(Session {
-        id, date: String::new(), title: String::new(), ..Session::default()
+        id,
+        date: String::new(),
+        title: String::new(),
+        ..Session::default()
     });
 }
 
@@ -89,9 +96,7 @@ pub fn WorkoutPlanner(csrf: String) -> Element {
     let csrf = use_signal(|| csrf);
     let mut plans = use_resource(move || {
         let token = csrf();
-        async move {
-            health_tools::call::<Vec<Plan>>(&token, Tool::PlanList, json!({})).await
-        }
+        async move { health_tools::call::<Vec<Plan>>(&token, Tool::PlanList, json!({})).await }
     });
     let mut active = use_signal(|| None::<Plan>);
     let mut busy = use_signal(|| false);
@@ -403,10 +408,16 @@ mod tests {
 
     #[test]
     fn validates_revision_safe_workout_structure() {
-        let mut plan = Plan { kind: "workout".to_owned(), title: "Training".to_owned(),
-            ..Plan::default() };
+        let mut plan = Plan {
+            kind: "workout".to_owned(),
+            title: "Training".to_owned(),
+            ..Plan::default()
+        };
         assert!(validate(&plan).is_ok());
-        plan.sessions.push(Session { id: "session-1".to_owned(), ..Session::default() });
+        plan.sessions.push(Session {
+            id: "session-1".to_owned(),
+            ..Session::default()
+        });
         assert!(validate(&plan).is_err());
         plan.sessions[0].date = "2026-11-10".to_owned();
         plan.sessions[0].title = "Lower body".to_owned();

@@ -20,9 +20,11 @@ fn milliseconds() -> Option<f64> {
 }
 
 fn reaction_summary(trials: &[f64]) -> Option<(f64, f64)> {
-    if trials.len() != 5 || trials.iter().any(|value| {
-        !value.is_finite() || !(80.0..=1500.0).contains(value)
-    }) {
+    if trials.len() != 5
+        || trials
+            .iter()
+            .any(|value| !value.is_finite() || !(80.0..=1500.0).contains(value))
+    {
         return None;
     }
     let mut sorted = trials.to_vec();
@@ -75,9 +77,7 @@ pub fn ReactionTime(csrf: String) -> Element {
     let mut saved = use_signal(|| false);
     let mut notice = use_signal(String::new);
     let mut error = use_signal(String::new);
-    let mut history = use_resource(|| async {
-        api::get::<Value>("/v1/health/records").await
-    });
+    let mut history = use_resource(|| async { api::get::<Value>("/v1/health/records").await });
 
     let progress = trials().len();
     let result = reaction_summary(&trials());
@@ -282,8 +282,14 @@ mod tests {
 
     #[test]
     fn median_and_mean_are_computed_from_five_valid_trials() {
-        assert_eq!(reaction_summary(&[242.0, 210.0, 238.0, 270.0, 225.0]), Some((238.0, 237.0)));
-        assert_eq!(reaction_summary(&[80.0, 1500.0, 120.0, 100.0, 90.0]), Some((100.0, 378.0)));
+        assert_eq!(
+            reaction_summary(&[242.0, 210.0, 238.0, 270.0, 225.0]),
+            Some((238.0, 237.0))
+        );
+        assert_eq!(
+            reaction_summary(&[80.0, 1500.0, 120.0, 100.0, 90.0]),
+            Some((100.0, 378.0))
+        );
     }
 
     #[test]

@@ -111,17 +111,21 @@ fn public_provider_host(host: &str) -> bool {
     {
         return false;
     }
-    host.rsplit('.').next().is_some_and(|suffix|
-        suffix.len() >= 2 && suffix.bytes().all(|c| c.is_ascii_lowercase())
-    )
+    host.rsplit('.')
+        .next()
+        .is_some_and(|suffix| suffix.len() >= 2 && suffix.bytes().all(|c| c.is_ascii_lowercase()))
 }
 
 fn safe_https(value: &str) -> Result<Url, Error> {
     let url = Url::parse(value).map_err(|_| Error::InvalidConfiguration)?;
     if url.scheme() != "https"
-        || url.host_str().is_none_or(|host| !public_provider_host(host))
-        || url.password().is_some() || !url.username().is_empty()
-        || url.fragment().is_some() || url.query().is_some()
+        || url
+            .host_str()
+            .is_none_or(|host| !public_provider_host(host))
+        || url.password().is_some()
+        || !url.username().is_empty()
+        || url.fragment().is_some()
+        || url.query().is_some()
     {
         return Err(Error::InvalidConfiguration);
     }
@@ -136,17 +140,27 @@ fn verify_url(url: &str, name: &str) -> bool {
         return false;
     };
     public_provider_host(name)
-        && url.scheme() == "https" && url.host_str() == Some(name)
-        && url.username().is_empty() && url.password().is_none()
+        && url.scheme() == "https"
+        && url.host_str() == Some(name)
+        && url.username().is_empty()
+        && url.password().is_none()
         && url.fragment().is_none()
 }
 
 fn validate_provider(provider: &Provider) -> Result<Option<SocketAddr>, Error> {
-    if provider.name.is_empty() || provider.name.len() > 64
-        || provider.name.bytes().any(|c| !c.is_ascii_alphanumeric() && c != b'-' && c != b'_')
-        || provider.client_id.is_empty() || provider.client_id.len() > 256
+    if provider.name.is_empty()
+        || provider.name.len() > 64
+        || provider
+            .name
+            .bytes()
+            .any(|c| !c.is_ascii_alphanumeric() && c != b'-' && c != b'_')
+        || provider.client_id.is_empty()
+        || provider.client_id.len() > 256
         || provider.scopes.len() > 16
-        || provider.scopes.iter().any(|scope| scope.len() > 128 || scope.is_empty())
+        || provider
+            .scopes
+            .iter()
+            .any(|scope| scope.len() > 128 || scope.is_empty())
     {
         return Err(Error::InvalidConfiguration);
     }
@@ -156,14 +170,18 @@ fn validate_provider(provider: &Provider) -> Result<Option<SocketAddr>, Error> {
         if !provider.authorize_url.is_empty()
             || !provider.redirect_url.is_empty()
             || provider.device_verification_host.is_empty()
-            || provider.device_verification_host.chars().any(|c| matches!(c, '/' | ':' | '@' | '?' | '#' | ' '))
+            || provider
+                .device_verification_host
+                .chars()
+                .any(|c| matches!(c, '/' | ':' | '@' | '?' | '#' | ' '))
         {
             return Err(Error::InvalidConfiguration);
         }
         Ok(None)
     } else {
         safe_https(&provider.authorize_url)?;
-        let redirect = Url::parse(&provider.redirect_url).map_err(|_| Error::InvalidConfiguration)?;
+        let redirect =
+            Url::parse(&provider.redirect_url).map_err(|_| Error::InvalidConfiguration)?;
         if redirect.scheme() != "http"
             || redirect.host_str() != Some("127.0.0.1")
             || redirect.path() != "/oauth/callback"
@@ -175,8 +193,10 @@ fn validate_provider(provider: &Provider) -> Result<Option<SocketAddr>, Error> {
         {
             return Err(Error::InvalidConfiguration);
         }
-        Ok(Some(SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST),
-            redirect.port().ok_or(Error::InvalidConfiguration)?)))
+        Ok(Some(SocketAddr::new(
+            IpAddr::V4(Ipv4Addr::LOCALHOST),
+            redirect.port().ok_or(Error::InvalidConfiguration)?,
+        )))
     }
 }
 
@@ -212,7 +232,8 @@ impl Broker {
             .redirect(reqwest::redirect::Policy::none())
             .timeout(Duration::from_secs(15))
             .connect_timeout(Duration::from_secs(5))
-            .build().map_err(|_| Error::InvalidConfiguration)?;
+            .build()
+            .map_err(|_| Error::InvalidConfiguration)?;
         Ok(Some(Self {
             providers: allowed,
             browser: BTreeMap::new(),
@@ -241,7 +262,10 @@ impl Broker {
         if self.browser.len() >= MAX_PENDING {
             return Err(Error::Unauthorized);
         }
-        let selected = self.providers.get(provider).ok_or(Error::InvalidArguments)?;
+        let selected = self
+            .providers
+            .get(provider)
+            .ok_or(Error::InvalidArguments)?;
         if selected.authorize_url.is_empty() {
             return Err(Error::InvalidArguments);
         }
@@ -259,15 +283,23 @@ impl Broker {
             .append_pair("state", &state)
             .append_pair("code_challenge", &challenge)
             .append_pair("code_challenge_method", "S256");
-        self.browser.insert(state, BrowserFlow {
-            provider: selected, session_id, verifier,
-            expires: Instant::now() + Duration::from_secs(300),
-        });
+        self.browser.insert(
+            state,
+            BrowserFlow {
+                provider: selected,
+                session_id,
+                verifier,
+                expires: Instant::now() + Duration::from_secs(300),
+            },
+        );
         let expires_at = chrono::Utc::now()
             .checked_add_signed(chrono::Duration::seconds(300))
             .ok_or(Error::Storage)?
             .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-        Ok(BeginResult { url: url.to_string(), expires_at })
+        Ok(BeginResult {
+            url: url.to_string(),
+            expires_at,
+        })
     }
 
     fn take_browser(&mut self, state: &str) -> Result<BrowserFlow, Error> {
@@ -276,12 +308,20 @@ impl Broker {
     }
 
     pub async fn token_request(
-        http: &Client, provider: &Provider, form: &[(String, String)]
+        http: &Client,
+        provider: &Provider,
+        form: &[(String, String)],
     ) -> Result<Zeroizing<Vec<u8>>, Error> {
-        let response = http.post(safe_https(&provider.token_url)?)
-            .form(form).send().await.map_err(|_| Error::Storage)?;
+        let response = http
+            .post(safe_https(&provider.token_url)?)
+            .form(form)
+            .send()
+            .await
+            .map_err(|_| Error::Storage)?;
         if !response.status().is_success()
-            || !response.headers().get(reqwest::header::CONTENT_TYPE)
+            || !response
+                .headers()
+                .get(reqwest::header::CONTENT_TYPE)
                 .and_then(|v| v.to_str().ok())
                 .is_some_and(|v| v.starts_with("application/json"))
         {
@@ -296,9 +336,13 @@ impl Broker {
             bytes.extend_from_slice(&chunk);
         }
         let data: Value = serde_json::from_slice(&bytes).map_err(|_| Error::Unauthorized)?;
-        if data.get("access_token").and_then(Value::as_str)
+        if data
+            .get("access_token")
+            .and_then(Value::as_str)
             .is_none_or(str::is_empty)
-            || data.get("token_type").and_then(Value::as_str)
+            || data
+                .get("token_type")
+                .and_then(Value::as_str)
                 .is_none_or(|kind| !kind.eq_ignore_ascii_case("bearer"))
         {
             return Err(Error::Unauthorized);
@@ -307,11 +351,16 @@ impl Broker {
     }
 
     pub async fn device_begin(
-        &mut self, provider: &str, session_id: String
+        &mut self,
+        provider: &str,
+        session_id: String,
     ) -> Result<DeviceBeginResult, Error> {
         self.prune();
-        let selected = self.providers.get(provider)
-            .ok_or(Error::InvalidArguments)?.clone();
+        let selected = self
+            .providers
+            .get(provider)
+            .ok_or(Error::InvalidArguments)?
+            .clone();
         if selected.device_authorization_url.is_empty() || self.device.len() >= MAX_PENDING {
             return Err(Error::Unauthorized);
         }
@@ -319,10 +368,17 @@ impl Broker {
             ("client_id".into(), selected.client_id.clone()),
             ("scope".into(), selected.scopes.join(" ")),
         ];
-        let mut response = self.http.post(safe_https(&selected.device_authorization_url)?)
-            .form(&form).send().await.map_err(|_| Error::Storage)?;
+        let mut response = self
+            .http
+            .post(safe_https(&selected.device_authorization_url)?)
+            .form(&form)
+            .send()
+            .await
+            .map_err(|_| Error::Storage)?;
         if response.status() != reqwest::StatusCode::OK
-            || !response.headers().get(reqwest::header::CONTENT_TYPE)
+            || !response
+                .headers()
+                .get(reqwest::header::CONTENT_TYPE)
                 .and_then(|v| v.to_str().ok())
                 .is_some_and(|v| v.starts_with("application/json"))
         {
@@ -346,18 +402,29 @@ impl Broker {
             #[serde(default)]
             interval: u64,
         }
-        let instructions: DeviceInstructions = serde_json::from_slice(&bytes)
-            .map_err(|_| Error::Unauthorized)?;
+        let instructions: DeviceInstructions =
+            serde_json::from_slice(&bytes).map_err(|_| Error::Unauthorized)?;
         if !(8..=MAX_CODE_BYTES).contains(&instructions.device_code.len())
-            || instructions.user_code.is_empty() || instructions.user_code.len() > 128
+            || instructions.user_code.is_empty()
+            || instructions.user_code.len() > 128
             || !(30..=900).contains(&instructions.expires_in)
-            || !verify_url(&instructions.verification_uri, &selected.device_verification_host)
+            || !verify_url(
+                &instructions.verification_uri,
+                &selected.device_verification_host,
+            )
             || (!instructions.verification_uri_complete.is_empty()
-                && !verify_url(&instructions.verification_uri_complete, &selected.device_verification_host))
+                && !verify_url(
+                    &instructions.verification_uri_complete,
+                    &selected.device_verification_host,
+                ))
         {
             return Err(Error::Unauthorized);
         }
-        let interval = if instructions.interval == 0 { 5 } else { instructions.interval };
+        let interval = if instructions.interval == 0 {
+            5
+        } else {
+            instructions.interval
+        };
         if !(5..=60).contains(&interval) {
             return Err(Error::Unauthorized);
         }
@@ -366,24 +433,33 @@ impl Broker {
             .checked_add_signed(chrono::Duration::seconds(instructions.expires_in as i64))
             .ok_or(Error::Storage)?
             .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-        self.device.insert(id.clone(), DeviceFlow {
-            provider: selected, session_id,
-            device_code: Zeroizing::new(instructions.device_code),
-            expires: Instant::now() + Duration::from_secs(instructions.expires_in),
-            next_poll: Instant::now() + Duration::from_secs(interval),
-            interval: Duration::from_secs(interval),
-        });
+        self.device.insert(
+            id.clone(),
+            DeviceFlow {
+                provider: selected,
+                session_id,
+                device_code: Zeroizing::new(instructions.device_code),
+                expires: Instant::now() + Duration::from_secs(instructions.expires_in),
+                next_poll: Instant::now() + Duration::from_secs(interval),
+                interval: Duration::from_secs(interval),
+            },
+        );
         Ok(DeviceBeginResult {
-            id, verification_url: instructions.verification_uri,
+            id,
+            verification_url: instructions.verification_uri,
             verification_url_complete: (!instructions.verification_uri_complete.is_empty())
                 .then_some(instructions.verification_uri_complete),
-            user_code: instructions.user_code, expires_at, poll_after_seconds: interval,
+            user_code: instructions.user_code,
+            expires_at,
+            poll_after_seconds: interval,
         })
     }
 
-    pub async fn device_poll(&mut self, provider: &str, id: &str)
-        -> Result<(DeviceStatus, Option<(String, Zeroizing<Vec<u8>>)>), Error>
-    {
+    pub async fn device_poll(
+        &mut self,
+        provider: &str,
+        id: &str,
+    ) -> Result<(DeviceStatus, Option<(String, Zeroizing<Vec<u8>>)>), Error> {
         self.prune();
         let flow = self.device.get(id).ok_or(Error::Unauthorized)?;
         if flow.provider.name != provider {
@@ -391,23 +467,38 @@ impl Broker {
         }
         let now = Instant::now();
         if now < flow.next_poll {
-            return Ok((DeviceStatus {
-                state: "pending".into(),
-                retry_after_seconds: Some((flow.next_poll - now).as_secs().max(1)),
-                credential: None,
-            }, None));
+            return Ok((
+                DeviceStatus {
+                    state: "pending".into(),
+                    retry_after_seconds: Some((flow.next_poll - now).as_secs().max(1)),
+                    credential: None,
+                },
+                None,
+            ));
         }
         let mut flow = self.device.remove(id).ok_or(Error::Unauthorized)?;
         let form: Vec<(String, String)> = vec![
-            ("grant_type".into(), "urn:ietf:params:oauth:grant-type:device_code".into()),
+            (
+                "grant_type".into(),
+                "urn:ietf:params:oauth:grant-type:device_code".into(),
+            ),
             ("device_code".into(), flow.device_code.to_string()),
             ("client_id".into(), flow.provider.client_id.clone()),
         ];
-        let request = self.http.post(safe_https(&flow.provider.token_url)?).form(&form)
-            .send().await.map_err(|_| Error::Storage)?;
+        let request = self
+            .http
+            .post(safe_https(&flow.provider.token_url)?)
+            .form(&form)
+            .send()
+            .await
+            .map_err(|_| Error::Storage)?;
         let status = request.status();
-        let content_type = request.headers().get(reqwest::header::CONTENT_TYPE)
-            .and_then(|v| v.to_str().ok()).unwrap_or("").to_owned();
+        let content_type = request
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("")
+            .to_owned();
         let mut request = request;
         let mut bytes = Zeroizing::new(Vec::new());
         while let Some(chunk) = request.chunk().await.map_err(|_| Error::Storage)? {
@@ -421,18 +512,31 @@ impl Broker {
         }
         if status == reqwest::StatusCode::OK {
             let token: Value = serde_json::from_slice(&bytes).map_err(|_| Error::Unauthorized)?;
-            if token.get("access_token").and_then(Value::as_str).is_none_or(str::is_empty)
-                || token.get("token_type").and_then(Value::as_str)
+            if token
+                .get("access_token")
+                .and_then(Value::as_str)
+                .is_none_or(str::is_empty)
+                || token
+                    .get("token_type")
+                    .and_then(Value::as_str)
                     .is_none_or(|v| !v.eq_ignore_ascii_case("bearer"))
             {
                 return Err(Error::Unauthorized);
             }
-            return Ok((DeviceStatus {
-                state: "authorized".into(), retry_after_seconds: None, credential: None,
-            }, Some((flow.session_id, bytes))));
+            return Ok((
+                DeviceStatus {
+                    state: "authorized".into(),
+                    retry_after_seconds: None,
+                    credential: None,
+                },
+                Some((flow.session_id, bytes)),
+            ));
         }
         let response: Value = serde_json::from_slice(&bytes).map_err(|_| Error::Unauthorized)?;
-        let error = response.get("error").and_then(Value::as_str).ok_or(Error::Unauthorized)?;
+        let error = response
+            .get("error")
+            .and_then(Value::as_str)
+            .ok_or(Error::Unauthorized)?;
         if error != "authorization_pending" && error != "slow_down" {
             return Err(Error::Unauthorized);
         }
@@ -442,13 +546,21 @@ impl Broker {
         flow.next_poll = Instant::now() + flow.interval;
         let wait = flow.interval.as_secs();
         self.device.insert(id.to_owned(), flow);
-        Ok((DeviceStatus {
-            state: "pending".into(), retry_after_seconds: Some(wait), credential: None
-        }, None))
+        Ok((
+            DeviceStatus {
+                state: "pending".into(),
+                retry_after_seconds: Some(wait),
+                credential: None,
+            },
+            None,
+        ))
     }
 
     pub fn take_refresh_provider(&self, provider: &str) -> Result<Provider, Error> {
-        self.providers.get(provider).cloned().ok_or(Error::Unauthorized)
+        self.providers
+            .get(provider)
+            .cloned()
+            .ok_or(Error::Unauthorized)
     }
 
     pub fn client(&self) -> Client {
@@ -536,9 +648,17 @@ async fn oauth_device_begin(
     let Ok(session_id) = owner else {
         return failure("owner authentication required", StatusCode::FORBIDDEN);
     };
-    match broker.lock().await.device_begin(&provider, session_id).await {
+    match broker
+        .lock()
+        .await
+        .device_begin(&provider, session_id)
+        .await
+    {
         Ok(instructions) => Json(instructions).into_response(),
-        Err(_) => failure("device authorization unavailable", StatusCode::SERVICE_UNAVAILABLE),
+        Err(_) => failure(
+            "device authorization unavailable",
+            StatusCode::SERVICE_UNAVAILABLE,
+        ),
     }
 }
 
@@ -557,15 +677,17 @@ async fn oauth_device_poll(
     let result = broker.lock().await.device_poll(&provider, &input.id).await;
     match result {
         Ok((mut status, Some((session, token)))) => {
-            let stored = shared.with_authority(|auth|
-                auth.store_broker_credential(&session, &provider, &token)
-            );
+            let stored = shared
+                .with_authority(|auth| auth.store_broker_credential(&session, &provider, &token));
             match stored {
                 Ok(handle) => {
                     status.credential = Some(handle);
                     Json(status).into_response()
                 }
-                Err(_) => failure("device credential could not be secured", StatusCode::FORBIDDEN),
+                Err(_) => failure(
+                    "device credential could not be secured",
+                    StatusCode::FORBIDDEN,
+                ),
             }
         }
         Ok((status, None)) => Json(status).into_response(),
@@ -600,7 +722,10 @@ async fn oauth_refresh(
         return failure("invalid refresh request", StatusCode::BAD_REQUEST);
     };
     if !input.confirm {
-        return failure("explicit refresh confirmation required", StatusCode::BAD_REQUEST);
+        return failure(
+            "explicit refresh confirmation required",
+            StatusCode::BAD_REQUEST,
+        );
     }
     let password = Zeroizing::new(input.password);
     let totp = Zeroizing::new(input.totp);
@@ -618,9 +743,8 @@ async fn oauth_refresh(
         };
         (config, broker.client())
     };
-    let snapshot = shared.with_authority(|auth| auth.broker_credential_snapshot(
-        &session, &input.handle, &provider
-    ));
+    let snapshot = shared
+        .with_authority(|auth| auth.broker_credential_snapshot(&session, &input.handle, &provider));
     let Ok((secret, revision)) = snapshot else {
         return failure("credential unavailable", StatusCode::FORBIDDEN);
     };
@@ -643,17 +767,30 @@ async fn oauth_refresh(
     // token. Retain existing provider metadata unless explicitly replaced.
     let response = match merge_refreshed_credential(&existing, &token) {
         Ok(value) => value,
-        Err(_) => return failure("invalid OAuth refresh response", StatusCode::SERVICE_UNAVAILABLE),
+        Err(_) => {
+            return failure(
+                "invalid OAuth refresh response",
+                StatusCode::SERVICE_UNAVAILABLE,
+            )
+        }
     };
     let secured = match serde_json::to_vec(&response) {
         Ok(raw) => Zeroizing::new(raw),
-        Err(_) => return failure("invalid OAuth refresh response", StatusCode::SERVICE_UNAVAILABLE),
+        Err(_) => {
+            return failure(
+                "invalid OAuth refresh response",
+                StatusCode::SERVICE_UNAVAILABLE,
+            )
+        }
     };
-    match shared.with_authority(|auth|
+    match shared.with_authority(|auth| {
         auth.replace_broker_credential(&session, &input.handle, &provider, &revision, &secured)
-    ) {
+    }) {
         Ok(()) => Json(json!({"refreshed":true})).into_response(),
-        Err(_) => failure("OAuth credential custody unavailable", StatusCode::FORBIDDEN),
+        Err(_) => failure(
+            "OAuth credential custody unavailable",
+            StatusCode::FORBIDDEN,
+        ),
     }
 }
 
@@ -661,12 +798,19 @@ pub fn register_owner_routes(router: Router<Shared>) -> Router<Shared> {
     router
         .route("/v1/oauth/providers", get(oauth_providers))
         .route("/v1/oauth/{provider}/begin", post(oauth_begin))
-        .route("/v1/oauth/{provider}/device/begin", post(oauth_device_begin))
+        .route(
+            "/v1/oauth/{provider}/device/begin",
+            post(oauth_device_begin),
+        )
         .route("/v1/oauth/{provider}/device/poll", post(oauth_device_poll))
         .route("/v1/oauth/{provider}/refresh", post(oauth_refresh))
 }
 
-async fn oauth_callback(State(shared): State<Shared>, headers: HeaderMap, raw: axum::extract::RawQuery) -> Response {
+async fn oauth_callback(
+    State(shared): State<Shared>,
+    headers: HeaderMap,
+    raw: axum::extract::RawQuery,
+) -> Response {
     let Some(broker) = &shared.oauth else {
         return failure("OAuth unavailable", StatusCode::NOT_FOUND);
     };
@@ -681,7 +825,10 @@ async fn oauth_callback(State(shared): State<Shared>, headers: HeaderMap, raw: a
         return failure("wrong OAuth callback host", StatusCode::FORBIDDEN);
     }
     let Some(query) = raw.0 else {
-        return failure("OAuth callback parameters required", StatusCode::BAD_REQUEST);
+        return failure(
+            "OAuth callback parameters required",
+            StatusCode::BAD_REQUEST,
+        );
     };
     if query.len() > 8192 {
         return failure("OAuth callback exceeds size limit", StatusCode::BAD_REQUEST);
@@ -689,14 +836,24 @@ async fn oauth_callback(State(shared): State<Shared>, headers: HeaderMap, raw: a
     let parameters: Vec<_> = url::form_urlencoded::parse(query.as_bytes()).collect();
     if parameters.len() != 2
         || parameters.iter().filter(|(name, _)| name == "code").count() != 1
-        || parameters.iter().filter(|(name, _)| name == "state").count() != 1
+        || parameters
+            .iter()
+            .filter(|(name, _)| name == "state")
+            .count()
+            != 1
     {
         return failure("invalid OAuth callback", StatusCode::BAD_REQUEST);
     }
-    let code = parameters.iter().find(|(name, _)| name == "code")
-        .map(|(_, value)| value.as_ref()).unwrap_or("");
-    let state = parameters.iter().find(|(name, _)| name == "state")
-        .map(|(_, value)| value.as_ref()).unwrap_or("");
+    let code = parameters
+        .iter()
+        .find(|(name, _)| name == "code")
+        .map(|(_, value)| value.as_ref())
+        .unwrap_or("");
+    let state = parameters
+        .iter()
+        .find(|(name, _)| name == "state")
+        .map(|(_, value)| value.as_ref())
+        .unwrap_or("");
     if code.is_empty() || code.len() > MAX_CODE_BYTES || state.len() != 43 {
         return failure("invalid OAuth callback", StatusCode::BAD_REQUEST);
     }
@@ -705,7 +862,10 @@ async fn oauth_callback(State(shared): State<Shared>, headers: HeaderMap, raw: a
         broker.take_browser(state)
     };
     let Ok(flow) = flow else {
-        return failure("unknown or expired OAuth authorization", StatusCode::FORBIDDEN);
+        return failure(
+            "unknown or expired OAuth authorization",
+            StatusCode::FORBIDDEN,
+        );
     };
     let form = vec![
         ("grant_type".into(), "authorization_code".into()),
@@ -717,23 +877,28 @@ async fn oauth_callback(State(shared): State<Shared>, headers: HeaderMap, raw: a
     let Ok(credential) = Broker::token_request(&http, &flow.provider, &form).await else {
         return failure("OAuth token exchange rejected", StatusCode::FORBIDDEN);
     };
-    let stored = shared.with_authority(|auth|
+    let stored = shared.with_authority(|auth| {
         auth.store_broker_credential(&flow.session_id, &flow.provider.name, &credential)
-    );
+    });
     if stored.is_err() {
-        return failure("OAuth credential custody unavailable", StatusCode::FORBIDDEN);
+        return failure(
+            "OAuth credential custody unavailable",
+            StatusCode::FORBIDDEN,
+        );
     }
     Json(json!({"connected":true,"message":"Provider authorization completed in the independent credential service."})).into_response()
 }
 
 pub async fn serve_callback(
-    broker: SharedBroker, shared: Shared
+    broker: SharedBroker,
+    shared: Shared,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let Some(address) = broker.lock().await.callback_address() else {
         return Ok(());
     };
     let listener = tokio::net::TcpListener::bind(address).await?;
-    let router = Router::new().route("/oauth/callback", get(oauth_callback))
+    let router = Router::new()
+        .route("/oauth/callback", get(oauth_callback))
         .with_state(shared);
     axum::serve(listener, router).await?;
     Ok(())
@@ -748,9 +913,9 @@ mod tests {
             "access_token":"old", "refresh_token":"refresh-a",
             "token_type":"Bearer", "scope":"read", "error":"stale"
         });
-        let refreshed = merge_refreshed_credential(
-            &stored, br#"{"access_token":"new","token_type":"Bearer"}"#
-        ).unwrap();
+        let refreshed =
+            merge_refreshed_credential(&stored, br#"{"access_token":"new","token_type":"Bearer"}"#)
+                .unwrap();
         assert_eq!(refreshed["access_token"], "new");
         assert_eq!(refreshed["refresh_token"], "refresh-a");
         assert_eq!(refreshed["scope"], "read");
@@ -758,8 +923,9 @@ mod tests {
 
         let changed = merge_refreshed_credential(
             &refreshed,
-            br#"{"access_token":"newer","refresh_token":"refresh-b","token_type":"Bearer"}"#
-        ).unwrap();
+            br#"{"access_token":"newer","refresh_token":"refresh-b","token_type":"Bearer"}"#,
+        )
+        .unwrap();
         assert_eq!(changed["refresh_token"], "refresh-b");
     }
 
@@ -774,11 +940,17 @@ mod tests {
             "https://example.invalid/token?redirect=1",
             "https://user@example.invalid/token",
         ] {
-            assert!(safe_https(endpoint).is_err(), "unsafe OAuth endpoint: {endpoint}");
+            assert!(
+                safe_https(endpoint).is_err(),
+                "unsafe OAuth endpoint: {endpoint}"
+            );
         }
         assert!(safe_https("https://example.invalid/token").is_ok());
         assert!(!verify_url("https://127.0.0.1/verify", "127.0.0.1"));
-        assert!(verify_url("https://example.invalid/verify", "example.invalid"));
+        assert!(verify_url(
+            "https://example.invalid/verify",
+            "example.invalid"
+        ));
     }
 
     #[test]

@@ -2,10 +2,10 @@
 use std::ffi::CString;
 use std::path::Path;
 
-use homelab_security_authority::{bootstrap, migration};
 use homelab_security_authority::oauth::{self, Broker};
 use homelab_security_authority::remote::Remote;
 use homelab_security_authority::transport::{self, Shared};
+use homelab_security_authority::{bootstrap, migration};
 
 fn group_id(name: &str) -> Result<u32, &'static str> {
     let value = CString::new(name).map_err(|_| "invalid security group")?;
@@ -40,12 +40,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // The shared authority retains the exclusive state lease. Commit the
     // selection only after configuration validation and before binding sockets.
     let receipt = if std::env::var_os("HOMELAB_SECURITY_MIGRATION_RECEIPT_FILE").is_some() {
-        Some(bootstrap::configured_file("HOMELAB_SECURITY_MIGRATION_RECEIPT_FILE", true)?)
+        Some(bootstrap::configured_file(
+            "HOMELAB_SECURITY_MIGRATION_RECEIPT_FILE",
+            true,
+        )?)
     } else {
         None
     };
     migration::admit(
-        Path::new("/var/lib/homelab-securityd"), "rust", receipt.as_deref()
+        Path::new("/var/lib/homelab-securityd"),
+        "rust",
+        receipt.as_deref(),
     )?;
 
     let mut listeners = tokio::task::JoinSet::new();
@@ -53,27 +58,36 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let shared = shared.clone();
         listeners.spawn(async move {
             transport::serve_unix(
-                Path::new("/run/homelab-securityd/owner.sock"), 0o600, None,
-                transport::owner_router(shared)
-            ).await
+                Path::new("/run/homelab-securityd/owner.sock"),
+                0o600,
+                None,
+                transport::owner_router(shared),
+            )
+            .await
         });
     }
     {
         let shared = shared.clone();
         listeners.spawn(async move {
             transport::serve_unix(
-                Path::new("/run/homelab-securityd/client.sock"), 0o660, Some(client_gid),
-                transport::client_router(shared)
-            ).await
+                Path::new("/run/homelab-securityd/client.sock"),
+                0o660,
+                Some(client_gid),
+                transport::client_router(shared),
+            )
+            .await
         });
     }
     if let Some(browser_gid) = browser_gid {
         let shared_browser = shared.clone();
         listeners.spawn(async move {
             transport::serve_unix(
-                Path::new("/run/homelab-security-browser/browser.sock"), 0o660,
-                Some(browser_gid), transport::browser_router(shared_browser)
-            ).await
+                Path::new("/run/homelab-security-browser/browser.sock"),
+                0o660,
+                Some(browser_gid),
+                transport::browser_router(shared_browser),
+            )
+            .await
         });
     }
     if let Some(remote) = remote {
@@ -88,9 +102,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     }
 
     #[cfg(unix)]
-    let mut termination = tokio::signal::unix::signal(
-        tokio::signal::unix::SignalKind::terminate()
-    )?;
+    let mut termination =
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
 
     tokio::select! {
         next = listeners.join_next() => {

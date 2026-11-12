@@ -8,7 +8,9 @@ fn encode_query(value: &str) -> String {
     let mut result = String::new();
     for byte in value.as_bytes() {
         match *byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => result.push(*byte as char),
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                result.push(*byte as char)
+            }
             _ => result.push_str(&format!("%{byte:02X}")),
         }
     }
@@ -18,7 +20,8 @@ fn project_path(project: &str, section: &str) -> String {
     format!("/v1/engineering/projects/{project}/{section}")
 }
 fn document_body(context: &Value, key: &str) -> Option<String> {
-    context.get(key)
+    context
+        .get(key)
         .and_then(|record| record.get("body"))
         .and_then(Value::as_str)
         .map(|text| text.chars().take(1800).collect())
@@ -32,31 +35,41 @@ pub fn ProjectKnowledge() -> Element {
     let mut context = use_resource(move || {
         let id = selected();
         async move {
-            if id.is_empty() { Ok(Value::Null) }
-            else { api::get::<Value>(&project_path(&id, "context")).await }
+            if id.is_empty() {
+                Ok(Value::Null)
+            } else {
+                api::get::<Value>(&project_path(&id, "context")).await
+            }
         }
     });
     let mut overview = use_resource(move || {
         let id = selected();
         async move {
-            if id.is_empty() { Ok(Value::Null) }
-            else { api::get::<Value>(&format!("/v1/projects/{id}/overview")).await }
+            if id.is_empty() {
+                Ok(Value::Null)
+            } else {
+                api::get::<Value>(&format!("/v1/projects/{id}/overview")).await
+            }
         }
     });
     let mut workflows = use_resource(|| async { api::get::<Value>("/v1/workflows").await });
     let mut repositories = use_resource(move || {
         let id = selected();
         async move {
-            if id.is_empty() { Ok(Value::Null) }
-            else { api::get::<Value>(&project_path(&id, "repositories")).await }
+            if id.is_empty() {
+                Ok(Value::Null)
+            } else {
+                api::get::<Value>(&project_path(&id, "repositories")).await
+            }
         }
     });
     let mut research = use_resource(move || {
         let id = selected();
         let q = submitted();
         async move {
-            if id.is_empty() || q.is_empty() { Ok(Value::Null) }
-            else {
+            if id.is_empty() || q.is_empty() {
+                Ok(Value::Null)
+            } else {
                 let endpoint = format!("{}?q={}", project_path(&id, "research"), encode_query(&q));
                 api::get::<Value>(&endpoint).await
             }

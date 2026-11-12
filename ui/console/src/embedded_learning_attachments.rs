@@ -1,89 +1,120 @@
 //! Original file custody through a bounded, host-mediated MCP Apps tool.
 //! This module uses neither a browser owner cookie nor an MCP bearer token.
-use dioxus::prelude::*;
-use serde_json::{json,Value};
-use wasm_bindgen::JsValue;
 use crate::components::{Card, Empty, Notice};
 use crate::mcp_app;
+use dioxus::prelude::*;
+use serde_json::{Value, json};
+use wasm_bindgen::JsValue;
 
-const ORIGINAL_LIMIT:usize=5*1024*1024;
-const ALPHABET:&[u8;64]=b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+const ORIGINAL_LIMIT: usize = 5 * 1024 * 1024;
+const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
-fn to_base64(bytes:&[u8])->String{
-    let mut encoded=String::with_capacity((bytes.len()+2)/3*4);
-    for chunk in bytes.chunks(3){
-        let a=chunk[0];
-        let b=chunk.get(1).copied().unwrap_or(0);
-        let c=chunk.get(2).copied().unwrap_or(0);
-        encoded.push(ALPHABET[(a>>2) as usize] as char);
-        encoded.push(ALPHABET[(((a&3)<<4)|(b>>4)) as usize] as char);
-        encoded.push(if chunk.len()>1{ALPHABET[(((b&15)<<2)|(c>>6)) as usize] as char}else{'='});
-        encoded.push(if chunk.len()>2{ALPHABET[(c&63) as usize] as char}else{'='});
+fn to_base64(bytes: &[u8]) -> String {
+    let mut encoded = String::with_capacity((bytes.len() + 2) / 3 * 4);
+    for chunk in bytes.chunks(3) {
+        let a = chunk[0];
+        let b = chunk.get(1).copied().unwrap_or(0);
+        let c = chunk.get(2).copied().unwrap_or(0);
+        encoded.push(ALPHABET[(a >> 2) as usize] as char);
+        encoded.push(ALPHABET[(((a & 3) << 4) | (b >> 4)) as usize] as char);
+        encoded.push(if chunk.len() > 1 {
+            ALPHABET[(((b & 15) << 2) | (c >> 6)) as usize] as char
+        } else {
+            '='
+        });
+        encoded.push(if chunk.len() > 2 {
+            ALPHABET[(c & 63) as usize] as char
+        } else {
+            '='
+        });
     }
     encoded
 }
-fn digit(b:u8)->Option<u8>{
-    match b{
-        b'A'..=b'Z'=>Some(b-b'A'),
-        b'a'..=b'z'=>Some(b-b'a'+26),
-        b'0'..=b'9'=>Some(b-b'0'+52),
-        b'+'=>Some(62),
-        b'/'=>Some(63),
-        _=>None,
+fn digit(b: u8) -> Option<u8> {
+    match b {
+        b'A'..=b'Z' => Some(b - b'A'),
+        b'a'..=b'z' => Some(b - b'a' + 26),
+        b'0'..=b'9' => Some(b - b'0' + 52),
+        b'+' => Some(62),
+        b'/' => Some(63),
+        _ => None,
     }
 }
-fn from_base64(text:&str)->Result<Vec<u8>,String>{
-    let bytes=text.as_bytes();
-    if bytes.is_empty()||bytes.len()%4!=0||
-        bytes.len()>(ORIGINAL_LIMIT+2)/3*4+4 {
+fn from_base64(text: &str) -> Result<Vec<u8>, String> {
+    let bytes = text.as_bytes();
+    if bytes.is_empty() || bytes.len() % 4 != 0 || bytes.len() > (ORIGINAL_LIMIT + 2) / 3 * 4 + 4 {
         return Err("Original file exceeds the bounded transfer limit.".to_owned());
     }
-    let mut output=Vec::with_capacity(bytes.len()/4*3);
-    for (index,group) in bytes.chunks_exact(4).enumerate(){
-        let final_chunk=index+1==bytes.len()/4;
-        let padding=group.iter().rev().take_while(|&&b|b==b'=').count();
-        if padding>2||(!final_chunk&&padding>0){return Err("Invalid base64 padding.".to_owned());}
-        let a=digit(group[0]).ok_or("Invalid base64 original.")?;
-        let b=digit(group[1]).ok_or("Invalid base64 original.")?;
-        let c=if padding>=2{0}else{digit(group[2]).ok_or("Invalid base64 original.")?};
-        let d=if padding>=1{0}else{digit(group[3]).ok_or("Invalid base64 original.")?};
-        if padding==2&&(b&15)!=0 || padding==1&&(c&3)!=0 {
+    let mut output = Vec::with_capacity(bytes.len() / 4 * 3);
+    for (index, group) in bytes.chunks_exact(4).enumerate() {
+        let final_chunk = index + 1 == bytes.len() / 4;
+        let padding = group.iter().rev().take_while(|&&b| b == b'=').count();
+        if padding > 2 || (!final_chunk && padding > 0) {
+            return Err("Invalid base64 padding.".to_owned());
+        }
+        let a = digit(group[0]).ok_or("Invalid base64 original.")?;
+        let b = digit(group[1]).ok_or("Invalid base64 original.")?;
+        let c = if padding >= 2 {
+            0
+        } else {
+            digit(group[2]).ok_or("Invalid base64 original.")?
+        };
+        let d = if padding >= 1 {
+            0
+        } else {
+            digit(group[3]).ok_or("Invalid base64 original.")?
+        };
+        if padding == 2 && (b & 15) != 0 || padding == 1 && (c & 3) != 0 {
             return Err("Noncanonical base64 original.".to_owned());
         }
-        output.push((a<<2)|(b>>4));
-        if padding<2{output.push((b<<4)|(c>>2));}
-        if padding<1{output.push((c<<6)|d);}
-        if output.len()>ORIGINAL_LIMIT{return Err("Original file exceeds 5 MiB.".to_owned());}
+        output.push((a << 2) | (b >> 4));
+        if padding < 2 {
+            output.push((b << 4) | (c >> 2));
+        }
+        if padding < 1 {
+            output.push((c << 6) | d);
+        }
+        if output.len() > ORIGINAL_LIMIT {
+            return Err("Original file exceeds 5 MiB.".to_owned());
+        }
     }
     Ok(output)
 }
-fn allowed_mime(value:&str)->bool{
-    matches!(value,"image/jpeg"|"image/png"|"image/webp"|"image/heic"|
-        "application/pdf"|"text/plain"|"text/markdown")
+fn allowed_mime(value: &str) -> bool {
+    matches!(
+        value,
+        "image/jpeg"
+            | "image/png"
+            | "image/webp"
+            | "image/heic"
+            | "application/pdf"
+            | "text/plain"
+            | "text/markdown"
+    )
 }
 
-fn original_url(data:&[u8],mime:&str)->Result<String,String>{
-    let blob_bytes=js_sys::Uint8Array::from(data);
-    let chunks=js_sys::Array::new();
+fn original_url(data: &[u8], mime: &str) -> Result<String, String> {
+    let blob_bytes = js_sys::Uint8Array::from(data);
+    let chunks = js_sys::Array::new();
     chunks.push(&JsValue::from(blob_bytes));
-    let mut options=web_sys::BlobPropertyBag::new();
+    let mut options = web_sys::BlobPropertyBag::new();
     options.set_type(mime);
-    let blob=web_sys::Blob::new_with_u8_array_sequence_and_options(&chunks,&options)
-        .map_err(|_|"Could not create a local original file.".to_owned())?;
+    let blob = web_sys::Blob::new_with_u8_array_sequence_and_options(&chunks, &options)
+        .map_err(|_| "Could not create a local original file.".to_owned())?;
     web_sys::Url::create_object_url_with_blob(&blob)
-        .map_err(|_|"Browser refused the original download.".to_owned())
+        .map_err(|_| "Browser refused the original download.".to_owned())
 }
 
 #[component]
-pub fn EmbeddedAttachments(owner_kind:String, owner_id:String)->Element{
-    let mut busy=use_signal(||false);
-    let mut error=use_signal(String::new);
-    let mut notice=use_signal(String::new);
-    let mut files=use_signal(||None::<Value>);
-    let mut download_url=use_signal(String::new);
-    let mut download_name=use_signal(String::new);
-    let mut preview_mime=use_signal(String::new);
-    rsx!{
+pub fn EmbeddedAttachments(owner_kind: String, owner_id: String) -> Element {
+    let mut busy = use_signal(|| false);
+    let mut error = use_signal(String::new);
+    let mut notice = use_signal(String::new);
+    let mut files = use_signal(|| None::<Value>);
+    let mut download_url = use_signal(String::new);
+    let mut download_name = use_signal(String::new);
+    let mut preview_mime = use_signal(String::new);
+    rsx! {
         Card{
             title:"Original Learning files".to_owned(),
             description:"Preserve original evidence separately from any model interpretation. Maximum 5 MiB per browser transfer.".to_owned(),
@@ -276,12 +307,12 @@ pub fn EmbeddedAttachments(owner_kind:String, owner_id:String)->Element{
 }
 
 #[cfg(test)]
-mod tests{
+mod tests {
     use super::*;
     #[test]
-    fn bounded_codec_uses_canonical_base64(){
-        for original in [b"A".as_slice(),b"AB",b"ABC",b"Hello!"]{
-            assert_eq!(from_base64(&to_base64(original)).unwrap(),original);
+    fn bounded_codec_uses_canonical_base64() {
+        for original in [b"A".as_slice(), b"AB", b"ABC", b"Hello!"] {
+            assert_eq!(from_base64(&to_base64(original)).unwrap(), original);
         }
         assert!(from_base64("TWFu=").is_err());
         assert!(from_base64("TW=F").is_err());

@@ -6,20 +6,20 @@ use crate::api;
 use crate::components::{Card, Empty, Heading, Loading, Notice};
 
 fn field(value: &Value, name: &str) -> String {
-    value.get(name).and_then(Value::as_str).unwrap_or("").to_owned()
+    value
+        .get(name)
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_owned()
 }
 
 #[component]
 pub fn Motivation(csrf: String) -> Element {
     let csrf = use_signal(|| csrf);
-    let mut state = use_resource(|| async {
-        api::get::<Value>("/v1/motivation/state").await
-    });
+    let mut state = use_resource(|| async { api::get::<Value>("/v1/motivation/state").await });
     let mut seen_profile_revision = use_signal(|| None::<u64>);
     let mut goal_id = use_signal(String::new);
-    let goals = use_resource(|| async {
-        api::get::<Vec<Value>>("/v1/goals").await
-    });
+    let goals = use_resource(|| async { api::get::<Vec<Value>>("/v1/goals").await });
     let mut identity = use_signal(String::new);
     let mut outcome = use_signal(String::new);
     let mut next_step = use_signal(String::new);
@@ -44,9 +44,7 @@ pub fn Motivation(csrf: String) -> Element {
     let mut focus_reflection = use_signal(String::new);
     let mut trigger = use_signal(|| "session_start".to_owned());
     let mut current_question = use_signal(String::new);
-    let mut metrics = use_resource(|| async {
-        api::get::<Value>("/v1/motivation/metrics").await
-    });
+    let mut metrics = use_resource(|| async { api::get::<Value>("/v1/motivation/metrics").await });
     // The service schedules in-app prompts. Refresh only while this view is open.
     use_future(move || async move {
         loop {
@@ -63,44 +61,107 @@ pub fn Motivation(csrf: String) -> Element {
         if let Some(Ok(snapshot)) = state.cloned() {
             if let Some(profile) = snapshot.get("profile") {
                 let revision = profile.get("revision").and_then(Value::as_u64).unwrap_or(0);
-                if seen_profile_revision() == Some(revision) { return; }
+                if seen_profile_revision() == Some(revision) {
+                    return;
+                }
                 goal_id.set(field(profile, "goal_id"));
                 identity.set(field(profile, "identity"));
                 outcome.set(field(profile, "outcome"));
                 next_step.set(field(profile, "next_step"));
-                enabled.set(profile.get("enabled").and_then(Value::as_bool).unwrap_or(false));
+                enabled.set(
+                    profile
+                        .get("enabled")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false),
+                );
                 intensity.set(field(profile, "intensity"));
-                daily_limit.set(profile.get("daily_limit").and_then(Value::as_u64).unwrap_or(4) as u8);
-                proactive_enabled.set(profile.get("proactive_enabled").and_then(Value::as_bool).unwrap_or(false));
-                cadence_minutes.set(profile.get("cadence_minutes").and_then(Value::as_u64).unwrap_or(240) as u16);
-                holdout_day.set(profile.get("holdout_weekday_utc").and_then(Value::as_u64)
-                    .map(|day| day.to_string()).unwrap_or_else(|| "none".to_owned()));
-                quiet_start.set(profile.get("quiet_start_utc_hour").and_then(Value::as_u64).unwrap_or(0) as u8);
-                quiet_end.set(profile.get("quiet_end_utc_hour").and_then(Value::as_u64).unwrap_or(0) as u8);
+                daily_limit.set(
+                    profile
+                        .get("daily_limit")
+                        .and_then(Value::as_u64)
+                        .unwrap_or(4) as u8,
+                );
+                proactive_enabled.set(
+                    profile
+                        .get("proactive_enabled")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false),
+                );
+                cadence_minutes.set(
+                    profile
+                        .get("cadence_minutes")
+                        .and_then(Value::as_u64)
+                        .unwrap_or(240) as u16,
+                );
+                holdout_day.set(
+                    profile
+                        .get("holdout_weekday_utc")
+                        .and_then(Value::as_u64)
+                        .map(|day| day.to_string())
+                        .unwrap_or_else(|| "none".to_owned()),
+                );
+                quiet_start.set(
+                    profile
+                        .get("quiet_start_utc_hour")
+                        .and_then(Value::as_u64)
+                        .unwrap_or(0) as u8,
+                );
+                quiet_end.set(
+                    profile
+                        .get("quiet_end_utc_hour")
+                        .and_then(Value::as_u64)
+                        .unwrap_or(0) as u8,
+                );
                 seen_profile_revision.set(Some(revision));
             }
         }
     });
     let snapshot = state.cloned().and_then(Result::ok);
     let profile = snapshot.as_ref().and_then(|value| value.get("profile"));
-    let revision = profile.and_then(|p| p.get("revision")).and_then(Value::as_u64).unwrap_or(0);
-    let service_enabled = profile.and_then(|p| p.get("enabled")).and_then(Value::as_bool).unwrap_or(false);
-    let interventions = snapshot.as_ref()
+    let revision = profile
+        .and_then(|p| p.get("revision"))
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    let service_enabled = profile
+        .and_then(|p| p.get("enabled"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let interventions = snapshot
+        .as_ref()
         .and_then(|value| value.get("interventions"))
-        .and_then(Value::as_array).cloned().unwrap_or_default();
-    let pending = interventions.iter().rev()
-        .find(|item| item.get("feedback").is_none_or(Value::is_null) &&
-            !item.get("cancelled").and_then(Value::as_bool).unwrap_or(false)).cloned();
-    let pending_id = pending.as_ref().and_then(|item| item.get("id"))
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let pending = interventions
+        .iter()
+        .rev()
+        .find(|item| {
+            item.get("feedback").is_none_or(Value::is_null)
+                && !item
+                    .get("cancelled")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false)
+        })
+        .cloned();
+    let pending_id = pending
+        .as_ref()
+        .and_then(|item| item.get("id"))
         .and_then(Value::as_u64);
-    let focus_active = snapshot.as_ref()
+    let focus_active = snapshot
+        .as_ref()
         .and_then(|value| value.get("focus_sessions"))
         .and_then(Value::as_array)
-        .and_then(|items| items.iter().rev().find(|s|
-            s.get("status").and_then(Value::as_str) == Some("active")))
+        .and_then(|items| {
+            items
+                .iter()
+                .rev()
+                .find(|s| s.get("status").and_then(Value::as_str) == Some("active"))
+        })
         .cloned();
-    let active_focus_id = focus_active.as_ref()
-        .and_then(|item| item.get("id")).and_then(Value::as_u64);
+    let active_focus_id = focus_active
+        .as_ref()
+        .and_then(|item| item.get("id"))
+        .and_then(Value::as_u64);
 
     rsx! {
         Heading {

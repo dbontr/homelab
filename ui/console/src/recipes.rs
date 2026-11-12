@@ -1,13 +1,13 @@
 use dioxus::prelude::*;
 use reqwest::Method;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use serde::{Deserialize, Serialize};
 
 use crate::api;
+use crate::components::{Empty, Heading, Loading, Notice};
 use crate::pantry::Pantry;
 use crate::usda_nutrition::USDANutrition;
-use crate::components::{Empty, Heading, Loading, Notice};
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -66,7 +66,10 @@ impl Recipe {
     fn blank() -> Self {
         Self {
             servings: 2.0,
-            ingredients: vec![Ingredient { amount: 1.0, ..Default::default() }],
+            ingredients: vec![Ingredient {
+                amount: 1.0,
+                ..Default::default()
+            }],
             steps: vec![Step::default()],
             ..Default::default()
         }
@@ -129,11 +132,24 @@ struct HealthGoal {
 }
 
 fn current_record(records: &[Recipe], selected: Option<String>, query: &str) -> Option<Recipe> {
-    selected.and_then(|id| records.iter().find(|recipe| recipe.id == id).cloned())
-        .or_else(|| records.iter().find(|recipe| {
-            query.is_empty() || format!("{} {} {}", recipe.title, recipe.summary, recipe.tags.join(" "))
-                .to_lowercase().contains(query)
-        }).cloned())
+    selected
+        .and_then(|id| records.iter().find(|recipe| recipe.id == id).cloned())
+        .or_else(|| {
+            records
+                .iter()
+                .find(|recipe| {
+                    query.is_empty()
+                        || format!(
+                            "{} {} {}",
+                            recipe.title,
+                            recipe.summary,
+                            recipe.tags.join(" ")
+                        )
+                        .to_lowercase()
+                        .contains(query)
+                })
+                .cloned()
+        })
 }
 
 #[component]
@@ -231,10 +247,17 @@ enum Tab {
 }
 
 fn quantity(value: f64) -> String {
-    format!("{value:.2}").trim_end_matches('0').trim_end_matches('.').to_owned()
+    format!("{value:.2}")
+        .trim_end_matches('0')
+        .trim_end_matches('.')
+        .to_owned()
 }
 
-fn nutrients_from_lines(text: &str, method: &str, source: &str) -> Result<Option<Nutrition>, String> {
+fn nutrients_from_lines(
+    text: &str,
+    method: &str,
+    source: &str,
+) -> Result<Option<Nutrition>, String> {
     if text.trim().is_empty() {
         return Ok(None);
     }
@@ -243,27 +266,47 @@ fn nutrients_from_lines(text: &str, method: &str, source: &str) -> Result<Option
     }
     let mut entries = Vec::new();
     for (index, line) in text.lines().enumerate() {
-        if line.trim().is_empty() { continue; }
+        if line.trim().is_empty() {
+            continue;
+        }
         let parts: Vec<_> = line.splitn(3, '|').map(str::trim).collect();
         if parts.len() != 3 {
-            return Err(format!("Nutrition line {} must be name | amount | unit", index + 1));
+            return Err(format!(
+                "Nutrition line {} must be name | amount | unit",
+                index + 1
+            ));
         }
-        let amount: f64 = parts[1].parse().map_err(|_| format!("Invalid nutrition amount on line {}", index + 1))?;
+        let amount: f64 = parts[1]
+            .parse()
+            .map_err(|_| format!("Invalid nutrition amount on line {}", index + 1))?;
         if !amount.is_finite() || amount < 0.0 || parts[0].is_empty() || parts[2].is_empty() {
             return Err(format!("Invalid nutrient on line {}", index + 1));
         }
-        entries.push(Nutrient { name: parts[0].to_owned(), amount, unit: parts[2].to_owned() });
+        entries.push(Nutrient {
+            name: parts[0].to_owned(),
+            amount,
+            unit: parts[2].to_owned(),
+        });
     }
-    Ok(Some(Nutrition { method: method.to_owned(), source: source.to_owned(), per_serving: entries }))
+    Ok(Some(Nutrition {
+        method: method.to_owned(),
+        source: source.to_owned(),
+        per_serving: entries,
+    }))
 }
 
 fn nutrient_lines(recipe: &Recipe) -> String {
-    recipe.nutrition.as_ref().map(|n| {
-        n.per_serving.iter()
-            .map(|entry| format!("{} | {} | {}", entry.name, entry.amount, entry.unit))
-            .collect::<Vec<_>>()
-            .join("\n")
-    }).unwrap_or_default()
+    recipe
+        .nutrition
+        .as_ref()
+        .map(|n| {
+            n.per_serving
+                .iter()
+                .map(|entry| format!("{} | {} | {}", entry.name, entry.amount, entry.unit))
+                .collect::<Vec<_>>()
+                .join("\n")
+        })
+        .unwrap_or_default()
 }
 
 #[component]
@@ -271,9 +314,13 @@ pub fn Recipes(csrf: String) -> Element {
     let csrf = use_signal(|| csrf);
     let mut recipes = use_resource(|| async { api::get::<Vec<Recipe>>("/v1/recipes").await });
     let mut meals = use_resource(|| async { api::get::<Vec<Meal>>("/v1/meals").await });
-    let mut groceries = use_resource(|| async { api::get::<GroceryBoard>("/v1/groceries/board").await });
-    let mut grocery_needs = use_resource(|| async { api::get::<GroceryNeedsBoard>("/v1/groceries/needs").await });
-    let mut health_goals = use_resource(|| async { api::get::<HashMap<String, HealthGoal>>("/v1/recipes/health-goals").await });
+    let mut groceries =
+        use_resource(|| async { api::get::<GroceryBoard>("/v1/groceries/board").await });
+    let mut grocery_needs =
+        use_resource(|| async { api::get::<GroceryNeedsBoard>("/v1/groceries/needs").await });
+    let mut health_goals = use_resource(|| async {
+        api::get::<HashMap<String, HealthGoal>>("/v1/recipes/health-goals").await
+    });
 
     let mut tab = use_signal(|| Tab::Library);
     let mut search = use_signal(String::new);
@@ -312,10 +359,21 @@ pub fn Recipes(csrf: String) -> Element {
 
     let records = recipes.cloned().and_then(Result::ok).unwrap_or_default();
     let query = search().trim().to_lowercase();
-    let filtered: Vec<Recipe> = records.iter().filter(|recipe| {
-        query.is_empty() || format!("{} {} {}", recipe.title, recipe.summary, recipe.tags.join(" "))
-            .to_lowercase().contains(&query)
-    }).cloned().collect();
+    let filtered: Vec<Recipe> = records
+        .iter()
+        .filter(|recipe| {
+            query.is_empty()
+                || format!(
+                    "{} {} {}",
+                    recipe.title,
+                    recipe.summary,
+                    recipe.tags.join(" ")
+                )
+                .to_lowercase()
+                .contains(&query)
+        })
+        .cloned()
+        .collect();
 
     let active = current_record(&records, selected(), &query);
     let draft_value = draft();

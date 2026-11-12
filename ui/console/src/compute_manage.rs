@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 use reqwest::Method;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::api;
 use crate::components::{Card, Notice};
@@ -27,39 +27,85 @@ struct Allocation {
 impl Default for Allocation {
     fn default() -> Self {
         Self {
-            host:String::new(),project_id:String::new(),image_pool_id:String::new(),node_id:String::new(),
-            architecture:String::new(),cpu:"1".to_owned(),memory_mb:"2048".to_owned(),
-            duration_minutes:"120".to_owned(),gpu:"0".to_owned(),npu:"0".to_owned(),
-            fpga:"0".to_owned(),min_gpu_memory_mb:"0".to_owned(),usb_passthrough:false,
-            usb_node:String::new(),usb_device_id:String::new(),display:false,
+            host: String::new(),
+            project_id: String::new(),
+            image_pool_id: String::new(),
+            node_id: String::new(),
+            architecture: String::new(),
+            cpu: "1".to_owned(),
+            memory_mb: "2048".to_owned(),
+            duration_minutes: "120".to_owned(),
+            gpu: "0".to_owned(),
+            npu: "0".to_owned(),
+            fpga: "0".to_owned(),
+            min_gpu_memory_mb: "0".to_owned(),
+            usb_passthrough: false,
+            usb_node: String::new(),
+            usb_device_id: String::new(),
+            display: false,
         }
     }
 }
 
-fn allocation_request(selection: &Allocation) -> Result<Value,String> {
-    let cpu = selection.cpu.parse::<f64>().map_err(|_| "CPU must be a number.")?;
-    let memory = selection.memory_mb.parse::<u64>()
+fn allocation_request(selection: &Allocation) -> Result<Value, String> {
+    let cpu = selection
+        .cpu
+        .parse::<f64>()
+        .map_err(|_| "CPU must be a number.")?;
+    let memory = selection
+        .memory_mb
+        .parse::<u64>()
         .map_err(|_| "Memory must be a whole number of MiB.")?;
-    let duration = selection.duration_minutes.parse::<u64>()
+    let duration = selection
+        .duration_minutes
+        .parse::<u64>()
         .map_err(|_| "Duration must be whole minutes.")?;
-    let gpu = selection.gpu.parse::<u64>().map_err(|_| "GPU count must be a whole number.")?;
-    let npu = selection.npu.parse::<u64>().map_err(|_| "NPU count must be a whole number.")?;
-    let fpga = selection.fpga.parse::<u64>().map_err(|_| "FPGA count must be a whole number.")?;
-    let gpu_memory = selection.min_gpu_memory_mb.parse::<u64>()
+    let gpu = selection
+        .gpu
+        .parse::<u64>()
+        .map_err(|_| "GPU count must be a whole number.")?;
+    let npu = selection
+        .npu
+        .parse::<u64>()
+        .map_err(|_| "NPU count must be a whole number.")?;
+    let fpga = selection
+        .fpga
+        .parse::<u64>()
+        .map_err(|_| "FPGA count must be a whole number.")?;
+    let gpu_memory = selection
+        .min_gpu_memory_mb
+        .parse::<u64>()
         .map_err(|_| "Minimum GPU memory must be a whole number of MiB.")?;
-    if selection.project_id.is_empty() || !cpu.is_finite() || !(0.1..=32.0).contains(&cpu) ||
-        !(64..=131072).contains(&memory) || !(1..=1440).contains(&duration) ||
-        gpu > 2 || npu > 2 || fpga > 2 || gpu_memory > 1000000 ||
-        gpu_memory > 0 && gpu == 0 ||
-        selection.usb_passthrough && (selection.usb_node.is_empty()
-            || selection.usb_device_id.is_empty()) {
-        return Err("The workspace request has invalid resources or missing device identity.".to_owned());
+    if selection.project_id.is_empty()
+        || !cpu.is_finite()
+        || !(0.1..=32.0).contains(&cpu)
+        || !(64..=131072).contains(&memory)
+        || !(1..=1440).contains(&duration)
+        || gpu > 2
+        || npu > 2
+        || fpga > 2
+        || gpu_memory > 1000000
+        || gpu_memory > 0 && gpu == 0
+        || selection.usb_passthrough
+            && (selection.usb_node.is_empty() || selection.usb_device_id.is_empty())
+    {
+        return Err(
+            "The workspace request has invalid resources or missing device identity.".to_owned(),
+        );
     }
     let mut hardware = serde_json::Map::new();
-    if gpu > 0 {hardware.insert("gpu".to_owned(),json!(gpu));}
-    if npu > 0 {hardware.insert("npu".to_owned(),json!(npu));}
-    if fpga > 0 {hardware.insert("fpga".to_owned(),json!(fpga));}
-    if selection.usb_passthrough {hardware.insert("usb".to_owned(),json!(1));}
+    if gpu > 0 {
+        hardware.insert("gpu".to_owned(), json!(gpu));
+    }
+    if npu > 0 {
+        hardware.insert("npu".to_owned(), json!(npu));
+    }
+    if fpga > 0 {
+        hardware.insert("fpga".to_owned(), json!(fpga));
+    }
+    if selection.usb_passthrough {
+        hardware.insert("usb".to_owned(), json!(1));
+    }
     Ok(json!({
         "host":selection.host,
         "project_id":selection.project_id,
@@ -78,12 +124,12 @@ fn allocation_request(selection: &Allocation) -> Result<Value,String> {
 
 #[component]
 pub fn ComputeManagement(csrf: String) -> Element {
-    let mut draft=use_signal(Allocation::default);
-    let mut confirm=use_signal(||false);
-    let mut busy=use_signal(||false);
-    let mut error=use_signal(String::new);
-    let mut preview=use_signal(||None::<Value>);
-    let mut result=use_signal(||None::<Value>);
+    let mut draft = use_signal(Allocation::default);
+    let mut confirm = use_signal(|| false);
+    let mut busy = use_signal(|| false);
+    let mut error = use_signal(String::new);
+    let mut preview = use_signal(|| None::<Value>);
+    let mut result = use_signal(|| None::<Value>);
 
     rsx! {
         Card {
@@ -295,13 +341,13 @@ pub fn ComputeManagement(csrf: String) -> Element {
 
 #[component]
 fn ComputeStop(csrf: String) -> Element {
-    let mut host=use_signal(String::new);
-    let mut project=use_signal(String::new);
-    let mut workspace=use_signal(String::new);
-    let mut confirmed=use_signal(||false);
-    let mut busy=use_signal(||false);
-    let mut error=use_signal(String::new);
-    let mut message=use_signal(String::new);
+    let mut host = use_signal(String::new);
+    let mut project = use_signal(String::new);
+    let mut workspace = use_signal(String::new);
+    let mut confirmed = use_signal(|| false);
+    let mut busy = use_signal(|| false);
+    let mut error = use_signal(String::new);
+    let mut message = use_signal(String::new);
     rsx! {
         Card {
             title:"Workspace lifecycle".to_owned(),
@@ -383,68 +429,88 @@ struct CatalogDraft {
     revision: String,
 }
 
-fn catalog_request(draft: &CatalogDraft) -> Result<Value,String> {
-    if draft.id.is_empty()||draft.host.is_empty(){
+fn catalog_request(draft: &CatalogDraft) -> Result<Value, String> {
+    if draft.id.is_empty() || draft.host.is_empty() {
         return Err("Enter the catalog ID and independent executor host.".to_owned());
     }
-    let mut payload=json!({"id":draft.id,"host":draft.host});
-    match draft.operation.as_str(){
-        "register-image"=>{
-            if !draft.image.contains("@sha256:"){return Err("Use a digest-qualified OCI image.".to_owned());}
-            payload["image"]=json!(draft.image);
-            payload["architecture"]=json!(draft.architecture);
-            payload["description"]=json!(draft.description);
+    let mut payload = json!({"id":draft.id,"host":draft.host});
+    match draft.operation.as_str() {
+        "register-image" => {
+            if !draft.image.contains("@sha256:") {
+                return Err("Use a digest-qualified OCI image.".to_owned());
+            }
+            payload["image"] = json!(draft.image);
+            payload["architecture"] = json!(draft.architecture);
+            payload["description"] = json!(draft.description);
         }
-        "register-software"=>{
-            let packages:Vec<&str>=draft.packages.split(',').map(str::trim)
-                .filter(|name|!name.is_empty()).collect();
-            if packages.is_empty() || packages.len()>128 {
+        "register-software" => {
+            let packages: Vec<&str> = draft
+                .packages
+                .split(',')
+                .map(str::trim)
+                .filter(|name| !name.is_empty())
+                .collect();
+            if packages.is_empty() || packages.len() > 128 {
                 return Err("Enter 1 to 128 apt package names.".to_owned());
             }
-            payload["image_id"]=json!(draft.image_id);
-            payload["packages"]=json!(packages);
-            payload["description"]=json!(draft.description);
+            payload["image_id"] = json!(draft.image_id);
+            payload["packages"] = json!(packages);
+            payload["description"] = json!(draft.description);
         }
-        "propose-program"=>{
-            for (name,value) in [("name",&draft.name),("version",&draft.version),
-                ("platform",&draft.platform),("distribution",&draft.distribution),
-                ("source_url",&draft.source_url),("license_notes",&draft.license_notes),
-                ("description",&draft.description)]{
-                payload[name]=json!(value);
+        "propose-program" => {
+            for (name, value) in [
+                ("name", &draft.name),
+                ("version", &draft.version),
+                ("platform", &draft.platform),
+                ("distribution", &draft.distribution),
+                ("source_url", &draft.source_url),
+                ("license_notes", &draft.license_notes),
+                ("description", &draft.description),
+            ] {
+                payload[name] = json!(value);
             }
         }
-        "review-program"=>{
-            let revision=draft.revision.parse::<u32>()
-                .map_err(|_|"A current catalog revision is required.".to_owned())?;
-            if revision==0 {return Err("Revision must be positive.".to_owned());}
-            payload["expected_revision"]=json!(revision);
-            payload["status"]=json!(draft.status);
-            payload["review_note"]=json!(draft.review_note);
-            payload["pool_kind"]=json!(draft.pool_kind);
-            payload["pool_id"]=json!(draft.pool_id);
+        "review-program" => {
+            let revision = draft
+                .revision
+                .parse::<u32>()
+                .map_err(|_| "A current catalog revision is required.".to_owned())?;
+            if revision == 0 {
+                return Err("Revision must be positive.".to_owned());
+            }
+            payload["expected_revision"] = json!(revision);
+            payload["status"] = json!(draft.status);
+            payload["review_note"] = json!(draft.review_note);
+            payload["pool_kind"] = json!(draft.pool_kind);
+            payload["pool_id"] = json!(draft.pool_id);
         }
-        "update-entry"=>{
-            let revision=draft.revision.parse::<u32>()
-                .map_err(|_|"A current catalog revision is required.".to_owned())?;
-            if revision==0 {return Err("Revision must be positive.".to_owned());}
-            payload["expected_revision"]=json!(revision);
-            payload["kind"]=json!(draft.kind);
-            payload["status"]=json!(draft.status);
-            payload["reason"]=json!(draft.reason);
+        "update-entry" => {
+            let revision = draft
+                .revision
+                .parse::<u32>()
+                .map_err(|_| "A current catalog revision is required.".to_owned())?;
+            if revision == 0 {
+                return Err("Revision must be positive.".to_owned());
+            }
+            payload["expected_revision"] = json!(revision);
+            payload["kind"] = json!(draft.kind);
+            payload["status"] = json!(draft.status);
+            payload["reason"] = json!(draft.reason);
         }
-        _=>return Err("Choose a supported catalog action.".to_owned()),
+        _ => return Err("Choose a supported catalog action.".to_owned()),
     }
     Ok(payload)
 }
 
 #[component]
 fn ComputeCatalog(csrf: String) -> Element {
-    let mut draft=use_signal(||CatalogDraft{
-        operation:"register-software".to_owned(),..CatalogDraft::default()
+    let mut draft = use_signal(|| CatalogDraft {
+        operation: "register-software".to_owned(),
+        ..CatalogDraft::default()
     });
-    let mut busy=use_signal(||false);
-    let mut error=use_signal(String::new);
-    let mut receipt=use_signal(||None::<Value>);
+    let mut busy = use_signal(|| false);
+    let mut error = use_signal(String::new);
+    let mut receipt = use_signal(|| None::<Value>);
     rsx! {
         Card {
             title:"Software and image catalog".to_owned(),
@@ -657,27 +723,27 @@ fn ComputeCatalog(csrf: String) -> Element {
 mod tests {
     use super::*;
     #[test]
-    fn allocation_refuses_unknown_unsafe_quantities_and_missing_usb_identity(){
-        let mut draft=Allocation::default();
-        draft.project_id="research".to_owned();
+    fn allocation_refuses_unknown_unsafe_quantities_and_missing_usb_identity() {
+        let mut draft = Allocation::default();
+        draft.project_id = "research".to_owned();
         assert!(allocation_request(&draft).is_ok());
-        draft.gpu="not a number".to_owned();
+        draft.gpu = "not a number".to_owned();
         assert!(allocation_request(&draft).is_err());
-        draft.gpu="1".to_owned();
-        draft.usb_passthrough=true;
+        draft.gpu = "1".to_owned();
+        draft.usb_passthrough = true;
         assert!(allocation_request(&draft).is_err());
-        draft.usb_node="jupiter".to_owned();
-        draft.usb_device_id="probe".to_owned();
+        draft.usb_node = "jupiter".to_owned();
+        draft.usb_device_id = "probe".to_owned();
         assert!(allocation_request(&draft).is_ok());
     }
     #[test]
-    fn catalog_actions_never_construct_arbitrary_backend_tool_names(){
-        let mut draft=CatalogDraft::default();
-        draft.id="go-image".to_owned();
-        draft.operation="unknown-tool".to_owned();
+    fn catalog_actions_never_construct_arbitrary_backend_tool_names() {
+        let mut draft = CatalogDraft::default();
+        draft.id = "go-image".to_owned();
+        draft.operation = "unknown-tool".to_owned();
         assert!(catalog_request(&draft).is_err());
-        draft.operation="register-image".to_owned();
-        draft.image="registry.example/go:latest".to_owned();
+        draft.operation = "register-image".to_owned();
+        draft.image = "registry.example/go:latest".to_owned();
         assert!(catalog_request(&draft).is_err());
     }
 }

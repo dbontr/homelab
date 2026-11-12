@@ -21,17 +21,22 @@ const MAX_REPLY: usize = 4 * 1024 * 1024;
 const MAX_FILE_TRANSFER: usize = 8 * 1024 * 1024;
 const MAX_PENDING: usize = 32;
 
-
 fn decode_response(raw: &str) -> Option<(u32, Result<Value, String>)> {
-    if raw.len() > MAX_FILE_TRANSFER { return None; }
+    if raw.len() > MAX_FILE_TRANSFER {
+        return None;
+    }
     let message: Value = serde_json::from_str(raw).ok()?;
     if message.get("jsonrpc").and_then(Value::as_str) != Some("2.0") {
         return None;
     }
-    let id = message.get("id").and_then(Value::as_u64)
+    let id = message
+        .get("id")
+        .and_then(Value::as_u64)
         .and_then(|value| u32::try_from(value).ok())?;
     let response = if let Some(error) = message.get("error") {
-        let message = error.get("message").and_then(Value::as_str)
+        let message = error
+            .get("message")
+            .and_then(Value::as_str)
             .unwrap_or("Host rejected the request");
         Err(message.chars().take(240).collect())
     } else if let Some(result) = message.get("result") {
@@ -42,21 +47,24 @@ fn decode_response(raw: &str) -> Option<(u32, Result<Value, String>)> {
     Some((id, response))
 }
 
-fn decode_host_result(raw:&str)->Option<Value>{
-    if raw.len()>MAX_REPLY {return None}
-    let message:Value=serde_json::from_str(raw).ok()?;
-    if message.get("jsonrpc").and_then(Value::as_str)!=Some("2.0")||
-        message.get("method").and_then(Value::as_str)!=Some("ui/notifications/tool-result"){
+fn decode_host_result(raw: &str) -> Option<Value> {
+    if raw.len() > MAX_REPLY {
         return None;
     }
-    let params=message.get("params")?;
-    if params.get("isError").and_then(Value::as_bool)==Some(true){
+    let message: Value = serde_json::from_str(raw).ok()?;
+    if message.get("jsonrpc").and_then(Value::as_str) != Some("2.0")
+        || message.get("method").and_then(Value::as_str) != Some("ui/notifications/tool-result")
+    {
         return None;
     }
-    if let Some(data)=params.get("structuredContent"){
+    let params = message.get("params")?;
+    if params.get("isError").and_then(Value::as_bool) == Some(true) {
+        return None;
+    }
+    if let Some(data) = params.get("structuredContent") {
         return Some(data.clone());
     }
-    let text=params.pointer("/content/0/text")?.as_str()?;
+    let text = params.pointer("/content/0/text")?.as_str()?;
     serde_json::from_str(text).ok()
 }
 
@@ -80,7 +88,9 @@ struct Bridge {
 impl Bridge {
     fn create() -> Result<Self, String> {
         let current = web_sys::window().ok_or("Browser window unavailable")?;
-        let parent = current.parent().map_err(|_| "MCP Apps parent unavailable")?
+        let parent = current
+            .parent()
+            .map_err(|_| "MCP Apps parent unavailable")?
             .ok_or("MCP Apps host is missing")?;
         if Object::is(current.as_ref(), parent.as_ref()) {
             return Err("MCP Apps requires an embedded host".to_owned());
@@ -100,17 +110,24 @@ impl Bridge {
             if !Object::is(&JsValue::from(source), expected_source.as_ref()) {
                 return;
             }
-            let Ok(raw) = JSON::stringify(&event.data()) else { return };
+            let Ok(raw) = JSON::stringify(&event.data()) else {
+                return;
+            };
             let Some(raw) = raw.as_string() else { return };
-            if raw.len() > MAX_FILE_TRANSFER { return; }
+            if raw.len() > MAX_FILE_TRANSFER {
+                return;
+            }
             if let Ok(value) = serde_json::from_str::<Value>(&raw) {
-                if value.get("jsonrpc").and_then(Value::as_str)==Some("2.0")
-                    && value.get("method").and_then(Value::as_str)==Some("ui/resource-teardown") {
-                    if let Some(id)=value.get("id").filter(|id|
-                        id.is_number() || id.is_string()) {
-                        let response=json!({"jsonrpc":"2.0","id":id,"result":{}});
-                        if let Ok(reply)=JSON::parse(&response.to_string()) {
-                            let _=reply_destination.post_message(&reply,"*");
+                if value.get("jsonrpc").and_then(Value::as_str) == Some("2.0")
+                    && value.get("method").and_then(Value::as_str) == Some("ui/resource-teardown")
+                {
+                    if let Some(id) = value
+                        .get("id")
+                        .filter(|id| id.is_number() || id.is_string())
+                    {
+                        let response = json!({"jsonrpc":"2.0","id":id,"result":{}});
+                        if let Ok(reply) = JSON::parse(&response.to_string()) {
+                            let _ = reply_destination.post_message(&reply, "*");
                         }
                     }
                     closed_for_listener.set(true);
@@ -119,17 +136,22 @@ impl Bridge {
                     return;
                 }
             }
-            if closed_for_listener.get(){return}
-            if let Ok(message)=serde_json::from_str::<Value>(&raw){
-                if message.get("jsonrpc").and_then(Value::as_str)==Some("2.0") &&
-                    message.get("method").and_then(Value::as_str)==Some(
-                        "ui/notifications/host-context-changed"){
-                    if let Some(params)=message.get("params").and_then(Value::as_object){
-                        let mut active=observed_context.borrow_mut();
-                        if !active.is_object(){*active=json!({});}
-                        if let Some(current)=active.as_object_mut(){
-                            for (key,value) in params{
-                                current.insert(key.clone(),value.clone());
+            if closed_for_listener.get() {
+                return;
+            }
+            if let Ok(message) = serde_json::from_str::<Value>(&raw) {
+                if message.get("jsonrpc").and_then(Value::as_str) == Some("2.0")
+                    && message.get("method").and_then(Value::as_str)
+                        == Some("ui/notifications/host-context-changed")
+                {
+                    if let Some(params) = message.get("params").and_then(Value::as_object) {
+                        let mut active = observed_context.borrow_mut();
+                        if !active.is_object() {
+                            *active = json!({});
+                        }
+                        if let Some(current) = active.as_object_mut() {
+                            for (key, value) in params {
+                                current.insert(key.clone(), value.clone());
                             }
                         }
                     }
@@ -140,20 +162,40 @@ impl Bridge {
                 observed_result.replace(Some(value));
                 return;
             }
-            let Some((id, response)) = decode_response(&raw) else { return };
-            let Some(pending) = pending_messages.borrow_mut().remove(&id) else { return };
+            let Some((id, response)) = decode_response(&raw) else {
+                return;
+            };
+            let Some(pending) = pending_messages.borrow_mut().remove(&id) else {
+                return;
+            };
             if raw.len() > pending.max_reply {
-                let _ = pending.reply.send(Err("MCP Apps response exceeds its operation limit".to_owned()));
+                let _ = pending.reply.send(Err(
+                    "MCP Apps response exceeds its operation limit".to_owned()
+                ));
                 return;
             }
             let _ = pending.reply.send(response);
         });
-        current.add_event_listener_with_callback("message", listener.as_ref().unchecked_ref())
+        current
+            .add_event_listener_with_callback("message", listener.as_ref().unchecked_ref())
             .map_err(|_| "MCP Apps message listener unavailable")?;
-        Ok(Self { parent, current, _listener: listener, pending, host_result, host_context, closed, next_id: 1 })
+        Ok(Self {
+            parent,
+            current,
+            _listener: listener,
+            pending,
+            host_result,
+            host_context,
+            closed,
+            next_id: 1,
+        })
     }
 
-    fn send(&mut self, method: &str, params: Value) -> Result<oneshot::Receiver<Result<Value, String>>, String> {
+    fn send(
+        &mut self,
+        method: &str,
+        params: Value,
+    ) -> Result<oneshot::Receiver<Result<Value, String>>, String> {
         if self.closed.get() {
             return Err("MCP Apps resource has been torn down".to_owned());
         }
@@ -161,30 +203,53 @@ impl Bridge {
             return Err("Too many pending MCP Apps requests".to_owned());
         }
         let id = self.next_id;
-        self.next_id = self.next_id.checked_add(1)
+        self.next_id = self
+            .next_id
+            .checked_add(1)
             .ok_or_else(|| "MCP Apps request limit reached".to_owned())?;
-        let upload = method=="tools/call" &&
-            params.get("name").and_then(Value::as_str)==Some("upload_attachment") &&
-            selected_view().as_deref()==Some("learning");
-        let download = method=="tools/call" &&
-            params.get("name").and_then(Value::as_str)==Some("get_attachment") &&
-            params.pointer("/arguments/include_original").and_then(Value::as_bool)==Some(true) &&
-            selected_view().as_deref()==Some("learning");
-        let max_request = if upload {MAX_FILE_TRANSFER} else {MAX_REQUEST};
-        let max_reply = if download {MAX_FILE_TRANSFER} else {MAX_REPLY};
+        let upload = method == "tools/call"
+            && params.get("name").and_then(Value::as_str) == Some("upload_attachment")
+            && selected_view().as_deref() == Some("learning");
+        let download = method == "tools/call"
+            && params.get("name").and_then(Value::as_str) == Some("get_attachment")
+            && params
+                .pointer("/arguments/include_original")
+                .and_then(Value::as_bool)
+                == Some(true)
+            && selected_view().as_deref() == Some("learning");
+        let max_request = if upload {
+            MAX_FILE_TRANSFER
+        } else {
+            MAX_REQUEST
+        };
+        let max_reply = if download {
+            MAX_FILE_TRANSFER
+        } else {
+            MAX_REPLY
+        };
         let request = json!({"jsonrpc":"2.0","id":id,"method":method,"params":params});
         let text = request.to_string();
-        if text.len() > max_request { return Err("MCP Apps request is too large".to_owned()); }
-        let payload = JSON::parse(&text)
-            .map_err(|_| "Unable to encode MCP Apps request")?;
+        if text.len() > max_request {
+            return Err("MCP Apps request is too large".to_owned());
+        }
+        let payload = JSON::parse(&text).map_err(|_| "Unable to encode MCP Apps request")?;
         let (sender, receiver) = oneshot::channel();
         let pending_messages = self.pending.clone();
         let timer = Timeout::new(12_000, move || {
             if let Some(pending) = pending_messages.borrow_mut().remove(&id) {
-                let _ = pending.reply.send(Err("MCP Apps host did not respond".to_owned()));
+                let _ = pending
+                    .reply
+                    .send(Err("MCP Apps host did not respond".to_owned()));
             }
         });
-        self.pending.borrow_mut().insert(id, Pending { reply: sender, max_reply, _timeout: timer });
+        self.pending.borrow_mut().insert(
+            id,
+            Pending {
+                reply: sender,
+                max_reply,
+                _timeout: timer,
+            },
+        );
         if self.parent.post_message(&payload, "*").is_err() {
             self.pending.borrow_mut().remove(&id);
             return Err("MCP Apps host connection failed".to_owned());
@@ -198,7 +263,8 @@ impl Bridge {
         }
         let payload = JSON::parse(&json!({"jsonrpc":"2.0","method":method}).to_string())
             .map_err(|_| "Unable to encode MCP Apps notification")?;
-        self.parent.post_message(&payload, "*")
+        self.parent
+            .post_message(&payload, "*")
             .map_err(|_| "MCP Apps notification failed".to_owned())
     }
 }
@@ -206,7 +272,8 @@ impl Bridge {
 impl Drop for Bridge {
     fn drop(&mut self) {
         let _ = self.current.remove_event_listener_with_callback(
-            "message", self._listener.as_ref().unchecked_ref()
+            "message",
+            self._listener.as_ref().unchecked_ref(),
         );
         self.pending.borrow_mut().clear();
     }
@@ -219,39 +286,54 @@ thread_local! {
 pub async fn request(method: &str, params: Value) -> Result<Value, String> {
     let receiver = BRIDGE.with(|cell| {
         let mut state = cell.borrow_mut();
-        if state.is_none() { *state = Some(Bridge::create()?); }
-        state.as_mut().ok_or("MCP Apps bridge missing")?.send(method, params)
+        if state.is_none() {
+            *state = Some(Bridge::create()?);
+        }
+        state
+            .as_mut()
+            .ok_or("MCP Apps bridge missing")?
+            .send(method, params)
     })?;
-    receiver.await
+    receiver
+        .await
         .map_err(|_| "MCP Apps request was interrupted".to_owned())?
 }
 
 pub fn host_fullscreen_available() -> bool {
     BRIDGE.with(|cell| {
-        cell.borrow().as_ref().map(|bridge|{
-            let context=bridge.host_context.borrow();
-            let supported=context.get("availableDisplayModes")
-                .and_then(Value::as_array)
-                .map(|values|values.iter().any(|v|v.as_str()==Some("fullscreen")))
-                .unwrap_or(false);
-            let active=context.get("displayMode").and_then(Value::as_str)
-                ==Some("fullscreen");
-            supported&&!active&&!bridge.closed.get()
-        }).unwrap_or(false)
+        cell.borrow()
+            .as_ref()
+            .map(|bridge| {
+                let context = bridge.host_context.borrow();
+                let supported = context
+                    .get("availableDisplayModes")
+                    .and_then(Value::as_array)
+                    .map(|values| values.iter().any(|v| v.as_str() == Some("fullscreen")))
+                    .unwrap_or(false);
+                let active =
+                    context.get("displayMode").and_then(Value::as_str) == Some("fullscreen");
+                supported && !active && !bridge.closed.get()
+            })
+            .unwrap_or(false)
     })
 }
 
 // A tool-triggered Learning App receives the originating tool result as a
 // host notification. It is not an authorization token or a grading verdict.
 pub fn take_host_learning_result() -> Option<Value> {
-    BRIDGE.with(|cell| cell.borrow().as_ref()
-        .and_then(|bridge| bridge.host_result.borrow_mut().take()))
+    BRIDGE.with(|cell| {
+        cell.borrow()
+            .as_ref()
+            .and_then(|bridge| bridge.host_result.borrow_mut().take())
+    })
 }
 
 fn notify_initialized() -> Result<(), String> {
     BRIDGE.with(|cell| {
         let state = cell.borrow();
-        state.as_ref().ok_or("MCP Apps bridge missing")?
+        state
+            .as_ref()
+            .ok_or("MCP Apps bridge missing")?
             .notify("ui/notifications/initialized")
     })
 }
@@ -262,17 +344,21 @@ pub async fn initialize() -> Result<(), String> {
     } else {
         "Homelab Health"
     };
-    let result = request("ui/initialize", json!({
-        "appInfo":{"name":app_name,"version":"0.1.0"},
-        "appCapabilities":{"availableDisplayModes":["inline","fullscreen"]},
-        "protocolVersion":PROTOCOL
-    })).await?;
+    let result = request(
+        "ui/initialize",
+        json!({
+            "appInfo":{"name":app_name,"version":"0.1.0"},
+            "appCapabilities":{"availableDisplayModes":["inline","fullscreen"]},
+            "protocolVersion":PROTOCOL
+        }),
+    )
+    .await?;
     if result.get("protocolVersion").and_then(Value::as_str) != Some(PROTOCOL) {
         return Err("MCP Apps host did not confirm protocol initialization".to_owned());
     }
-    BRIDGE.with(|cell|{
-        if let Some(bridge)=cell.borrow().as_ref(){
-            let context=result.get("hostContext").cloned().unwrap_or(Value::Null);
+    BRIDGE.with(|cell| {
+        if let Some(bridge) = cell.borrow().as_ref() {
+            let context = result.get("hostContext").cloned().unwrap_or(Value::Null);
             bridge.host_context.replace(context);
         }
     });
@@ -285,14 +371,18 @@ pub async fn call_tool<T: DeserializeOwned>(name: &str, arguments: Value) -> Res
     }
     let result = request("tools/call", json!({"name":name,"arguments":arguments})).await?;
     if result.get("isError").and_then(Value::as_bool) == Some(true) {
-        let message = result.pointer("/content/0/text").and_then(Value::as_str)
+        let message = result
+            .pointer("/content/0/text")
+            .and_then(Value::as_str)
             .unwrap_or("Health rejected the request");
         return Err(message.chars().take(240).collect());
     }
     let value = if let Some(content) = result.get("structuredContent") {
         content.clone()
     } else {
-        let text = result.pointer("/content/0/text").and_then(Value::as_str)
+        let text = result
+            .pointer("/content/0/text")
+            .and_then(Value::as_str)
             .ok_or("Health tool returned no data")?;
         if text.len() > MAX_REPLY {
             return Err("Health tool response is too large".to_owned());
@@ -306,48 +396,75 @@ pub async fn call_tool<T: DeserializeOwned>(name: &str, arguments: Value) -> Res
 // operations. Direct grading, answer-key reads, arbitrary backend tools, and
 // privileged operations remain outside the browser capability.
 const LEARNING_APP_TOOLS: &[&str] = &[
-    "get_learning_summary", "get_graph", "get_concept",
-    "get_confidence_calibration", "get_mastery_portfolio", "get_reassessment_queue",
-    "get_proposition", "get_translation_reviews", "get_reasoning_formal_checks",
-    "list_learning_sessions", "get_learning_session", "start_learning_session",
-    "build_learning_plan", "advance_learning_session", "save_problem_draft",
+    "get_learning_summary",
+    "get_graph",
+    "get_concept",
+    "get_confidence_calibration",
+    "get_mastery_portfolio",
+    "get_reassessment_queue",
+    "get_proposition",
+    "get_translation_reviews",
+    "get_reasoning_formal_checks",
+    "list_learning_sessions",
+    "get_learning_session",
+    "start_learning_session",
+    "build_learning_plan",
+    "advance_learning_session",
+    "save_problem_draft",
     "set_learning_target",
-    "get_pending_learning_question", "get_learning_question",
-    "answer_learning_question", "next_learning_action",
-    "recommend_session_probe", "get_reasoning_graph", "get_reasoning_chain",
-    "recommend_practice", "next_extraction",
-    "list_problems", "get_problem", "get_problem_solution", "get_review_queue",
-    "list_learning_sources", "search_learning_sources",
-    "list_practice_sessions", "get_practice_session",
-    "preview_source_curriculum", "import_source_curriculum",
-    "list_attachments", "get_attachment", "upload_attachment",
-    "propose_question_model_assessment", "propose_step_model_assessment",
+    "get_pending_learning_question",
+    "get_learning_question",
+    "answer_learning_question",
+    "next_learning_action",
+    "recommend_session_probe",
+    "get_reasoning_graph",
+    "get_reasoning_chain",
+    "recommend_practice",
+    "next_extraction",
+    "list_problems",
+    "get_problem",
+    "get_problem_solution",
+    "get_review_queue",
+    "list_learning_sources",
+    "search_learning_sources",
+    "list_practice_sessions",
+    "get_practice_session",
+    "preview_source_curriculum",
+    "import_source_curriculum",
+    "list_attachments",
+    "get_attachment",
+    "upload_attachment",
+    "propose_question_model_assessment",
+    "propose_step_model_assessment",
     "stage_model_source_extraction",
 ];
 
 pub async fn call_learning_tool<T: DeserializeOwned>(
-    name: &str, arguments: Value
+    name: &str,
+    arguments: Value,
 ) -> Result<T, String> {
-    if selected_view().as_deref() != Some("learning")
-        || !LEARNING_APP_TOOLS.contains(&name) {
+    if selected_view().as_deref() != Some("learning") || !LEARNING_APP_TOOLS.contains(&name) {
         return Err("This operation is not available in the Learning App".to_owned());
     }
     let result = request("tools/call", json!({"name":name,"arguments":arguments})).await?;
     if result.get("isError").and_then(Value::as_bool) == Some(true) {
-        let message = result.pointer("/content/0/text").and_then(Value::as_str)
+        let message = result
+            .pointer("/content/0/text")
+            .and_then(Value::as_str)
             .unwrap_or("Learning did not accept the request");
         return Err(message.chars().take(240).collect());
     }
     let value = if let Some(content) = result.get("structuredContent") {
         content.clone()
     } else {
-        let text = result.pointer("/content/0/text").and_then(Value::as_str)
+        let text = result
+            .pointer("/content/0/text")
+            .and_then(Value::as_str)
             .ok_or("Learning tool returned no data")?;
         if text.len() > MAX_REPLY {
             return Err("Learning tool response is too large".to_owned());
         }
-        serde_json::from_str(text)
-            .map_err(|_| "Learning returned invalid JSON")?
+        serde_json::from_str(text).map_err(|_| "Learning returned invalid JSON")?
     };
     serde_json::from_value(value)
         .map_err(|_| "Learning returned an incompatible response".to_owned())
@@ -355,7 +472,9 @@ pub async fn call_learning_tool<T: DeserializeOwned>(
 
 fn selected_view() -> Option<String> {
     let document = web_sys::window()?.document()?;
-    document.query_selector("meta[name=\"homelab-mcp-view\"]").ok()??
+    document
+        .query_selector("meta[name=\"homelab-mcp-view\"]")
+        .ok()??
         .get_attribute("content")
 }
 
@@ -396,30 +515,58 @@ mod tests {
 
     #[test]
     fn learning_app_retains_all_legacy_study_operations_without_grading_authority() {
-        let legacy_tools=[
-            "advance_learning_session","answer_learning_question",
-            "build_learning_plan","get_attachment","get_concept",
-            "get_confidence_calibration","get_graph","get_learning_question",
-            "get_learning_session","get_practice_session","get_problem",
-            "get_problem_solution","get_proposition","get_reasoning_chain",
-            "get_reasoning_graph","get_review_queue","get_translation_reviews",
-            "list_attachments","list_learning_sessions","list_learning_sources",
-            "list_practice_sessions","list_problems","next_extraction",
-            "recommend_practice","recommend_session_probe","save_problem_draft",
-            "set_learning_target","upload_attachment"
+        let legacy_tools = [
+            "advance_learning_session",
+            "answer_learning_question",
+            "build_learning_plan",
+            "get_attachment",
+            "get_concept",
+            "get_confidence_calibration",
+            "get_graph",
+            "get_learning_question",
+            "get_learning_session",
+            "get_practice_session",
+            "get_problem",
+            "get_problem_solution",
+            "get_proposition",
+            "get_reasoning_chain",
+            "get_reasoning_graph",
+            "get_review_queue",
+            "get_translation_reviews",
+            "list_attachments",
+            "list_learning_sessions",
+            "list_learning_sources",
+            "list_practice_sessions",
+            "list_problems",
+            "next_extraction",
+            "recommend_practice",
+            "recommend_session_probe",
+            "save_problem_draft",
+            "set_learning_target",
+            "upload_attachment",
         ];
         for name in legacy_tools {
-            assert!(LEARNING_APP_TOOLS.contains(&name),
-                "the embedded Learning interface cannot invoke {name}");
+            assert!(
+                LEARNING_APP_TOOLS.contains(&name),
+                "the embedded Learning interface cannot invoke {name}"
+            );
         }
         for denied in [
-            "grade_learning_question","finish_problem","record_assessment",
-            "record_learning_step","open_learning_question","record_problem_hint",
-            "audit_extraction","review_reasoning_chain","inspect_attachment",
+            "grade_learning_question",
+            "finish_problem",
+            "record_assessment",
+            "record_learning_step",
+            "open_learning_question",
+            "record_problem_hint",
+            "audit_extraction",
+            "review_reasoning_chain",
+            "inspect_attachment",
             "infrastructure__workspace_create",
         ] {
-            assert!(!LEARNING_APP_TOOLS.contains(&denied),
-                "Learning UI acquired server-owned assessment or execution power: {denied}");
+            assert!(
+                !LEARNING_APP_TOOLS.contains(&denied),
+                "Learning UI acquired server-owned assessment or execution power: {denied}"
+            );
         }
     }
 
@@ -431,22 +578,26 @@ mod tests {
         assert!(MAX_REPLY <= 4 * 1024 * 1024);
     }
 
-
     #[test]
     fn host_display_mode_is_only_admitted_after_initialization() {
-        let context=json!({"displayMode":"inline",
+        let context = json!({"displayMode":"inline",
             "availableDisplayModes":["inline","fullscreen"]});
-        assert!(context["availableDisplayModes"].as_array()
-            .unwrap().iter().any(|v|v.as_str()==Some("fullscreen")));
-        assert_ne!(context["displayMode"],"fullscreen");
+        assert!(
+            context["availableDisplayModes"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|v| v.as_str() == Some("fullscreen"))
+        );
+        assert_ne!(context["displayMode"], "fullscreen");
     }
 
     #[test]
     fn host_result_notifications_are_read_only_and_bounded() {
-        let event=r#"{"jsonrpc":"2.0","method":"ui/notifications/tool-result","params":{"structuredContent":{"view":"graph","nodes":[{"id":"linear-algebra"}]}}}"#;
-        let data=decode_host_result(event).expect("structured host result");
-        assert_eq!(data["view"],"graph");
-        assert_eq!(data["nodes"][0]["id"],"linear-algebra");
+        let event = r#"{"jsonrpc":"2.0","method":"ui/notifications/tool-result","params":{"structuredContent":{"view":"graph","nodes":[{"id":"linear-algebra"}]}}}"#;
+        let data = decode_host_result(event).expect("structured host result");
+        assert_eq!(data["view"], "graph");
+        assert_eq!(data["nodes"][0]["id"], "linear-algebra");
         assert!(decode_host_result(r#"{"jsonrpc":"2.0","method":"ui/notifications/tool-result","params":{"isError":true,"content":[]}}"#).is_none());
         assert!(decode_host_result(r#"{"jsonrpc":"2.0","method":"ui/notifications/tool-input","params":{"arguments":{}}}"#).is_none());
     }
@@ -463,13 +614,15 @@ mod tests {
             assert!(decode_response(value).is_none(), "{value}");
         }
         let (id, value) = decode_response(
-            r#"{"jsonrpc":"2.0","id":7,"result":{"protocolVersion":"2026-01-26"}}"#
-        ).expect("valid response");
+            r#"{"jsonrpc":"2.0","id":7,"result":{"protocolVersion":"2026-01-26"}}"#,
+        )
+        .expect("valid response");
         assert_eq!(id, 7);
         assert_eq!(value.unwrap()["protocolVersion"], PROTOCOL);
         let (_, failure) = decode_response(
-            r#"{"jsonrpc":"2.0","id":3,"error":{"code":-32601,"message":"not found"}}"#
-        ).expect("valid error response");
+            r#"{"jsonrpc":"2.0","id":3,"error":{"code":-32601,"message":"not found"}}"#,
+        )
+        .expect("valid error response");
         assert_eq!(failure.unwrap_err(), "not found");
     }
 }

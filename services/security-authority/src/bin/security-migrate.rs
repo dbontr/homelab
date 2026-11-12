@@ -12,9 +12,7 @@ use homelab_security_authority::migration;
 
 fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut args = env::args().skip(1);
-    if args.next().as_deref() != Some("prepare")
-        || args.next().as_deref() != Some("--target")
-    {
+    if args.next().as_deref() != Some("prepare") || args.next().as_deref() != Some("--target") {
         return Err("usage: security-migrate prepare --target rust|go --state-dir ABSOLUTE_STATE_DIRECTORY --snapshot-dir ABSOLUTE_NEW_DIRECTORY".into());
     }
     let target = args.next().ok_or("authority selection target required")?;
@@ -30,8 +28,10 @@ fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         return Err("unexpected migration arguments".into());
     }
     migration::prepare(&state, &snapshot, &target)?;
-    println!("Validated offline state copy and cutover receipt: {}",
-        snapshot.join("authority-cutover.json").display());
+    println!(
+        "Validated offline state copy and cutover receipt: {}",
+        snapshot.join("authority-cutover.json").display()
+    );
     println!("Provide the receipt as a protected systemd credential in a separate, operator-approved NixOS generation. Preserve the current state directory during rollback.");
     Ok(())
 }

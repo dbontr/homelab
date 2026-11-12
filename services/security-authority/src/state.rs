@@ -107,12 +107,15 @@ pub struct StateStore {
 impl StateStore {
     fn validate_directory(directory: &Path) -> Result<(), Error> {
         if !directory.is_absolute()
-            || directory.components().any(|c| matches!(c, std::path::Component::ParentDir))
+            || directory
+                .components()
+                .any(|c| matches!(c, std::path::Component::ParentDir))
         {
             return Err(Error::InvalidConfiguration);
         }
         let md = fs::symlink_metadata(directory).map_err(|_| Error::Storage)?;
-        if !md.is_dir() || md.file_type().is_symlink()
+        if !md.is_dir()
+            || md.file_type().is_symlink()
             || md.mode() & 0o077 != 0
             || md.uid() != unsafe { libc::geteuid() }
         {
@@ -149,11 +152,8 @@ impl StateStore {
         // the canonical path. Otherwise another process could lock a
         // replacement file and claim the same state directory.
         let locked = lease.metadata().map_err(|_| Error::Storage)?;
-        let named = fs::symlink_metadata(directory.join(LOCK_NAME))
-            .map_err(|_| Error::Storage)?;
-        if !owner_only(&named)
-            || named.dev() != locked.dev() || named.ino() != locked.ino()
-        {
+        let named = fs::symlink_metadata(directory.join(LOCK_NAME)).map_err(|_| Error::Storage)?;
+        if !owner_only(&named) || named.dev() != locked.dev() || named.ino() != locked.ino() {
             return Err(Error::Storage);
         }
         Ok(Self {
@@ -177,7 +177,10 @@ impl StateStore {
         if self.faulted {
             return Err(Error::Storage);
         }
-        decode_state(protected_read(&self.directory.join(STATE_NAME), MAX_STATE_BYTES)?)
+        decode_state(protected_read(
+            &self.directory.join(STATE_NAME),
+            MAX_STATE_BYTES,
+        )?)
     }
 
     pub fn persist_authenticator(&mut self, state: &AuthenticatorState) -> Result<(), Error> {
@@ -185,7 +188,10 @@ impl StateStore {
             return Err(Error::Storage);
         }
         let payload = encode_state(state)?;
-        if self.write_atomically(STATE_NAME, &payload, MAX_STATE_BYTES).is_err() {
+        if self
+            .write_atomically(STATE_NAME, &payload, MAX_STATE_BYTES)
+            .is_err()
+        {
             self.faulted = true;
             return Err(Error::Storage);
         }
@@ -203,7 +209,10 @@ impl StateStore {
         if self.faulted || self.read_only {
             return Err(Error::Storage);
         }
-        if self.write_atomically(VAULT_NAME, payload, MAX_VAULT_BYTES).is_err() {
+        if self
+            .write_atomically(VAULT_NAME, payload, MAX_VAULT_BYTES)
+            .is_err()
+        {
             self.faulted = true;
             return Err(Error::Storage);
         }
@@ -216,7 +225,9 @@ impl StateStore {
         }
         let mut nonce = [0u8; 16];
         getrandom::fill(&mut nonce).map_err(|_| Error::Storage)?;
-        let temporary = self.directory.join(format!(".auth-state-{}", hex::encode(nonce)));
+        let temporary = self
+            .directory
+            .join(format!(".auth-state-{}", hex::encode(nonce)));
         let result = (|| {
             let mut file = OpenOptions::new()
                 .write(true)
@@ -245,7 +256,8 @@ mod tests {
     fn dir() -> PathBuf {
         let mut id = [0u8; 16];
         getrandom::fill(&mut id).unwrap();
-        let path = std::env::temp_dir().join(format!("security-authority-test-{}", hex::encode(id)));
+        let path =
+            std::env::temp_dir().join(format!("security-authority-test-{}", hex::encode(id)));
         fs::create_dir(&path).unwrap();
         fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
         path
@@ -256,7 +268,10 @@ mod tests {
         let directory = dir();
         let mut store = StateStore::inspect(&directory).unwrap();
         assert!(!directory.join(LOCK_NAME).exists());
-        assert_eq!(store.load_authenticator().unwrap(), AuthenticatorState::default());
+        assert_eq!(
+            store.load_authenticator().unwrap(),
+            AuthenticatorState::default()
+        );
         assert_eq!(
             store.persist_authenticator(&AuthenticatorState::default()),
             Err(Error::Storage)
@@ -272,14 +287,19 @@ mod tests {
     fn exclusive_lease_and_go_authenticator_format() {
         let directory = dir();
         let mut store = StateStore::acquire(&directory).unwrap();
-        assert!(matches!(StateStore::acquire(&directory), Err(Error::Storage)));
+        assert!(matches!(
+            StateStore::acquire(&directory),
+            Err(Error::Storage)
+        ));
         let original = store.load_authenticator().unwrap();
         assert_eq!(original, AuthenticatorState::default());
-        store.persist_authenticator(&AuthenticatorState {
-            last_totp_step: 123,
-            failures: 2,
-            locked_until: 1_700_000_000,
-        }).unwrap();
+        store
+            .persist_authenticator(&AuthenticatorState {
+                last_totp_step: 123,
+                failures: 2,
+                locked_until: 1_700_000_000,
+            })
+            .unwrap();
         let raw = fs::read(directory.join(STATE_NAME)).unwrap();
         assert!(String::from_utf8_lossy(&raw).contains("last_totp_step"));
         drop(store);
@@ -314,7 +334,10 @@ mod tests {
         fs::remove_file(directory.join(STATE_NAME)).unwrap();
         fs::remove_file(directory.join(LOCK_NAME)).unwrap();
         fs::hard_link(&source, directory.join(LOCK_NAME)).unwrap();
-        assert!(matches!(StateStore::acquire(&directory), Err(Error::Storage)));
+        assert!(matches!(
+            StateStore::acquire(&directory),
+            Err(Error::Storage)
+        ));
         fs::remove_dir_all(directory).unwrap();
         fs::remove_file(source).unwrap();
     }
@@ -356,6 +379,9 @@ mod tests {
     #[test]
     fn reads_go_zero_time() {
         let raw = br#"{"version":1,"last_totp_step":-1,"failures":0,"locked_until":"0001-01-01T00:00:00Z"}"#;
-        assert_eq!(decode_state(Some(raw.to_vec())).unwrap(), AuthenticatorState::default());
+        assert_eq!(
+            decode_state(Some(raw.to_vec())).unwrap(),
+            AuthenticatorState::default()
+        );
     }
 }

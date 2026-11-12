@@ -16,12 +16,19 @@ use crate::Error;
 const MAX_CREDENTIAL_BYTES: usize = 1 << 20;
 
 pub fn required(name: &str) -> Result<String, Error> {
-    env::var(name).ok().filter(|s| !s.is_empty()).ok_or(Error::InvalidConfiguration)
+    env::var(name)
+        .ok()
+        .filter(|s| !s.is_empty())
+        .ok_or(Error::InvalidConfiguration)
 }
 
 pub fn configured_file(name: &str, private: bool) -> Result<Vec<u8>, Error> {
     let path = PathBuf::from(required(name)?);
-    if !path.is_absolute() || path.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
+    if !path.is_absolute()
+        || path
+            .components()
+            .any(|c| matches!(c, std::path::Component::ParentDir))
+    {
         return Err(Error::InvalidConfiguration);
     }
     let mut file = OpenOptions::new()
@@ -31,7 +38,8 @@ pub fn configured_file(name: &str, private: bool) -> Result<Vec<u8>, Error> {
         .map_err(|_| Error::Storage)?;
     let md = file.metadata().map_err(|_| Error::Storage)?;
     let forbidden = if private { 0o077 } else { 0o022 };
-    if !md.is_file() || md.mode() & forbidden != 0
+    if !md.is_file()
+        || md.mode() & forbidden != 0
         || (private && md.uid() != unsafe { libc::geteuid() })
     {
         return Err(Error::Storage);
@@ -48,9 +56,10 @@ pub fn configured_file(name: &str, private: bool) -> Result<Vec<u8>, Error> {
 }
 
 fn require_authenticator_record(directory: &Path) -> Result<(), Error> {
-    let metadata = fs::symlink_metadata(directory.join("authenticator.json"))
-        .map_err(|_| Error::Storage)?;
-    if !metadata.is_file() || metadata.file_type().is_symlink()
+    let metadata =
+        fs::symlink_metadata(directory.join("authenticator.json")).map_err(|_| Error::Storage)?;
+    if !metadata.is_file()
+        || metadata.file_type().is_symlink()
         || metadata.nlink() != 1
         || metadata.mode() & 0o077 != 0
         || metadata.uid() != unsafe { libc::geteuid() }
@@ -73,14 +82,20 @@ pub fn initialize(directory: &Path) -> Result<Settings, Error> {
         serde_json::from_slice(&verifier).map_err(|_| Error::InvalidConfiguration)?;
     let mut otp = configured_file("HOMELAB_SECURITY_TOTP_FILE", true)?;
     let secret = std::str::from_utf8(&otp)
-        .map_err(|_| Error::InvalidConfiguration)?.trim().to_owned();
+        .map_err(|_| Error::InvalidConfiguration)?
+        .trim()
+        .to_owned();
     otp.zeroize();
     let policies = configured_file("HOMELAB_SECURITY_POLICY_FILE", false)?;
     let policies: Vec<OperationPolicy> =
         serde_json::from_slice(&policies).map_err(|_| Error::InvalidConfiguration)?;
     let opened = Authority::open(
-        directory, required("HOMELAB_SECURITY_OWNER")?, "platform-gateway".into(),
-        verifier, &secret, policies
+        directory,
+        required("HOMELAB_SECURITY_OWNER")?,
+        "platform-gateway".into(),
+        verifier,
+        &secret,
+        policies,
     );
     let mut secret = zeroize::Zeroizing::new(secret);
     secret.zeroize();
@@ -113,7 +128,8 @@ pub fn initialize(directory: &Path) -> Result<Settings, Error> {
         }
     }
 
-    let browser_origin = env::var("HOMELAB_SECURITY_BROWSER_ORIGIN").ok()
+    let browser_origin = env::var("HOMELAB_SECURITY_BROWSER_ORIGIN")
+        .ok()
         .filter(|origin| !origin.is_empty());
 
     if let Ok(audience) = env::var("HOMELAB_SECURITY_ACCESS_GATEWAY_AUD") {
@@ -121,24 +137,25 @@ pub fn initialize(directory: &Path) -> Result<Settings, Error> {
             let jwks = configured_file("HOMELAB_SECURITY_ACCESS_JWKS_FILE", false)?;
             let mut email = configured_file("HOMELAB_SECURITY_ACCESS_OWNER_FILE", true)?;
             let owner = std::str::from_utf8(&email)
-                .map_err(|_| Error::InvalidConfiguration)?.trim().to_owned();
+                .map_err(|_| Error::InvalidConfiguration)?
+                .trim()
+                .to_owned();
             email.zeroize();
             authority.configure_access(
-                AccessVerifier::new(
-                    &required("HOMELAB_SECURITY_ACCESS_ISSUER")?, &owner, &jwks
-                )?,
+                AccessVerifier::new(&required("HOMELAB_SECURITY_ACCESS_ISSUER")?, &owner, &jwks)?,
                 audience,
                 env::var("HOMELAB_SECURITY_ACCESS_BROWSER_AUD").ok(),
             )?;
         }
     }
-    if browser_origin.is_some()
-        && env::var("HOMELAB_SECURITY_ACCESS_BROWSER_AUD").is_err()
-    {
+    if browser_origin.is_some() && env::var("HOMELAB_SECURITY_ACCESS_BROWSER_AUD").is_err() {
         return Err(Error::InvalidConfiguration);
     }
 
-    Ok(Settings { authority, browser_origin })
+    Ok(Settings {
+        authority,
+        browser_origin,
+    })
 }
 
 #[cfg(test)]

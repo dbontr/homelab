@@ -1,21 +1,26 @@
 //! Read-only evidence views. Calibration, source review, and formal
 //! entailment are separate from demonstrated learner mastery.
 use dioxus::prelude::*;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::components::{Card, Notice};
 use crate::embedded_learning_graph::LearningGraph;
 use crate::mcp_app;
 
 fn id_valid(value: &str) -> bool {
-    !value.is_empty() && value.len() <= 128
-        && value.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b,b'_'|b'-'))
+    !value.is_empty()
+        && value.len() <= 128
+        && value
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-'))
 }
 
 fn as_text(value: &Value, keys: &[&str]) -> String {
     for key in keys {
         if let Some(text) = value.get(key).and_then(Value::as_str) {
-            if !text.is_empty() { return text.to_owned(); }
+            if !text.is_empty() {
+                return text.to_owned();
+            }
         }
         if let Some(number) = value.get(key).and_then(Value::as_i64) {
             return number.to_string();
@@ -24,7 +29,8 @@ fn as_text(value: &Value, keys: &[&str]) -> String {
     "Not reported".to_owned()
 }
 fn pct(value: Option<&Value>) -> String {
-    value.and_then(Value::as_f64)
+    value
+        .and_then(Value::as_f64)
         .filter(|n| n.is_finite() && (0.0..=1.0).contains(n))
         .map(|n| format!("{:.1}%", n * 100.0))
         .unwrap_or_else(|| "Not reported".to_owned())
@@ -34,22 +40,31 @@ fn calibration_view(value: &Value, name: &str) -> Option<Value> {
 }
 
 pub fn reasoning_graph(value: &Value) -> Value {
-    if value.get("propositions").is_none() { return value.clone(); }
-    let nodes = value.get("propositions").and_then(Value::as_array)
-        .into_iter().flatten().take(200).map(|p| {
+    if value.get("propositions").is_none() {
+        return value.clone();
+    }
+    let nodes = value
+        .get("propositions")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .take(200)
+        .map(|p| {
             json!({
                 "id":p.get("id").and_then(Value::as_str).unwrap_or(""),
                 "title":p.get("statement").and_then(Value::as_str).unwrap_or("Proposition"),
                 "status":p.get("status").and_then(Value::as_str).unwrap_or("unreviewed"),
                 "summary":p.get("context").and_then(Value::as_str).unwrap_or(""),
             })
-        }).collect::<Vec<_>>();
+        })
+        .collect::<Vec<_>>();
     let mut edges = Vec::new();
     if let Some(chains) = value.get("chains").and_then(Value::as_array) {
         for chain in chains.iter().take(200) {
-            if let (Some(premises),Some(conclusion))=(
+            if let (Some(premises), Some(conclusion)) = (
                 chain.get("premises").and_then(Value::as_array),
-                chain.get("conclusion").and_then(Value::as_str)) {
+                chain.get("conclusion").and_then(Value::as_str),
+            ) {
                 for premise in premises.iter().take(24).filter_map(Value::as_str) {
                     edges.push(json!({"source":premise,"target":conclusion,
                         "kind":chain.get("relation").and_then(Value::as_str)
@@ -58,7 +73,7 @@ pub fn reasoning_graph(value: &Value) -> Value {
             }
         }
     }
-    if let Some(disputes)=value.get("disputes").and_then(Value::as_array) {
+    if let Some(disputes) = value.get("disputes").and_then(Value::as_array) {
         for item in disputes.iter().take(100) {
             edges.push(json!({
                 "source":item.get("left_id"),"target":item.get("right_id"),
@@ -70,7 +85,11 @@ pub fn reasoning_graph(value: &Value) -> Value {
 }
 
 #[component]
-pub fn CalibrationPanel(report:Option<Value>,on_question:EventHandler<String>,on_problem:EventHandler<String>)->Element {
+pub fn CalibrationPanel(
+    report: Option<Value>,
+    on_question: EventHandler<String>,
+    on_problem: EventHandler<String>,
+) -> Element {
     rsx! {
         Card {
             title:"Confidence calibration".to_owned(),
@@ -101,9 +120,17 @@ pub fn CalibrationPanel(report:Option<Value>,on_question:EventHandler<String>,on
 }
 
 #[component]
-fn CalibrationCohort(name:String,evidence:Value,kind:String,
-    on_question:EventHandler<String>,on_problem:EventHandler<String>)->Element {
-    let samples=evidence.get("sample_count").and_then(Value::as_u64).unwrap_or(0);
+fn CalibrationCohort(
+    name: String,
+    evidence: Value,
+    kind: String,
+    on_question: EventHandler<String>,
+    on_problem: EventHandler<String>,
+) -> Element {
+    let samples = evidence
+        .get("sample_count")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
     rsx! {
         section{class:"stack",
             h3{"{name}"}
@@ -191,12 +218,12 @@ fn CalibrationCohort(name:String,evidence:Value,kind:String,
 }
 
 #[component]
-pub fn ConceptEvidence(id:String)->Element{
-    let mut concept=use_signal(||None::<Value>);
-    let mut portfolio=use_signal(||None::<Value>);
-    let mut busy=use_signal(||false);
-    let mut error=use_signal(String::new);
-    rsx!{
+pub fn ConceptEvidence(id: String) -> Element {
+    let mut concept = use_signal(|| None::<Value>);
+    let mut portfolio = use_signal(|| None::<Value>);
+    let mut busy = use_signal(|| false);
+    let mut error = use_signal(String::new);
+    rsx! {
         Card{
             title:"Concept evidence".to_owned(),
             description:"Inspect prerequisites, independent assessments, and retention without changing mastery.".to_owned(),
@@ -258,16 +285,20 @@ pub fn ConceptEvidence(id:String)->Element{
 }
 
 #[component]
-pub fn ReasoningEvidence(graph:Value,on_select:EventHandler<String>)->Element{
-    let mut selection=use_signal(String::new);
-    let mut result=use_signal(||None::<Value>);
-    let mut history=use_signal(||None::<Value>);
-    let mut translation=use_signal(||None::<Value>);
-    let mut error=use_signal(String::new);
-    let mut busy=use_signal(||false);
-    let network=reasoning_graph(&graph);
-    let chains=graph.get("chains").and_then(Value::as_array).cloned().unwrap_or_default();
-    rsx!{
+pub fn ReasoningEvidence(graph: Value, on_select: EventHandler<String>) -> Element {
+    let mut selection = use_signal(String::new);
+    let mut result = use_signal(|| None::<Value>);
+    let mut history = use_signal(|| None::<Value>);
+    let mut translation = use_signal(|| None::<Value>);
+    let mut error = use_signal(String::new);
+    let mut busy = use_signal(|| false);
+    let network = reasoning_graph(&graph);
+    let chains = graph
+        .get("chains")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    rsx! {
         Card{
             title:"Source-grounded reasoning".to_owned(),
             description:"Premises must jointly support a conclusion. A reviewed translation is not a certified natural-language proof.".to_owned(),
@@ -366,23 +397,23 @@ pub fn ReasoningEvidence(graph:Value,on_select:EventHandler<String>)->Element{
 }
 
 #[cfg(test)]
-mod tests{
+mod tests {
     use super::*;
     #[test]
-    fn calibration_reports_do_not_create_mastery(){
-        assert_eq!(pct(Some(&json!(0.6))),"60.0%");
-        assert_eq!(pct(Some(&json!(1.2))),"Not reported");
-        assert_eq!(calibration_view(&json!({}),"choice_accuracy"),None);
+    fn calibration_reports_do_not_create_mastery() {
+        assert_eq!(pct(Some(&json!(0.6))), "60.0%");
+        assert_eq!(pct(Some(&json!(1.2))), "Not reported");
+        assert_eq!(calibration_view(&json!({}), "choice_accuracy"), None);
     }
     #[test]
-    fn reasoning_links_only_use_stored_premises(){
-        let record=json!({
+    fn reasoning_links_only_use_stored_premises() {
+        let record = json!({
             "propositions":[{"id":"p_a","statement":"Premise"},{"id":"p_b","statement":"Conclusion"}],
             "chains":[{"id":"c1","premises":["p_a"],"conclusion":"p_b","relation":"implies"}]
         });
-        let projected=reasoning_graph(&record);
-        assert_eq!(projected["nodes"].as_array().unwrap().len(),2);
-        assert_eq!(projected["edges"][0]["source"],"p_a");
-        assert_eq!(projected["edges"][0]["target"],"p_b");
+        let projected = reasoning_graph(&record);
+        assert_eq!(projected["nodes"].as_array().unwrap().len(), 2);
+        assert_eq!(projected["edges"][0]["source"], "p_a");
+        assert_eq!(projected["edges"][0]["target"], "p_b");
     }
 }

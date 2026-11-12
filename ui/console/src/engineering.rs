@@ -2,13 +2,17 @@ use dioxus::prelude::*;
 use serde_json::Value;
 
 use crate::api;
-use crate::engineering_orchestration::{TeamCreate, DependencyGraph, TeamIntegration};
-use crate::engineering_knowledge::KnowledgeApproval;
-use crate::engineering_diff::SourcePreviews;
 use crate::components::{Badge, Card, Empty, Heading, Icon, Loading, Notice};
+use crate::engineering_diff::SourcePreviews;
+use crate::engineering_knowledge::KnowledgeApproval;
+use crate::engineering_orchestration::{DependencyGraph, TeamCreate, TeamIntegration};
 
 fn as_items(value: &Value, key: &str) -> Vec<Value> {
-    value.get(key).and_then(Value::as_array).cloned().unwrap_or_default()
+    value
+        .get(key)
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default()
 }
 
 fn text(value: &Value, key: &str) -> String {
@@ -16,8 +20,14 @@ fn text(value: &Value, key: &str) -> String {
 }
 
 fn draft_url(steps: &[Value]) -> Option<String> {
-    steps.iter()
-        .find(|step| matches!(step.get("kind").and_then(Value::as_str), Some("publish") | Some("integration_publish")))
+    steps
+        .iter()
+        .find(|step| {
+            matches!(
+                step.get("kind").and_then(Value::as_str),
+                Some("publish") | Some("integration_publish")
+            )
+        })
         .and_then(|step| step.get("result"))
         .filter(|result| result.get("draft").and_then(Value::as_bool) == Some(true))
         .and_then(|result| result.get("url").and_then(Value::as_str))
@@ -34,7 +44,8 @@ fn RunDetail(run: Value, csrf: String) -> Element {
     let activity = as_items(&source, "events");
     let diagnostics = as_items(&source, "diagnostics");
     let proposals = as_items(&source, "knowledge");
-    let review = steps.iter()
+    let review = steps
+        .iter()
         .find(|step| step.get("kind").and_then(Value::as_str) == Some("review"))
         .and_then(|step| step.get("result"))
         .cloned()
@@ -155,7 +166,10 @@ fn TeamDetail(team: Value, csrf: String) -> Element {
     let members = as_items(&team, "members");
     let artifacts = as_items(&team, "artifacts");
     let conflicts = as_items(&team, "conflicts");
-    let ready = team.get("ready_for_review").and_then(Value::as_bool).unwrap_or(false);
+    let ready = team
+        .get("ready_for_review")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
     let integration = team.get("integration").cloned().unwrap_or(Value::Null);
     rsx! {
         details { class: "card",

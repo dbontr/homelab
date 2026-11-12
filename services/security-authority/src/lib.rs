@@ -9,13 +9,13 @@ pub mod bootstrap;
 pub mod canonical;
 pub mod credentials;
 pub mod grants;
+pub mod migration;
+pub mod oauth;
+pub mod remote;
 pub mod sessions;
 pub mod state;
-pub mod migration;
-pub mod vault;
 pub mod transport;
-pub mod remote;
-pub mod oauth;
+pub mod vault;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Error {

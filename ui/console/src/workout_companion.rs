@@ -7,7 +7,9 @@ use crate::health_tools::{self, Tool};
 use crate::workout_planner::Plan;
 
 fn optional_measurement(value: &str, maximum: f64) -> Result<Option<f64>, String> {
-    if value.trim().is_empty() { return Ok(None); }
+    if value.trim().is_empty() {
+        return Ok(None);
+    }
     match value.parse::<f64>() {
         Ok(number) if number.is_finite() && (0.0..=maximum).contains(&number) => Ok(Some(number)),
         _ => Err("Training measurements must be finite and within range.".to_owned()),
@@ -15,7 +17,10 @@ fn optional_measurement(value: &str, maximum: f64) -> Result<Option<f64>, String
 }
 
 fn current_utc() -> String {
-    js_sys::Date::new_0().to_iso_string().as_string().unwrap_or_default()
+    js_sys::Date::new_0()
+        .to_iso_string()
+        .as_string()
+        .unwrap_or_default()
 }
 
 fn start_rest(mut remaining: Signal<u32>, mut generation: Signal<u64>, seconds: u32) {
@@ -25,7 +30,9 @@ fn start_rest(mut remaining: Signal<u32>, mut generation: Signal<u64>, seconds: 
     spawn(async move {
         for left in (0..seconds).rev() {
             TimeoutFuture::new(1000).await;
-            if generation() != token { return; }
+            if generation() != token {
+                return;
+            }
             remaining.set(left);
         }
     });
@@ -36,9 +43,7 @@ pub fn WorkoutCompanion(csrf: String) -> Element {
     let csrf = use_signal(|| csrf);
     let mut plans = use_resource(move || {
         let token = csrf();
-        async move {
-            health_tools::call::<Vec<Plan>>(&token, Tool::PlanList, json!({})).await
-        }
+        async move { health_tools::call::<Vec<Plan>>(&token, Tool::PlanList, json!({})).await }
     });
     let mut selected_plan = use_signal(String::new);
     let mut selected_session = use_signal(String::new);
@@ -63,17 +68,24 @@ pub fn WorkoutCompanion(csrf: String) -> Element {
         let token = csrf();
         let plan_id = selected_plan();
         async move {
-            if plan_id.is_empty() { return Ok(Vec::<Value>::new()); }
+            if plan_id.is_empty() {
+                return Ok(Vec::<Value>::new());
+            }
             health_tools::call::<Vec<Value>>(
-                &token, Tool::TrainingSetList, json!({"plan_id":plan_id,"limit":500})
-            ).await
+                &token,
+                Tool::TrainingSetList,
+                json!({"plan_id":plan_id,"limit":500}),
+            )
+            .await
         }
     });
-    let plan = plans.cloned().and_then(Result::ok)
-        .and_then(|all| all.into_iter().find(|p|
-            p.kind == "workout" && p.id == selected_plan()));
-    let session = plan.as_ref().and_then(|p|
-        p.sessions.iter().find(|s| s.id == selected_session()));
+    let plan = plans.cloned().and_then(Result::ok).and_then(|all| {
+        all.into_iter()
+            .find(|p| p.kind == "workout" && p.id == selected_plan())
+    });
+    let session = plan
+        .as_ref()
+        .and_then(|p| p.sessions.iter().find(|s| s.id == selected_session()));
 
     rsx! {
         Heading {

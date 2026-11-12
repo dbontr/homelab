@@ -1,10 +1,13 @@
 //! Encrypted credentials in the existing AES-256-GCM vault representation.
-use std::collections::BTreeMap;
 use aes_gcm::aead::{Aead, KeyInit, Payload};
 use aes_gcm::{Aes256Gcm, Nonce};
-use base64::{engine::general_purpose::{STANDARD_NO_PAD, URL_SAFE_NO_PAD}, Engine};
+use base64::{
+    engine::general_purpose::{STANDARD_NO_PAD, URL_SAFE_NO_PAD},
+    Engine,
+};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use std::collections::BTreeMap;
 use zeroize::{Zeroize, Zeroizing};
 
 use crate::state::StateStore;
@@ -44,7 +47,9 @@ impl Drop for Vault {
 fn valid_provider(provider: &str) -> bool {
     !provider.is_empty()
         && provider.len() <= 64
-        && !provider.chars().any(|c| matches!(c, '\r' | '\n' | '\t' | '/' | ':' | '\\'))
+        && !provider
+            .chars()
+            .any(|c| matches!(c, '\r' | '\n' | '\t' | '/' | ':' | '\\'))
 }
 
 fn checked_secret(secret: &[u8]) -> Result<(), Error> {
@@ -100,7 +105,9 @@ impl Vault {
         for (id, record) in &records {
             if id != &record.id
                 || id.len() != 32
-                || URL_SAFE_NO_PAD.decode(id).map_or(true, |raw| raw.len() != 24)
+                || URL_SAFE_NO_PAD
+                    .decode(id)
+                    .map_or(true, |raw| raw.len() != 24)
                 || !valid_provider(&record.provider)
                 || chrono::DateTime::parse_from_rfc3339(&record.created_at).is_err()
                 || record.nonce.is_empty()
@@ -110,19 +117,32 @@ impl Vault {
             }
             // Authentication tags are checked when the credential is used.
         }
-        Ok(Self { key: *protected_key, records })
+        Ok(Self {
+            key: *protected_key,
+            records,
+        })
     }
 
-    fn seal(&self, provider: &str, id: &str, secret: &[u8], created_at: String)
-        -> Result<EncryptedCredential, Error>
-    {
+    fn seal(
+        &self,
+        provider: &str,
+        id: &str,
+        secret: &[u8],
+        created_at: String,
+    ) -> Result<EncryptedCredential, Error> {
         checked_secret(secret)?;
         let mut nonce = [0u8; 12];
         getrandom::fill(&mut nonce).map_err(|_| Error::Storage)?;
         let cipher = Aes256Gcm::new_from_slice(&self.key).map_err(|_| Error::Storage)?;
         let aad = format!("{provider}:{id}");
         let ciphertext = cipher
-            .encrypt(Nonce::from_slice(&nonce), Payload { msg: secret, aad: aad.as_bytes() })
+            .encrypt(
+                Nonce::from_slice(&nonce),
+                Payload {
+                    msg: secret,
+                    aad: aad.as_bytes(),
+                },
+            )
             .map_err(|_| Error::Storage)?;
         Ok(EncryptedCredential {
             id: id.into(),
@@ -133,18 +153,23 @@ impl Vault {
         })
     }
 
-    fn persist(&mut self, store: &mut StateStore, records: BTreeMap<String, EncryptedCredential>)
-        -> Result<(), Error>
-    {
+    fn persist(
+        &mut self,
+        store: &mut StateStore,
+        records: BTreeMap<String, EncryptedCredential>,
+    ) -> Result<(), Error> {
         let bytes = serde_json::to_vec(&records).map_err(|_| Error::Storage)?;
         store.persist_vault(&bytes)?;
         self.records = records;
         Ok(())
     }
 
-    pub(crate) fn store(&mut self, storage: &mut StateStore, provider: &str, secret: &[u8])
-        -> Result<CredentialHandle, Error>
-    {
+    pub(crate) fn store(
+        &mut self,
+        storage: &mut StateStore,
+        provider: &str,
+        secret: &[u8],
+    ) -> Result<CredentialHandle, Error> {
         if !valid_provider(provider) {
             return Err(Error::InvalidArguments);
         }
@@ -168,24 +193,36 @@ impl Vault {
         Ok(handle)
     }
 
-    pub(crate) fn rotate(&mut self, storage: &mut StateStore, id: &str, provider: &str, secret: &[u8])
-        -> Result<(), Error>
-    {
+    pub(crate) fn rotate(
+        &mut self,
+        storage: &mut StateStore,
+        id: &str,
+        provider: &str,
+        secret: &[u8],
+    ) -> Result<(), Error> {
         self.rotate_checked(storage, id, provider, None, secret)
     }
 
     /// A provider response cannot overwrite a credential that was revoked or
     /// rotated while the remote request was in flight.
     pub(crate) fn rotate_if_revision(
-        &mut self, storage: &mut StateStore, id: &str, provider: &str,
-        expected_revision: &str, secret: &[u8]
+        &mut self,
+        storage: &mut StateStore,
+        id: &str,
+        provider: &str,
+        expected_revision: &str,
+        secret: &[u8],
     ) -> Result<(), Error> {
         self.rotate_checked(storage, id, provider, Some(expected_revision), secret)
     }
 
     fn rotate_checked(
-        &mut self, storage: &mut StateStore, id: &str, provider: &str,
-        expected_revision: Option<&str>, secret: &[u8]
+        &mut self,
+        storage: &mut StateStore,
+        id: &str,
+        provider: &str,
+        expected_revision: Option<&str>,
+        secret: &[u8],
     ) -> Result<(), Error> {
         checked_secret(secret)?;
         let existing = self.records.get(id).ok_or(Error::Unauthorized)?;
@@ -202,7 +239,9 @@ impl Vault {
 
     pub(crate) fn handle(&self, id: &str, provider: &str) -> Result<CredentialHandle, Error> {
         let record = self.records.get(id).ok_or(Error::Unauthorized)?;
-        if record.provider != provider { return Err(Error::Unauthorized); }
+        if record.provider != provider {
+            return Err(Error::Unauthorized);
+        }
         Ok(CredentialHandle {
             id: record.id.clone(),
             provider: record.provider.clone(),
@@ -255,11 +294,14 @@ impl Vault {
     }
 
     pub(crate) fn handles(&self) -> Vec<CredentialHandle> {
-        self.records.values().map(|record| CredentialHandle {
-            id: record.id.clone(),
-            provider: record.provider.clone(),
-            created_at: record.created_at.clone(),
-        }).collect()
+        self.records
+            .values()
+            .map(|record| CredentialHandle {
+                id: record.id.clone(),
+                provider: record.provider.clone(),
+                created_at: record.created_at.clone(),
+            })
+            .collect()
     }
 }
 
@@ -281,13 +323,21 @@ mod tests {
         let dir = private_dir();
         let record = include_str!("../tests/fixtures/vault-records.json");
         fs::write(dir.join("credentials.json"), record).unwrap();
-        let mut permissions = fs::metadata(dir.join("credentials.json")).unwrap().permissions();
+        let mut permissions = fs::metadata(dir.join("credentials.json"))
+            .unwrap()
+            .permissions();
         permissions.set_mode(0o600);
         fs::set_permissions(dir.join("credentials.json"), permissions).unwrap();
         let storage = StateStore::acquire(&dir).unwrap();
         let vault = Vault::open(&storage, [b'k'; 32]).unwrap();
-        let got = vault.with_secret("abcdefghijklmnopqrstuvwxABCDEFGH", "research", None,
-            |secret| secret.to_vec()).unwrap();
+        let got = vault
+            .with_secret(
+                "abcdefghijklmnopqrstuvwxABCDEFGH",
+                "research",
+                None,
+                |secret| secret.to_vec(),
+            )
+            .unwrap();
         assert_eq!(got, b"fixture-credential");
         drop(vault);
         drop(storage);
@@ -301,16 +351,27 @@ mod tests {
         let mut vault = Vault::open(&storage, [b'k'; 32]).unwrap();
         let handle = vault.store(&mut storage, "vendor", b"initial").unwrap();
         let snapshot = vault.revision(&handle.id, "vendor").unwrap();
-        vault.rotate(&mut storage, &handle.id, "vendor", b"rotated").unwrap();
+        vault
+            .rotate(&mut storage, &handle.id, "vendor", b"rotated")
+            .unwrap();
         assert!(matches!(
             vault.rotate_if_revision(&mut storage, &handle.id, "vendor", &snapshot, b"stale"),
             Err(Error::Unauthorized)
         ));
-        let read = vault.with_secret(&handle.id, "vendor", None, |v| v.to_vec()).unwrap();
+        let read = vault
+            .with_secret(&handle.id, "vendor", None, |v| v.to_vec())
+            .unwrap();
         assert_eq!(read, b"rotated");
         let current = vault.revision(&handle.id, "vendor").unwrap();
-        vault.rotate_if_revision(&mut storage, &handle.id, "vendor", &current, b"fresh").unwrap();
-        assert_eq!(vault.with_secret(&handle.id, "vendor", None, |v| v.to_vec()).unwrap(), b"fresh");
+        vault
+            .rotate_if_revision(&mut storage, &handle.id, "vendor", &current, b"fresh")
+            .unwrap();
+        assert_eq!(
+            vault
+                .with_secret(&handle.id, "vendor", None, |v| v.to_vec())
+                .unwrap(),
+            b"fresh"
+        );
         let last = vault.revision(&handle.id, "vendor").unwrap();
         vault.delete(&mut storage, &handle.id).unwrap();
         assert!(matches!(
@@ -329,12 +390,16 @@ mod tests {
         let mut vault = Vault::open(&storage, [b'k'; 32]).unwrap();
         let handle = vault.store(&mut storage, "research", b"first").unwrap();
         let old_revision = vault.revision(&handle.id, "research").unwrap();
-        vault.rotate(&mut storage, &handle.id, "research", b"second").unwrap();
+        vault
+            .rotate(&mut storage, &handle.id, "research", b"second")
+            .unwrap();
         assert!(matches!(
             vault.with_secret(&handle.id, "research", Some(&old_revision), |_| ()),
             Err(Error::Unauthorized)
         ));
-        let secret = vault.with_secret(&handle.id, "research", None, |value| value.to_vec()).unwrap();
+        let secret = vault
+            .with_secret(&handle.id, "research", None, |value| value.to_vec())
+            .unwrap();
         assert_eq!(secret, b"second");
         drop(vault);
         let reopened = Vault::open(&storage, [b'k'; 32]).unwrap();

@@ -1,6 +1,6 @@
+use reqwest::Method;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use reqwest::Method;
 use serde_json::Value;
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -156,7 +156,10 @@ pub async fn logout(csrf: &str) -> Result<(), String> {
 
 #[cfg(not(feature = "embedded-app"))]
 pub async fn write<T: DeserializeOwned, P: Serialize>(
-    method: Method, path: &str, csrf: &str, payload: &P
+    method: Method,
+    path: &str,
+    csrf: &str,
+    payload: &P,
 ) -> Result<T, String> {
     let response = reqwest::Client::new()
         .request(method, url(path)?)
@@ -178,7 +181,9 @@ pub async fn write<T: DeserializeOwned, P: Serialize>(
         }
         return Err(response_error(status));
     }
-    response.json::<T>().await
+    response
+        .json::<T>()
+        .await
         .map_err(|_| "The service returned invalid data".to_owned())
 }
 
@@ -188,7 +193,9 @@ pub struct ImageUpload {
 }
 
 pub async fn upload_recipe_image(
-    csrf: &str, media_type: &str, contents: Vec<u8>
+    csrf: &str,
+    media_type: &str,
+    contents: Vec<u8>,
 ) -> Result<ImageUpload, String> {
     if contents.is_empty() || contents.len() > 5 * 1024 * 1024 {
         return Err("Recipe image must be 5 MiB or smaller".to_owned());
@@ -207,7 +214,9 @@ pub async fn upload_recipe_image(
     if !response.status().is_success() {
         return Err(response_error(response.status()));
     }
-    response.json::<ImageUpload>().await
+    response
+        .json::<ImageUpload>()
+        .await
         .map_err(|_| "The service returned invalid image data".to_owned())
 }
 
@@ -220,14 +229,20 @@ pub async fn upload_learning_attachment(
     contents: Vec<u8>,
 ) -> Result<Value, String> {
     if !matches!(owner_kind, "session" | "problem" | "source")
-        || owner_id.is_empty() || owner_id.len() > 128
-        || !owner_id.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b'_')
+        || owner_id.is_empty()
+        || owner_id.len() > 128
+        || !owner_id
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b'_')
     {
         return Err("Choose a valid Learning record before attaching a file.".to_owned());
     }
-    if filename.is_empty() || filename.len() > 250
-        || filename.contains('/') || filename.contains('\\')
-        || filename == "." || filename == ".."
+    if filename.is_empty()
+        || filename.len() > 250
+        || filename.contains('/')
+        || filename.contains('\\')
+        || filename == "."
+        || filename == ".."
     {
         return Err("The attachment has an invalid filename.".to_owned());
     }
@@ -236,12 +251,18 @@ pub async fn upload_learning_attachment(
     }
     if !matches!(
         media_type,
-        "image/png" | "image/jpeg" | "image/webp" | "image/heic"
-        | "application/pdf" | "text/plain" | "text/markdown"
+        "image/png"
+            | "image/jpeg"
+            | "image/webp"
+            | "image/heic"
+            | "application/pdf"
+            | "text/plain"
+            | "text/markdown"
     ) {
         return Err("This Learning attachment type is not supported.".to_owned());
     }
-    let encoded = js_sys::encode_uri_component(filename).as_string()
+    let encoded = js_sys::encode_uri_component(filename)
+        .as_string()
         .ok_or_else(|| "Cannot encode the selected filename.".to_owned())?;
     let response = reqwest::Client::new()
         .post(url("/v1/learning/attachments")?)
@@ -257,7 +278,9 @@ pub async fn upload_learning_attachment(
     if !response.status().is_success() {
         return Err(response_error(response.status()));
     }
-    response.json::<Value>().await
+    response
+        .json::<Value>()
+        .await
         .map_err(|_| "Learning returned invalid saved attachment metadata.".to_owned())
 }
 
@@ -281,7 +304,9 @@ pub async fn import_recipe_bundle(csrf: &str, content: Vec<u8>) -> Result<Bundle
     if !response.status().is_success() {
         return Err(response_error(response.status()));
     }
-    response.json::<BundleImport>().await
+    response
+        .json::<BundleImport>()
+        .await
         .map_err(|_| "The service returned invalid recipe bundle data".to_owned())
 }
 
@@ -291,10 +316,15 @@ pub async fn remove(path: &str, csrf: &str, revision: Option<i32>) -> Result<(),
     if let Some(version) = revision {
         request = request.header("If-Match", format!("\"{version}\""));
     }
-    let response = request.send().await
+    let response = request
+        .send()
+        .await
         .map_err(|_| "Could not contact the homelab API".to_owned())?;
-    if response.status().is_success() { Ok(()) }
-    else { Err(response_error(response.status())) }
+    if response.status().is_success() {
+        Ok(())
+    } else {
+        Err(response_error(response.status()))
+    }
 }
 
 pub fn list(value: &Value, keys: &[&str]) -> Vec<Value> {
@@ -343,7 +373,6 @@ mod tests {
     }
 }
 
-
 #[cfg(feature = "embedded-app")]
 pub async fn get<T: DeserializeOwned>(path: &str) -> Result<T, String> {
     let action = match path {
@@ -366,7 +395,9 @@ pub async fn write<T: DeserializeOwned, P: Serialize>(
     }
     let value = serde_json::to_value(payload)
         .map_err(|_| "Reaction trials have invalid JSON".to_owned())?;
-    let raw = value.get("trials_ms").and_then(Value::as_array)
+    let raw = value
+        .get("trials_ms")
+        .and_then(Value::as_array)
         .ok_or("Reaction trial measurements are required")?;
     if raw.len() != 5 {
         return Err("The reaction task requires exactly five trials".to_owned());
@@ -381,15 +412,19 @@ pub async fn write<T: DeserializeOwned, P: Serialize>(
     }
     let mut ordered = samples.clone();
     ordered.sort_by(f64::total_cmp);
-    crate::mcp_app::call_tool("health_record_add", serde_json::json!({
-        "domain": "cognition", "metric": "simple_reaction_ms",
-        "value": ordered[2], "unit": "ms",
-        "source": "browser_visual_reaction_test", "method": "estimated",
-        "metadata": {
-            "trials_ms": samples,
-            "mean_ms": ordered.iter().sum::<f64>() / 5.0,
-            "protocol": "five trial visual response",
-            "constraints": "Browser and display latency; not clinically standardized"
-        }
-    })).await
+    crate::mcp_app::call_tool(
+        "health_record_add",
+        serde_json::json!({
+            "domain": "cognition", "metric": "simple_reaction_ms",
+            "value": ordered[2], "unit": "ms",
+            "source": "browser_visual_reaction_test", "method": "estimated",
+            "metadata": {
+                "trials_ms": samples,
+                "mean_ms": ordered.iter().sum::<f64>() / 5.0,
+                "protocol": "five trial visual response",
+                "constraints": "Browser and display latency; not clinically standardized"
+            }
+        }),
+    )
+    .await
 }

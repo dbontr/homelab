@@ -35,15 +35,19 @@ struct Filter {
 fn utc_day(days_ago: f64) -> String {
     let date = js_sys::Date::new_0();
     date.set_time(js_sys::Date::now() - days_ago * 86_400_000.0);
-    date.to_iso_string().as_string()
+    date.to_iso_string()
+        .as_string()
         .and_then(|value| value.get(..10).map(str::to_owned))
         .unwrap_or_default()
 }
 
 fn valid_metric(metric: &str) -> bool {
-    !metric.is_empty() && metric.len() <= 64
+    !metric.is_empty()
+        && metric.len() <= 64
         && metric.starts_with(|ch: char| ch.is_ascii_lowercase())
-        && metric.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
+        && metric
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
 }
 
 #[derive(Clone)]
@@ -56,40 +60,73 @@ struct ChartDot {
 // Actual observation timestamps determine the horizontal coordinate.
 // Missing dates are never interpolated, and incompatible units are rejected.
 fn chart(points: &[MetricPoint]) -> Result<(String, Vec<ChartDot>), &'static str> {
-    if points.is_empty() { return Err("No observations in this interval"); }
+    if points.is_empty() {
+        return Err("No observations in this interval");
+    }
     let unit = &points[0].unit;
     if points.iter().any(|point| point.unit != *unit) {
         return Err("Mixed units: select a series with consistent units");
     }
-    let values = points.iter().filter_map(|point| {
-        let timestamp = js_sys::Date::parse(&point.at);
-        (timestamp.is_finite() && point.value.is_finite())
-            .then_some((timestamp, point))
-    }).collect::<Vec<_>>();
-    if values.is_empty() { return Err("No plottable observations"); }
-    let start = values.iter().map(|(time, _)| *time).fold(f64::INFINITY, f64::min);
-    let end = values.iter().map(|(time, _)| *time).fold(f64::NEG_INFINITY, f64::max);
-    let low = values.iter().map(|(_, point)| point.value).fold(f64::INFINITY, f64::min);
-    let high = values.iter().map(|(_, point)| point.value).fold(f64::NEG_INFINITY, f64::max);
-    let padding = if high == low { low.abs().max(1.0) * 0.1 } else { 0.0 };
+    let values = points
+        .iter()
+        .filter_map(|point| {
+            let timestamp = js_sys::Date::parse(&point.at);
+            (timestamp.is_finite() && point.value.is_finite()).then_some((timestamp, point))
+        })
+        .collect::<Vec<_>>();
+    if values.is_empty() {
+        return Err("No plottable observations");
+    }
+    let start = values
+        .iter()
+        .map(|(time, _)| *time)
+        .fold(f64::INFINITY, f64::min);
+    let end = values
+        .iter()
+        .map(|(time, _)| *time)
+        .fold(f64::NEG_INFINITY, f64::max);
+    let low = values
+        .iter()
+        .map(|(_, point)| point.value)
+        .fold(f64::INFINITY, f64::min);
+    let high = values
+        .iter()
+        .map(|(_, point)| point.value)
+        .fold(f64::NEG_INFINITY, f64::max);
+    let padding = if high == low {
+        low.abs().max(1.0) * 0.1
+    } else {
+        0.0
+    };
     let span_x = (end - start).max(1.0);
     let span_y = (high - low + padding * 2.0).max(1.0e-9);
-    let normalized = values.iter().map(|(time, point)| {
-        let x = 35.0 + (time - start) / span_x * 730.0;
-        let y = 175.0 - (point.value - low + padding) / span_y * 145.0;
-        (x, y, point)
-    }).collect::<Vec<_>>();
-    let line = normalized.iter().enumerate().map(|(i, (x, y, _))| {
-        format!("{}{x:.2},{y:.2}", if i == 0 { "M" } else { " L" })
-    }).collect::<String>();
+    let normalized = values
+        .iter()
+        .map(|(time, point)| {
+            let x = 35.0 + (time - start) / span_x * 730.0;
+            let y = 175.0 - (point.value - low + padding) / span_y * 145.0;
+            (x, y, point)
+        })
+        .collect::<Vec<_>>();
+    let line = normalized
+        .iter()
+        .enumerate()
+        .map(|(i, (x, y, _))| format!("{}{x:.2},{y:.2}", if i == 0 { "M" } else { " L" }))
+        .collect::<String>();
     let stride = normalized.len().div_ceil(100).max(1);
-    let dots = normalized.iter().enumerate()
+    let dots = normalized
+        .iter()
+        .enumerate()
         .filter(|(i, _)| i % stride == 0 || i + 1 == normalized.len())
         .map(|(_, (x, y, point))| ChartDot {
-            x: *x, y: *y,
-            label: format!("{}: {} {} ({}, {})",
-                point.at, point.value, point.unit, point.method, point.source),
-        }).collect();
+            x: *x,
+            y: *y,
+            label: format!(
+                "{}: {} {} ({}, {})",
+                point.at, point.value, point.unit, point.method, point.source
+            ),
+        })
+        .collect();
     Ok((line, dots))
 }
 
@@ -103,29 +140,52 @@ struct NutrientRow {
 fn nutrient_rows(nutrition: &Value, goals: &Value) -> Vec<NutrientRow> {
     let observed = nutrition.get("units_and_totals").and_then(Value::as_object);
     let targets = goals.as_object();
-    let names = observed.into_iter().flat_map(|map| map.keys())
+    let names = observed
+        .into_iter()
+        .flat_map(|map| map.keys())
         .chain(targets.into_iter().flat_map(|map| map.keys()))
-        .cloned().collect::<BTreeSet<_>>();
-    names.into_iter().map(|name| {
-        let recorded = observed.and_then(|map| map.get(&name))
-            .and_then(Value::as_object);
-        let logged = recorded.map(|units| {
-            units.iter().map(|(unit, value)| {
-                value.as_f64().map(|number| format!("{number:.2} {unit}"))
-                    .unwrap_or_else(|| "Unknown".to_owned())
-            }).collect::<Vec<_>>().join(", ")
-        }).unwrap_or_else(|| "Unknown".to_owned());
-        let target = targets.and_then(|map| map.get(&name));
-        let target_label = target.map(|goal| {
-            let quantity = goal.get("value").map(Value::to_string).unwrap_or_default();
-            let unit = goal.get("unit").and_then(Value::as_str).unwrap_or("");
-            format!("{quantity} {unit}")
-        }).unwrap_or_else(|| "Not set".to_owned());
-        NutrientRow {
-            name, logged, target: target_label,
-            coverage: if recorded.is_some() { "Logged, may be incomplete" } else { "Missing" },
-        }
-    }).collect()
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    names
+        .into_iter()
+        .map(|name| {
+            let recorded = observed
+                .and_then(|map| map.get(&name))
+                .and_then(Value::as_object);
+            let logged = recorded
+                .map(|units| {
+                    units
+                        .iter()
+                        .map(|(unit, value)| {
+                            value
+                                .as_f64()
+                                .map(|number| format!("{number:.2} {unit}"))
+                                .unwrap_or_else(|| "Unknown".to_owned())
+                        })
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                })
+                .unwrap_or_else(|| "Unknown".to_owned());
+            let target = targets.and_then(|map| map.get(&name));
+            let target_label = target
+                .map(|goal| {
+                    let quantity = goal.get("value").map(Value::to_string).unwrap_or_default();
+                    let unit = goal.get("unit").and_then(Value::as_str).unwrap_or("");
+                    format!("{quantity} {unit}")
+                })
+                .unwrap_or_else(|| "Not set".to_owned());
+            NutrientRow {
+                name,
+                logged,
+                target: target_label,
+                coverage: if recorded.is_some() {
+                    "Logged, may be incomplete"
+                } else {
+                    "Missing"
+                },
+            }
+        })
+        .collect()
 }
 
 #[component]
@@ -137,8 +197,10 @@ pub fn HealthDashboard(csrf: String) -> Element {
     let mut end = use_signal(|| utc_day(0.0));
     let mut day = use_signal(|| utc_day(0.0));
     let mut chosen = use_signal(|| Filter {
-        domain: "biometric".to_owned(), metric: "weight".to_owned(),
-        start: utc_day(30.0), end: utc_day(0.0),
+        domain: "biometric".to_owned(),
+        metric: "weight".to_owned(),
+        start: utc_day(30.0),
+        end: utc_day(0.0),
     });
     let mut goal_metric = use_signal(String::new);
     let mut goal_value = use_signal(String::new);
@@ -151,24 +213,32 @@ pub fn HealthDashboard(csrf: String) -> Element {
         let filter = chosen();
         let token = csrf();
         async move {
-            health_tools::call::<MetricSeries>(&token, Tool::MetricSeries, json!({
-                "domain": filter.domain, "metric": filter.metric,
-                "start_date": filter.start, "end_date": filter.end, "limit": 10000,
-            })).await
+            health_tools::call::<MetricSeries>(
+                &token,
+                Tool::MetricSeries,
+                json!({
+                    "domain": filter.domain, "metric": filter.metric,
+                    "start_date": filter.start, "end_date": filter.end, "limit": 10000,
+                }),
+            )
+            .await
         }
     });
     let mut nutrition = use_resource(move || {
         let selected_day = day();
         let token = csrf();
         async move {
-            health_tools::call::<Value>(&token, Tool::NutrientDaily, json!({
-                "date": selected_day,
-            })).await
+            health_tools::call::<Value>(
+                &token,
+                Tool::NutrientDaily,
+                json!({
+                    "date": selected_day,
+                }),
+            )
+            .await
         }
     });
-    let mut goals = use_resource(|| async {
-        api::get::<Value>("/v1/health/goals").await
-    });
+    let mut goals = use_resource(|| async { api::get::<Value>("/v1/health/goals").await });
 
     rsx! {
         Heading {

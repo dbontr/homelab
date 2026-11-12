@@ -48,8 +48,10 @@ fn sha(bytes: &[u8]) -> String {
 }
 
 fn digest(value: &str, bytes: usize) -> bool {
-    value.len() == bytes * 2 && value.bytes()
-        .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
+    value.len() == bytes * 2
+        && value
+            .bytes()
+            .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
 }
 
 fn target_ok(target: &str) -> bool {
@@ -57,22 +59,26 @@ fn target_ok(target: &str) -> bool {
 }
 
 fn protected(path: &Path, limit: usize) -> Result<Option<Vec<u8>>, Error> {
-    let mut file = match OpenOptions::new().read(true)
-        .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC).open(path)
+    let mut file = match OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
+        .open(path)
     {
         Ok(file) => file,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(_) => return Err(Error::Storage),
     };
     let metadata = file.metadata().map_err(|_| Error::Storage)?;
-    if !metadata.is_file() || metadata.nlink() != 1
+    if !metadata.is_file()
+        || metadata.nlink() != 1
         || metadata.mode() & 0o077 != 0
         || metadata.uid() != unsafe { libc::geteuid() }
     {
         return Err(Error::Storage);
     }
     let mut bytes = Vec::new();
-    file.take((limit + 1) as u64).read_to_end(&mut bytes)
+    file.take((limit + 1) as u64)
+        .read_to_end(&mut bytes)
         .map_err(|_| Error::Storage)?;
     if bytes.is_empty() || bytes.len() > limit {
         return Err(Error::Storage);
@@ -88,13 +94,17 @@ fn read_receipt(raw: &[u8], target: &str) -> Result<Receipt, Error> {
     if raw.is_empty() || raw.len() > RECEIPT_LIMIT || !target_ok(target) {
         return Err(Error::InvalidConfiguration);
     }
-    let parsed: Receipt = serde_json::from_slice(raw)
-        .map_err(|_| Error::InvalidConfiguration)?;
-    if parsed.version != 1 || parsed.target != target
+    let parsed: Receipt = serde_json::from_slice(raw).map_err(|_| Error::InvalidConfiguration)?;
+    if parsed.version != 1
+        || parsed.target != target
         || !digest(&parsed.authenticator_sha256, 32)
-        || parsed.vault_sha256.as_deref()
+        || parsed
+            .vault_sha256
+            .as_deref()
             .is_some_and(|v| !digest(v, 32))
-        || parsed.parent_marker_sha256.as_deref()
+        || parsed
+            .parent_marker_sha256
+            .as_deref()
             .is_some_and(|v| !digest(v, 32))
         || !digest(&parsed.nonce, 16)
     {
@@ -117,9 +127,7 @@ fn selection(state: &Path) -> Result<Option<(Selection, String)>, Error> {
         return Ok(None);
     };
     let marker: Selection = serde_json::from_slice(&bytes).map_err(|_| Error::Storage)?;
-    if marker.version != 1 || !target_ok(&marker.target)
-        || !digest(&marker.receipt_sha256, 32)
-    {
+    if marker.version != 1 || !target_ok(&marker.target) || !digest(&marker.receipt_sha256, 32) {
         return Err(Error::Storage);
     }
     Ok(Some((marker, sha(&bytes))))
@@ -134,25 +142,34 @@ fn verify_live(state: &Path, receipt: &Receipt) -> Result<(), Error> {
 }
 
 fn write_exclusive(path: &Path, bytes: &[u8]) -> Result<(), Error> {
-    let mut file = OpenOptions::new().write(true).create_new(true)
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
         .mode(0o600)
         .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
-        .open(path).map_err(|_| Error::Storage)?;
-    file.write_all(bytes).and_then(|()| file.sync_all())
+        .open(path)
+        .map_err(|_| Error::Storage)?;
+    file.write_all(bytes)
+        .and_then(|()| file.sync_all())
         .map_err(|_| Error::Storage)
 }
 
 fn publish_selection(state: &Path, target: &str, receipt_hash: &str) -> Result<(), Error> {
     let marker = serde_json::to_vec(&Selection {
-        version: 1, target: target.into(), receipt_sha256: receipt_hash.into(),
-    }).map_err(|_| Error::Storage)?;
+        version: 1,
+        target: target.into(),
+        receipt_sha256: receipt_hash.into(),
+    })
+    .map_err(|_| Error::Storage)?;
     let mut nonce = [0u8; 16];
     getrandom::fill(&mut nonce).map_err(|_| Error::Storage)?;
     let temporary = state.join(format!(".selection-{}", hex::encode(nonce)));
     let result = (|| {
         write_exclusive(&temporary, &marker)?;
         fs::rename(&temporary, state.join(MARKER_NAME)).map_err(|_| Error::Storage)?;
-        File::open(state).and_then(|dir| dir.sync_all()).map_err(|_| Error::Storage)
+        File::open(state)
+            .and_then(|dir| dir.sync_all())
+            .map_err(|_| Error::Storage)
     })();
     let _ = fs::remove_file(temporary);
     result
@@ -190,7 +207,9 @@ pub fn admit(state: &Path, target: &str, raw: Option<&[u8]>) -> Result<(), Error
             return Ok(());
         }
     }
-    let parent = previous.as_ref().map(|(_, marker_hash)| marker_hash.clone());
+    let parent = previous
+        .as_ref()
+        .map(|(_, marker_hash)| marker_hash.clone());
     if parent != receipt.parent_marker_sha256 {
         return Err(Error::InvalidConfiguration);
     }
@@ -203,10 +222,13 @@ pub fn admit(state: &Path, target: &str, raw: Option<&[u8]>) -> Result<(), Error
 /// The sibling security-preflight binary must accept the copied state and
 /// selected runtime credentials before an approval receipt is emitted.
 pub fn prepare(state: &Path, destination: &Path, target: &str) -> Result<(), Error> {
-    if !target_ok(target) || !state.is_absolute() || !destination.is_absolute()
+    if !target_ok(target)
+        || !state.is_absolute()
+        || !destination.is_absolute()
         || state.components().any(|c| c == Component::ParentDir)
         || destination.components().any(|c| c == Component::ParentDir)
-        || state == destination || state.starts_with(destination)
+        || state == destination
+        || state.starts_with(destination)
         || destination.starts_with(state)
     {
         return Err(Error::InvalidConfiguration);
@@ -218,24 +240,32 @@ pub fn prepare(state: &Path, destination: &Path, target: &str) -> Result<(), Err
     let parent = selection(state)?.map(|(_, fingerprint)| fingerprint);
     let parent_dir = destination.parent().ok_or(Error::InvalidConfiguration)?;
     let parent_md = fs::symlink_metadata(parent_dir).map_err(|_| Error::Storage)?;
-    if !parent_md.is_dir() || parent_md.file_type().is_symlink()
+    if !parent_md.is_dir()
+        || parent_md.file_type().is_symlink()
         || fs::canonicalize(parent_dir).map_err(|_| Error::Storage)? != parent_dir
         || parent_md.mode() & 0o022 != 0
     {
         return Err(Error::Storage);
     }
-    DirBuilder::new().mode(0o700).create(destination).map_err(|_| Error::Storage)?;
+    DirBuilder::new()
+        .mode(0o700)
+        .create(destination)
+        .map_err(|_| Error::Storage)?;
     let result = (|| {
         write_exclusive(&destination.join(AUTH_NAME), &auth)?;
         if let Some(vault) = &vault {
             write_exclusive(&destination.join(VAULT_NAME), vault)?;
         }
-        File::open(destination).and_then(|dir| dir.sync_all())
+        File::open(destination)
+            .and_then(|dir| dir.sync_all())
             .map_err(|_| Error::Storage)?;
         let executable = std::env::current_exe().map_err(|_| Error::Storage)?;
         let preflight = executable.with_file_name("security-preflight");
-        let status = Command::new(preflight).arg("--state-dir").arg(destination)
-            .status().map_err(|_| Error::Storage)?;
+        let status = Command::new(preflight)
+            .arg("--state-dir")
+            .arg(destination)
+            .status()
+            .map_err(|_| Error::Storage)?;
         if !status.success() {
             return Err(Error::InvalidConfiguration);
         }
@@ -245,21 +275,22 @@ pub fn prepare(state: &Path, destination: &Path, target: &str) -> Result<(), Err
             let binary = std::env::var("HOMELAB_SECURITY_GO_PREFLIGHT")
                 .map_err(|_| Error::InvalidConfiguration)?;
             let binary = Path::new(&binary);
-            if !binary.is_absolute()
-                || binary.components().any(|c| c == Component::ParentDir)
-            {
+            if !binary.is_absolute() || binary.components().any(|c| c == Component::ParentDir) {
                 return Err(Error::InvalidConfiguration);
             }
             let md = fs::symlink_metadata(binary).map_err(|_| Error::Storage)?;
-            if !md.is_file() || md.file_type().is_symlink()
+            if !md.is_file()
+                || md.file_type().is_symlink()
                 || md.mode() & 0o022 != 0
                 || (md.uid() != 0 && md.uid() != unsafe { libc::geteuid() })
             {
                 return Err(Error::Storage);
             }
             let outcome = Command::new(binary)
-                .arg("--state-dir").arg(destination)
-                .status().map_err(|_| Error::Storage)?;
+                .arg("--state-dir")
+                .arg(destination)
+                .status()
+                .map_err(|_| Error::Storage)?;
             if !outcome.success() {
                 return Err(Error::InvalidConfiguration);
             }
@@ -273,12 +304,14 @@ pub fn prepare(state: &Path, destination: &Path, target: &str) -> Result<(), Err
             vault_sha256: vault.as_ref().map(|bytes| sha(bytes)),
             parent_marker_sha256: parent,
             nonce: hex::encode(nonce),
-        }).map_err(|_| Error::Storage)?;
+        })
+        .map_err(|_| Error::Storage)?;
         if receipt.len() > RECEIPT_LIMIT {
             return Err(Error::Storage);
         }
         write_exclusive(&destination.join(RECEIPT_NAME), &receipt)?;
-        File::open(destination).and_then(|dir| dir.sync_all())
+        File::open(destination)
+            .and_then(|dir| dir.sync_all())
             .map_err(|_| Error::Storage)?;
         Ok(())
     })();
@@ -310,9 +343,14 @@ mod tests {
     fn receipt(state: &Path, target: &str, parent: Option<String>) -> Vec<u8> {
         let (auth, vault) = current_hashes(state).unwrap();
         serde_json::to_vec(&Receipt {
-            version: 1, target: target.into(), authenticator_sha256: auth,
-            vault_sha256: vault, parent_marker_sha256: parent, nonce: "a".repeat(32),
-        }).unwrap()
+            version: 1,
+            target: target.into(),
+            authenticator_sha256: auth,
+            vault_sha256: vault,
+            parent_marker_sha256: parent,
+            nonce: "a".repeat(32),
+        })
+        .unwrap()
     }
 
     #[test]
@@ -341,7 +379,7 @@ mod tests {
         assert!(admit(&dir, "rust", Some(&initial)).is_err());
         assert_eq!(required_file(&dir, AUTH_NAME, AUTH_LIMIT).unwrap(), auth);
         assert!(admit(&dir, "rust", Some(&receipt(&dir, "rust", None))).is_err());
-        let next = receipt(&dir, "rust", selection(&dir).unwrap().map(|(_,hash)|hash));
+        let next = receipt(&dir, "rust", selection(&dir).unwrap().map(|(_, hash)| hash));
         admit(&dir, "rust", Some(&next)).unwrap();
         fs::remove_dir_all(dir).unwrap();
     }
@@ -376,15 +414,13 @@ mod tests {
     fn restart_requires_replay_and_previously_present_vault() {
         let dir = state();
         fs::write(dir.join(VAULT_NAME), b"{}").unwrap();
-        fs::set_permissions(dir.join(VAULT_NAME),
-            fs::Permissions::from_mode(0o600)).unwrap();
+        fs::set_permissions(dir.join(VAULT_NAME), fs::Permissions::from_mode(0o600)).unwrap();
         let selected = receipt(&dir, "rust", None);
         admit(&dir, "rust", Some(&selected)).unwrap();
         fs::remove_file(dir.join(VAULT_NAME)).unwrap();
         assert!(admit(&dir, "rust", Some(&selected)).is_err());
         fs::write(dir.join(VAULT_NAME), b"{}").unwrap();
-        fs::set_permissions(dir.join(VAULT_NAME),
-            fs::Permissions::from_mode(0o600)).unwrap();
+        fs::set_permissions(dir.join(VAULT_NAME), fs::Permissions::from_mode(0o600)).unwrap();
         fs::remove_file(dir.join(AUTH_NAME)).unwrap();
         assert!(admit(&dir, "rust", Some(&selected)).is_err());
         fs::remove_dir_all(dir).unwrap();

@@ -7,7 +7,14 @@ use crate::api;
 use crate::components::{Card, Empty, Heading, Loading, Notice};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum View { Graph, Reasoning, Problems, Reviews, Sources, Practice }
+enum View {
+    Graph,
+    Reasoning,
+    Problems,
+    Reviews,
+    Sources,
+    Practice,
+}
 
 impl View {
     fn label(self) -> &'static str {
@@ -57,12 +64,14 @@ impl Query {
     }
 }
 
-async fn read<T: DeserializeOwned>(
-    csrf: &str, tool: Query, params: Value
-) -> Result<T, String> {
+async fn read<T: DeserializeOwned>(csrf: &str, tool: Query, params: Value) -> Result<T, String> {
     let response: Value = api::write(
-        Method::POST, &tool.route(), csrf, &json!({"arguments":params})
-    ).await?;
+        Method::POST,
+        &tool.route(),
+        csrf,
+        &json!({"arguments":params}),
+    )
+    .await?;
     if response.get("isError").and_then(Value::as_bool) == Some(true) {
         return Err("The Learning service rejected the request.".to_owned());
     }
@@ -70,10 +79,11 @@ async fn read<T: DeserializeOwned>(
         return serde_json::from_value(content.clone())
             .map_err(|_| "Learning returned an unexpected response.".to_owned());
     }
-    let raw = response.pointer("/content/0/text").and_then(Value::as_str)
+    let raw = response
+        .pointer("/content/0/text")
+        .and_then(Value::as_str)
         .ok_or("Learning returned no data.")?;
-    serde_json::from_str(raw)
-        .map_err(|_| "Learning returned invalid JSON.".to_owned())
+    serde_json::from_str(raw).map_err(|_| "Learning returned invalid JSON.".to_owned())
 }
 
 fn records(data: &Value, fields: &[&str]) -> Vec<Value> {
@@ -120,22 +130,28 @@ fn ConceptGraph(csrf: String) -> Element {
     let mut committed = use_signal(String::new);
     let mut concept_id = use_signal(String::new);
     let mut graph = use_resource({
-        let csrf=csrf.clone();
+        let csrf = csrf.clone();
         move || {
-            let token=csrf.clone();
-            let focus=committed();
+            let token = csrf.clone();
+            let focus = committed();
             async move {
-                read::<Value>(&token,Query::Graph,
-                    json!({"focus":focus,"depth":2,"limit":120})).await
+                read::<Value>(
+                    &token,
+                    Query::Graph,
+                    json!({"focus":focus,"depth":2,"limit":120}),
+                )
+                .await
             }
         }
     });
     let mut concept = use_resource(move || {
-        let token=csrf.clone();
-        let id=concept_id();
+        let token = csrf.clone();
+        let id = concept_id();
         async move {
-            if id.is_empty() { return Ok(Value::Null); }
-            read::<Value>(&token,Query::Concept,json!({"identifier":id})).await
+            if id.is_empty() {
+                return Ok(Value::Null);
+            }
+            read::<Value>(&token, Query::Concept, json!({"identifier":id})).await
         }
     });
     rsx! {
@@ -214,37 +230,38 @@ fn ConceptGraph(csrf: String) -> Element {
     }
 }
 
-
 #[component]
 fn ReasoningGraph(csrf: String) -> Element {
     let mut proposition_id = use_signal(String::new);
     let mut chain_id = use_signal(String::new);
     let mut graph = use_resource({
-        let token=csrf.clone();
+        let token = csrf.clone();
         move || {
-            let token=token.clone();
-            async move {
-                read::<Value>(&token,Query::ReasoningGraph,json!({"limit":150})).await
-            }
+            let token = token.clone();
+            async move { read::<Value>(&token, Query::ReasoningGraph, json!({"limit":150})).await }
         }
     });
     let mut proposition = use_resource({
-        let token=csrf.clone();
+        let token = csrf.clone();
         move || {
-            let token=token.clone();
-            let id=proposition_id();
+            let token = token.clone();
+            let id = proposition_id();
             async move {
-                if id.is_empty() {return Ok(Value::Null);}
-                read::<Value>(&token,Query::Proposition,json!({"proposition_id":id})).await
+                if id.is_empty() {
+                    return Ok(Value::Null);
+                }
+                read::<Value>(&token, Query::Proposition, json!({"proposition_id":id})).await
             }
         }
     });
     let mut chain = use_resource(move || {
-        let token=csrf.clone();
-        let id=chain_id();
+        let token = csrf.clone();
+        let id = chain_id();
         async move {
-            if id.is_empty() {return Ok(Value::Null);}
-            read::<Value>(&token,Query::ReasoningChain,json!({"chain_id":id})).await
+            if id.is_empty() {
+                return Ok(Value::Null);
+            }
+            read::<Value>(&token, Query::ReasoningChain, json!({"chain_id":id})).await
         }
     });
     rsx! {
@@ -402,20 +419,22 @@ fn ProblemLibrary(csrf: String) -> Element {
     let mut selected = use_signal(String::new);
     let attachments_csrf = csrf.clone();
     let mut problems = use_resource({
-        let token=csrf.clone();
+        let token = csrf.clone();
         move || {
-            let token=token.clone();
+            let token = token.clone();
             async move {
-                read::<Value>(&token,Query::Problems,json!({"status":"all","limit":100})).await
+                read::<Value>(&token, Query::Problems, json!({"status":"all","limit":100})).await
             }
         }
     });
     let mut problem = use_resource(move || {
-        let token=csrf.clone();
-        let id=selected();
+        let token = csrf.clone();
+        let id = selected();
         async move {
-            if id.is_empty() { return Ok(Value::Null); }
-            read::<Value>(&token,Query::Problem,json!({"problem_id":id})).await
+            if id.is_empty() {
+                return Ok(Value::Null);
+            }
+            read::<Value>(&token, Query::Problem, json!({"problem_id":id})).await
         }
     });
     rsx! {
@@ -506,11 +525,15 @@ fn ProblemLibrary(csrf: String) -> Element {
 
 #[component]
 fn ReviewQueue(csrf: String) -> Element {
-    let mut reviews=use_resource(move || {
-        let token=csrf.clone();
+    let mut reviews = use_resource(move || {
+        let token = csrf.clone();
         async move {
-            read::<Value>(&token,Query::Reviews,
-                json!({"include_upcoming":true,"limit":100})).await
+            read::<Value>(
+                &token,
+                Query::Reviews,
+                json!({"include_upcoming":true,"limit":100}),
+            )
+            .await
         }
     });
     rsx! {
@@ -566,11 +589,9 @@ fn SourceList(csrf: String) -> Element {
     let curriculum_csrf = csrf.clone();
     let mut selected_source = use_signal(String::new);
     let mut selected_curriculum = use_signal(String::new);
-    let mut sources=use_resource(move || {
-        let token=csrf.clone();
-        async move {
-            read::<Value>(&token,Query::Sources,json!({"limit":100})).await
-        }
+    let mut sources = use_resource(move || {
+        let token = csrf.clone();
+        async move { read::<Value>(&token, Query::Sources, json!({"limit":100})).await }
     });
     rsx! {
         Card {
@@ -658,8 +679,11 @@ fn SourceList(csrf: String) -> Element {
 }
 
 fn valid_curriculum_source_id(id: &str) -> bool {
-    !id.is_empty() && id.len() <= 128
-        && id.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+    !id.is_empty()
+        && id.len() <= 128
+        && id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
 }
 
 fn importable_curriculum(plan: &Value) -> Option<&str> {
@@ -667,8 +691,11 @@ fn importable_curriculum(plan: &Value) -> Option<&str> {
         return None;
     }
     let sha = plan.get("sha256").and_then(Value::as_str)?;
-    if sha.len() != 64 || !sha.bytes().all(|byte|
-        byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)) {
+    if sha.len() != 64
+        || !sha
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
         return None;
     }
     Some(sha)
@@ -683,8 +710,13 @@ fn SourceCurriculum(csrf: String, source_id: String, on_imported: EventHandler<(
     let mut error = use_signal(String::new);
 
     let plan = preview().and_then(|value| value.get("curriculum").cloned());
-    let digest = plan.as_ref().and_then(importable_curriculum).map(str::to_owned);
-    let steps = plan.as_ref().map(|value| records(value, &["steps"]))
+    let digest = plan
+        .as_ref()
+        .and_then(importable_curriculum)
+        .map(str::to_owned);
+    let steps = plan
+        .as_ref()
+        .map(|value| records(value, &["steps"]))
         .unwrap_or_default();
 
     rsx! {
@@ -857,22 +889,22 @@ mod curriculum_tests {
 
 #[component]
 fn PracticeHistory(csrf: String) -> Element {
-    let mut selected=use_signal(String::new);
-    let mut sessions=use_resource({
-        let token=csrf.clone();
+    let mut selected = use_signal(String::new);
+    let mut sessions = use_resource({
+        let token = csrf.clone();
         move || {
-            let token=token.clone();
-            async move {
-                read::<Value>(&token,Query::PracticeSessions,json!({"limit":50})).await
-            }
+            let token = token.clone();
+            async move { read::<Value>(&token, Query::PracticeSessions, json!({"limit":50})).await }
         }
     });
-    let mut details=use_resource(move || {
-        let token=csrf.clone();
-        let id=selected();
+    let mut details = use_resource(move || {
+        let token = csrf.clone();
+        let id = selected();
         async move {
-            if id.is_empty() { return Ok(Value::Null); }
-            read::<Value>(&token,Query::PracticeSession,json!({"session_id":id})).await
+            if id.is_empty() {
+                return Ok(Value::Null);
+            }
+            read::<Value>(&token, Query::PracticeSession, json!({"session_id":id})).await
         }
     });
     rsx! {
@@ -952,18 +984,28 @@ mod tests {
 
     #[test]
     fn every_library_query_has_one_exact_browser_route() {
-        for q in [Query::Graph,Query::Concept,Query::Problems,Query::Problem,
-            Query::Reviews,Query::Sources,Query::PracticeSessions,Query::PracticeSession,
-            Query::ReasoningGraph,Query::Proposition,Query::ReasoningChain] {
-            let expected=format!("/v1/learning/app-tools/{}/call",q.name());
-            assert_eq!(q.route(),expected);
+        for q in [
+            Query::Graph,
+            Query::Concept,
+            Query::Problems,
+            Query::Problem,
+            Query::Reviews,
+            Query::Sources,
+            Query::PracticeSessions,
+            Query::PracticeSession,
+            Query::ReasoningGraph,
+            Query::Proposition,
+            Query::ReasoningChain,
+        ] {
+            let expected = format!("/v1/learning/app-tools/{}/call", q.name());
+            assert_eq!(q.route(), expected);
             assert!(!expected.contains(".."));
         }
     }
 
     #[test]
     fn source_content_is_never_mapped_to_untrusted_markup() {
-        let source=json!({"label":"<img src=x onerror=alert(1)>","kind":"text"});
-        assert_eq!(label(&source,&["label"] ), "<img src=x onerror=alert(1)>");
+        let source = json!({"label":"<img src=x onerror=alert(1)>","kind":"text"});
+        assert_eq!(label(&source, &["label"]), "<img src=x onerror=alert(1)>");
     }
 }

@@ -97,7 +97,9 @@ impl Factors {
         let value = mac.finalize().into_bytes();
         let offset = usize::from(value[19] & 0x0f);
         let truncated = u32::from_be_bytes(
-            value[offset..offset + 4].try_into().expect("four-byte truncation"),
+            value[offset..offset + 4]
+                .try_into()
+                .expect("four-byte truncation"),
         ) & 0x7fff_ffff;
         format!("{:06}", truncated % 1_000_000)
     }
@@ -221,7 +223,9 @@ mod tests {
         let old = state.clone();
         let next_code = factors.totp_for(101);
         assert!(matches!(
-            factors.verify(&mut state, PASSPHRASE, &next_code, 3_030, |_| Err(Error::Storage)),
+            factors.verify(&mut state, PASSPHRASE, &next_code, 3_030, |_| Err(
+                Error::Storage
+            )),
             Err(Error::Storage)
         ));
         assert_eq!(state, old);
@@ -263,6 +267,9 @@ mod tests {
             salt: "YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4".into(),
             digest: "l9m+PJ5k/gZlE6OL9Ek9YfJ7L5ajP+9F+d5Z1mp4TXg".into(),
         };
-        assert!(matches!(Factors::new(record, "invalid"), Err(Error::InvalidConfiguration)));
+        assert!(matches!(
+            Factors::new(record, "invalid"),
+            Err(Error::InvalidConfiguration)
+        ));
     }
 }

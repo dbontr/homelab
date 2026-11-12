@@ -18,8 +18,8 @@ use hyper_util::rt::{TokioExecutor, TokioIo};
 use hyper_util::server::conn::auto::Builder;
 use hyper_util::service::TowerToHyperService;
 use serde::{Deserialize, Serialize};
-use serde_json::value::RawValue;
 use serde_json::json;
+use serde_json::value::RawValue;
 use tokio::net::UnixListener;
 use zeroize::Zeroizing;
 
@@ -44,13 +44,20 @@ impl AsRef<[u8]> for ProtectedBody {
 pub struct Shared {
     pub(crate) oauth: Option<crate::oauth::SharedBroker>,
     authority: Arc<Mutex<Authority>>,
-    csrf: Arc<Mutex<BTreeMap<String, (String, Instant)>>>, 
+    csrf: Arc<Mutex<BTreeMap<String, (String, Instant)>>>,
     browser_origin: Option<String>,
 }
 
 impl Shared {
-    pub fn new(authority: Authority, browser_origin: Option<String>, oauth: Option<crate::oauth::SharedBroker>) -> Result<Self, Error> {
-        if browser_origin.as_ref().is_some_and(|origin| !valid_origin(origin)) {
+    pub fn new(
+        authority: Authority,
+        browser_origin: Option<String>,
+        oauth: Option<crate::oauth::SharedBroker>,
+    ) -> Result<Self, Error> {
+        if browser_origin
+            .as_ref()
+            .is_some_and(|origin| !valid_origin(origin))
+        {
             return Err(Error::InvalidConfiguration);
         }
         Ok(Self {
@@ -62,7 +69,10 @@ impl Shared {
     }
 
     pub(crate) fn with_authority<T>(&self, action: impl FnOnce(&mut Authority) -> T) -> T {
-        let mut authority = self.authority.lock().unwrap_or_else(|_| std::process::abort());
+        let mut authority = self
+            .authority
+            .lock()
+            .unwrap_or_else(|_| std::process::abort());
         action(&mut authority)
     }
 
@@ -87,7 +97,9 @@ impl Shared {
         let Ok(mut values) = self.csrf.lock() else {
             return false;
         };
-        values.remove(token).is_some_and(|(owner, expiry)| owner == principal && expiry > Instant::now())
+        values
+            .remove(token)
+            .is_some_and(|(owner, expiry)| owner == principal && expiry > Instant::now())
     }
 }
 
@@ -95,10 +107,16 @@ fn valid_origin(origin: &str) -> bool {
     let Some(host) = origin.strip_prefix("https://") else {
         return false;
     };
-    !host.is_empty() && host.len() < 254
-        && !host.chars().any(|c| matches!(c, '/' | '?' | '#' | '@' | '\\' | ' '))
-        && host.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-'))
-        && !host.starts_with('.') && !host.ends_with('.')
+    !host.is_empty()
+        && host.len() < 254
+        && !host
+            .chars()
+            .any(|c| matches!(c, '/' | '?' | '#' | '@' | '\\' | ' '))
+        && host
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-'))
+        && !host.starts_with('.')
+        && !host.ends_with('.')
         && host.parse::<std::net::IpAddr>().is_err()
         && host != "localhost"
 }
@@ -117,22 +135,34 @@ fn json_reply<T: Serialize>(status: StatusCode, value: T) -> Response {
 }
 
 fn owner_assertion(headers: &HeaderMap) -> Result<&str, Response> {
-    let assertion = headers.get("cf-access-jwt-assertion")
+    let assertion = headers
+        .get("cf-access-jwt-assertion")
         .and_then(|header| header.to_str().ok())
         .filter(|value| !value.is_empty() && value.len() <= (16 << 10));
-    assertion.ok_or_else(|| protected_status("verified owner identity required", StatusCode::FORBIDDEN))
+    assertion
+        .ok_or_else(|| protected_status("verified owner identity required", StatusCode::FORBIDDEN))
 }
 
-pub(crate) fn json_input<T: serde::de::DeserializeOwned>(headers: &HeaderMap, raw: &[u8]) -> Result<T, Response> {
-    if headers.get(header::CONTENT_TYPE).and_then(|value| value.to_str().ok())
-        != Some("application/json") || raw.len() > MAX_JSON_BYTES
+pub(crate) fn json_input<T: serde::de::DeserializeOwned>(
+    headers: &HeaderMap,
+    raw: &[u8],
+) -> Result<T, Response> {
+    if headers
+        .get(header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        != Some("application/json")
+        || raw.len() > MAX_JSON_BYTES
     {
-        return Err(protected_status("invalid JSON request", StatusCode::BAD_REQUEST));
+        return Err(protected_status(
+            "invalid JSON request",
+            StatusCode::BAD_REQUEST,
+        ));
     }
     let mut deserializer = serde_json::Deserializer::from_slice(raw);
     let value = T::deserialize(&mut deserializer)
         .map_err(|_| protected_status("invalid JSON request", StatusCode::BAD_REQUEST))?;
-    deserializer.end()
+    deserializer
+        .end()
         .map_err(|_| protected_status("trailing JSON request", StatusCode::BAD_REQUEST))?;
     Ok(value)
 }
@@ -169,7 +199,10 @@ struct OperationInput {
 }
 
 fn arguments(input: &OperationInput) -> &[u8] {
-    input.arguments.as_ref().map_or(b"{}" as &[u8], |raw| raw.get().as_bytes())
+    input
+        .arguments
+        .as_ref()
+        .map_or(b"{}" as &[u8], |raw| raw.get().as_bytes())
 }
 
 #[derive(Deserialize)]
@@ -182,18 +215,31 @@ struct CredentialRedeemInput {
 }
 
 async fn session_owner_get(State(shared): State<Shared>) -> Response {
-    json_reply(StatusCode::OK, shared.with_authority(Authority::local_status))
+    json_reply(
+        StatusCode::OK,
+        shared.with_authority(Authority::local_status),
+    )
 }
 
-async fn session_owner_post(State(shared): State<Shared>, headers: HeaderMap, raw: Bytes) -> Response {
+async fn session_owner_post(
+    State(shared): State<Shared>,
+    headers: HeaderMap,
+    raw: Bytes,
+) -> Response {
     let Ok(factors) = json_input::<OwnerFactors>(&headers, &raw) else {
         return protected_status("invalid request", StatusCode::BAD_REQUEST);
     };
     let password = Zeroizing::new(factors.password);
     let totp = Zeroizing::new(factors.totp);
     match shared.with_authority(|auth| auth.login(LOCAL_OWNER, &password, &totp)) {
-        Ok(status) => { audit("owner_session_opened"); json_reply(StatusCode::OK, status) },
-        Err(_) => { audit("owner_authentication_denied"); protected_status("authentication denied", StatusCode::UNAUTHORIZED) },
+        Ok(status) => {
+            audit("owner_session_opened");
+            json_reply(StatusCode::OK, status)
+        }
+        Err(_) => {
+            audit("owner_authentication_denied");
+            protected_status("authentication denied", StatusCode::UNAUTHORIZED)
+        }
     }
 }
 
@@ -204,7 +250,10 @@ async fn session_owner_delete(State(shared): State<Shared>) -> Response {
 }
 
 async fn confirmations_owner_get(State(shared): State<Shared>) -> Response {
-    json_reply(StatusCode::OK, shared.with_authority(Authority::local_pending))
+    json_reply(
+        StatusCode::OK,
+        shared.with_authority(Authority::local_pending),
+    )
 }
 
 async fn confirmations_owner_post(
@@ -219,8 +268,14 @@ async fn confirmations_owner_post(
     let password = Zeroizing::new(factors.password);
     let totp = Zeroizing::new(factors.totp);
     match shared.with_authority(|auth| auth.confirm(LOCAL_OWNER, &id, &password, &totp)) {
-        Ok(()) => { audit("owner_confirmation_accepted"); json_reply(StatusCode::OK, json!({"confirmed":true})) },
-        Err(_) => { audit("owner_confirmation_denied"); protected_status("confirmation denied", StatusCode::FORBIDDEN) },
+        Ok(()) => {
+            audit("owner_confirmation_accepted");
+            json_reply(StatusCode::OK, json!({"confirmed":true}))
+        }
+        Err(_) => {
+            audit("owner_confirmation_denied");
+            protected_status("confirmation denied", StatusCode::FORBIDDEN)
+        }
     }
 }
 
@@ -231,18 +286,35 @@ async fn credentials_owner_get(State(shared): State<Shared>) -> Response {
     }
 }
 
-async fn credentials_owner_post(State(shared): State<Shared>, headers: HeaderMap, raw: Bytes) -> Response {
+async fn credentials_owner_post(
+    State(shared): State<Shared>,
+    headers: HeaderMap,
+    raw: Bytes,
+) -> Response {
     let Ok(input) = json_input::<CredentialInput>(&headers, &raw) else {
         return protected_status("invalid credential request", StatusCode::BAD_REQUEST);
     };
     let password = Zeroizing::new(input.password);
     let totp = Zeroizing::new(input.totp);
     let secret = Zeroizing::new(input.secret);
-    let result = shared.with_authority(|auth| auth.store_credential(
-        LOCAL_OWNER, &password, &totp, &input.provider, secret.as_bytes()));
+    let result = shared.with_authority(|auth| {
+        auth.store_credential(
+            LOCAL_OWNER,
+            &password,
+            &totp,
+            &input.provider,
+            secret.as_bytes(),
+        )
+    });
     match result {
-        Ok(handle) => { audit("credential_stored"); json_reply(StatusCode::OK, handle) },
-        Err(_) => { audit("credential_store_denied"); protected_status("credential request denied", StatusCode::FORBIDDEN) },
+        Ok(handle) => {
+            audit("credential_stored");
+            json_reply(StatusCode::OK, handle)
+        }
+        Err(_) => {
+            audit("credential_store_denied");
+            protected_status("credential request denied", StatusCode::FORBIDDEN)
+        }
     }
 }
 
@@ -258,11 +330,25 @@ async fn credentials_owner_put(
     let password = Zeroizing::new(input.password);
     let totp = Zeroizing::new(input.totp);
     let secret = Zeroizing::new(input.secret);
-    let result = shared.with_authority(|auth| auth.rotate_credential(
-        LOCAL_OWNER, &password, &totp, &id, &input.provider, secret.as_bytes()));
+    let result = shared.with_authority(|auth| {
+        auth.rotate_credential(
+            LOCAL_OWNER,
+            &password,
+            &totp,
+            &id,
+            &input.provider,
+            secret.as_bytes(),
+        )
+    });
     match result {
-        Ok(handle) => { audit("credential_rotated"); json_reply(StatusCode::OK, handle) },
-        Err(_) => { audit("credential_rotation_denied"); protected_status("credential rotation denied", StatusCode::FORBIDDEN) },
+        Ok(handle) => {
+            audit("credential_rotated");
+            json_reply(StatusCode::OK, handle)
+        }
+        Err(_) => {
+            audit("credential_rotation_denied");
+            protected_status("credential rotation denied", StatusCode::FORBIDDEN)
+        }
     }
 }
 
@@ -278,8 +364,14 @@ async fn credentials_owner_delete(
     let password = Zeroizing::new(input.password);
     let totp = Zeroizing::new(input.totp);
     match shared.with_authority(|auth| auth.revoke_credential(LOCAL_OWNER, &password, &totp, &id)) {
-        Ok(()) => { audit("credential_revoked"); json_reply(StatusCode::OK, json!({"revoked":true})) },
-        Err(_) => { audit("credential_revocation_denied"); protected_status("credential revocation denied", StatusCode::FORBIDDEN) },
+        Ok(()) => {
+            audit("credential_revoked");
+            json_reply(StatusCode::OK, json!({"revoked":true}))
+        }
+        Err(_) => {
+            audit("credential_revocation_denied");
+            protected_status("credential revocation denied", StatusCode::FORBIDDEN)
+        }
     }
 }
 
@@ -304,7 +396,10 @@ async fn session_client_delete(State(shared): State<Shared>, headers: HeaderMap)
 }
 
 async fn operation_response(
-    shared: Shared, headers: HeaderMap, raw: Bytes, consume: bool,
+    shared: Shared,
+    headers: HeaderMap,
+    raw: Bytes,
+    consume: bool,
     peer: Option<&crate::grants::VerifiedServiceIdentity>,
     replay: bool,
 ) -> Response {
@@ -322,16 +417,19 @@ async fn operation_response(
         } else if consume {
             match peer {
                 Some(peer) => auth.authorize_remote_gateway(
-                    assertion, peer, &input.operation, &input.target, args
+                    assertion,
+                    peer,
+                    &input.operation,
+                    &input.target,
+                    args,
                 ),
-                None => auth.authorize_gateway(
-                    assertion, &input.operation, &input.target, args
-                ).map(AuthorizationWire::from),
+                None => auth
+                    .authorize_gateway(assertion, &input.operation, &input.target, args)
+                    .map(AuthorizationWire::from),
             }
         } else {
-            auth.preview_gateway(
-                assertion, &input.operation, &input.target, args
-            ).map(AuthorizationWire::from)
+            auth.preview_gateway(assertion, &input.operation, &input.target, args)
+                .map(AuthorizationWire::from)
         }
     });
     match result {
@@ -346,21 +444,31 @@ async fn operation_response(
                 });
             }
             json_reply(StatusCode::OK, wire)
-        },
+        }
         Err(_) => protected_status("independent owner identity required", StatusCode::FORBIDDEN),
     }
 }
 
-async fn operation_client_preview(State(shared): State<Shared>, headers: HeaderMap, raw: Bytes) -> Response {
+async fn operation_client_preview(
+    State(shared): State<Shared>,
+    headers: HeaderMap,
+    raw: Bytes,
+) -> Response {
     operation_response(shared, headers, raw, false, None, false).await
 }
 
-async fn operation_client_authorize(State(shared): State<Shared>, headers: HeaderMap, raw: Bytes) -> Response {
+async fn operation_client_authorize(
+    State(shared): State<Shared>,
+    headers: HeaderMap,
+    raw: Bytes,
+) -> Response {
     operation_response(shared, headers, raw, true, None, false).await
 }
 
 async fn operation_client_replay(
-    State(shared): State<Shared>, headers: HeaderMap, raw: Bytes,
+    State(shared): State<Shared>,
+    headers: HeaderMap,
+    raw: Bytes,
 ) -> Response {
     operation_response(shared, headers, raw, false, None, true).await
 }
@@ -368,11 +476,22 @@ async fn operation_client_replay(
 pub fn owner_router(shared: Shared) -> Router {
     let owner = crate::oauth::register_owner_routes(Router::new());
     owner
-        .route("/v1/session", get(session_owner_get).post(session_owner_post).delete(session_owner_delete))
+        .route(
+            "/v1/session",
+            get(session_owner_get)
+                .post(session_owner_post)
+                .delete(session_owner_delete),
+        )
         .route("/v1/confirmations", get(confirmations_owner_get))
         .route("/v1/confirmations/{id}", post(confirmations_owner_post))
-        .route("/v1/credentials", get(credentials_owner_get).post(credentials_owner_post))
-        .route("/v1/credentials/{id}", axum::routing::put(credentials_owner_put).delete(credentials_owner_delete))
+        .route(
+            "/v1/credentials",
+            get(credentials_owner_get).post(credentials_owner_post),
+        )
+        .route(
+            "/v1/credentials/{id}",
+            axum::routing::put(credentials_owner_put).delete(credentials_owner_delete),
+        )
         .layer(DefaultBodyLimit::max(MAX_JSON_BYTES))
         .layer(middleware::from_fn(private_headers))
         .with_state(shared)
@@ -385,7 +504,10 @@ async fn remote_authorize(
     raw: Bytes,
 ) -> Response {
     if !peer.may_authorize {
-        return protected_status("remote operation authorization denied", StatusCode::FORBIDDEN);
+        return protected_status(
+            "remote operation authorization denied",
+            StatusCode::FORBIDDEN,
+        );
     }
     operation_response(shared, headers, raw, true, Some(&peer.identity), false).await
 }
@@ -397,14 +519,19 @@ async fn remote_preview(
     raw: Bytes,
 ) -> Response {
     if !peer.may_authorize {
-        return protected_status("remote operation authorization denied", StatusCode::FORBIDDEN);
+        return protected_status(
+            "remote operation authorization denied",
+            StatusCode::FORBIDDEN,
+        );
     }
     operation_response(shared, headers, raw, false, Some(&peer.identity), false).await
 }
 
 async fn remote_replay(
     axum::Extension(peer): axum::Extension<crate::remote::VerifiedPeer>,
-    State(shared): State<Shared>, headers: HeaderMap, raw: Bytes,
+    State(shared): State<Shared>,
+    headers: HeaderMap,
+    raw: Bytes,
 ) -> Response {
     if !peer.may_authorize {
         return protected_status("remote replay authorization denied", StatusCode::FORBIDDEN);
@@ -425,8 +552,13 @@ async fn remote_service_credential(
     };
     let credential = shared.with_authority(|authority| {
         authority.use_service_credential(
-            &peer.identity, &alias, &input.ticket, &input.operation, &input.target,
-            input.arguments.get().as_bytes(), |secret| Zeroizing::new(secret.to_vec())
+            &peer.identity,
+            &alias,
+            &input.ticket,
+            &input.operation,
+            &input.target,
+            input.arguments.get().as_bytes(),
+            |secret| Zeroizing::new(secret.to_vec()),
         )
     });
     let Ok(bytes) = credential else {
@@ -438,9 +570,11 @@ async fn remote_service_credential(
         return protected_status("service credential unavailable", StatusCode::FORBIDDEN);
     }
     audit("credential_redemption_allowed");
-    let mut response = axum::body::Body::from(Bytes::from_owner(ProtectedBody(bytes))).into_response();
+    let mut response =
+        axum::body::Body::from(Bytes::from_owner(ProtectedBody(bytes))).into_response();
     response.headers_mut().insert(
-        header::CONTENT_TYPE, HeaderValue::from_static("application/octet-stream")
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("application/octet-stream"),
     );
     response
 }
@@ -451,7 +585,10 @@ pub fn remote_router(shared: Shared) -> Router {
         .route("/v1/authorize", post(remote_authorize))
         .route("/v1/preview", post(remote_preview))
         .route("/v1/replay", post(remote_replay))
-        .route("/v1/service-credentials/{alias}", post(remote_service_credential))
+        .route(
+            "/v1/service-credentials/{alias}",
+            post(remote_service_credential),
+        )
         .layer(DefaultBodyLimit::max(MAX_JSON_BYTES))
         .layer(middleware::from_fn(private_headers))
         .with_state(shared)
@@ -459,7 +596,10 @@ pub fn remote_router(shared: Shared) -> Router {
 
 pub fn client_router(shared: Shared) -> Router {
     Router::new()
-        .route("/v1/session", get(session_client_get).delete(session_client_delete))
+        .route(
+            "/v1/session",
+            get(session_client_get).delete(session_client_delete),
+        )
         .route("/v1/preview", post(operation_client_preview))
         .route("/v1/replay", post(operation_client_replay))
         .route("/v1/authorize", post(operation_client_authorize))
@@ -473,7 +613,10 @@ async fn private_headers(request: axum::extract::Request, next: Next) -> Respons
     let headers = response.headers_mut();
     headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
     headers.insert(header::PRAGMA, HeaderValue::from_static("no-cache"));
-    headers.insert("x-content-type-options", HeaderValue::from_static("nosniff"));
+    headers.insert(
+        "x-content-type-options",
+        HeaderValue::from_static("nosniff"),
+    );
     headers.insert("referrer-policy", HeaderValue::from_static("no-referrer"));
     headers.insert("x-frame-options", HeaderValue::from_static("DENY"));
     response
@@ -499,9 +642,14 @@ pub async fn serve_unix(
     if !socket.is_absolute() || !matches!(mode, 0o600 | 0o660) {
         return Err("invalid private security socket configuration".into());
     }
-    let parent = socket.parent().ok_or("missing security runtime directory")?;
+    let parent = socket
+        .parent()
+        .ok_or("missing security runtime directory")?;
     let metadata = fs::symlink_metadata(parent)?;
-    if !metadata.is_dir() || metadata.file_type().is_symlink() || metadata.permissions().mode() & 0o007 != 0 {
+    if !metadata.is_dir()
+        || metadata.file_type().is_symlink()
+        || metadata.permissions().mode() & 0o007 != 0
+    {
         return Err("security runtime directory is accessible by other users".into());
     }
     if fs::symlink_metadata(socket).is_ok() {
@@ -524,8 +672,11 @@ pub async fn serve_unix(
             let io = TokioIo::new(stream);
             let service = TowerToHyperService::new(router);
             let builder = Builder::new(TokioExecutor::new());
-            let served = tokio::time::timeout(Duration::from_secs(35),
-                builder.serve_connection(io, service)).await;
+            let served = tokio::time::timeout(
+                Duration::from_secs(35),
+                builder.serve_connection(io, service),
+            )
+            .await;
             if let Ok(Err(error)) = served {
                 eprintln!("security request failed: {error}");
             }
@@ -535,26 +686,41 @@ pub async fn serve_unix(
 
 // Browser routes are deliberately separate from the owner and gateway sockets.
 fn escape_html(value: &str) -> String {
-    value.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
-        .replace('"', "&quot;").replace('\'', "&#39;")
+    value
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&#39;")
 }
 
-fn checked_browser_assertion<'a>(shared: &Shared, headers: &'a HeaderMap) -> Result<&'a str, Response> {
+fn checked_browser_assertion<'a>(
+    shared: &Shared,
+    headers: &'a HeaderMap,
+) -> Result<&'a str, Response> {
     let Some(origin) = &shared.browser_origin else {
-        return Err(protected_status("owner browser unavailable", StatusCode::FORBIDDEN));
+        return Err(protected_status(
+            "owner browser unavailable",
+            StatusCode::FORBIDDEN,
+        ));
     };
     if headers.get(header::HOST).and_then(|v| v.to_str().ok()) != origin.strip_prefix("https://") {
-        return Err(protected_status("wrong owner host", StatusCode::MISDIRECTED_REQUEST));
+        return Err(protected_status(
+            "wrong owner host",
+            StatusCode::MISDIRECTED_REQUEST,
+        ));
     }
     owner_assertion(headers)
 }
 
 fn browser_page(shared: &Shared, assertion: &str, message: &str) -> Response {
-    let (principal, session, pending) = shared.with_authority(|auth| (
-        auth.browser_principal(assertion),
-        auth.browser_status(assertion),
-        auth.browser_pending(assertion),
-    ));
+    let (principal, session, pending) = shared.with_authority(|auth| {
+        (
+            auth.browser_principal(assertion),
+            auth.browser_status(assertion),
+            auth.browser_pending(assertion),
+        )
+    });
     let Ok(principal) = principal else {
         return protected_status("verified owner identity required", StatusCode::FORBIDDEN);
     };
@@ -621,9 +787,13 @@ async fn browser_form(
         return protected_status("owner browser unavailable", StatusCode::FORBIDDEN);
     };
     if headers.get(header::ORIGIN).and_then(|h| h.to_str().ok()) != Some(origin)
-        || headers.get("sec-fetch-site").and_then(|h| h.to_str().ok())
+        || headers
+            .get("sec-fetch-site")
+            .and_then(|h| h.to_str().ok())
             .is_some_and(|v| v != "same-origin")
-        || headers.get(header::CONTENT_TYPE).and_then(|h| h.to_str().ok())
+        || headers
+            .get(header::CONTENT_TYPE)
+            .and_then(|h| h.to_str().ok())
             != Some("application/x-www-form-urlencoded")
         || raw.len() > 4096
     {
@@ -644,13 +814,21 @@ async fn browser_form(
     let result = shared.with_authority(|auth| match action {
         "login" => auth.login_browser(assertion, &password, otp).map(|_| ()),
         "close" => auth.browser_revoke(assertion).and_then(|closed| {
-            if closed { Ok(()) } else { Err(Error::Unauthorized) }
+            if closed {
+                Ok(())
+            } else {
+                Err(Error::Unauthorized)
+            }
         }),
         "confirm" => auth.browser_confirm(assertion, confirmation_id.unwrap_or(""), &password, otp),
         _ => Err(Error::Unauthorized),
     });
     if result.is_err() {
-        return browser_page(&shared, assertion, "Owner authentication or confirmation denied");
+        return browser_page(
+            &shared,
+            assertion,
+            "Owner authentication or confirmation denied",
+        );
     }
     Redirect::to("/").into_response()
 }
@@ -664,7 +842,8 @@ async fn browser_close(State(shared): State<Shared>, headers: HeaderMap, raw: By
 async fn browser_confirm(
     State(shared): State<Shared>,
     RoutePath(id): RoutePath<String>,
-    headers: HeaderMap, raw: Bytes,
+    headers: HeaderMap,
+    raw: Bytes,
 ) -> Response {
     if id.len() != 48 || !id.bytes().all(|b| b.is_ascii_hexdigit()) {
         return protected_status("invalid confirmation", StatusCode::NOT_FOUND);
@@ -690,28 +869,37 @@ mod tests {
     #[test]
     fn owner_browser_rejects_untrusted_origins() {
         assert!(valid_origin("https://auth.example.invalid"));
-        for value in ["http://auth.example.invalid", "https://127.0.0.1",
-            "https://localhost", "https://evil.invalid/escape", "https://bad@evil.invalid"] {
-            assert!(!valid_origin(value), "unsafe browser origin accepted: {value}");
+        for value in [
+            "http://auth.example.invalid",
+            "https://127.0.0.1",
+            "https://localhost",
+            "https://evil.invalid/escape",
+            "https://bad@evil.invalid",
+        ] {
+            assert!(
+                !valid_origin(value),
+                "unsafe browser origin accepted: {value}"
+            );
         }
     }
 
     #[tokio::test]
     async fn socket_routers_do_not_cross_privilege_boundaries() {
+        use crate::credentials::PassphraseRecord;
+        use crate::sessions::OperationPolicy;
         use axum::body::Body;
         use axum::http::Request;
         use tower::ServiceExt;
-        use crate::credentials::PassphraseRecord;
-        use crate::sessions::OperationPolicy;
 
         let mut id = [0u8; 16];
         getrandom::fill(&mut id).unwrap();
-        let dir = std::env::temp_dir()
-            .join(format!("transport-boundary-test-{}", hex::encode(id)));
+        let dir = std::env::temp_dir().join(format!("transport-boundary-test-{}", hex::encode(id)));
         fs::create_dir(&dir).unwrap();
         fs::set_permissions(&dir, fs::Permissions::from_mode(0o700)).unwrap();
         let authority = Authority::open(
-            &dir, "operator".into(), "platform-gateway".into(),
+            &dir,
+            "operator".into(),
+            "platform-gateway".into(),
             PassphraseRecord {
                 version: 1,
                 iterations: 310_000,
@@ -724,7 +912,8 @@ mod tests {
                 targets: vec!["jupiter".into()],
                 destructive: false,
             }],
-        ).unwrap();
+        )
+        .unwrap();
         let shared = Shared::new(authority, None, None).unwrap();
         let csrf = shared.new_csrf("verified-principal").unwrap();
         assert!(!shared.take_csrf("another-principal", &csrf));
@@ -736,35 +925,63 @@ mod tests {
         let gateway = client_router(shared.clone());
         let remote = remote_router(shared);
 
-        let request = Request::builder().uri("/v1/session")
-            .body(Body::empty()).unwrap();
-        assert_eq!(owner.oneshot(request).await.unwrap().status(), StatusCode::OK);
-
-        let request = Request::builder().uri("/v1/session")
-            .body(Body::empty()).unwrap();
-        assert_eq!(gateway.clone().oneshot(request).await.unwrap().status(), StatusCode::FORBIDDEN);
-
-        let request = Request::builder().uri("/v1/authorize")
-            .method("POST")
-            .header("content-type","application/json")
-            .header("cf-access-jwt-assertion","untrusted")
-            .body(Body::from(r#"{"operation":"workspace__status","target":"jupiter","arguments":{}}"#))
+        let request = Request::builder()
+            .uri("/v1/session")
+            .body(Body::empty())
             .unwrap();
-        assert_eq!(gateway.clone().oneshot(request).await.unwrap().status(), StatusCode::FORBIDDEN);
+        assert_eq!(
+            owner.oneshot(request).await.unwrap().status(),
+            StatusCode::OK
+        );
+
+        let request = Request::builder()
+            .uri("/v1/session")
+            .body(Body::empty())
+            .unwrap();
+        assert_eq!(
+            gateway.clone().oneshot(request).await.unwrap().status(),
+            StatusCode::FORBIDDEN
+        );
+
+        let request = Request::builder()
+            .uri("/v1/authorize")
+            .method("POST")
+            .header("content-type", "application/json")
+            .header("cf-access-jwt-assertion", "untrusted")
+            .body(Body::from(
+                r#"{"operation":"workspace__status","target":"jupiter","arguments":{}}"#,
+            ))
+            .unwrap();
+        assert_eq!(
+            gateway.clone().oneshot(request).await.unwrap().status(),
+            StatusCode::FORBIDDEN
+        );
 
         for path in ["/v1/credentials", "/v1/oauth/providers"] {
-            let request = Request::builder().uri(path)
-                .body(Body::empty()).unwrap();
-            assert_eq!(gateway.clone().oneshot(request).await.unwrap().status(), StatusCode::NOT_FOUND);
+            let request = Request::builder().uri(path).body(Body::empty()).unwrap();
+            assert_eq!(
+                gateway.clone().oneshot(request).await.unwrap().status(),
+                StatusCode::NOT_FOUND
+            );
         }
 
-        let request = Request::builder().uri("/v1/session")
-            .body(Body::empty()).unwrap();
-        assert_eq!(remote.clone().oneshot(request).await.unwrap().status(), StatusCode::NOT_FOUND);
+        let request = Request::builder()
+            .uri("/v1/session")
+            .body(Body::empty())
+            .unwrap();
+        assert_eq!(
+            remote.clone().oneshot(request).await.unwrap().status(),
+            StatusCode::NOT_FOUND
+        );
 
-        let request = Request::builder().uri("/v1/credentials")
-            .body(Body::empty()).unwrap();
-        assert_eq!(remote.oneshot(request).await.unwrap().status(), StatusCode::NOT_FOUND);
+        let request = Request::builder()
+            .uri("/v1/credentials")
+            .body(Body::empty())
+            .unwrap();
+        assert_eq!(
+            remote.oneshot(request).await.unwrap().status(),
+            StatusCode::NOT_FOUND
+        );
 
         fs::remove_dir_all(dir).unwrap();
     }

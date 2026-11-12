@@ -37,11 +37,20 @@ fn validate(list: &GroceryList) -> Result<(), String> {
     }
     let mut ids = BTreeSet::new();
     for item in &list.items {
-        if item.id.is_empty() || item.id.len() > 128 || !ids.insert(&item.id) ||
-            item.name.trim().is_empty() || item.name.len() > 200 ||
-            item.unit.trim().is_empty() || !item.quantity.is_finite() ||
-            item.quantity <= 0.0 || item.quantity > 1_000_000.0 {
-            return Err("Every item requires a unique ID, a name, a positive quantity, and a unit.".to_owned());
+        if item.id.is_empty()
+            || item.id.len() > 128
+            || !ids.insert(&item.id)
+            || item.name.trim().is_empty()
+            || item.name.len() > 200
+            || item.unit.trim().is_empty()
+            || !item.quantity.is_finite()
+            || item.quantity <= 0.0
+            || item.quantity > 1_000_000.0
+        {
+            return Err(
+                "Every item requires a unique ID, a name, a positive quantity, and a unit."
+                    .to_owned(),
+            );
         }
     }
     Ok(())
@@ -58,7 +67,10 @@ fn add_item(list: &mut GroceryList) {
         suffix += 1;
     };
     list.items.push(GroceryItem {
-        id, quantity: 1.0, unit: "each".to_owned(), ..GroceryItem::default()
+        id,
+        quantity: 1.0,
+        unit: "each".to_owned(),
+        ..GroceryItem::default()
     });
 }
 
@@ -67,15 +79,11 @@ pub fn HealthGroceries(csrf: String) -> Element {
     let csrf = use_signal(|| csrf);
     let mut lists = use_resource(move || {
         let token = csrf();
-        async move {
-            health_tools::call::<Vec<GroceryList>>(&token, Tool::GroceryList, json!({})).await
-        }
+        async move { health_tools::call::<Vec<GroceryList>>(&token, Tool::GroceryList, json!({})).await }
     });
     let mut meal_plans = use_resource(move || {
         let token = csrf();
-        async move {
-            health_tools::call::<Vec<Value>>(&token, Tool::PlanList, json!({})).await
-        }
+        async move { health_tools::call::<Vec<Value>>(&token, Tool::PlanList, json!({})).await }
     });
     let mut selected_plan = use_signal(String::new);
     let mut draft = use_signal(|| None::<GroceryList>);
@@ -383,8 +391,11 @@ mod tests {
         let mut list = GroceryList {
             title: "Weekly groceries".to_owned(),
             items: vec![GroceryItem {
-                id: "item-1".to_owned(), name: "Oats".to_owned(),
-                quantity: 1.5, unit: "kg".to_owned(), ..GroceryItem::default()
+                id: "item-1".to_owned(),
+                name: "Oats".to_owned(),
+                quantity: 1.5,
+                unit: "kg".to_owned(),
+                ..GroceryItem::default()
             }],
             ..GroceryList::default()
         };
@@ -401,7 +412,8 @@ mod tests {
         let item: GroceryItem = serde_json::from_value(json!({
             "id":"item-1", "name":"Oats", "quantity":1.0, "unit":"kg",
             "checked":true, "recipe_id":"recipe-1", "source_note":"manual"
-        })).unwrap();
+        }))
+        .unwrap();
         let encoded = serde_json::to_value(item).unwrap();
         assert_eq!(encoded["source_note"], "manual");
         assert_eq!(encoded["recipe_id"], "recipe-1");

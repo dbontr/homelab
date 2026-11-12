@@ -1,7 +1,7 @@
 mod conditioning;
 mod focus;
 pub use conditioning::{Checkin, CheckinInput, EngagementSummary};
-pub use focus::{FocusSession, FocusStatus, FocusStart, FocusFinish};
+pub use focus::{FocusFinish, FocusSession, FocusStart, FocusStatus};
 
 use fs2::FileExt;
 use serde::{Deserialize, Serialize};
@@ -15,7 +15,9 @@ const MAX_EVENTS: usize = 256;
 const MAX_BYTES: u64 = 2 * 1024 * 1024;
 const COOLDOWN_SECONDS: u64 = 25 * 60;
 const MAX_CHECKINS: usize = 512;
-pub(crate) fn default_cadence() -> u16 { 240 }
+pub(crate) fn default_cadence() -> u16 {
+    240
+}
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -209,7 +211,9 @@ impl std::fmt::Display for Error {
 
 impl std::error::Error for Error {}
 impl From<std::io::Error> for Error {
-    fn from(value: std::io::Error) -> Self { Self::Io(value) }
+    fn from(value: std::io::Error) -> Self {
+        Self::Io(value)
+    }
 }
 
 pub fn unix_seconds() -> u64 {
@@ -233,30 +237,47 @@ impl Engine {
         }
         // systemd DynamicUser state directories may use root-managed symlinks.
         // Resolve the directory before constructing the lock and data paths.
-        let parent = requested.parent().ok_or(Error::Invalid("state directory required"))?;
+        let parent = requested
+            .parent()
+            .ok_or(Error::Invalid("state directory required"))?;
         let dir = fs::canonicalize(parent)?;
-        if !dir.is_dir() { return Err(Error::Invalid("state directory is invalid")); }
-        let name = requested.file_name().ok_or(Error::Invalid("state filename required"))?;
+        if !dir.is_dir() {
+            return Err(Error::Invalid("state directory is invalid"));
+        }
+        let name = requested
+            .file_name()
+            .ok_or(Error::Invalid("state filename required"))?;
         let path = dir.join(name);
         if let Ok(meta) = fs::symlink_metadata(&path) {
-            if !meta.is_file() || meta.file_type().is_symlink() ||
-                meta.permissions().mode() & 0o077 != 0 {
+            if !meta.is_file()
+                || meta.file_type().is_symlink()
+                || meta.permissions().mode() & 0o077 != 0
+            {
                 return Err(Error::Invalid("state file must be a private regular file"));
             }
         }
         let lock_path = path.with_extension("lock");
         if let Ok(meta) = fs::symlink_metadata(&lock_path) {
-            if !meta.is_file() || meta.file_type().is_symlink() ||
-                meta.permissions().mode() & 0o077 != 0 {
+            if !meta.is_file()
+                || meta.file_type().is_symlink()
+                || meta.permissions().mode() & 0o077 != 0
+            {
                 return Err(Error::Invalid("lock file must be a private regular file"));
             }
         }
         let lock = OpenOptions::new()
-            .read(true).write(true).create(true).mode(0o600)
-            .custom_flags(libc::O_NOFOLLOW).open(lock_path)?;
+            .read(true)
+            .write(true)
+            .create(true)
+            .mode(0o600)
+            .custom_flags(libc::O_NOFOLLOW)
+            .open(lock_path)?;
         lock.try_lock_exclusive()?;
         let state = match OpenOptions::new()
-            .read(true).custom_flags(libc::O_NOFOLLOW).open(&path) {
+            .read(true)
+            .custom_flags(libc::O_NOFOLLOW)
+            .open(&path)
+        {
             Ok(mut file) => {
                 if file.metadata()?.len() > MAX_BYTES {
                     return Err(Error::Invalid("state file exceeds the size limit"));
@@ -270,10 +291,16 @@ impl Engine {
             Err(e) => return Err(e.into()),
         };
         validate_record(&state)?;
-        Ok(Self { path: path.to_owned(), state, _lock: lock })
+        Ok(Self {
+            path: path.to_owned(),
+            state,
+            _lock: lock,
+        })
     }
 
-    pub fn snapshot(&self) -> Record { self.state.clone() }
+    pub fn snapshot(&self) -> Record {
+        self.state.clone()
+    }
 
     fn commit(&mut self, state: Record) -> Result<Record, Error> {
         validate_record(&state)?;
@@ -282,16 +309,25 @@ impl Engine {
         if data.len() as u64 > MAX_BYTES {
             return Err(Error::Invalid("state capacity exceeded"));
         }
-        let parent = self.path.parent().ok_or(Error::Invalid("state directory required"))?;
+        let parent = self
+            .path
+            .parent()
+            .ok_or(Error::Invalid("state directory required"))?;
         let temp = parent.join(format!(
             ".motivation-{}-{}.tmp",
             std::process::id(),
-            SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_nanos()
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos()
         ));
         let result = (|| -> Result<(), Error> {
             let mut file = OpenOptions::new()
-                .write(true).create_new(true).mode(0o600)
-                .custom_flags(libc::O_NOFOLLOW).open(&temp)?;
+                .write(true)
+                .create_new(true)
+                .mode(0o600)
+                .custom_flags(libc::O_NOFOLLOW)
+                .open(&temp)?;
             file.write_all(&data)?;
             file.sync_all()?;
             fs::rename(&temp, &self.path)?;
@@ -311,7 +347,11 @@ impl Engine {
             return Err(Error::Conflict("profile revision conflict"));
         }
         let profile = Profile {
-            revision: self.state.profile.revision.checked_add(1)
+            revision: self
+                .state
+                .profile
+                .revision
+                .checked_add(1)
                 .ok_or(Error::Invalid("profile revision exhausted"))?,
             enabled: change.enabled,
             proactive_enabled: change.proactive_enabled,
@@ -328,13 +368,17 @@ impl Engine {
         };
         validate_profile(&profile)?;
         let mut next = self.state.clone();
-        let changed_goal = next.profile.identity != profile.identity ||
-            next.profile.outcome != profile.outcome ||
-            next.profile.next_step != profile.next_step;
+        let changed_goal = next.profile.identity != profile.identity
+            || next.profile.outcome != profile.outcome
+            || next.profile.next_step != profile.next_step;
         next.profile = profile;
-        if changed_goal { focus::supersede_active(&mut next.focus_sessions, unix_seconds()); }
+        if changed_goal {
+            focus::supersede_active(&mut next.focus_sessions, unix_seconds());
+        }
         for event in &mut next.interventions {
-            if event.feedback.is_none() { event.cancelled = true; }
+            if event.feedback.is_none() {
+                event.cancelled = true;
+            }
         }
         self.commit(next)
     }
@@ -344,9 +388,14 @@ impl Engine {
         next.profile.enabled = false;
         next.profile.proactive_enabled = false;
         for event in &mut next.interventions {
-            if event.feedback.is_none() { event.cancelled = true; }
+            if event.feedback.is_none() {
+                event.cancelled = true;
+            }
         }
-        next.profile.revision = next.profile.revision.checked_add(1)
+        next.profile.revision = next
+            .profile
+            .revision
+            .checked_add(1)
             .ok_or(Error::Invalid("profile revision exhausted"))?;
         self.commit(next)
     }
@@ -355,10 +404,13 @@ impl Engine {
         self.suggest_with_context(SuggestRequest::default(), now)
     }
 
-    pub fn suggest_with_context(&mut self, request: SuggestRequest, now: u64)
-        -> Result<Intervention, Error> {
-        if request.question.chars().count() > 320 ||
-            request.question.chars().any(char::is_control) {
+    pub fn suggest_with_context(
+        &mut self,
+        request: SuggestRequest,
+        now: u64,
+    ) -> Result<Intervention, Error> {
+        if request.question.chars().count() > 320 || request.question.chars().any(char::is_control)
+        {
             return Err(Error::Invalid("invalid research question"));
         }
         let p = &self.state.profile;
@@ -368,8 +420,13 @@ impl Engine {
         if p.holdout_weekday_utc == Some(((now / 86400 + 4) % 7) as u8) {
             return Err(Error::Limited("intervention-free day is active"));
         }
-        if let Some(pending) = self.state.interventions.iter().rev()
-            .find(|event| event.feedback.is_none() && !event.cancelled) {
+        if let Some(pending) = self
+            .state
+            .interventions
+            .iter()
+            .rev()
+            .find(|event| event.feedback.is_none() && !event.cancelled)
+        {
             return Ok(pending.clone());
         }
         let hour = (now / 3600 % 24) as u8;
@@ -377,21 +434,38 @@ impl Engine {
             hour >= p.quiet_start_utc_hour && hour < p.quiet_end_utc_hour
         } else if p.quiet_start_utc_hour > p.quiet_end_utc_hour {
             hour >= p.quiet_start_utc_hour || hour < p.quiet_end_utc_hour
-        } else { false };
+        } else {
+            false
+        };
         if quiet {
-            return Err(Error::Limited("interventions are disabled during quiet hours"));
+            return Err(Error::Limited(
+                "interventions are disabled during quiet hours",
+            ));
         }
         let today = now / 86400;
-        if self.state.interventions.iter()
-            .filter(|event| event.created_at / 86400 == today).count() >= p.daily_limit as usize {
+        if self
+            .state
+            .interventions
+            .iter()
+            .filter(|event| event.created_at / 86400 == today)
+            .count()
+            >= p.daily_limit as usize
+        {
             return Err(Error::Limited("daily intervention limit reached"));
         }
-        if self.state.interventions.last()
-            .is_some_and(|last| now.saturating_sub(last.created_at) < COOLDOWN_SECONDS) {
+        if self
+            .state
+            .interventions
+            .last()
+            .is_some_and(|last| now.saturating_sub(last.created_at) < COOLDOWN_SECONDS)
+        {
             return Err(Error::Limited("intervention cooldown is active"));
         }
         let strategy = select_strategy(&self.state.interventions, request.trigger);
-        let next_id = self.state.next_id.checked_add(1)
+        let next_id = self
+            .state
+            .next_id
+            .checked_add(1)
             .ok_or(Error::Invalid("intervention identity exhausted"))?;
         let event = Intervention {
             id: self.state.next_id,
@@ -413,12 +487,19 @@ impl Engine {
     }
 
     pub fn record_feedback(&mut self, input: FeedbackInput, now: u64) -> Result<Record, Error> {
-        if input.engagement > 5 || input.progress > 5 || input.wellbeing > 5 ||
-            input.notes.chars().count() > 400 {
-            return Err(Error::Invalid("feedback values are outside accepted bounds"));
+        if input.engagement > 5
+            || input.progress > 5
+            || input.wellbeing > 5
+            || input.notes.chars().count() > 400
+        {
+            return Err(Error::Invalid(
+                "feedback values are outside accepted bounds",
+            ));
         }
         let mut next = self.state.clone();
-        let event = next.interventions.iter_mut()
+        let event = next
+            .interventions
+            .iter_mut()
             .find(|event| event.id == input.intervention_id)
             .ok_or(Error::Invalid("intervention not found"))?;
         if event.cancelled || event.feedback.is_some() {
@@ -434,7 +515,10 @@ impl Engine {
         if input.wellbeing <= 1 {
             next.profile.enabled = false;
             next.profile.proactive_enabled = false;
-            next.profile.revision = next.profile.revision.checked_add(1)
+            next.profile.revision = next
+                .profile
+                .revision
+                .checked_add(1)
                 .ok_or(Error::Invalid("profile revision exhausted"))?;
         }
         self.commit(next)
@@ -442,48 +526,79 @@ impl Engine {
 }
 
 fn validate_profile(p: &Profile) -> Result<(), Error> {
-    if p.identity.chars().count() > 240 || p.outcome.chars().count() > 400 ||
-        p.next_step.chars().count() > 320 || p.goal_id.len() > 128 {
+    if p.identity.chars().count() > 240
+        || p.outcome.chars().count() > 400
+        || p.next_step.chars().count() > 320
+        || p.goal_id.len() > 128
+    {
         return Err(Error::Invalid("profile text exceeds accepted limits"));
     }
-    if p.goal_id.chars().any(|c| !c.is_ascii_alphanumeric() && c != '-' && c != '_') {
+    if p.goal_id
+        .chars()
+        .any(|c| !c.is_ascii_alphanumeric() && c != '-' && c != '_')
+    {
         return Err(Error::Invalid("invalid goal reference"));
     }
-    if p.daily_limit == 0 || p.daily_limit > 8 ||
-        p.cadence_minutes < 60 || p.cadence_minutes > 1440 ||
-        p.holdout_weekday_utc.is_some_and(|day| day > 6) ||
-        p.quiet_start_utc_hour > 23 || p.quiet_end_utc_hour > 23 {
+    if p.daily_limit == 0
+        || p.daily_limit > 8
+        || p.cadence_minutes < 60
+        || p.cadence_minutes > 1440
+        || p.holdout_weekday_utc.is_some_and(|day| day > 6)
+        || p.quiet_start_utc_hour > 23
+        || p.quiet_end_utc_hour > 23
+    {
         return Err(Error::Invalid("invalid intervention limits"));
     }
     if p.enabled && (p.identity.is_empty() || p.outcome.is_empty() || p.next_step.is_empty()) {
-        return Err(Error::Invalid("identity, outcome and next step are required before enabling"));
+        return Err(Error::Invalid(
+            "identity, outcome and next step are required before enabling",
+        ));
     }
     Ok(())
 }
 
 fn validate_record(record: &Record) -> Result<(), Error> {
     validate_profile(&record.profile)?;
-    if record.interventions.len() > MAX_EVENTS || record.next_id == 0 ||
-        record.checkins.len() > MAX_CHECKINS ||
-        !conditioning::valid_checkins(&record.checkins, record.next_id) ||
-        !focus::valid_sessions(&record.focus_sessions, record.next_focus_id) ||
-        record.interventions.iter().any(|e| e.id >= record.next_id ||
-            e.message.chars().count() > 1600 ||
-            e.feedback.as_ref().is_some_and(|f| f.engagement > 5 ||
-                f.progress > 5 || f.wellbeing > 5 || f.notes.chars().count() > 400)) {
+    if record.interventions.len() > MAX_EVENTS
+        || record.next_id == 0
+        || record.checkins.len() > MAX_CHECKINS
+        || !conditioning::valid_checkins(&record.checkins, record.next_id)
+        || !focus::valid_sessions(&record.focus_sessions, record.next_focus_id)
+        || record.interventions.iter().any(|e| {
+            e.id >= record.next_id
+                || e.message.chars().count() > 1600
+                || e.feedback.as_ref().is_some_and(|f| {
+                    f.engagement > 5
+                        || f.progress > 5
+                        || f.wellbeing > 5
+                        || f.notes.chars().count() > 400
+                })
+        })
+    {
         return Err(Error::Invalid("stored intervention history is invalid"));
     }
-    if record.interventions.windows(2).any(|w| w[0].id >= w[1].id) ||
-        record.interventions.iter().filter(|e| e.feedback.is_none() && !e.cancelled).count() > 1 ||
-        record.interventions.iter().any(|e| e.cancelled && e.feedback.is_some()) {
+    if record.interventions.windows(2).any(|w| w[0].id >= w[1].id)
+        || record
+            .interventions
+            .iter()
+            .filter(|e| e.feedback.is_none() && !e.cancelled)
+            .count()
+            > 1
+        || record
+            .interventions
+            .iter()
+            .any(|e| e.cancelled && e.feedback.is_some())
+    {
         return Err(Error::Invalid("stored intervention sequence is invalid"));
     }
     Ok(())
 }
 
 fn select_strategy(events: &[Intervention], trigger: Trigger) -> Strategy {
-    let completed: Vec<&Intervention> = events.iter()
-        .filter(|e| e.feedback.is_some() && e.trigger == trigger).collect();
+    let completed: Vec<&Intervention> = events
+        .iter()
+        .filter(|e| e.feedback.is_some() && e.trigger == trigger)
+        .collect();
     let total = completed.len();
     let preferred = match trigger {
         Trigger::SessionStart => Strategy::Outcome,
@@ -493,19 +608,31 @@ fn select_strategy(events: &[Intervention], trigger: Trigger) -> Strategy {
         Trigger::Milestone => Strategy::Reflection,
     };
     let order = std::iter::once(preferred).chain(
-        STRATEGIES.into_iter().filter(|strategy| *strategy != preferred)
+        STRATEGIES
+            .into_iter()
+            .filter(|strategy| *strategy != preferred),
     );
     let mut best = preferred;
     let mut best_value = f64::NEG_INFINITY;
     for strategy in order {
-        let matches: Vec<_> = completed.iter().filter(|e| e.strategy == strategy).collect();
-        if matches.is_empty() { return strategy; }
-        let average = matches.iter().map(|event| {
-            let feedback = event.feedback.as_ref().expect("completed intervention");
-            (feedback.progress as f64 * 0.50 +
-             feedback.engagement as f64 * 0.25 +
-             feedback.wellbeing as f64 * 0.25) / 5.0
-        }).sum::<f64>() / matches.len() as f64;
+        let matches: Vec<_> = completed
+            .iter()
+            .filter(|e| e.strategy == strategy)
+            .collect();
+        if matches.is_empty() {
+            return strategy;
+        }
+        let average = matches
+            .iter()
+            .map(|event| {
+                let feedback = event.feedback.as_ref().expect("completed intervention");
+                (feedback.progress as f64 * 0.50
+                    + feedback.engagement as f64 * 0.25
+                    + feedback.wellbeing as f64 * 0.25)
+                    / 5.0
+            })
+            .sum::<f64>()
+            / matches.len() as f64;
         let exploration = (2.0 * (total as f64).ln() / matches.len() as f64).sqrt();
         let value = average + exploration;
         if value > best_value {
@@ -547,10 +674,16 @@ fn format_message(p: &Profile, strategy: Strategy, question: &str) -> String {
             p.identity, p.next_step
         ),
     };
-    let focus = if question.trim().is_empty() { String::new() }
-        else { format!(" Your research question is: {}.", question.trim()) };
+    let focus = if question.trim().is_empty() {
+        String::new()
+    } else {
+        format!(" Your research question is: {}.", question.trim())
+    };
     if p.intensity == Intensity::Direct {
-        format!("{opening}{focus} Your next committed step is: {}. Choose deliberately: begin it, or revise the commitment.", p.next_step)
+        format!(
+            "{opening}{focus} Your next committed step is: {}. Choose deliberately: begin it, or revise the commitment.",
+            p.next_step
+        )
     } else {
         format!("{opening}{focus} A useful next step is: {}.", p.next_step)
     }
@@ -564,22 +697,32 @@ mod tests {
 
     fn engine() -> (Engine, PathBuf) {
         let path = std::env::temp_dir().join(format!(
-            "homelab-motivation-test-{}-{}", std::process::id(), COUNTER.fetch_add(1, Ordering::Relaxed)
+            "homelab-motivation-test-{}-{}",
+            std::process::id(),
+            COUNTER.fetch_add(1, Ordering::Relaxed)
         ));
         fs::create_dir(&path).unwrap();
         let engine = Engine::open(path.join("state.json")).unwrap();
         (engine, path)
     }
     fn configured(engine: &mut Engine) {
-        engine.update_profile(ProfileChange {
-            expected_revision: 0, enabled: true, goal_id: "research".into(),
-            identity: "Independent researcher".into(),
-            outcome: "Test a meaningful scientific conjecture".into(),
-            next_step: "Derive the governing equation".into(),
-            intensity: Intensity::Direct, daily_limit: 4,
-            proactive_enabled: false, cadence_minutes: 240, holdout_weekday_utc: None,
-            quiet_start_utc_hour: 0, quiet_end_utc_hour: 0,
-        }).unwrap();
+        engine
+            .update_profile(ProfileChange {
+                expected_revision: 0,
+                enabled: true,
+                goal_id: "research".into(),
+                identity: "Independent researcher".into(),
+                outcome: "Test a meaningful scientific conjecture".into(),
+                next_step: "Derive the governing equation".into(),
+                intensity: Intensity::Direct,
+                daily_limit: 4,
+                proactive_enabled: false,
+                cadence_minutes: 240,
+                holdout_weekday_utc: None,
+                quiet_start_utc_hour: 0,
+                quiet_end_utc_hour: 0,
+            })
+            .unwrap();
     }
     #[test]
     fn state_directory_alias_uses_canonical_exclusive_lock() {
@@ -600,13 +743,24 @@ mod tests {
         let (mut e, dir) = engine();
         assert!(matches!(e.suggest(100_000), Err(Error::Conflict(_))));
         configured(&mut e);
-        assert!(matches!(e.update_profile(ProfileChange {
-            expected_revision: 0, enabled: true, goal_id: String::new(),
-            identity: "x".into(), outcome: "x".into(), next_step: "x".into(),
-            intensity: Intensity::Guided, daily_limit: 3,
-            proactive_enabled: false, cadence_minutes: 240, holdout_weekday_utc: None,
-            quiet_start_utc_hour: 0, quiet_end_utc_hour: 0,
-        }), Err(Error::Conflict(_))));
+        assert!(matches!(
+            e.update_profile(ProfileChange {
+                expected_revision: 0,
+                enabled: true,
+                goal_id: String::new(),
+                identity: "x".into(),
+                outcome: "x".into(),
+                next_step: "x".into(),
+                intensity: Intensity::Guided,
+                daily_limit: 3,
+                proactive_enabled: false,
+                cadence_minutes: 240,
+                holdout_weekday_utc: None,
+                quiet_start_utc_hour: 0,
+                quiet_end_utc_hour: 0,
+            }),
+            Err(Error::Conflict(_))
+        ));
         e.pause().unwrap();
         assert!(matches!(e.suggest(100_000), Err(Error::Conflict(_))));
         drop(e);
@@ -616,16 +770,28 @@ mod tests {
     fn situation_directs_initial_strategy_without_invented_motives() {
         let (mut e, dir) = engine();
         configured(&mut e);
-        let prompt = e.suggest_with_context(SuggestRequest {
-            trigger: Trigger::Resistance,
-            question: "Can coupled oscillators optimize a physical objective?".into(),
-        }, 100_000).unwrap();
+        let prompt = e
+            .suggest_with_context(
+                SuggestRequest {
+                    trigger: Trigger::Resistance,
+                    question: "Can coupled oscillators optimize a physical objective?".into(),
+                },
+                100_000,
+            )
+            .unwrap();
         assert_eq!(prompt.strategy, Strategy::Accountability);
         assert!(prompt.message.contains("coupled oscillators"));
         assert_eq!(prompt.trigger, Trigger::Resistance);
-        assert!(matches!(e.suggest_with_context(SuggestRequest {
-            trigger: Trigger::Distraction, question: "bad\ninput".into(),
-        }, 100_050), Err(Error::Invalid(_))));
+        assert!(matches!(
+            e.suggest_with_context(
+                SuggestRequest {
+                    trigger: Trigger::Distraction,
+                    question: "bad\ninput".into(),
+                },
+                100_050
+            ),
+            Err(Error::Invalid(_))
+        ));
         drop(e);
         fs::remove_dir_all(dir).unwrap();
     }
@@ -636,17 +802,31 @@ mod tests {
         let first = e.suggest(100_000).unwrap();
         assert_eq!(first.strategy, Strategy::Outcome);
         assert_eq!(e.suggest(100_001).unwrap().id, first.id);
-        e.record_feedback(FeedbackInput {
-            intervention_id: first.id, engagement: 4, progress: 3,
-            wellbeing: 5, notes: "solved a subproblem".into(),
-        }, 100_050).unwrap();
+        e.record_feedback(
+            FeedbackInput {
+                intervention_id: first.id,
+                engagement: 4,
+                progress: 3,
+                wellbeing: 5,
+                notes: "solved a subproblem".into(),
+            },
+            100_050,
+        )
+        .unwrap();
         assert!(matches!(e.suggest(100_060), Err(Error::Limited(_))));
         let next = e.suggest(102_000).unwrap();
         assert_eq!(next.strategy, Strategy::Inquiry);
         drop(e);
         let reopened = Engine::open(dir.join("state.json")).unwrap();
         assert_eq!(reopened.snapshot().interventions.len(), 2);
-        assert_eq!(reopened.snapshot().interventions[0].feedback.as_ref().unwrap().progress, 3);
+        assert_eq!(
+            reopened.snapshot().interventions[0]
+                .feedback
+                .as_ref()
+                .unwrap()
+                .progress,
+            3
+        );
         drop(reopened);
         fs::remove_dir_all(dir).unwrap();
     }
@@ -656,18 +836,35 @@ mod tests {
         configured(&mut e);
         let old = e.suggest(100_000).unwrap();
         e.update_profile(ProfileChange {
-            expected_revision: 1, enabled: true, goal_id: "research".into(),
-            identity: "Mathematician".into(), outcome: "Prove a theorem".into(),
+            expected_revision: 1,
+            enabled: true,
+            goal_id: "research".into(),
+            identity: "Mathematician".into(),
+            outcome: "Prove a theorem".into(),
             next_step: "Investigate an open lemma".into(),
-            intensity: Intensity::Guided, daily_limit: 4,
-            proactive_enabled: false, cadence_minutes: 240, holdout_weekday_utc: None,
-            quiet_start_utc_hour: 0, quiet_end_utc_hour: 0,
-        }).unwrap();
+            intensity: Intensity::Guided,
+            daily_limit: 4,
+            proactive_enabled: false,
+            cadence_minutes: 240,
+            holdout_weekday_utc: None,
+            quiet_start_utc_hour: 0,
+            quiet_end_utc_hour: 0,
+        })
+        .unwrap();
         assert!(e.snapshot().interventions[0].cancelled);
-        assert!(matches!(e.record_feedback(FeedbackInput {
-            intervention_id: old.id, engagement: 5, progress: 5, wellbeing: 5,
-            notes: String::new(),
-        }, 100_010), Err(Error::Conflict(_))));
+        assert!(matches!(
+            e.record_feedback(
+                FeedbackInput {
+                    intervention_id: old.id,
+                    engagement: 5,
+                    progress: 5,
+                    wellbeing: 5,
+                    notes: String::new(),
+                },
+                100_010
+            ),
+            Err(Error::Conflict(_))
+        ));
         let next = e.suggest(102_000).unwrap();
         assert_ne!(next.id, old.id);
         assert!(next.message.contains("Prove a theorem"));
@@ -679,9 +876,18 @@ mod tests {
         let (mut e, dir) = engine();
         configured(&mut e);
         let event = e.suggest(100_000).unwrap();
-        let status = e.record_feedback(FeedbackInput {
-            intervention_id: event.id, engagement: 5, progress: 5, wellbeing: 1, notes: String::new(),
-        }, 100_050).unwrap();
+        let status = e
+            .record_feedback(
+                FeedbackInput {
+                    intervention_id: event.id,
+                    engagement: 5,
+                    progress: 5,
+                    wellbeing: 1,
+                    notes: String::new(),
+                },
+                100_050,
+            )
+            .unwrap();
         assert!(!status.profile.enabled);
         assert_eq!(status.profile.revision, 2);
         assert_eq!(status.interventions.len(), 1);
@@ -693,19 +899,41 @@ mod tests {
         let (mut e, dir) = engine();
         configured(&mut e);
         let first = e.suggest(86400 + 3600).unwrap();
-        e.record_feedback(FeedbackInput {
-            intervention_id: first.id, engagement: 3, progress: 3,
-            wellbeing: 3, notes: String::new(),
-        }, 86400 + 3610).unwrap();
+        e.record_feedback(
+            FeedbackInput {
+                intervention_id: first.id,
+                engagement: 3,
+                progress: 3,
+                wellbeing: 3,
+                notes: String::new(),
+            },
+            86400 + 3610,
+        )
+        .unwrap();
         e.update_profile(ProfileChange {
-            expected_revision: 1, enabled: true, goal_id: "research".into(),
-            identity: "Researcher".into(), outcome: "Publish sound work".into(),
-            next_step: "Prove a lemma".into(), intensity: Intensity::Guided,
-            daily_limit: 1, proactive_enabled: false, cadence_minutes: 240,
-            holdout_weekday_utc: None, quiet_start_utc_hour: 22, quiet_end_utc_hour: 6,
-        }).unwrap();
-        assert!(matches!(e.suggest(86400 + 23 * 3600), Err(Error::Limited(_))));
-        assert!(matches!(e.suggest(86400 + 12 * 3600), Err(Error::Limited(_))));
+            expected_revision: 1,
+            enabled: true,
+            goal_id: "research".into(),
+            identity: "Researcher".into(),
+            outcome: "Publish sound work".into(),
+            next_step: "Prove a lemma".into(),
+            intensity: Intensity::Guided,
+            daily_limit: 1,
+            proactive_enabled: false,
+            cadence_minutes: 240,
+            holdout_weekday_utc: None,
+            quiet_start_utc_hour: 22,
+            quiet_end_utc_hour: 6,
+        })
+        .unwrap();
+        assert!(matches!(
+            e.suggest(86400 + 23 * 3600),
+            Err(Error::Limited(_))
+        ));
+        assert!(matches!(
+            e.suggest(86400 + 12 * 3600),
+            Err(Error::Limited(_))
+        ));
         drop(e);
         fs::remove_dir_all(dir).unwrap();
     }

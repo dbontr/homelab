@@ -1,8 +1,8 @@
 //! Root-only, out-of-band repair of an interrupted release transaction.
-use std::sync::Arc;
 use homelab_executor_authority::audit::StateLease;
 use homelab_executor_authority::policy::Policy;
 use homelab_executor_authority::release::ReleaseController;
+use std::sync::Arc;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {

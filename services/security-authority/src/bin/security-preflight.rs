@@ -8,16 +8,19 @@ use std::path::{Path, PathBuf};
 use homelab_security_authority::access::AccessVerifier;
 use homelab_security_authority::credentials::PassphraseRecord;
 use homelab_security_authority::grants::ServiceCredentialGrant;
-use homelab_security_authority::sessions::{Authority, OperationPolicy};
 use homelab_security_authority::oauth::Broker;
 use homelab_security_authority::remote::Remote;
+use homelab_security_authority::sessions::{Authority, OperationPolicy};
 use homelab_security_authority::transport::Shared;
 use zeroize::Zeroize;
 
 const MAX_CREDENTIAL_BYTES: usize = 1 << 20;
 
 fn required(name: &str) -> Result<String, &'static str> {
-    env::var(name).ok().filter(|s| !s.is_empty()).ok_or("required configuration missing")
+    env::var(name)
+        .ok()
+        .filter(|s| !s.is_empty())
+        .ok_or("required configuration missing")
 }
 
 fn read_file(name: &str, private: bool) -> Result<Vec<u8>, &'static str> {
@@ -30,7 +33,9 @@ fn read_file(name: &str, private: bool) -> Result<Vec<u8>, &'static str> {
         .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
         .open(path)
         .map_err(|_| "configured file unavailable")?;
-    let md = file.metadata().map_err(|_| "cannot inspect configured file")?;
+    let md = file
+        .metadata()
+        .map_err(|_| "cannot inspect configured file")?;
     let forbidden_permissions = if private { 0o077 } else { 0o022 };
     if !md.is_file()
         || md.mode() & forbidden_permissions != 0
@@ -63,7 +68,8 @@ fn copied_state_directory() -> Result<PathBuf, &'static str> {
 // A preflight copy must not share writable inodes with the source state.
 fn validate_copied_file(path: &Path) -> Result<(), &'static str> {
     let metadata = fs::symlink_metadata(path).map_err(|_| "copied state file missing")?;
-    if !metadata.is_file() || metadata.file_type().is_symlink()
+    if !metadata.is_file()
+        || metadata.file_type().is_symlink()
         || metadata.nlink() != 1
         || metadata.mode() & 0o077 != 0
         || metadata.uid() != unsafe { libc::geteuid() }
@@ -77,8 +83,9 @@ fn validate_copied_file(path: &Path) -> Result<(), &'static str> {
 fn reject_live_inode(copy: &Path, live: &Path) -> Result<(), &'static str> {
     let copy_md = fs::symlink_metadata(copy).map_err(|_| "copied state file missing")?;
     match fs::metadata(live) {
-        Ok(live_md) if copy_md.dev() == live_md.dev() && copy_md.ino() == live_md.ino() =>
-            Err("copied state file references the live authority inode"),
+        Ok(live_md) if copy_md.dev() == live_md.dev() && copy_md.ino() == live_md.ino() => {
+            Err("copied state file references the live authority inode")
+        }
         Ok(_) => Ok(()),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
         Err(_) => Err("cannot inspect live authority inode"),
@@ -88,12 +95,15 @@ fn reject_live_inode(copy: &Path, live: &Path) -> Result<(), &'static str> {
 fn validate_copy_directory(directory: PathBuf) -> Result<PathBuf, &'static str> {
     if !directory.is_absolute()
         || directory == Path::new("/var/lib/homelab-securityd")
-        || directory.components().any(|v| matches!(v, std::path::Component::ParentDir))
+        || directory
+            .components()
+            .any(|v| matches!(v, std::path::Component::ParentDir))
     {
         return Err("preflight requires an independent copied state directory");
     }
     let copy = fs::symlink_metadata(&directory).map_err(|_| "state copy missing")?;
-    if !copy.is_dir() || copy.file_type().is_symlink()
+    if !copy.is_dir()
+        || copy.file_type().is_symlink()
         || copy.mode() & 0o077 != 0
         || copy.uid() != unsafe { libc::geteuid() }
     {
@@ -119,7 +129,7 @@ fn validate_copy_directory(directory: PathBuf) -> Result<PathBuf, &'static str> 
                 &directory.join("credentials.json"),
                 Path::new("/var/lib/homelab-securityd/credentials.json"),
             )?;
-        },
+        }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => (),
         Err(_) => return Err("cannot inspect copied encrypted credential store"),
     }
@@ -169,7 +179,8 @@ fn run() -> Result<(), &'static str> {
         let attached = authority.attach_vault(secret);
         secret.zeroize();
         attached.map_err(|_| "encrypted vault structure invalid")?;
-        authority.validate_vault()
+        authority
+            .validate_vault()
             .map_err(|_| "encrypted vault authentication failed")?;
     } else if directory.join("credentials.json").exists() {
         return Err("encrypted vault requires its owner key");
@@ -181,7 +192,8 @@ fn run() -> Result<(), &'static str> {
         }
         let grants: Vec<ServiceCredentialGrant> =
             serde_json::from_str(&raw_grants).map_err(|_| "invalid service grants")?;
-        authority.configure_service_grants(grants)
+        authority
+            .configure_service_grants(grants)
             .map_err(|_| "invalid service credential scope")?;
     }
 
@@ -200,29 +212,33 @@ fn run() -> Result<(), &'static str> {
         )
         .map_err(|_| "invalid pinned owner-signing keys")?;
         let browser = env::var("HOMELAB_SECURITY_ACCESS_BROWSER_AUD").ok();
-        authority.configure_access(
-            verifier,
-            required("HOMELAB_SECURITY_ACCESS_GATEWAY_AUD")?,
-            browser,
-        ).map_err(|_| "invalid Access audience configuration")?;
+        authority
+            .configure_access(
+                verifier,
+                required("HOMELAB_SECURITY_ACCESS_GATEWAY_AUD")?,
+                browser,
+            )
+            .map_err(|_| "invalid Access audience configuration")?;
     }
     // Parse the same optional runtime inputs without binding sockets or
     // exchanging tokens. A migration preview must cover the actual selected
     // remote, browser, and provider configuration rather than silently
     // dropping any configured interface.
-    let remote = Remote::from_environment()
-        .map_err(|_| "invalid remote TLS authorization configuration")?;
-    let broker = Broker::from_environment()
-        .map_err(|_| "invalid configured OAuth provider")?;
+    let remote =
+        Remote::from_environment().map_err(|_| "invalid remote TLS authorization configuration")?;
+    let broker = Broker::from_environment().map_err(|_| "invalid configured OAuth provider")?;
     if broker.is_some() {
-        authority.validate_vault()
+        authority
+            .validate_vault()
             .map_err(|_| "OAuth provider requires a verified credential vault")?;
     }
-    let browser_origin = env::var("HOMELAB_SECURITY_BROWSER_ORIGIN").ok()
+    let browser_origin = env::var("HOMELAB_SECURITY_BROWSER_ORIGIN")
+        .ok()
         .filter(|origin| !origin.is_empty());
     if browser_origin.is_some()
         && env::var("HOMELAB_SECURITY_ACCESS_BROWSER_AUD")
-            .ok().is_none_or(|audience| audience.is_empty())
+            .ok()
+            .is_none_or(|audience| audience.is_empty())
     {
         return Err("browser origin requires a pinned browser assertion audience");
     }
@@ -276,12 +292,24 @@ mod tests {
         assert!(validate_copy_directory(directory.clone()).is_err());
         fs::remove_file(directory.join("authenticator.json")).unwrap();
         fs::write(directory.join("authenticator.json"), br#"{"version":1}"#).unwrap();
-        fs::set_permissions(directory.join("authenticator.json"), fs::Permissions::from_mode(0o600)).unwrap();
+        fs::set_permissions(
+            directory.join("authenticator.json"),
+            fs::Permissions::from_mode(0o600),
+        )
+        .unwrap();
         assert!(validate_copy_directory(directory.clone()).is_ok());
         fs::write(directory.join("credentials.json"), b"{}").unwrap();
-        fs::set_permissions(directory.join("credentials.json"), fs::Permissions::from_mode(0o644)).unwrap();
+        fs::set_permissions(
+            directory.join("credentials.json"),
+            fs::Permissions::from_mode(0o644),
+        )
+        .unwrap();
         assert!(validate_copy_directory(directory.clone()).is_err());
-        fs::set_permissions(directory.join("credentials.json"), fs::Permissions::from_mode(0o600)).unwrap();
+        fs::set_permissions(
+            directory.join("credentials.json"),
+            fs::Permissions::from_mode(0o600),
+        )
+        .unwrap();
         assert!(validate_copy_directory(directory.clone()).is_ok());
         fs::set_permissions(&directory, fs::Permissions::from_mode(0o755)).unwrap();
         assert!(validate_copy_directory(directory).is_err());
@@ -298,7 +326,11 @@ mod tests {
         assert!(validate_copy_directory(path.clone()).is_err());
         fs::write(path.join("authenticator.json"),
             br#"{"version":1,"last_totp_step":-1,"failures":0,"locked_until":"0001-01-01T00:00:00Z"}"#).unwrap();
-        fs::set_permissions(path.join("authenticator.json"), fs::Permissions::from_mode(0o600)).unwrap();
+        fs::set_permissions(
+            path.join("authenticator.json"),
+            fs::Permissions::from_mode(0o600),
+        )
+        .unwrap();
         assert_eq!(validate_copy_directory(path.clone()).unwrap(), path);
         assert!(!path.join(".securityd.lock").exists());
         let store = homelab_security_authority::state::StateStore::inspect(&path).unwrap();

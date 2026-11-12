@@ -5,9 +5,12 @@ use crate::api;
 use crate::components::{Card, Empty, Loading, Notice};
 
 fn valid_owner(kind: &str, id: &str) -> bool {
-    matches!(kind,"problem"|"session"|"source")
-        && !id.is_empty() && id.len() <= 128
-        && id.bytes().all(|ch| ch.is_ascii_alphanumeric() || ch==b'-' || ch==b'_')
+    matches!(kind, "problem" | "session" | "source")
+        && !id.is_empty()
+        && id.len() <= 128
+        && id
+            .bytes()
+            .all(|ch| ch.is_ascii_alphanumeric() || ch == b'-' || ch == b'_')
 }
 
 #[component]
@@ -22,7 +25,7 @@ pub fn LearningAttachments(csrf: String, owner_kind: String, owner_id: String) -
             let kind = kind.clone();
             let id = id.clone();
             async move {
-                if !valid_owner(&kind,&id) {
+                if !valid_owner(&kind, &id) {
                     return Err("No Learning record selected for original files.".to_owned());
                 }
                 api::get::<Value>(&format!("/v1/learning/attachments/{kind}/{id}")).await
@@ -179,14 +182,14 @@ mod tests {
 
     #[test]
     fn attachment_owners_are_explicit() {
-        for kind in ["problem","session","source"] {
-            assert!(valid_owner(kind,"abC-123_def"));
+        for kind in ["problem", "session", "source"] {
+            assert!(valid_owner(kind, "abC-123_def"));
         }
-        for kind in ["project","health",""] {
-            assert!(!valid_owner(kind,"record"));
+        for kind in ["project", "health", ""] {
+            assert!(!valid_owner(kind, "record"));
         }
-        assert!(!valid_owner("session","../escape"));
-        assert!(!valid_owner("session","bad/id"));
-        assert!(!valid_owner("source",""));
+        assert!(!valid_owner("session", "../escape"));
+        assert!(!valid_owner("session", "bad/id"));
+        assert!(!valid_owner("source", ""));
     }
 }
