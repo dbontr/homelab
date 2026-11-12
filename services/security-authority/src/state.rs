@@ -35,7 +35,7 @@ fn owner_only(metadata: &fs::Metadata) -> bool {
 }
 
 fn protected_read(path: &Path, limit: usize) -> Result<Option<Vec<u8>>, Error> {
-    let mut file = match OpenOptions::new()
+    let file = match OpenOptions::new()
         .read(true)
         .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
         .open(path)
