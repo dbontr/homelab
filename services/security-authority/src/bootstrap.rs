@@ -15,6 +15,27 @@ use crate::Error;
 
 const MAX_CREDENTIAL_BYTES: usize = 1 << 20;
 
+// systemd LoadCredential may provide root-owned, group-readable files.
+// That exception is limited to the exact manager-provided credential directory.
+fn protected_credential_custody(
+    path: &Path,
+    metadata: &fs::Metadata,
+    credentials_directory: Option<&Path>,
+) -> bool {
+    let uid = metadata.uid();
+    if uid != 0 && uid != unsafe { libc::geteuid() } {
+        return false;
+    }
+    if metadata.mode() & 0o077 == 0 {
+        return true;
+    }
+    credentials_directory.is_some_and(|directory| {
+        !directory.as_os_str().is_empty()
+            && path.parent() == Some(directory)
+            && metadata.mode() & 0o037 == 0
+    })
+}
+
 pub fn required(name: &str) -> Result<String, Error> {
     env::var(name)
         .ok()
@@ -34,13 +55,19 @@ pub fn configured_file(name: &str, private: bool) -> Result<Vec<u8>, Error> {
     let file = OpenOptions::new()
         .read(true)
         .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
-        .open(path)
+        .open(&path)
         .map_err(|_| Error::Storage)?;
     let md = file.metadata().map_err(|_| Error::Storage)?;
-    let forbidden = if private { 0o077 } else { 0o022 };
+    let credentials_directory = env::var("CREDENTIALS_DIRECTORY").ok();
     if !md.is_file()
-        || md.mode() & forbidden != 0
-        || (private && md.uid() != unsafe { libc::geteuid() })
+        || md.nlink() != 1
+        || (private
+            && !protected_credential_custody(
+                &path,
+                &md,
+                credentials_directory.as_deref().map(Path::new),
+            ))
+        || (!private && md.mode() & 0o022 != 0)
     {
         return Err(Error::Storage);
     }
@@ -188,6 +215,27 @@ mod tests {
         fs::set_permissions(&shared, fs::Permissions::from_mode(0o600)).unwrap();
         fs::hard_link(&shared, &record).unwrap();
         assert_eq!(require_authenticator_record(&dir), Err(Error::Storage));
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn credential_group_read_is_restricted_to_systemd_directory() {
+        use std::os::unix::fs::PermissionsExt;
+        let mut id = [0u8; 12];
+        getrandom::fill(&mut id).unwrap();
+        let dir = std::env::temp_dir().join(format!("systemd-credential-test-{}", hex::encode(id)));
+        fs::create_dir(&dir).unwrap();
+        let credential = dir.join("password");
+        fs::write(&credential, b"not-a-real-credential").unwrap();
+        fs::set_permissions(&credential, fs::Permissions::from_mode(0o440)).unwrap();
+        let metadata = fs::metadata(&credential).unwrap();
+        assert!(!protected_credential_custody(&credential, &metadata, None));
+        assert!(protected_credential_custody(&credential, &metadata, Some(&dir)));
+        let other = dir.join("unrelated");
+        assert!(!protected_credential_custody(&credential, &metadata, Some(&other)));
+        fs::set_permissions(&credential, fs::Permissions::from_mode(0o444)).unwrap();
+        let metadata = fs::metadata(&credential).unwrap();
+        assert!(!protected_credential_custody(&credential, &metadata, Some(&dir)));
         fs::remove_dir_all(dir).unwrap();
     }
 
