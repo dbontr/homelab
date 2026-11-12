@@ -109,7 +109,7 @@ func (s *Server) sessionOwnerWriteAllowed(r *http.Request) bool {
 			if mediaType != "application/zip" { return false }
 		} else if mediaType != "application/json" { return false }
 	}
-	csrf, _, valid := s.sessions.Check(s.sessionCookie(r))
+	csrf, valid := s.sessions.Check(r.Header.Get("Cf-Access-Jwt-Assertion"))
 	supplied := r.Header.Get("X-CSRF-Token")
 	return valid && len(csrf) == len(supplied) &&
 		subtle.ConstantTimeCompare([]byte(csrf), []byte(supplied)) == 1
