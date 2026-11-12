@@ -3,6 +3,9 @@ package main
 
 import (
     "crypto/hmac"
+    "math/big"
+    "crypto/rsa"
+    "crypto"
     "crypto/rand"
     "crypto/sha256"
     "crypto/subtle"
@@ -66,6 +69,55 @@ func persist(password,totp string)error{
     created=nil
     return nil
 }
+const audience="f7ff144af280e780e5eabee814d5f6809d83b3a3d1acd1c7666bafd583d0f308"
+func verifiedJWT(token string) bool {
+    if len(token)<100 || len(token)>8192 {return false}
+    parts:=strings.Split(token,".")
+    if len(parts)!=3{return false}
+    decode:=base64.RawURLEncoding.DecodeString
+    headerData,err:=decode(parts[0]);if err!=nil{return false}
+    payloadData,err:=decode(parts[1]);if err!=nil{return false}
+    signature,err:=decode(parts[2]);if err!=nil{return false}
+    var header struct{ Alg string `json:"alg"`; Kid string `json:"kid"` }
+    var claims struct{
+        Iss string `json:"iss"`
+        Email string `json:"email"`
+        Aud []string `json:"aud"`
+        Exp int64 `json:"exp"`
+        Nbf int64 `json:"nbf"`
+        Iat int64 `json:"iat"`
+    }
+    if json.Unmarshal(headerData,&header)!=nil || json.Unmarshal(payloadData,&claims)!=nil {return false}
+    now:=time.Now().Unix()
+    if header.Alg!="RS256" || header.Kid=="" || claims.Iss!="https://dbontr.cloudflareaccess.com" ||
+       !strings.EqualFold(claims.Email,"dbontr33@hotmail.com") || claims.Exp<=now ||
+       claims.Iat>now+30 || claims.Nbf>now+30 {return false}
+    match:=false
+    for _,a:=range claims.Aud {if a==audience{match=true}}
+    if !match{return false}
+    pem,err:=os.ReadFile("/srv/homelab/secrets/security/access-jwks.json")
+    if err!=nil || len(pem)>65536{return false}
+    var jwks struct{ Keys []struct{
+        Kid string `json:"kid"`
+        Kty string `json:"kty"`
+        Alg string `json:"alg"`
+        N string `json:"n"`
+        E string `json:"e"`
+    } `json:"keys"` }
+    if json.Unmarshal(pem,&jwks)!=nil {return false}
+    for _,key:=range jwks.Keys {
+        if key.Kid!=header.Kid || key.Kty!="RSA" {continue}
+        modulus,err:=decode(key.N);if err!=nil{return false}
+        exponent,err:=decode(key.E);if err!=nil||len(exponent)<1||len(exponent)>4{return false}
+        e:=0
+        for _,v:=range exponent {e=(e<<8)|int(v)}
+        if len(modulus)<256||e<3{return false}
+        digest:=sha256.Sum256([]byte(parts[0]+"."+parts[1]))
+        return rsa.VerifyPKCS1v15(&rsa.PublicKey{N:new(big.Int).SetBytes(modulus),E:e},crypto.SHA256,digest[:],signature)==nil
+    }
+    return false
+}
+
 func (a *app) ServeHTTP(w http.ResponseWriter,r *http.Request){
     for k,v:=range map[string]string{
         "Cache-Control":"private, no-store, max-age=0",
@@ -74,7 +126,7 @@ func (a *app) ServeHTTP(w http.ResponseWriter,r *http.Request){
         "Content-Security-Policy":"default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
         "Content-Type":"text/html; charset=utf-8",
     }{w.Header().Set(k,v)}
-    if r.Host!="enroll.dbontr.me"||r.Header.Get("Cf-Access-Jwt-Assertion")==""{http.Error(w,"Access authentication required",403);return}
+    if r.Host!="enroll.dbontr.me"||!verifiedJWT(r.Header.Get("Cf-Access-Jwt-Assertion")){http.Error(w,"Access authentication required",403);return}
     a.mu.Lock();defer a.mu.Unlock()
     if time.Now().After(a.deadline){http.Error(w,"Enrollment expired",410);return}
     if a.done{fmt.Fprint(w,"<h2>Enrollment already completed.</h2>");return}
