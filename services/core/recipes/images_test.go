@@ -31,7 +31,7 @@ func smallImage(t *testing.T, format string) []byte {
 }
 
 func TestRecipeImagePersistenceAndDeduplication(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "recipes.json")
+	path := privateRecipeTestPath(t, "recipes.json")
 	store, err := Open(path)
 	if err != nil {
 		t.Fatal(err)
@@ -72,7 +72,7 @@ func TestRecipeImagePersistenceAndDeduplication(t *testing.T) {
 }
 
 func TestRecipeImageInputValidationAndTampering(t *testing.T) {
-	store, err := Open(filepath.Join(t.TempDir(), "recipes.json"))
+	store, err := Open(privateRecipeTestPath(t, "recipes.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
