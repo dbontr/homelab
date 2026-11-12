@@ -156,6 +156,8 @@ func TestOwnerEngineeringReadAllowlistDoesNotPermitExecutions(t *testing.T) {
     if err != nil { t.Fatal(err) }
     sessions,token:=accessTransportFixture(t)
     service.SetSessions(sessions)
+    csrf,ok:=sessions.Check(token)
+    if !ok {t.Fatal("signed Access assertion invalid")}
     allowed := []string{
         "/v1/engineering/projects",
         "/v1/engineering/nodes",
