@@ -621,7 +621,9 @@ async fn private_headers(request: axum::extract::Request, next: Next) -> Respons
         "x-content-type-options",
         HeaderValue::from_static("nosniff"),
     );
-    headers.insert("referrer-policy", HeaderValue::from_static("no-referrer"));
+    if !headers.contains_key("referrer-policy") {
+        headers.insert("referrer-policy", HeaderValue::from_static("no-referrer"));
+    }
     headers.insert("x-frame-options", HeaderValue::from_static("DENY"));
     response
 }
@@ -770,6 +772,10 @@ fn browser_page(shared: &Shared, assertion: &str, message: &str) -> Response {
     let mut response = Html(html).into_response();
     response.headers_mut().insert("content-security-policy",
         HeaderValue::from_static("default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"));
+    response.headers_mut().insert(
+        "referrer-policy",
+        HeaderValue::from_static("same-origin"),
+    );
     response
 }
 
@@ -1010,6 +1016,48 @@ mod tests {
                 "unsafe browser origin accepted: {value}"
             );
         }
+    }
+
+    #[tokio::test]
+    async fn form_referrer_policy_survives_private_headers() {
+        use axum::body::Body;
+        use axum::http::Request;
+        use tower::ServiceExt;
+
+        let routes = Router::new()
+            .route(
+                "/form",
+                get(|| async {
+                    let mut response = Html("<form method=\"post\" action=\"/login\"></form>")
+                        .into_response();
+                    response.headers_mut().insert(
+                        "referrer-policy",
+                        HeaderValue::from_static("same-origin"),
+                    );
+                    response
+                }),
+            )
+            .route("/private", get(|| async { "private" }))
+            .layer(middleware::from_fn(private_headers));
+
+        let form = routes
+            .clone()
+            .oneshot(Request::builder().uri("/form").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(
+            form.headers().get("referrer-policy").unwrap(),
+            "same-origin"
+        );
+
+        let private = routes
+            .oneshot(Request::builder().uri("/private").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(
+            private.headers().get("referrer-policy").unwrap(),
+            "no-referrer"
+        );
     }
 
     #[tokio::test]
