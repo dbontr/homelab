@@ -10,7 +10,7 @@ Authoritative sources:
 
 - Rust/Dioxus owns component rendering and interaction. No React, TypeScript, Tailwind build toolchain or Radix runtime is required.
 - `assets/main.css` owns the shadcn neutral design tokens and the exact base geometry of shared components. Do not reintroduce a second set of theme colors.
-- `src/components.rs` owns shared card, badge, alert and icon primitives. Use the same `data-slot` names as the upstream components for reusable styles and semantic structure.
+- `src/components.rs` owns shared card, badge, alert and icon primitives. Dioxus classes correspond to the upstream component slots, using native Rust RSX attributes supported by the pinned framework.
 - Dioxus view modules compose the shared primitives and class variants; ordinary controls must use the canonical classes rather than local hard-coded padding, radii, colors or shadows.
 - Icons follow Lucide's 24×24 view box, two-pixel stroke, round caps and round joins.
 - Preserve native focus behavior, keyboard operation, visible focus indicators, form labels, input errors, disabled states and `aria-*` semantics. Copying CSS alone is not a substitute for the accessibility behavior of the upstream component.
