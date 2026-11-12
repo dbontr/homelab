@@ -29,7 +29,7 @@
   # homepage selected until owner login and browser API flows are accepted.
   services.homelabConsole = {
     enable = true;
-    replaceHomepage = true;
+    replaceHomepage = false;
     package = import ../../packages/console.nix { inherit pkgs; };
   };
 
