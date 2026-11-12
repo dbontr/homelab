@@ -20,6 +20,8 @@ import (
 	"github.com/dbontr/homelab-new/system/store"
 )
 
+type accessTestIdentity struct { Value string }
+
 func accessTransportFixture(t *testing.T) (*session.Manager, string) {
 	t.Helper()
 	key,err:=rsa.GenerateKey(rand.Reader,2048)
