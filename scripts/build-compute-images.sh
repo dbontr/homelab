@@ -56,6 +56,8 @@ build_image() {
     buildx build --platform linux/amd64
     --file "$context/deploy/kubernetes/$dockerfile"
     --tag "$tag"
+    --label "org.opencontainers.image.source=https://github.com/dbontr/homelab"
+    --label "org.opencontainers.image.revision=$revision"
     --metadata-file "$metadata"
     --progress plain
   )
