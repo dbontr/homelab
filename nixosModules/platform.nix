@@ -325,8 +325,7 @@ in
       description = "Personal computing platform";
       wantedBy = [ "multi-user.target" ];
       after = [ "network-online.target" ] ++ lib.optional calendarCfg.enable "homelab-calendar.service"
-        ++ lib.optional motivationCfg.enable "homelab-motivation.service"
-;
+        ++ lib.optional motivationCfg.enable "homelab-motivation.service";
       wants = [ "network-online.target" ] ++ lib.optional calendarCfg.enable "homelab-calendar.service"
         ++ lib.optional motivationCfg.enable "homelab-motivation.service";
       environment = {
