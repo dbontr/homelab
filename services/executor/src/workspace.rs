@@ -40,6 +40,7 @@ fn validate_tool_response(raw: &[u8]) -> Result<(), Error> {
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn call(
     policy: &Policy,
     authorization: &AuthorizationClient,
