@@ -15,7 +15,6 @@ import (
     "fmt"
     "io"
     "log"
-    "mime"
     "net/http"
     "os"
     "path/filepath"
@@ -119,19 +118,14 @@ func verifiedJWT(token string) bool {
     return false
 }
 
-func validFormOrigin(r *http.Request) bool {
-    mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
-    if err != nil || mediaType != "application/x-www-form-urlencoded" {
+// validateEnrollmentForm binds enrollment to the unpredictable token issued
+// through the authenticated owner-only page. HTTP origin metadata is not used
+// as an authorization signal because reverse proxies can alter or omit it.
+func validateEnrollmentForm(r *http.Request, token string) bool {
+    if err := r.ParseForm(); err != nil {
         return false
     }
-    origin := r.Header.Get("Origin")
-    if origin != "" && origin != publicOrigin {
-        return false
-    }
-    // A missing Origin header is permitted because the request also requires
-    // a signed owner assertion and an unpredictable, single-use form token.
-    // Browsers and intermediaries do not always forward Fetch Metadata.
-    return true
+    return subtle.ConstantTimeCompare([]byte(r.PostForm.Get("csrf")), []byte(token)) == 1
 }
 
 func (a *app) ServeHTTP(w http.ResponseWriter,r *http.Request){
@@ -153,10 +147,8 @@ func (a *app) ServeHTTP(w http.ResponseWriter,r *http.Request){
         return
     }
     if r.Method!=http.MethodPost{http.Error(w,"Method not allowed",405);return}
-    if !validFormOrigin(r){a.failures++;http.Error(w,"Invalid origin",403);return}
     r.Body=http.MaxBytesReader(w,r.Body,4096)
-    if r.ParseForm()!=nil{a.failures++;http.Error(w,"Invalid form",400);return}
-    if subtle.ConstantTimeCompare([]byte(r.PostForm.Get("csrf")),[]byte(a.csrf))!=1{a.failures++;http.Error(w,"Invalid session",403);return}
+    if !validateEnrollmentForm(r,a.csrf){a.failures++;http.Error(w,"Invalid or expired form",403);return}
     password:=r.PostForm.Get("password")
     totp:=strings.ToUpper(strings.TrimSpace(r.PostForm.Get("totp")))
     secret,err:=base32.StdEncoding.WithPadding(base32.NoPadding).DecodeString(totp)
