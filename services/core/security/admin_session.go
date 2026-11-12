@@ -183,6 +183,10 @@ func decodePassphraseField(raw string, length int) ([]byte, error) {
 }
 
 func dangerousOperation(name string) bool {
+	// Privileged workspace actions require owner confirmation irrespective of their verb.
+	if strings.HasPrefix(strings.ToLower(name), "infrastructure__workspace_") {
+		return true
+	}
 	// These administrative actions cannot become routine through a config typo.
 	tokens := strings.FieldsFunc(strings.ToLower(name), func(r rune) bool { return r == '.' || r == '_' || r == '-' || r == '/' })
 	for _, word := range tokens {
