@@ -53,7 +53,7 @@ func TestRecipeImageHTTPAccessAndContentRestrictions(t *testing.T) {
 		return response
 	}
 	accessToken := &accessTestIdentity{Value: accessAssertion}
-	status := call("GET", "/ui/session", "", nil, identity, "")
+	status := call("GET", "/ui/session", "", nil, accessToken, "")
 	var sessionData struct {
 		CSRF string `json:"csrf_token"`
 	}
@@ -69,16 +69,16 @@ func TestRecipeImageHTTPAccessAndContentRestrictions(t *testing.T) {
 	if r := call("POST", "/v1/recipes/images", "image/png", picture, nil, ""); r.Code != 401 {
 		t.Fatalf("anonymous upload accepted: %d", r.Code)
 	}
-	if r := call("POST", "/v1/recipes/images", "image/png", picture, identity, ""); r.Code != 401 {
+	if r := call("POST", "/v1/recipes/images", "image/png", picture, accessToken, ""); r.Code != 401 {
 		t.Fatalf("image upload without CSRF accepted: %d", r.Code)
 	}
-	if r := call("POST", "/v1/recipes/images", "image/svg+xml", picture, identity, sessionData.CSRF); r.Code < 400 {
+	if r := call("POST", "/v1/recipes/images", "image/svg+xml", picture, accessToken, sessionData.CSRF); r.Code < 400 {
 		t.Fatalf("unexpected image type accepted: %d", r.Code)
 	}
-	if r := call("POST", "/v1/recipes/images", "image/png", []byte("not an image"), identity, sessionData.CSRF); r.Code != 422 {
+	if r := call("POST", "/v1/recipes/images", "image/png", []byte("not an image"), accessToken, sessionData.CSRF); r.Code != 422 {
 		t.Fatalf("invalid image accepted: %d %s", r.Code, r.Body.String())
 	}
-	uploaded := call("POST", "/v1/recipes/images", "image/png", picture, identity, sessionData.CSRF)
+	uploaded := call("POST", "/v1/recipes/images", "image/png", picture, accessToken, sessionData.CSRF)
 	if uploaded.Code != http.StatusCreated {
 		t.Fatalf("image upload: %d %s", uploaded.Code, uploaded.Body.String())
 	}
@@ -91,16 +91,16 @@ func TestRecipeImageHTTPAccessAndContentRestrictions(t *testing.T) {
 	if r := call("GET", asset.ImageRef, "", nil, nil, ""); r.Code != 401 {
 		t.Fatalf("anonymous image retrieval accepted: %d", r.Code)
 	}
-	read := call("GET", asset.ImageRef, "", nil, identity, "")
+	read := call("GET", asset.ImageRef, "", nil, accessToken, "")
 	if read.Code != 200 || read.Header().Get("Content-Type") != "image/png" ||
 		!bytes.Equal(read.Body.Bytes(), picture) ||
 		read.Header().Get("X-Content-Type-Options") != "nosniff" {
 		t.Fatalf("authenticated image read failed: %d %s", read.Code, read.Body.String())
 	}
-	if r := call("POST", "/v1/recipes/images", "image/png", bytes.Repeat([]byte{1}, recipes.MaxImageBytes+1), identity, sessionData.CSRF); r.Code != 413 {
+	if r := call("POST", "/v1/recipes/images", "image/png", bytes.Repeat([]byte{1}, recipes.MaxImageBytes+1), accessToken, sessionData.CSRF); r.Code != 413 {
 		t.Fatalf("oversized image accepted: %d", r.Code)
 	}
-	if r := call("GET", "/v1/recipes/images/not-an-image.png", "", nil, identity, ""); r.Code != 404 {
+	if r := call("GET", "/v1/recipes/images/not-an-image.png", "", nil, accessToken, ""); r.Code != 404 {
 		t.Fatalf("malformed image path accepted: %d", r.Code)
 	}
 }
