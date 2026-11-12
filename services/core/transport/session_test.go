@@ -127,9 +127,9 @@ func TestConsoleBrowserSessionScopesMutations(t *testing.T) {
  }
  if len(db.Tasks(""))!=3{t.Fatal("browser flow did not persist the complete parent and subtask graph")}
  if w:=call("POST","/mcp",`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`,assertion,result.CSRF);w.Code!=401{t.Fatalf("session reached MCP: %d",w.Code)}
- if w:=call("DELETE","/ui/session","",assertion,"wrong");w.Code!=403{
-		t.Fatalf("CSRF bypassed: %d",w.Code)
-	}
+ if w:=call("DELETE","/ui/session","",assertion,"wrong");w.Code!=405{
+        t.Fatalf("application session deletion remains enabled: %d",w.Code)
+    }
 
 	if w:=call("DELETE","/ui/session","",assertion,result.CSRF);w.Code!=405{
 		t.Fatalf("browser logout remains enabled: %d",w.Code)
