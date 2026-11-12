@@ -28,7 +28,7 @@ fn read_file(name: &str, private: bool) -> Result<Vec<u8>, &'static str> {
     if !path.is_absolute() {
         return Err("configured file path must be absolute");
     }
-    let mut file = OpenOptions::new()
+    let file = OpenOptions::new()
         .read(true)
         .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
         .open(path)
