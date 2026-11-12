@@ -148,10 +148,11 @@ in
       default = null;
       description = "Protected client socket of the independent owner security service. Enabling this disables legacy gateway approval access.";
     };
-    consolePassphraseFile = lib.mkOption {
-      type = lib.types.nullOr lib.types.str;
-      default = null;
-      description = "Owner-only path to the browser console passphrase verifier. This verifier must not grant cluster administration privileges.";
+    consoleAccess = {
+      issuer = lib.mkOption { type = lib.types.str; default = ""; description = "Exact Cloudflare Access issuer for the console."; };
+      audience = lib.mkOption { type = lib.types.str; default = ""; description = "Dedicated Cloudflare Access audience for the console."; };
+      ownerEmailFile = lib.mkOption { type = lib.types.nullOr lib.types.str; default = null; description = "Protected owner identity file."; };
+      jwksFile = lib.mkOption { type = lib.types.nullOr lib.types.str; default = null; description = "Pinned Cloudflare Access signing keys."; };
     };
     calendarURLFile = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
@@ -301,6 +302,14 @@ in
         message = "Browser authentication requires an HTTPS origin and independent security client socket.";
       }
       {
+        assertion = !cfg.enable ||
+          (lib.hasPrefix "https://" cfg.consoleAccess.issuer &&
+           cfg.consoleAccess.audience != "" &&
+           cfg.consoleAccess.ownerEmailFile != null &&
+           cfg.consoleAccess.jwksFile != null);
+        message = "The platform requires a signed console Access identity and protected verification credentials.";
+      }
+      {
         assertion = cfg.tokenFile != null;
         message = "The platform requires a protected API token file.";
       }
@@ -312,28 +321,12 @@ in
       }
     ];
 
-    systemd.paths.homelab-console-verifier = lib.mkIf
-      (cfg.consolePassphraseFile == "/var/lib/homelab-console/verifier.json") {
-        wantedBy = [ "multi-user.target" ];
-        pathConfig = {
-          PathModified = "/var/lib/homelab-console/refresh.trigger";
-          Unit = "homelab-console-verifier-refresh.service";
-        };
-      };
-
-    systemd.services.homelab-console-verifier-refresh = lib.mkIf
-      (cfg.consolePassphraseFile == "/var/lib/homelab-console/verifier.json") {
-        description = "Load owner-authorized console verifier rotation";
-        serviceConfig.Type = "oneshot";
-        script = "${pkgs.systemd}/bin/systemctl try-restart homelab-platform.service";
-      };
-
     systemd.services.homelab-platform = {
       description = "Personal computing platform";
       wantedBy = [ "multi-user.target" ];
       after = [ "network-online.target" ] ++ lib.optional calendarCfg.enable "homelab-calendar.service"
         ++ lib.optional motivationCfg.enable "homelab-motivation.service"
-        ++ lib.optional (cfg.consolePassphraseFile != null) "homelab-securityd.service";
+;
       wants = [ "network-online.target" ] ++ lib.optional calendarCfg.enable "homelab-calendar.service"
         ++ lib.optional motivationCfg.enable "homelab-motivation.service";
       environment = {
@@ -391,8 +384,11 @@ in
         HOMELAB_FLEET_SOCKET = cfg.fleetSocket;
       } // lib.optionalAttrs (cfg.books.contactFile != null) {
         HOMELAB_BOOKS_CONTACT_FILE = "/run/credentials/homelab-platform.service/books_contact";
-      } // lib.optionalAttrs (cfg.consolePassphraseFile != null) {
-        HOMELAB_CONSOLE_PASSPHRASE_FILE = "/run/credentials/homelab-platform.service/console_passphrase";
+      } // lib.optionalAttrs (cfg.consoleAccess.audience != "") {
+        HOMELAB_CONSOLE_ACCESS_ISSUER = cfg.consoleAccess.issuer;
+        HOMELAB_CONSOLE_ACCESS_AUDIENCE = cfg.consoleAccess.audience;
+        HOMELAB_CONSOLE_ACCESS_OWNER_FILE = "/run/credentials/homelab-platform.service/console-access-owner";
+        HOMELAB_CONSOLE_ACCESS_JWKS_FILE = "/run/credentials/homelab-platform.service/console-access-jwks";
       } // lib.optionalAttrs (cfg.seerr.url != "") {
         HOMELAB_SEERR_URL = cfg.seerr.url;
       } // lib.optionalAttrs (cfg.seerr.apiKeyFile != null) {
@@ -444,7 +440,10 @@ in
           ++ lib.optional (cfg.calendarURLFile != null) "calendar_url:${cfg.calendarURLFile}"
           ++ lib.optional calendarCfg.enable "calendar-service-token:${calendarCfg.tokenFile}"
           ++ lib.optional motivationCfg.enable "motivation-service-token:${motivationCfg.tokenFile}"
-          ++ lib.optional (cfg.consolePassphraseFile != null) "console_passphrase:${cfg.consolePassphraseFile}"
+          ++ lib.optionals (cfg.consoleAccess.audience != "") [
+            "console-access-owner:${cfg.consoleAccess.ownerEmailFile}"
+            "console-access-jwks:${cfg.consoleAccess.jwksFile}"
+          ]
           ++ lib.optional (cfg.books.contactFile != null) "books_contact:${cfg.books.contactFile}"
           ++ lib.optional (cfg.seerr.apiKeyFile != null) "seerr_api_key:${cfg.seerr.apiKeyFile}"
           ++ lib.optionals (cfg.vault.endpoint != null) [
