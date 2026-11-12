@@ -51,6 +51,9 @@
 - [shadcn/ui](https://github.com/shadcn-ui/ui) — shadcn/ui project. Used for: semantic component composition, design vocabulary, and accessible interaction patterns in the Rust console.
 - [shadcn/ui Theming](https://ui.shadcn.com/docs/theming) — shadcn/ui project. Used for: exact neutral light/dark design tokens, sidebar colors, and radius scale for the Rust/Dioxus console.
 - [Dioxus 0.7 Documentation](https://dioxuslabs.com/learn/0.7/) — Dioxus project. Used for: Rust RSX components, WASM rendering and future desktop packaging.
+- [Dioxus v0.7.10 Release](https://github.com/DioxusLabs/dioxus/releases/tag/v0.7.10) — Dioxus project. Used for: pinned, checksummed WebAssembly console bundling.
+- [wasm-bindgen v0.2.130 Release](https://github.com/wasm-bindgen/wasm-bindgen/releases/tag/0.2.130) — wasm-bindgen project. Used for: pinned JavaScript binding generation matching the compiled console.
+- [actions/upload-artifact](https://github.com/actions/upload-artifact) — GitHub Actions project. Used for: storing source-bound static console bundles as inspectable CI artifacts.
 - [MCP Apps specification (2026-01-26)](https://github.com/modelcontextprotocol/ext-apps/blob/main/specification/2026-01-26/apps.mdx) — Model Context Protocol project. Used for: embedded view lifecycle, JSON-RPC tool messages, UI resource MIME types and host iframe security contracts.
 - [Go MCP SDK v1.8.0 ResourceContents](https://pkg.go.dev/github.com/modelcontextprotocol/go-sdk@v1.8.0/mcp#ResourceContents) — Model Context Protocol Go SDK maintainers. Used for: resource-level UI CSP metadata and verified Learning MCP App resource publication.
 - [Web Blob API](https://developer.mozilla.org/en-US/docs/Web/API/Blob) — MDN Web Docs. Used for: browser-local, credential-free original-file downloads after Learning verifies source bytes.
