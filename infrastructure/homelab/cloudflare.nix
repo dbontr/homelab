@@ -74,12 +74,12 @@ in
     };
     mediaAudTag = lib.mkOption {
       type = lib.types.str;
-      default = "6440ec8c06ff6d3644330d172eef02b02af55a55fda035494f2939d9bdc593b6";
+      default = "96b230d8c452581124db0d901d564b555c2d740d0c49af1b3b34640d84900195";
       description = "Cloudflare Access audience for the household media application.";
     };
     recipesAudTag = lib.mkOption {
       type = lib.types.str;
-      default = "6440ec8c06ff6d3644330d172eef02b02af55a55fda035494f2939d9bdc593b6";
+      default = "285091e05e19c5d4a737d889b25eba053499cda3617899c94fc09d8d9e45d579";
       description = "Cloudflare Access audience for the household recipe application.";
     };
     monitorAudTag = lib.mkOption {
