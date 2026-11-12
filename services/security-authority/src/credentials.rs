@@ -37,12 +37,7 @@ impl PassphraseRecord {
         let mut salt = [0u8; 24];
         getrandom::fill(&mut salt).map_err(|_| Error::Storage)?;
         let mut digest = [0u8; 32];
-        pbkdf2_hmac::<Sha256>(
-            password.as_bytes(),
-            &salt,
-            MIN_ITERATIONS,
-            &mut digest,
-        );
+        pbkdf2_hmac::<Sha256>(password.as_bytes(), &salt, MIN_ITERATIONS, &mut digest);
         let record = Self {
             version: 1,
             iterations: MIN_ITERATIONS,
