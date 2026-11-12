@@ -210,6 +210,21 @@ impl Default for AuthenticatorState {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn console_secret_has_a_distinct_valid_pbkdf2_verifier() {
+        let (a, password_a) = PassphraseRecord::generate_console_secret().unwrap();
+        let (b, password_b) = PassphraseRecord::generate_console_secret().unwrap();
+        assert_eq!(password_a.len(), 43);
+        assert_ne!(password_a.as_str(), password_b.as_str());
+        assert_ne!(a.salt, b.salt);
+        let salt = STANDARD_NO_PAD.decode(a.salt.as_bytes()).unwrap();
+        let digest = STANDARD_NO_PAD.decode(a.digest.as_bytes()).unwrap();
+        let mut derived = [0u8; 32];
+        pbkdf2_hmac::<Sha256>(password_a.as_bytes(), &salt, a.iterations, &mut derived);
+        assert_eq!(derived.as_slice(), digest.as_slice());
+        derived.zeroize();
+    }
     const PASSPHRASE: &str = "correct horse battery staple";
     fn fixture() -> Factors {
         Factors::new(
