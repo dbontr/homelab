@@ -8,6 +8,15 @@ import (
 	"testing"
 )
 
+func privateRecipeTestPath(t *testing.T, name string) string {
+ t.Helper()
+ directory := t.TempDir()
+ if err := os.Chmod(directory, 0700); err != nil {
+  t.Fatal(err)
+ }
+ return filepath.Join(directory, name)
+}
+
 func sample(title string) Recipe {
 	return Recipe{Title: title, Servings: 2, Ingredients: []Ingredient{
 		{Name:"Tomato", Amount:2, Unit:"count"},
@@ -18,7 +27,7 @@ func sample(title string) Recipe {
 }
 
 func TestRecipeLifecycleAndPersistence(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "recipes.json")
+	path := privateRecipeTestPath(t, "recipes.json")
 	store, err := Open(path)
 	if err != nil { t.Fatal(err) }
 	recipe, err := store.Save(sample("Tomato salad"))
@@ -41,7 +50,7 @@ func TestRecipeLifecycleAndPersistence(t *testing.T) {
 }
 
 func TestMealPlanAndGroceryConsolidation(t *testing.T) {
-	store, err := Open(filepath.Join(t.TempDir(), "recipes.json"))
+	store, err := Open(privateRecipeTestPath(t, "recipes.json"))
 	if err != nil { t.Fatal(err) }
 	a, _ := store.Save(sample("Salad"))
 	b, _ := store.Save(sample("Another salad"))
@@ -66,7 +75,7 @@ func TestMealPlanAndGroceryConsolidation(t *testing.T) {
 }
 
 func TestNutritionAndImportAreExplicit(t *testing.T) {
-	s, _ := Open(filepath.Join(t.TempDir(),"one.json"))
+	s, _ := Open(privateRecipeTestPath(t,"one.json"))
 	r, _ := s.Save(sample("Soup"))
 	values, err := s.Nutrition(r.ID, 3)
 	if err != nil || values.Method!="estimated" || len(values.Nutrients)!=1 || values.Nutrients[0].Amount!=12 {
@@ -74,7 +83,7 @@ func TestNutritionAndImportAreExplicit(t *testing.T) {
 	}
 	if _,err:=s.Nutrition(r.ID, math.Inf(1));err==nil { t.Fatal("infinite portion accepted") }
 	archive:=s.Export()
-	target,_:=Open(filepath.Join(t.TempDir(),"two.json"))
+	target,_:=Open(privateRecipeTestPath(t,"two.json"))
 	n,err:=target.Import(archive)
 	if err!=nil||n!=1{t.Fatalf("import: %d %v",n,err)}
 	if _,err:=target.Import(archive);!errors.Is(err,ErrConflict){t.Fatal("duplicate import overwrote data")}
@@ -82,7 +91,7 @@ func TestNutritionAndImportAreExplicit(t *testing.T) {
 }
 
 func TestRecipeValidation(t *testing.T) {
-	s,_:=Open(filepath.Join(t.TempDir(),"recipes.json"))
+	s,_:=Open(privateRecipeTestPath(t,"recipes.json"))
 	for _, item:=range []Recipe{
 		{Title:"Empty",Servings:2},
 		{Title:"Bad quantity",Servings:2,Ingredients:[]Ingredient{{Name:"Rice",Amount:-1}},Steps:[]Step{{Text:"Cook"}}},
@@ -93,7 +102,7 @@ func TestRecipeValidation(t *testing.T) {
 }
 
 func TestGroceryChecklistRevisionAndRestart(t *testing.T) {
- path:=filepath.Join(t.TempDir(),"recipes.json")
+ path:=privateRecipeTestPath(t,"recipes.json")
  s,err:=Open(path);if err!=nil{t.Fatal(err)}
  recipe,err:=s.Save(sample("Broth"));if err!=nil{t.Fatal(err)}
  if _,err=s.AddMeal(Meal{RecipeID:recipe.ID,Date:"2026-11-14",Servings:2});err!=nil{t.Fatal(err)}
