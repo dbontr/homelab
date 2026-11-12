@@ -17,6 +17,19 @@
     tokenFile = "/srv/homelab/secrets/homelab-motivation.token";
   };
 
+  # Promote only the exact, source-bound console artifact. Keep the existing
+  # homepage selected until owner login and browser API flows are accepted.
+  services.homelabConsole = {
+    enable = true;
+    replaceHomepage = false;
+    package = pkgs.fetchFromGitHub {
+      owner = "dbontr";
+      repo = "homelab";
+      rev = "90b09f41f363ba406337993cb7ced677ea247bdf";
+      hash = "sha256-3wCdgUYirDq9PIVyudZ57sGToYiotyu3dJtdUAHK8tk=";
+    };
+  };
+
   services.homelabInterfaces = {
     mcp = {
       enable = true;
