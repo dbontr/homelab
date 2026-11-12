@@ -134,7 +134,7 @@ pub fn LearningRoute(
                         Some(Err(message)) => rsx! { Notice { message } },
                         Some(Ok(value)) => rsx! {
                             p { class: "small muted",
-                                "Diagnostic: {api::property(&value, &["reason"])}"
+                                {format!("Diagnostic: {}", api::property(&value, &["reason"]))}
                             }
                             p { {api::property(&value, &["title", "concept_id"])} }
                         }
