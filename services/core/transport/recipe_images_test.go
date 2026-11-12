@@ -52,7 +52,7 @@ func TestRecipeImageHTTPAccessAndContentRestrictions(t *testing.T) {
 		handler.ServeHTTP(response, req)
 		return response
 	}
-	identity := &accessTestIdentity{Value: accessAssertion}
+	accessToken := &accessTestIdentity{Value: accessAssertion}
 	status := call("GET", "/ui/session", "", nil, identity, "")
 	var sessionData struct {
 		CSRF string `json:"csrf_token"`
