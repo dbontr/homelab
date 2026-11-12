@@ -54,7 +54,7 @@ func TestRecipeSagePreviewAndImportAuthorization(t *testing.T) {
 	var identity struct {
 		CSRF string `json:"csrf_token"`
 	}
-	s := call("GET", "/ui/session", nil, identity, "", "")
+	s := call("GET", "/ui/session", nil, accessToken, "", "")
 	if err := json.Unmarshal(s.Body.Bytes(), &identity); err != nil || identity.CSRF == "" {
 		t.Fatalf("missing session token: %v", err)
 	}
@@ -75,13 +75,13 @@ func TestRecipeSagePreviewAndImportAuthorization(t *testing.T) {
 	if r := call("POST", "/v1/recipes/recipesage/preview", request, nil, "", "application/json"); r.Code != 401 {
 		t.Fatalf("anonymous migration preview accepted: %d", r.Code)
 	}
-	if r := call("POST", "/v1/recipes/recipesage/preview", request, identity, "", "application/json"); r.Code != 401 {
+	if r := call("POST", "/v1/recipes/recipesage/preview", request, accessToken, "", "application/json"); r.Code != 401 {
 		t.Fatalf("preview without CSRF accepted: %d", r.Code)
 	}
-	if r := call("POST", "/v1/recipes/recipesage/preview", request, identity, identity.CSRF, "text/plain"); r.Code != 401 {
+	if r := call("POST", "/v1/recipes/recipesage/preview", request, accessToken, identity.CSRF, "text/plain"); r.Code != 401 {
 		t.Fatalf("unexpected media type accepted: %d", r.Code)
 	}
-	previewResponse := call("POST", "/v1/recipes/recipesage/preview", request, identity, identity.CSRF, "application/json")
+	previewResponse := call("POST", "/v1/recipes/recipesage/preview", request, accessToken, identity.CSRF, "application/json")
 	var preview recipes.RecipeSagePreview
 	if previewResponse.Code != 200 || json.Unmarshal(previewResponse.Body.Bytes(), &preview) != nil ||
 		preview.Ready != 1 {
@@ -94,17 +94,17 @@ func TestRecipeSagePreviewAndImportAuthorization(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r := call("POST", "/v1/recipes/recipesage/import", payload, identity, "", "application/json"); r.Code != 401 {
+	if r := call("POST", "/v1/recipes/recipesage/import", payload, accessToken, "", "application/json"); r.Code != 401 {
 		t.Fatalf("import without CSRF accepted: %d", r.Code)
 	}
-	imported := call("POST", "/v1/recipes/recipesage/import", payload, identity, identity.CSRF, "application/json")
+	imported := call("POST", "/v1/recipes/recipesage/import", payload, accessToken, identity.CSRF, "application/json")
 	if imported.Code != 201 || !strings.Contains(imported.Body.String(), `"imported":1`) {
 		t.Fatalf("import failed: %d %s", imported.Code, imported.Body.String())
 	}
-	if r := call("POST", "/v1/recipes/recipesage/import", payload, identity, identity.CSRF, "application/json"); r.Code != 409 {
+	if r := call("POST", "/v1/recipes/recipesage/import", payload, accessToken, identity.CSRF, "application/json"); r.Code != 409 {
 		t.Fatalf("duplicate migration allowed: %d %s", r.Code, r.Body.String())
 	}
-	if r := call("POST", "/mcp", request, identity, identity.CSRF, "application/json"); r.Code != 401 {
+	if r := call("POST", "/mcp", request, accessToken, identity.CSRF, "application/json"); r.Code != 401 {
 		t.Fatalf("browser session obtained MCP credentials: %d", r.Code)
 	}
 	if len(db.List("")) != 1 {
@@ -124,7 +124,7 @@ func TestRecipeSagePreviewAndImportAuthorization(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	reviewResponse := call("POST", "/v1/recipes/recipesage/preview", reviewBody, identity, identity.CSRF, "application/json")
+	reviewResponse := call("POST", "/v1/recipes/recipesage/preview", reviewBody, accessToken, identity.CSRF, "application/json")
 	var review recipes.RecipeSagePreview
 	if reviewResponse.Code != 200 || json.Unmarshal(reviewResponse.Body.Bytes(), &review) != nil ||
 		review.Candidates[0].Status != "needs_review" {
@@ -140,7 +140,7 @@ func TestRecipeSagePreviewAndImportAuthorization(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	applied := call("POST", "/v1/recipes/recipesage/import", applyBody, identity, identity.CSRF, "application/json")
+	applied := call("POST", "/v1/recipes/recipesage/import", applyBody, accessToken, identity.CSRF, "application/json")
 	if applied.Code != 201 || len(db.List("")) != 2 {
 		t.Fatalf("reviewed import failed: %d %s", applied.Code, applied.Body.String())
 	}
