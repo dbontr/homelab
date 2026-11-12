@@ -772,10 +772,9 @@ fn browser_page(shared: &Shared, assertion: &str, message: &str) -> Response {
     let mut response = Html(html).into_response();
     response.headers_mut().insert("content-security-policy",
         HeaderValue::from_static("default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"));
-    response.headers_mut().insert(
-        "referrer-policy",
-        HeaderValue::from_static("same-origin"),
-    );
+    response
+        .headers_mut()
+        .insert("referrer-policy", HeaderValue::from_static("same-origin"));
     response
 }
 
@@ -1028,12 +1027,11 @@ mod tests {
             .route(
                 "/form",
                 get(|| async {
-                    let mut response = Html("<form method=\"post\" action=\"/login\"></form>")
-                        .into_response();
-                    response.headers_mut().insert(
-                        "referrer-policy",
-                        HeaderValue::from_static("same-origin"),
-                    );
+                    let mut response =
+                        Html("<form method=\"post\" action=\"/login\"></form>").into_response();
+                    response
+                        .headers_mut()
+                        .insert("referrer-policy", HeaderValue::from_static("same-origin"));
                     response
                 }),
             )
@@ -1051,7 +1049,12 @@ mod tests {
         );
 
         let private = routes
-            .oneshot(Request::builder().uri("/private").body(Body::empty()).unwrap())
+            .oneshot(
+                Request::builder()
+                    .uri("/private")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
             .await
             .unwrap();
         assert_eq!(
