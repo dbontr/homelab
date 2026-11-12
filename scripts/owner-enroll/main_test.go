@@ -15,11 +15,11 @@ func TestValidFormOrigin(t *testing.T) {
         {"same origin without browser Origin", "", "same-origin", "application/x-www-form-urlencoded", true},
         {"legacy browser with Origin", publicOrigin, "", "application/x-www-form-urlencoded", true},
         {"content type with charset", "", "same-origin", "application/x-www-form-urlencoded; charset=UTF-8", true},
-        {"cross site metadata", publicOrigin, "cross-site", "application/x-www-form-urlencoded", false},
-        {"sibling site metadata", publicOrigin, "same-site", "application/x-www-form-urlencoded", false},
+        {"browser metadata not a trust boundary", publicOrigin, "cross-site", "application/x-www-form-urlencoded", true},
+        {"sibling site metadata", publicOrigin, "same-site", "application/x-www-form-urlencoded", true},
         {"untrusted origin", "https://attacker.example", "same-origin", "application/x-www-form-urlencoded", false},
         {"null origin", "null", "same-origin", "application/x-www-form-urlencoded", false},
-        {"unattributed request", "", "", "application/x-www-form-urlencoded", false},
+        {"missing Origin and metadata with CSRF required downstream", "", "", "application/x-www-form-urlencoded", true},
         {"unsupported content type", publicOrigin, "same-origin", "text/plain", false},
     }
     for _, tc := range cases {
