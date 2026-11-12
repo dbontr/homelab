@@ -62,17 +62,9 @@ in
         };
         locations."/v1/" = {
           proxyPass = api;
-          extraConfig = ''
-            proxy_set_header Host $host;
-            proxy_set_header X-Forwarded-Proto https;
-          '';
         };
         locations."/ui/" = {
           proxyPass = api;
-          extraConfig = ''
-            proxy_set_header Host $host;
-            proxy_set_header X-Forwarded-Proto https;
-          '';
         };
         locations."/mcp" = { return = "404"; };
       };
