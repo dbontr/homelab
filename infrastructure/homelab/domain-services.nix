@@ -24,12 +24,7 @@
   services.homelabConsole = {
     enable = true;
     replaceHomepage = false;
-    package = pkgs.fetchFromGitHub {
-      owner = "dbontr";
-      repo = "homelab";
-      rev = "90b09f41f363ba406337993cb7ced677ea247bdf";
-      hash = "sha256-3wCdgUYirDq9PIVyudZ57sGToYiotyu3dJtdUAHK8tk=";
-    };
+    package = import ../../packages/console.nix { inherit pkgs; };
   };
 
   services.homelabInterfaces = {
