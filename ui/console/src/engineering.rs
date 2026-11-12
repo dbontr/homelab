@@ -91,7 +91,7 @@ fn RunDetail(run: Value, csrf: String) -> Element {
                             div { class:"inline-row",
                                 span { class:"mono", {text(&diagnostic, "command")} }
                                 Badge { text:text(&diagnostic,"category") }
-                                span { class:"muted", "Exit: {text(&diagnostic, "exit_code")}" }
+                                span { class:"muted", {format!("Exit: {}", text(&diagnostic, "exit_code"))} }
                             }
                         }
                     }
@@ -181,7 +181,7 @@ fn TeamDetail(team: Value, csrf: String) -> Element {
                 if !conflicts.is_empty() {
                     h3 { "Reconciliation conflicts" }
                     for conflict in conflicts {
-                        p { role: "alert", "{conflict.as_str().unwrap_or("")}" }
+                        p { role: "alert", {conflict.as_str().unwrap_or("").to_string()} }
                     }
                 }
                 if ready {
