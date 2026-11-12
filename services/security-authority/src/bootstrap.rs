@@ -76,17 +76,20 @@ pub struct Settings {
 
 pub fn initialize(directory: &Path) -> Result<Settings, Error> {
     // Switching the authority must not reset replay or lockout history.
-    require_authenticator_record(directory)?;
-    let verifier = configured_file("HOMELAB_SECURITY_PASSWORD_FILE", true)?;
+    require_authenticator_record(directory).inspect_err(|_| eprintln!("securityd startup: replay file custody"))?;
+    let verifier = configured_file("HOMELAB_SECURITY_PASSWORD_FILE", true)
+        .inspect_err(|_| eprintln!("securityd startup: password verifier custody"))?;
     let verifier: PassphraseRecord =
         serde_json::from_slice(&verifier).map_err(|_| Error::InvalidConfiguration)?;
-    let mut otp = configured_file("HOMELAB_SECURITY_TOTP_FILE", true)?;
+    let mut otp = configured_file("HOMELAB_SECURITY_TOTP_FILE", true)
+        .inspect_err(|_| eprintln!("securityd startup: TOTP credential custody"))?;
     let secret = std::str::from_utf8(&otp)
         .map_err(|_| Error::InvalidConfiguration)?
         .trim()
         .to_owned();
     otp.zeroize();
-    let policies = configured_file("HOMELAB_SECURITY_POLICY_FILE", false)?;
+    let policies = configured_file("HOMELAB_SECURITY_POLICY_FILE", false)
+        .inspect_err(|_| eprintln!("securityd startup: operation policy custody"))?;
     let policies: Vec<OperationPolicy> =
         serde_json::from_slice(&policies).map_err(|_| Error::InvalidConfiguration)?;
     let opened = Authority::open(
@@ -99,10 +102,11 @@ pub fn initialize(directory: &Path) -> Result<Settings, Error> {
     );
     let mut secret = zeroize::Zeroizing::new(secret);
     secret.zeroize();
-    let mut authority = opened?;
+    let mut authority = opened.inspect_err(|_| eprintln!("securityd startup: state ownership or replay validation"))?;
 
     if env::var("HOMELAB_SECURITY_VAULT_KEY_FILE").is_ok() {
-        let mut raw = configured_file("HOMELAB_SECURITY_VAULT_KEY_FILE", true)?;
+        let mut raw = configured_file("HOMELAB_SECURITY_VAULT_KEY_FILE", true)
+            .inspect_err(|_| eprintln!("securityd startup: vault key custody"))?;
         if raw.len() != 32 {
             raw.zeroize();
             return Err(Error::InvalidConfiguration);
@@ -112,7 +116,7 @@ pub fn initialize(directory: &Path) -> Result<Settings, Error> {
         raw.zeroize();
         let attached = authority.attach_vault(key);
         key.zeroize();
-        attached?;
+        attached.inspect_err(|_| eprintln!("securityd startup: vault state validation"))?;
     } else if directory.join("credentials.json").exists() {
         return Err(Error::InvalidConfiguration);
     }
@@ -134,8 +138,10 @@ pub fn initialize(directory: &Path) -> Result<Settings, Error> {
 
     if let Ok(audience) = env::var("HOMELAB_SECURITY_ACCESS_GATEWAY_AUD") {
         if !audience.is_empty() {
-            let jwks = configured_file("HOMELAB_SECURITY_ACCESS_JWKS_FILE", false)?;
-            let mut email = configured_file("HOMELAB_SECURITY_ACCESS_OWNER_FILE", true)?;
+            let jwks = configured_file("HOMELAB_SECURITY_ACCESS_JWKS_FILE", false)
+                .inspect_err(|_| eprintln!("securityd startup: Access signing keys custody"))?;
+            let mut email = configured_file("HOMELAB_SECURITY_ACCESS_OWNER_FILE", true)
+                .inspect_err(|_| eprintln!("securityd startup: owner identity custody"))?;
             let owner = std::str::from_utf8(&email)
                 .map_err(|_| Error::InvalidConfiguration)?
                 .trim()
