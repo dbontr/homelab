@@ -265,7 +265,15 @@ in
     systemd.tmpfiles.rules = lib.optionals cfg.browser.enable [
       "d /run/homelab-security-browser 0750 homelab-security homelab-security-browser -"
     ];
+    # The bootstrap verifier has no known matching passphrase. Browser
+    # enrollment atomically replaces it with an owner-authorized verifier.
     systemd.services.homelab-securityd = {
+      preStart = lib.optionalString cfg.browser.enable ''
+        if [ ! -e /var/lib/homelab-console/verifier.json ]; then
+          umask 077
+          printf '%s\\n' '{"version":1,"iterations":310000,"salt":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","digest":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}' > /var/lib/homelab-console/verifier.json
+        fi
+      '';
       description = "Independent owner authentication and privileged-session policy";
       wantedBy = [ "multi-user.target" ];
       environment = {
@@ -312,7 +320,7 @@ in
         User = "homelab-security";
         Group = "homelab-security";
         SupplementaryGroups = [ "homelab-security-client" ] ++ lib.optional cfg.browser.enable "homelab-security-browser";
-        StateDirectory = "homelab-securityd";
+        StateDirectory = [ "homelab-securityd" ] ++ lib.optional cfg.browser.enable "homelab-console";
         StateDirectoryMode = "0700";
         RuntimeDirectory = [ "homelab-securityd" ];
         RuntimeDirectoryMode = "0750";
