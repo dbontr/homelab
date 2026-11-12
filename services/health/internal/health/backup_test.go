@@ -14,7 +14,9 @@ func TestBackupCapturesCommittedHealthRecords(t *testing.T){
  _,err:=s.Add(ctx,Record{Domain:"biometric",Metric:"weight",Value:82,Unit:"kg",
   At:time.Now(),Source:"manual",Method:"reported"})
  if err!=nil{t.Fatal(err)}
- destination:=filepath.Join(t.TempDir(),"snapshot.db")
+ destinationDir:=filepath.Join(t.TempDir(),"snapshots")
+ if err:=os.Mkdir(destinationDir,0700);err!=nil{t.Fatal(err)}
+ destination:=filepath.Join(destinationDir,"snapshot.db")
  if err=s.Backup(ctx,destination);err!=nil{t.Fatal(err)}
  info,err:=os.Stat(destination)
  if err!=nil{t.Fatal(err)}
