@@ -128,22 +128,47 @@ main.content { max-width: 94rem; margin: 0 auto; padding: 2rem; }
 .page-heading p { margin: .45rem 0 0; color: var(--muted-foreground); }
 .page-heading .page-actions { display: flex; gap: .5rem; }
 .btn {
-  display: inline-flex; align-items: center; justify-content: center; gap: .5rem; height: 2.25rem;
-  border-radius: calc(var(--radius) * .8); padding: 0 1rem; border: 1px solid transparent;
-  font-size: .875rem; font-weight: 500; white-space: nowrap; transition: background .12s, color .12s;
+  display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; gap: .5rem;
+  min-height: 2.25rem; height: 2.25rem; padding: .5rem 1rem;
+  border: 1px solid transparent; border-radius: calc(var(--radius) * .8);
+  font-size: .875rem; font-weight: 500; line-height: 1.25rem; white-space: nowrap;
+  transition: background-color .15s, border-color .15s, color .15s, box-shadow .15s;
 }
-.btn svg { width: 1rem; height: 1rem; flex: 0 0 1rem; }
+.btn svg { width: 1rem; height: 1rem; flex: 0 0 1rem; pointer-events: none; }
+.btn:focus-visible { border-color: var(--ring); box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring) 50%, transparent); }
 .btn-primary { background: var(--primary); color: var(--primary-foreground); }
-.btn-primary:hover { opacity: .9; }
+.btn-primary:hover { background: color-mix(in oklch, var(--primary) 90%, transparent); }
 .btn-outline { background: var(--background); color: var(--foreground); border-color: var(--input); box-shadow: 0 1px 2px 0 rgb(0 0 0 / .05); }
 .btn-outline:hover { background: var(--accent); color: var(--accent-foreground); }
-.btn-ghost { background: transparent; color: var(--foreground); padding: 0 .625rem; }
-.btn-ghost:hover { background: var(--accent); }
+.dark .btn-outline { background: color-mix(in oklch, var(--input) 30%, transparent); }
+.dark .btn-outline:hover { background: color-mix(in oklch, var(--input) 50%, transparent); }
+.btn-ghost { background: transparent; color: var(--foreground); padding-inline: .625rem; }
+.btn-ghost:hover { background: var(--accent); color: var(--accent-foreground); }
+.dark .btn-ghost:hover { background: color-mix(in oklch, var(--accent) 50%, transparent); }
+.btn-secondary { background: var(--secondary); color: var(--secondary-foreground); }
+.btn-secondary:hover { background: color-mix(in oklch, var(--secondary) 80%, transparent); }
+.btn-destructive { background: var(--destructive); color: white; }
+.btn-destructive:hover { background: color-mix(in oklch, var(--destructive) 90%, transparent); }
+.btn-link { background: transparent; color: var(--primary); text-decoration: none; text-underline-offset: 4px; }
+.btn-link:hover { text-decoration: underline; }
 .btn-icon { width: 2.25rem; padding: 0; }
-.btn-sm { height: 2rem; padding: 0 .75rem; font-size: .875rem; }
-.field { width: 100%; height: 2.25rem; border: 1px solid var(--input); background: transparent; color: var(--foreground); border-radius: calc(var(--radius) * .8); padding: .5rem .75rem; font-size: .875rem; }
+.btn-sm { min-height: 2rem; height: 2rem; padding: .375rem .75rem; font-size: .875rem; }
+.field {
+  width: 100%; min-width: 0; height: 2.25rem; border: 1px solid var(--input);
+  background: transparent; color: var(--foreground); border-radius: calc(var(--radius) * .8);
+  padding: .25rem .75rem; font-size: .875rem; box-shadow: 0 1px 2px rgb(0 0 0 / .05);
+  transition: border-color .15s, box-shadow .15s;
+}
+.dark .field { background: color-mix(in oklch, var(--input) 30%, transparent); }
 .field::placeholder { color: var(--muted-foreground); }
 .field:focus-visible { outline: none; border-color: var(--ring); box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring) 50%, transparent); }
+.field[aria-invalid="true"], .btn[aria-invalid="true"] { border-color: var(--destructive); }
+.field[aria-invalid="true"]:focus-visible { box-shadow: 0 0 0 3px color-mix(in oklch, var(--destructive) 20%, transparent); }
+.app input[type="checkbox"], .app input[type="radio"] { accent-color: var(--primary); }
+.app :is(input, select, textarea):disabled { cursor: not-allowed; opacity: .5; }
+.app select.field { padding-block: .25rem; }
+.app textarea.field, .app .textarea { height: auto; min-height: 4rem; padding-block: .5rem; resize: vertical; }
+
 .card { background: var(--card); color: var(--card-foreground); border: 1px solid var(--border); border-radius: calc(var(--radius) * 1.4); box-shadow: 0 1px 3px 0 rgb(0 0 0 / .1), 0 1px 2px -1px rgb(0 0 0 / .1); min-width: 0; }
 .card-header { display: grid; gap: .5rem; padding: 1.5rem 1.5rem 1rem; }
 .card-title { font-size: 1rem; font-weight: 600; line-height: 1; letter-spacing: -.015em; margin: 0; }
