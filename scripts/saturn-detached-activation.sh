@@ -50,7 +50,8 @@ if [[ "$#" -eq 3 && "$1" == "--run" ]]; then
     for unit in k3s.service cloudflared-saturn.service nginx.service saturn-media.service \
                 adaptive-teaching.service personal-health-mcp.service \
                 homelab-platform.service homelab-mcp.service homelab-api.service \
-                homelab-motivation.service homelab-securityd.service; do
+                homelab-motivation.service homelab-securityd.service \
+                homelab-executord.service; do
       require_active "$unit" || status=1
     done
     security_dir=/run/homelab-securityd
@@ -71,6 +72,23 @@ if [[ "$#" -eq 3 && "$1" == "--run" ]]; then
         http://unix/v1/session) || client_status=""
       if [[ "$owner_status" != 200 || "$client_status" != 403 ]]; then
         printf 'Security socket health or unsigned-client rejection failed\n' >&2
+        status=1
+      fi
+    fi
+    executor_dir=/run/homelab-executord
+    if [[ ! -S "$executor_dir/execute.sock" ||
+          "$(stat -c '%a' "$executor_dir/execute.sock")" != 660 ]]; then
+      printf 'Executor socket type or permissions are invalid\n' >&2
+      status=1
+    else
+      executor_status=$(curl --silent --show-error --max-time 5 \
+        --unix-socket "$executor_dir/execute.sock" \
+        --header 'Content-Type: application/json' \
+        --data '{"request_id":"00000000000000000000000000000000","operation":"infrastructure__service_restart","target":"saturn","arguments":{"host":"saturn","service":"homelab-motivation.service"}}' \
+        --output /dev/null --write-out '%{http_code}' \
+        http://unix/v1/execute) || executor_status=""
+      if [[ "$executor_status" != 403 ]]; then
+        printf 'Unsigned executor request was not rejected\n' >&2
         status=1
       fi
     fi
