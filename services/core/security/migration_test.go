@@ -82,7 +82,7 @@ func TestMigrationCutoverAndRollbackPreserveCurrentReplayAndVault(t *testing.T){
     if err!=nil||!bytes.Equal(current,newer){t.Fatal("rollback restored stale authentication state")}
     vault,err:=os.ReadFile(filepath.Join(dir,"credentials.json"))
     if err!=nil||!bytes.Equal(vault,credential){t.Fatal("rollback changed encrypted vault")}
-    _,parent,err=migrationMarkerRead(dir)
+    _,parent,err:=migrationMarkerRead(dir)
     if err!=nil{t.Fatal(err)}
     forward:=migrationTestReceipt(t,dir,"rust",parent)
     if err:=AdmitMigration(dir,"rust",forward);err!=nil{t.Fatal(err)}
