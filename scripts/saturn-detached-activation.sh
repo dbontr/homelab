@@ -53,6 +53,27 @@ if [[ "$#" -eq 3 && "$1" == "--run" ]]; then
                 homelab-motivation.service homelab-securityd.service; do
       require_active "$unit" || status=1
     done
+    security_dir=/run/homelab-securityd
+    if [[ ! -S "$security_dir/owner.sock" ||
+          ! -S "$security_dir/client.sock" ||
+          "$(stat -c '%a' "$security_dir/owner.sock")" != 600 ||
+          "$(stat -c '%a' "$security_dir/client.sock")" != 660 ]]; then
+      printf 'Security socket type or permissions are invalid\n' >&2
+      status=1
+    else
+      owner_status=$(curl --silent --show-error --max-time 5 \
+        --unix-socket "$security_dir/owner.sock" \
+        --output /dev/null --write-out '%{http_code}' \
+        http://unix/v1/session) || owner_status=""
+      client_status=$(curl --silent --show-error --max-time 5 \
+        --unix-socket "$security_dir/client.sock" \
+        --output /dev/null --write-out '%{http_code}' \
+        http://unix/v1/session) || client_status=""
+      if [[ "$owner_status" != 200 || "$client_status" != 403 ]]; then
+        printf 'Security socket health or unsigned-client rejection failed\n' >&2
+        status=1
+      fi
+    fi
     for port in 8300 8401 8402; do
       if ! curl --fail --silent --show-error --max-time 5 \
         "http://127.0.0.1:$port/healthz" >/dev/null; then
