@@ -50,7 +50,7 @@ if [[ "$#" -eq 3 && "$1" == "--run" ]]; then
     for unit in k3s.service cloudflared-saturn.service nginx.service saturn-media.service \
                 adaptive-teaching.service personal-health-mcp.service \
                 homelab-platform.service homelab-mcp.service homelab-api.service \
-                homelab-motivation.service; do
+                homelab-motivation.service homelab-securityd.service; do
       require_active "$unit" || status=1
     done
     for port in 8300 8401 8402; do
