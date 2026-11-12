@@ -72,7 +72,7 @@ func TestFederationRejectsConflictingRemoteConfirmations(t *testing.T){
  if err!=nil{t.Fatal(err)}
  gateway,err:=New(db,strings.Repeat("f",40),nil)
  if err!=nil{t.Fatal(err)}
- var result map[string]any
+ var result any
  err=gateway.forward(context.Background(),Backend{Name:"test",URL:backend.URL},
   rpcRequest{JSONRPC:"2.0",ID:json.RawMessage("7"),Method:"tools/call"},&result)
  if err==nil||result!=nil{
