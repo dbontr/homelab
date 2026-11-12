@@ -38,7 +38,7 @@ func TestSyncPollerPersistsContinuation(t *testing.T){
   }
  }))
  defer server.Close()
- db,err:=health.Open(filepath.Join(t.TempDir(),"data.db"));if err!=nil{t.Fatal(err)}
+ db,err:=health.Open(filepath.Join(privateGoogleHealthDir(t),"data.db"));if err!=nil{t.Fatal(err)}
  defer db.Close()
  client,err:=New(Config{AccessToken:"test",HTTP:server.Client(),BaseURL:server.URL+"/v4"})
  if err!=nil{t.Fatal(err)}
