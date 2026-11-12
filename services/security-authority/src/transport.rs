@@ -23,7 +23,7 @@ use serde_json::value::RawValue;
 use tokio::net::UnixListener;
 use zeroize::Zeroizing;
 
-use crate::sessions::{Authority, AuthorizationWire, Decision};
+use crate::sessions::{Authority, AuthorizationWire};
 use crate::Error;
 
 const MAX_JSON_BYTES: usize = 1 << 20;
@@ -134,6 +134,7 @@ fn json_reply<T: Serialize>(status: StatusCode, value: T) -> Response {
     (status, Json(value)).into_response()
 }
 
+#[allow(clippy::result_large_err)]
 fn owner_assertion(headers: &HeaderMap) -> Result<&str, Response> {
     let assertion = headers
         .get("cf-access-jwt-assertion")
@@ -143,6 +144,7 @@ fn owner_assertion(headers: &HeaderMap) -> Result<&str, Response> {
         .ok_or_else(|| protected_status("verified owner identity required", StatusCode::FORBIDDEN))
 }
 
+#[allow(clippy::result_large_err)]
 pub(crate) fn json_input<T: serde::de::DeserializeOwned>(
     headers: &HeaderMap,
     raw: &[u8],
@@ -694,6 +696,7 @@ fn escape_html(value: &str) -> String {
         .replace('\'', "&#39;")
 }
 
+#[allow(clippy::result_large_err)]
 fn checked_browser_assertion<'a>(
     shared: &Shared,
     headers: &'a HeaderMap,
