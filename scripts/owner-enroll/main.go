@@ -15,6 +15,7 @@ import (
     "fmt"
     "io"
     "log"
+    "mime"
     "net/http"
     "os"
     "path/filepath"
@@ -118,6 +119,25 @@ func verifiedJWT(token string) bool {
     return false
 }
 
+func validFormOrigin(r *http.Request) bool {
+    mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+    if err != nil || mediaType != "application/x-www-form-urlencoded" {
+        return false
+    }
+    origin := r.Header.Get("Origin")
+    if origin != "" && origin != publicOrigin {
+        return false
+    }
+    switch r.Header.Get("Sec-Fetch-Site") {
+    case "same-origin":
+        return true
+    case "":
+        return origin == publicOrigin
+    default:
+        return false
+    }
+}
+
 func (a *app) ServeHTTP(w http.ResponseWriter,r *http.Request){
     for k,v:=range map[string]string{
         "Cache-Control":"private, no-store, max-age=0",
@@ -133,11 +153,11 @@ func (a *app) ServeHTTP(w http.ResponseWriter,r *http.Request){
     if a.failures>=5{http.Error(w,"Enrollment locked",429);return}
     if r.URL.Path!="/"{http.NotFound(w,r);return}
     if r.Method==http.MethodGet{
-        fmt.Fprintf(w,"<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='robots' content='noindex,nofollow,noarchive'><meta name='viewport' content='width=device-width,initial-scale=1'><title>Homelab owner enrollment</title><style>body{font:16px system-ui;background:#111827;color:#fff;max-width:560px;margin:6vh auto;padding:24px}label{display:block;margin:22px 0 6px}input,button{box-sizing:border-box;width:100%%;padding:12px;font:inherit}button{margin-top:24px}</style></head><body><h1>Enroll administrator on Saturn</h1><p>Enter the password and TOTP Base32 seed you recorded. They are sent directly to Saturn through Cloudflare Access and are never stored in Cloudflare KV.</p><form method='POST'><input type='hidden' name='csrf' value='%s'><label>Password</label><input name='password' type='password' required minlength='16' maxlength='1024' autocomplete='new-password'><label>Confirm password</label><input name='confirm' type='password' required minlength='16' maxlength='1024' autocomplete='off'><label>TOTP Base32 secret</label><input name='totp' type='password' required minlength='32' maxlength='208' autocomplete='off'><button type='submit'>Install credentials on Saturn</button></form><p>Temporary, owner-only endpoint. Do not enter your root login password.</p></body></html>",a.csrf)
+        fmt.Fprintf(w,"<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='robots' content='noindex,nofollow,noarchive'><meta name='viewport' content='width=device-width,initial-scale=1'><title>Homelab owner enrollment</title><style>body{font:16px system-ui;background:#111827;color:#fff;max-width:560px;margin:6vh auto;padding:24px}label{display:block;margin:22px 0 6px}input,button{box-sizing:border-box;width:100%%;padding:12px;font:inherit}button{margin-top:24px}</style></head><body><h1>Enroll administrator on Saturn</h1><p>Enter the password and TOTP Base32 seed you recorded. They are sent directly to Saturn through Cloudflare Access and are never stored in Cloudflare KV.</p><form method='POST' action='/'><input type='hidden' name='csrf' value='%s'><label>Password</label><input name='password' type='password' required minlength='16' maxlength='1024' autocomplete='new-password'><label>Confirm password</label><input name='confirm' type='password' required minlength='16' maxlength='1024' autocomplete='off'><label>TOTP Base32 secret</label><input name='totp' type='password' required minlength='32' maxlength='208' autocomplete='off'><button type='submit'>Install credentials on Saturn</button></form><p>Temporary, owner-only endpoint. Do not enter your root login password.</p></body></html>",a.csrf)
         return
     }
     if r.Method!=http.MethodPost{http.Error(w,"Method not allowed",405);return}
-    if r.Header.Get("Origin")!=publicOrigin||!strings.HasPrefix(r.Header.Get("Content-Type"),"application/x-www-form-urlencoded"){a.failures++;http.Error(w,"Invalid origin",403);return}
+    if !validFormOrigin(r){a.failures++;http.Error(w,"Invalid origin",403);return}
     r.Body=http.MaxBytesReader(w,r.Body,4096)
     if r.ParseForm()!=nil{a.failures++;http.Error(w,"Invalid form",400);return}
     if subtle.ConstantTimeCompare([]byte(r.PostForm.Get("csrf")),[]byte(a.csrf))!=1{a.failures++;http.Error(w,"Invalid session",403);return}
@@ -155,7 +175,7 @@ func (a *app) ServeHTTP(w http.ResponseWriter,r *http.Request){
 func main(){
     if err:=checkTarget();err!=nil{log.Fatal(err)}
     random:=make([]byte,24);if _,err:=io.ReadFull(rand.Reader,random);err!=nil{log.Fatal(err)}
-    a:=&app{csrf:base64.RawURLEncoding.EncodeToString(random),deadline:time.Now().Add(30*time.Minute)}
+    a:=&app{csrf:base64.RawURLEncoding.EncodeToString(random),deadline:time.Now().Add(60*time.Minute)}
     a.server=&http.Server{Addr:"127.0.0.1:8127",Handler:a,ReadHeaderTimeout:5*time.Second,ReadTimeout:10*time.Second,WriteTimeout:10*time.Second,MaxHeaderBytes:4096}
     time.AfterFunc(time.Until(a.deadline),func(){_ =a.server.Close()})
     log.Print("owner enrollment receiver ready on 127.0.0.1:8127")
