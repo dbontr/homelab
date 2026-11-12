@@ -49,13 +49,13 @@ func TestMotivationBrowserRoutesRequireOwnerSessionAndCSRF(t *testing.T) {
         return writer
     }
     if w:=call("GET","/v1/motivation/state","",nil,"");w.Code!=401 {t.Fatalf("unauthenticated read: %d",w.Code)}
-    identity := &accessTestIdentity{Value: accessAssertion}
-    state:=call("GET","/ui/session","",identity,"")
+    accessToken := &accessTestIdentity{Value: accessAssertion}
+    state:=call("GET","/ui/session","",accessToken,"")
     var sessionState struct { CSRF string `json:"csrf_token"` }
     if err:=json.Unmarshal(state.Body.Bytes(),&sessionState);err!=nil {t.Fatal(err)}
     if sessionState.CSRF=="" {t.Fatal("CSRF missing")}
     for _,path:=range []string{"/v1/motivation/state","/v1/motivation/metrics"} {
-        if w:=call("GET",path,"",identity,"");w.Code!=200 {
+        if w:=call("GET",path,"",accessToken,"");w.Code!=200 {
             t.Fatalf("authenticated read %s: %d %s",path,w.Code,w.Body.String())
         }
     }
@@ -66,15 +66,15 @@ func TestMotivationBrowserRoutesRequireOwnerSessionAndCSRF(t *testing.T) {
         {"POST","/v1/motivation/focus"},{"POST","/v1/motivation/focus/end"},
     }
     for _,item:=range cases {
-        if w:=call(item.method,item.path,"{}",identity,"");w.Code!=401 {
+        if w:=call(item.method,item.path,"{}",accessToken,"");w.Code!=401 {
             t.Fatalf("CSRF bypass for %s %s: %d",item.method,item.path,w.Code)
         }
-        if w:=call(item.method,item.path,"{}",identity,sessionState.CSRF);w.Code!=200 {
+        if w:=call(item.method,item.path,"{}",accessToken,sessionState.CSRF);w.Code!=200 {
             t.Fatalf("authorized call %s %s: %d %s",item.method,item.path,w.Code,w.Body.String())
         }
     }
     if len(calls)!=10 {t.Fatalf("expected ten authorized upstream calls, got %v",calls)}
-    if w:=call("POST","/mcp",`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`,identity,sessionState.CSRF);w.Code!=401 {
+    if w:=call("POST","/mcp",`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`,accessToken,sessionState.CSRF);w.Code!=401 {
         t.Fatal("browser session reached MCP")
     }
 }
