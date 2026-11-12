@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/dbontr/homelab-new/system/devices"
 	"github.com/dbontr/homelab-new/system/security"
 	"github.com/dbontr/homelab-new/system/session"
 	"github.com/dbontr/homelab-new/system/store"
@@ -23,6 +24,9 @@ func TestConsoleBrowserSessionScopesMutations(t *testing.T) {
 	manager,err:=session.New(record)
 	if err!=nil{t.Fatal(err)}
 	s.SetSessions(manager)
+	nodes,err:=devices.NewNodes([]devices.Node{{ID:"saturn", Mode:devices.ModeEnrolled, Role:"controller", System:"x86_64-linux"}})
+	if err!=nil{t.Fatal(err)}
+	s.SetNodeCatalog(nodes)
 	if err:=s.SetAllowedOrigins([]string{"https://console.example"});err!=nil{t.Fatal(err)}
 	h:=s.Handler()
 	call:=func(method,path,body string,cookie *http.Cookie,csrf string)*httptest.ResponseRecorder{
