@@ -106,8 +106,9 @@ unit="homelab-cutover-$(date +%s)"
 runner="/run/$unit-runner"
 install -m 0700 -- "$0" "$runner"
 printf '%s\n' "$previous" > /run/homelab-previous-system
-systemd-run --unit="$unit" --collect \
-  --property=Type=oneshot --property=TimeoutStartSec=0 \
+systemd-run --no-block --unit="$unit" --collect \
+  --property=Type=oneshot --property=TimeoutStartSec=25min \
+  --property=StandardOutput=journal --property=StandardError=journal \
   "$runner" --run "$candidate" "$previous"
 printf 'Detached trial started: %s\n' "$unit"
 printf 'Inspect with: journalctl -u %s --no-pager\n' "$unit"
