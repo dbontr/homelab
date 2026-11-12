@@ -12,9 +12,9 @@ dx serve --platform web
 
 Requires a Rust toolchain with the `wasm32-unknown-unknown` target, Dioxus CLI 0.7, and cached Cargo dependencies. Use a local reverse proxy to serve the compiled console and Go API under one HTTPS origin. Dioxus is a web application; the API must be reachable under the same origin.
 
-Do not expose the gateway's MCP bearer secret to the browser. The browser uses a short-lived cookie authenticated through `POST /ui/session`. Go accepts reads of selected native resources; permitted owner-data mutations require a CSRF token and an exact allowed Origin. The cookie cannot change cluster configuration, invoke MCP tools, or update other domain resources.
+Do not expose the gateway's MCP bearer secret to the browser. Cloudflare Access authenticates the owner at `dbontr.me`; Go verifies the signed Access assertion, including issuer, application audience, lifetime, and exact owner identity, on each native browser API request. The read-only `GET /ui/session` returns authentication status and an assertion-bound CSRF token. Permitted personal-data mutations also require the exact allowed Origin and `X-CSRF-Token`; signed browser identity cannot change cluster configuration or invoke MCP tools. Signing out uses `/cdn-cgi/access/logout`.
 
-The Go service must have `HOMELAB_CONSOLE_PASSPHRASE_FILE` pointing to an owner-only JSON passphrase verifier, provisioned independently of the administrator approval passphrase. Configure `HOMELAB_ALLOWED_ORIGINS` for the console's exact HTTPS origin. No browser session is available if the verifier is not configured.
+Configure `HOMELAB_CONSOLE_ACCESS_ISSUER`, `HOMELAB_CONSOLE_ACCESS_AUDIENCE`, `HOMELAB_CONSOLE_ACCESS_OWNER_FILE` and `HOMELAB_CONSOLE_ACCESS_JWKS_FILE` together. NixOS supplies the owner identity and pinned signing keys through protected systemd credentials; the audience must match the Cloudflare Access application at `dbontr.me`. Configure `HOMELAB_ALLOWED_ORIGINS` for the exact HTTPS origin. Missing or invalid Access verification fails closed. Infrastructure administration remains separately protected by the Rust authority's password, TOTP and operation policy.
 
 ## Views
 
