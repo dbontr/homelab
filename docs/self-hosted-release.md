@@ -77,16 +77,42 @@ The Go platform and Rust console have separate NixOS activation switches. They r
 
 The internal compute, learning and health services retain their own state and release ownership. The imported source in this repository does not automatically replace their active binaries or modify Kubernetes controllers. An operator must select locally built, digest-qualified artifacts in the relevant service definitions and provide a rollback plan for each replacement.
 
-## Acceptance before activation
+## Acceptance and rollout order
 
-1. Confirm the staged binary and asset SHA-256 manifest and the corresponding source revision.
-2. Validate the Go modules, Rust/WASM build, NixOS host evaluations and service package derivations against the selected revision.
-3. Confirm the owner browser session, MCP authentication, backend discovery, private monitoring access, calendar read-only behavior and blocked unauthorized actions.
-4. Confirm worker image admission, registry push/pull, state retention, hardware identity and Kubernetes Job lifecycle independently of the public gateway.
-5. Inspect existing media, DNS, routing and Cloudflare paths, and preserve access to Moonfin and RecipeSage before any cutover.
-6. Activate one service at a time, verify readiness and retain the previous NixOS generation and immutable release. Avoid changing home routing until every dependent service is accepted.
+Every stage requires an exact source revision, verified release provenance, successful
+relevant Go/Rust/Nix checks, preserved private state, and a tested rollback path.
+Failure of a required check blocks that stage; unrelated services remain active.
 
-Source staging is not evidence of these acceptance checks. Do not delete databases, previous application deployments, existing repositories, recovery points or media merely because a newer source build exists.
+1. **Network and security backbone.** Qualify routing, firewall boundaries,
+   trusted management access, Cloudflare Tunnel and owner-only Access policies,
+   signed identity verification, Rust authority and executor isolation, secret
+   custody, unauthorized-request rejection, and recovery after controlled reboot.
+   Preserve the existing router configuration and an independent recovery path.
+2. **Unified MCP.** Verify the public MCP route, authenticated initialization,
+   tool discovery, exact domain allowlists, private backend delegation,
+   unauthorized-write rejection, CSRF/Origin protection where applicable,
+   session expiry, and service restart recovery. Retain independent domain
+   storage and avoid granting deployment privileges to the gateway.
+3. **Compute and cluster.** Publish worker images by immutable digest through a
+   durable authenticated registry, reconcile K3s worker configuration one node
+   at a time, and verify fresh-node pulls, worker registration, workspace
+   lifecycle, hardware custody, job recovery, and five-node readiness. Do not
+   rely on an image cached by a single node.
+4. **Rust/Dioxus console.** Accept Cloudflare owner sessions and required
+   browser operations before replacing Homepage. Verify the pinned shadcn/ui
+   component contracts, accessibility, light and dark themes, responsive
+   layouts, and authenticated application parity. Retain Homepage as a recovery
+   interface until these checks pass.
+5. **Remaining services and retirement.** Validate the independent Learning,
+   Health, media, monitoring, calendar, and other domain applications, then
+   retire superseded infrastructure only after its replacement has passed
+   acceptance. Preserve media files and every rollback artifact still required
+   for essential infrastructure.
+
+Promote the tested NixOS generation to the boot profile only after a reversible
+activation trial succeeds. A selected boot generation is not proof of cold-boot
+recovery. Do not delete private databases, previous application deployments,
+existing repositories, or recovery points merely because a newer build exists.
 
 ## Canonical resource references
 
