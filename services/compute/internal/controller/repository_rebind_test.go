@@ -18,9 +18,6 @@ func TestRepositoryRebindPreservesSourceIdentityAndKnowledgeDestination(t *testi
 		"1111111111111111111111111111111111111111", stamp()); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.ConfigureKnowledgePolicy("research", "git", "example/source", "main", "knowledge", 0); err != nil {
-		t.Fatal(err)
-	}
 	if err := db.exec(`INSERT INTO workspaces(id,project,node,image,cpu,memory_mb,status,expires,created,updated)
 		VALUES('ws1','research','worker-one','debian:bookworm-slim',1,512,'stopped',0,?,?)`,
 		stamp(), stamp()); err != nil {
@@ -35,6 +32,9 @@ func TestRepositoryRebindPreservesSourceIdentityAndKnowledgeDestination(t *testi
 		Repository: "example/source", Revision: "1111111111111111111111111111111111111111",
 	}, "controller-owner")
 	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ConfigureKnowledgePolicy("research", "git", "example/source", "main", "knowledge", 0); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.CheckRepositoryRebind("example/source", "example/renamed"); err != nil {
