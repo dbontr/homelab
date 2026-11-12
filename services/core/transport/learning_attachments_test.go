@@ -115,25 +115,25 @@ func TestLearningOriginalsRequireOwnerSessionCSRFAndApprovedMedia(t *testing.T) 
     if got:=call("POST","/v1/learning/attachments","text/plain","original text",nil,"");got.Code!=401{
         t.Fatalf("anonymous original accepted: %d",got.Code)
     }
-    identity := &accessTestIdentity{Value: accessAssertion}
-    status:=call("GET","/ui/session","","",identity,"")
+    accessToken := &accessTestIdentity{Value: accessAssertion}
+    status:=call("GET","/ui/session","","",accessToken,"")
     var identity struct{CSRF string `json:"csrf_token"`}
     if err:=json.Unmarshal(status.Body.Bytes(),&identity);err!=nil||identity.CSRF==""{
         t.Fatalf("CSRF unavailable: %v",err)
     }
-    if got:=call("POST","/v1/learning/attachments","text/plain","original text",identity,"");got.Code!=401{
+    if got:=call("POST","/v1/learning/attachments","text/plain","original text",accessToken,"");got.Code!=401{
         t.Fatalf("missing CSRF authorized original: %d",got.Code)
     }
-    if got:=call("POST","/v1/learning/attachments","application/javascript","alert(1)",identity,identity.CSRF);got.Code!=401{
+    if got:=call("POST","/v1/learning/attachments","application/javascript","alert(1)",accessToken,identity.CSRF);got.Code!=401{
         t.Fatalf("unsafe content type passed owner authorization: %d",got.Code)
     }
-    if got:=call("POST","/v1/learning/attachments","text/plain","original text",identity,identity.CSRF);got.Code!=502{
+    if got:=call("POST","/v1/learning/attachments","text/plain","original text",accessToken,identity.CSRF);got.Code!=502{
         t.Fatalf("allowed attachment did not reach unavailable Learning backend: %d",got.Code)
     }
-    if got:=call("GET","/v1/learning/attachments/session/abc","","",identity,"");got.Code!=502{
+    if got:=call("GET","/v1/learning/attachments/session/abc","","",accessToken,"");got.Code!=502{
         t.Fatalf("allowed attachment listing route inaccessible: %d",got.Code)
     }
-    if got:=call("GET","/v1/learning/attachment-originals/abc","","",identity,"");got.Code!=502{
+    if got:=call("GET","/v1/learning/attachment-originals/abc","","",accessToken,"");got.Code!=502{
         t.Fatalf("original-download route blocked: %d",got.Code)
     }
     if got:=call("GET","/v1/learning/attachment-originals/abc","","",nil,"");got.Code!=401{
