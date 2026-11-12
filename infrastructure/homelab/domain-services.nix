@@ -11,19 +11,6 @@
     ];
   };
 
-  # Preview only. Keep the legacy homepage active until console session
-  # enrollment and browser-origin acceptance are complete.
-  services.homelabConsole = {
-    enable = true;
-    replaceHomepage = false;
-    package = pkgs.fetchFromGitHub {
-      owner = "dbontr";
-      repo = "homelab";
-      rev = "7eb184f13b0448e1683b6ce76b97849f70663a42";
-      sha256 = "17mlvisuiy7dh94gri9jvmrjn37iz92il0i0xk5a3f89g570h9i7";
-    };
-  };
-
   services.homelabMotivation = {
     enable = true;
     package = import ../../packages/motivation.nix { inherit pkgs; };
