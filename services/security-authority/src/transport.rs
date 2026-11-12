@@ -758,7 +758,6 @@ fn browser_page(shared: &Shared, assertion: &str, message: &str) -> Response {
             html.push_str("</div>");
         }
         html.push_str("</section>");
-
     } else {
         html.push_str(&format!("<section><h2>Sign in</h2><form method=\"post\" action=\"/login\"><input type=\"hidden\" name=\"csrf\" value=\"{}\"><label>Password<input name=\"password\" type=\"password\" required></label><label>Authenticator code<input name=\"totp\" pattern=\"[0-9]{{6}}\" inputmode=\"numeric\" required></label><button type=\"submit\">Unlock administration</button></form></section>", csrf));
     }
