@@ -35,6 +35,7 @@ use crate::Error;
 
 const MAX_BODY: usize = 64 << 10;
 
+#[allow(clippy::result_large_err)]
 fn json_input<T: serde::de::DeserializeOwned>(
     headers: &HeaderMap,
     raw: &[u8],
@@ -52,6 +53,7 @@ fn json_input<T: serde::de::DeserializeOwned>(
     serde_json::from_slice(&canonical)
         .map_err(|_| (StatusCode::BAD_REQUEST, "invalid request schema").into_response())
 }
+#[allow(clippy::result_large_err)]
 fn assertion(headers: &HeaderMap) -> Result<&str, Response> {
     headers
         .get("cf-access-jwt-assertion")
