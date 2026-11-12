@@ -175,7 +175,13 @@ func (e *Executor) ExecuteWithID(ctx context.Context,requestID,operation,target 
 	if !ValidExecutionRequestID(requestID) {
         return deny("invalid execution request identity"),nil
     }
-	if e == nil || target != e.cfg.Host {
+	if e == nil {
+		return deny("executor unavailable"), errors.New("executor is not initialized")
+	}
+	if e.cfg.Audit == nil {
+		return deny("protected audit journal required"), errors.New("audit journal unavailable")
+	}
+	if target != e.cfg.Host {
 		return deny("target is not this host"), nil
 	}
 	canonical, fields, err := canonicaljson.Object(args)
