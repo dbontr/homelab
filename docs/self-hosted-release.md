@@ -40,6 +40,26 @@ The default `--load` mode installs source-built images into the operator's local
 
 The local Compute Helm chart disables both components by default and refuses to render an enabled controller or worker with an empty or mutable image reference. After independently verifying the source revision and registry artifact custody, configure `controller.enabled` / `worker.enabled` and their exact digest-qualified `image` fields, or set the matching `services.workspaceMcp.controllerImage` and `workerImage` NixOS options. Registry publish does not imply Kubernetes deployment, worker enrollment or source-repository retirement. The current Dockerfiles rely on external base images and package repositories; independent base-image and package provenance must be accepted before claiming fully reproducible builds. The existing controller database volume, paired worker credentials, namespaces and jobs must survive the separately approved live cutover.
 
+### Compute controller Helm activation
+
+The controller holds project and worker identities in a node-local SQLite database. Treat a controller image change as a stateful release: verify the immutable image digest, retain the live persistent volume and its owner node, and capture a restricted, consistent SQLite snapshot together with its artifact directory. A raw copy of a database in WAL mode is not a consistent snapshot. Verify the snapshot with `PRAGMA integrity_check` and keep it separate from the live volume. Do not start a second controller against the same database.
+
+The chart disables both executable roles by default. A controller release created with an older chart may not record `controller.enabled` in its values. **Always set `controller.enabled=true` and `worker.enabled=false` explicitly** when upgrading it. Helm 3.20 or later can merge current chart defaults with stored release overrides using `--reset-then-reuse-values`; using `--reuse-values` alone can omit newly introduced values. A successful dry run is insufficient if its rendered manifest is empty.
+
+For an existing controller release, substitute the verified source-owned chart directory and exact registry digest into this command. Run it with `--dry-run=server --hide-secret` first, then check that the manifest contains exactly the controller ServiceAccount, existing PVC, Service, and Deployment. Compare the proposed PVC name, storage request, storage class, Saturn/node placement, `Recreate` strategy, secret references, and environment with the live release. Resolve all differences before removing the dry-run flags.
+
+```sh
+helm upgrade pwm-controller "$WORKSPACE_HELM_CHART" \
+  --namespace pwm-system \
+  --reset-then-reuse-values \
+  --set controller.enabled=true \
+  --set worker.enabled=false \
+  --set-string "controller.image=$CONTROLLER_IMAGE_DIGEST" \
+  --atomic --wait --timeout 5m --history-max 10
+```
+
+Keep the preceding Helm revision and the verified state snapshot until the new controller passes authenticated project and worker enumeration, heartbeat freshness, read-only resource planning, workspace creation, command execution, workspace destruction, and access-denial checks. If a rollback is required after the database schema has changed, inspect compatibility and restore from the separately held pre-upgrade snapshot only with the controller stopped. A Helm rollback alone does not restore data.
+
 Compute toolchain environments can be built locally with:
 
 `bash services/compute/scripts/build-toolchain-image.sh <approved-image-reference> --load`
