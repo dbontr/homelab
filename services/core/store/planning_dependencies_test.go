@@ -82,8 +82,13 @@ func TestWeeklyPlanScheduledPrerequisiteRemainsAdvisory(t *testing.T) {
 	if err != nil { t.Fatal(err) }
 	plan, err := s.PlanWeekWithCapacities("2032-06-07", [7]int{0, 180, 0, 0, 0, 0, 0}, 9, nil)
 	if err != nil { t.Fatal(err) }
-	if len(plan.Slots) != 1 || plan.Slots[0].TaskID != child.ID || plan.Slots[0].Start < "2032-06-08T12:00:00Z" {
+	if len(plan.Slots) != 1 || plan.Slots[0].TaskID != child.ID {
 		t.Fatalf("scheduled prerequisite was not respected: %+v", plan)
+	}
+	start, parseErr := time.Parse(time.RFC3339, plan.Slots[0].Start)
+	prerequisiteEnd, _ := time.Parse(time.RFC3339, "2032-06-08T12:00:00Z")
+	if parseErr != nil || start.Before(prerequisiteEnd) {
+		t.Fatalf("dependent task started before prerequisite finished: %+v", plan)
 	}
 	if len(plan.Limitations) == 0 {
 		t.Fatal("scheduled prerequisite treated as confirmed completion")

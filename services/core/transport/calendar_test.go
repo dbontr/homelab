@@ -34,7 +34,7 @@ func TestReadOnlyCalendarFeed(t *testing.T){
 
 func TestCalendarServiceSuppliesNativeMCPAndRecurrenceViews(t *testing.T) {
 	const serviceToken="separate-calendar-service-token-with-sufficient-length"
-	feed,err:=calendar.Parse("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:1\r\nDTSTART:20261109T120000Z\r\nSUMMARY:Seminar\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n")
+	feed,err:=calendar.Parse("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:1\r\nDTSTART:20261109T120000Z\r\nDTEND:20261109T130000Z\r\nSUMMARY:Seminar\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n")
 	if err!=nil{t.Fatal(err)}
 	var calls atomic.Int32
 	private:=httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){
