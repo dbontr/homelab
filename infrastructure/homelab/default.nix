@@ -58,7 +58,7 @@
 
   services.workspaceMcpProjectProvisioner = {
     enable = true;
-    workerImage = "docker.io/library/project-workspace-worker:cuda-exec-756b88c";
+    workerImage = "ghcr.io/dbontr/homelab/worker@sha256:c7ab035296db9aec360611c52737ca4e94143fb959c7ad56ca536cc20fd6ee4f";
     computeNodes = [ "jupiter" "venus" "mercury" "janus" ];
     excludeProjects = [ "acceptance" ];
     interval = "2min";

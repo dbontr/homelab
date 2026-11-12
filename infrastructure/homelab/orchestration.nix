@@ -25,6 +25,7 @@ in
     environment.etc."rancher/k3s/registries.yaml".text = ''
       mirrors:
         "images.dbontr.internal":
+        "ghcr.io":
     '';
 
     systemd.services.k3s-compute-policy = {

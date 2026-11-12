@@ -22,7 +22,7 @@ in
     workerImage = lib.mkOption {
       type = lib.types.str;
       example = "ghcr.io/example/workspace-worker@sha256:...";
-      description = "A worker OCI image reachable or preloaded on every approved compute host.";
+      description = "Immutable worker OCI image, retrievable by digest from every approved compute host.";
     };
     chart = lib.mkOption {
       type = lib.types.path;
@@ -53,8 +53,8 @@ in
   config = lib.mkIf cfg.enable {
     assertions = [
       {
-        assertion = cfg.workerImage != "" && cfg.computeNodes != [];
-        message = "Workspace project provisioning needs a worker image and at least one compute node.";
+        assertion = builtins.match ".+@sha256:[0-9a-f]{64}" cfg.workerImage != null && cfg.computeNodes != [];
+        message = "Workspace project provisioning requires a digest-pinned worker image and at least one compute node.";
       }
     ];
     systemd.services.workspace-project-provisioner = {

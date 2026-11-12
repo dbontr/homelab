@@ -13,14 +13,14 @@ Import `deploy/nixos/project-provisioner.nix` into the control-plane machine's N
 ```nix
 services.workspaceMcpProjectProvisioner = {
   enable = true;
-  workerImage = "registry.example.org/workspace-worker:verified";
+  workerImage = "ghcr.io/dbontr/homelab/worker@sha256:c7ab035296db9aec360611c52737ca4e94143fb959c7ad56ca536cc20fd6ee4f";
   computeNodes = [ "jupiter" "venus" "mercury" "janus" ];
   excludeProjects = [ "acceptance" ];
   interval = "2min";
 };
 ```
 
-The worker image must already exist on each approved host or be retrievable from its configured registry. The operator must have a working K3s administrator kubeconfig, the controller's own TLS CA Secret, and its administrator credential Secret in `pwm-system`. The service runs as root with a read-only system filesystem and an isolated temporary directory; it does not expose a host SSH listener or grant cluster administration to worker Pods.
+The worker image must be content-addressed and retrievable from an approved OCI registry by each compute node. A successful pull on the operator host is not sufficient: qualify fresh pulls on the worker hosts before activation. The operator must have a working K3s administrator kubeconfig, the controller's own TLS CA Secret, and its administrator credential Secret in `pwm-system`. The service runs as root with a read-only system filesystem and an isolated temporary directory; it does not expose a host SSH listener or grant cluster administration to worker Pods.
 
 The timer checks projects after boot and at the specified interval. An existing worker with the same project and physical host is retained, not silently replaced. Incomplete enrollment or a missing Secret requires operator review; revoked worker identities are not resurrected. Repository publication and Project Knowledge remain governed separately by each project's Git configuration.
 
@@ -30,7 +30,7 @@ The timer checks projects after boot and at the specified interval. An existing 
 export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 export PWM_HELM_CHART=/path/to/workspace-mcp/deploy/helm/project-workspace
 export PWM_HELM_BINARY=/path/to/helm
-export PWM_WORKER_IMAGE=registry.example.org/workspace-worker:verified
+export PWM_WORKER_IMAGE=ghcr.io/dbontr/homelab/worker@sha256:c7ab035296db9aec360611c52737ca4e94143fb959c7ad56ca536cc20fd6ee4f
 export PWM_COMPUTE_NODES="jupiter venus mercury janus"
 export PWM_EXCLUDE_PROJECTS="acceptance"
 bash scripts/reconcile-kubernetes-projects.sh
