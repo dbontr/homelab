@@ -12,8 +12,6 @@ import (
 	"testing"
 
 	"github.com/dbontr/homelab-new/system/recipes"
-	"github.com/dbontr/homelab-new/system/security"
-	"github.com/dbontr/homelab-new/system/session"
 	"github.com/dbontr/homelab-new/system/store"
 )
 
@@ -31,20 +29,13 @@ func TestRecipeImageHTTPAccessAndContentRestrictions(t *testing.T) {
 		t.Fatal(err)
 	}
 	server.SetRecipes(db)
-	verifier, err := security.HashPassphrase([]byte("recipe-photo-owner-passphrase"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	manager, err := session.New(verifier)
-	if err != nil {
-		t.Fatal(err)
-	}
+	manager, accessAssertion := accessTransportFixture(t)
 	server.SetSessions(manager)
 	if err := server.SetAllowedOrigins([]string{"https://console.example"}); err != nil {
 		t.Fatal(err)
 	}
 	handler := server.Handler()
-	call := func(method, path, mediaType string, body []byte, cookie *http.Cookie, csrf string) *httptest.ResponseRecorder {
+	call := func(method, path, mediaType string, body []byte, identity *accessTestIdentity, csrf string) *httptest.ResponseRecorder {
 		req := httptest.NewRequest(method, path, bytes.NewReader(body))
 		req.Host = "console.example"
 		req.Header.Set("Origin", "https://console.example")
@@ -54,19 +45,15 @@ func TestRecipeImageHTTPAccessAndContentRestrictions(t *testing.T) {
 		if csrf != "" {
 			req.Header.Set("X-CSRF-Token", csrf)
 		}
-		if cookie != nil {
-			req.AddCookie(cookie)
+		if identity != nil {
+			req.Header.Set("Cf-Access-Jwt-Assertion",identity.Value)
 		}
 		response := httptest.NewRecorder()
 		handler.ServeHTTP(response, req)
 		return response
 	}
-	login := call("POST", "/ui/session", "application/json", []byte(`{"passphrase":"recipe-photo-owner-passphrase"}`), nil, "")
-	if login.Code != http.StatusOK {
-		t.Fatalf("login failed: %s", login.Body.String())
-	}
-	cookie := login.Result().Cookies()[0]
-	status := call("GET", "/ui/session", "", nil, cookie, "")
+	identity := &accessTestIdentity{Value: accessAssertion}
+	status := call("GET", "/ui/session", "", nil, identity, "")
 	var sessionData struct {
 		CSRF string `json:"csrf_token"`
 	}
@@ -82,16 +69,16 @@ func TestRecipeImageHTTPAccessAndContentRestrictions(t *testing.T) {
 	if r := call("POST", "/v1/recipes/images", "image/png", picture, nil, ""); r.Code != 401 {
 		t.Fatalf("anonymous upload accepted: %d", r.Code)
 	}
-	if r := call("POST", "/v1/recipes/images", "image/png", picture, cookie, ""); r.Code != 401 {
+	if r := call("POST", "/v1/recipes/images", "image/png", picture, identity, ""); r.Code != 401 {
 		t.Fatalf("image upload without CSRF accepted: %d", r.Code)
 	}
-	if r := call("POST", "/v1/recipes/images", "image/svg+xml", picture, cookie, sessionData.CSRF); r.Code < 400 {
+	if r := call("POST", "/v1/recipes/images", "image/svg+xml", picture, identity, sessionData.CSRF); r.Code < 400 {
 		t.Fatalf("unexpected image type accepted: %d", r.Code)
 	}
-	if r := call("POST", "/v1/recipes/images", "image/png", []byte("not an image"), cookie, sessionData.CSRF); r.Code != 422 {
+	if r := call("POST", "/v1/recipes/images", "image/png", []byte("not an image"), identity, sessionData.CSRF); r.Code != 422 {
 		t.Fatalf("invalid image accepted: %d %s", r.Code, r.Body.String())
 	}
-	uploaded := call("POST", "/v1/recipes/images", "image/png", picture, cookie, sessionData.CSRF)
+	uploaded := call("POST", "/v1/recipes/images", "image/png", picture, identity, sessionData.CSRF)
 	if uploaded.Code != http.StatusCreated {
 		t.Fatalf("image upload: %d %s", uploaded.Code, uploaded.Body.String())
 	}
@@ -104,16 +91,16 @@ func TestRecipeImageHTTPAccessAndContentRestrictions(t *testing.T) {
 	if r := call("GET", asset.ImageRef, "", nil, nil, ""); r.Code != 401 {
 		t.Fatalf("anonymous image retrieval accepted: %d", r.Code)
 	}
-	read := call("GET", asset.ImageRef, "", nil, cookie, "")
+	read := call("GET", asset.ImageRef, "", nil, identity, "")
 	if read.Code != 200 || read.Header().Get("Content-Type") != "image/png" ||
 		!bytes.Equal(read.Body.Bytes(), picture) ||
 		read.Header().Get("X-Content-Type-Options") != "nosniff" {
 		t.Fatalf("authenticated image read failed: %d %s", read.Code, read.Body.String())
 	}
-	if r := call("POST", "/v1/recipes/images", "image/png", bytes.Repeat([]byte{1}, recipes.MaxImageBytes+1), cookie, sessionData.CSRF); r.Code != 413 {
+	if r := call("POST", "/v1/recipes/images", "image/png", bytes.Repeat([]byte{1}, recipes.MaxImageBytes+1), identity, sessionData.CSRF); r.Code != 413 {
 		t.Fatalf("oversized image accepted: %d", r.Code)
 	}
-	if r := call("GET", "/v1/recipes/images/not-an-image.png", "", nil, cookie, ""); r.Code != 404 {
+	if r := call("GET", "/v1/recipes/images/not-an-image.png", "", nil, identity, ""); r.Code != 404 {
 		t.Fatalf("malformed image path accepted: %d", r.Code)
 	}
 }
