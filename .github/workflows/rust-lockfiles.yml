@@ -57,6 +57,10 @@ jobs:
             cat "lock-diagnostics/$name.log"
             cargo metadata --format-version 1 --locked --no-deps --manifest-path "$manifest" > /dev/null
           done
+          for manifest in services/security-authority/Cargo.toml services/executor/Cargo.toml services/motivation/Cargo.toml ui/console/Cargo.toml; do
+            cargo fmt --all --manifest-path "$manifest"
+          done
+          git diff --check
           for file in services/security-authority/Cargo.lock services/executor/Cargo.lock services/motivation/Cargo.lock ui/console/Cargo.lock; do
             test -s "$file"
             grep -q '^version = 4$' "$file"
@@ -74,9 +78,10 @@ jobs:
         run: |
           set -euo pipefail
           git add -f -- services/security-authority/Cargo.lock services/executor/Cargo.lock services/motivation/Cargo.lock ui/console/Cargo.lock
+          git add -u -- services/security-authority/src services/executor/src services/motivation/src ui/console/src
           if git diff --cached --quiet; then
-            echo "Cargo locks already match the four manifests."
+            echo "Cargo locks and Rust formatting already match the manifests."
             exit 0
           fi
-          git -c user.name=homelab-build -c user.email=build@users.noreply.github.com commit -m "Lock Rust release dependencies"
+          git -c user.name=homelab-build -c user.email=build@users.noreply.github.com commit -m "Normalize Rust code and lock release dependencies"
           git push origin HEAD:feature/rust-native-execution-boundaries
