@@ -41,4 +41,18 @@ in
       destructive = true;
     }) privilegedOperations;
   };
+
+  services.homelabExecutor = {
+    enable = true;
+    implementation = "rust";
+    useRustActuator = true;
+    allowReleaseActivation = false;
+    allowedServices = [ "homelab-motivation.service" ];
+    healthServices = [
+      "homelab-platform.service"
+      "homelab-mcp.service"
+      "homelab-api.service"
+      "homelab-securityd.service"
+    ];
+  };
 }
