@@ -33,14 +33,14 @@ in
         }
         ++ lib.optional (cfg.enable && cfg.replaceHomepage) {
           assertion = lib.elem cfg.publicOrigin config.services.homelabPlatform.allowedOrigins;
-          message = "The console's publicOrigin must be included in homelabPlatform.allowedOrigins for browser login.";
+          message = "The console's publicOrigin must be included in homelabPlatform.allowedOrigins for browser requests.";
         }
         ++ lib.optional (cfg.enable && cfg.replaceHomepage) {
           assertion =
-            config.services.homelabPlatform.consolePassphraseFile != null &&
-            config.services.homelabPlatform.consolePassphraseFile !=
-              lib.attrByPath [ "services" "homelabSecurity" "passwordVerifierFile" ] null config;
-          message = "Homepage replacement requires a dedicated browser verifier, distinct from the privileged administrator verifier.";
+            config.services.homelabPlatform.consoleAccess.audience ==
+              config.homelab.access.consoleAudTag &&
+            config.services.homelabPlatform.consoleAccess.issuer != "";
+          message = "Homepage replacement requires a signed Cloudflare Access identity matching the ingress application.";
         };
     }
     (lib.mkIf (cfg.enable && cfg.replaceHomepage) {
