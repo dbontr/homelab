@@ -69,7 +69,7 @@ fn RunDetail(run: Value, csrf: String) -> Element {
                         h3 { "Changed files" }
                         ul {
                             for path in changed {
-                                li { class: "mono", "{path.as_str().unwrap_or("")}" }
+                                li { class: "mono", {path.as_str().unwrap_or("").to_string()} }
                             }
                         }
                     }
@@ -174,7 +174,7 @@ fn TeamDetail(team: Value, csrf: String) -> Element {
                     for artifact in artifacts {
                         div { class: "inline-row",
                             span { class: "mono", {text(&artifact, "path")} }
-                            span { class: "muted", "Prepared by {text(&artifact, "member")}" }
+                            span { class: "muted", {format!("Prepared by {}", text(&artifact, "member"))} }
                         }
                     }
                 }
