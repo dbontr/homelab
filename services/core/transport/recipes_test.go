@@ -37,14 +37,14 @@ func TestRecipeRoutesAndScopedBrowserWrites(t *testing.T) {
 		return w
 	}
 	if r := call("GET","/v1/recipes","",nil,""); r.Code!=401 { t.Fatal("anonymous recipe read accepted") }
-	identity := &accessTestIdentity{Value: accessAssertion}
-	status := call("GET","/ui/session","",identity,"")
+	accessToken := &accessTestIdentity{Value: accessAssertion}
+	status := call("GET","/ui/session","",accessToken,"")
 	var sessionInfo struct { CSRF string `json:"csrf_token"` }
 	if err := json.Unmarshal(status.Body.Bytes(),&sessionInfo);err!=nil { t.Fatal(err) }
 	if sessionInfo.CSRF=="" { t.Fatal("missing session CSRF token") }
 	payload := `{"title":"Rice bowl","servings":2,"ingredients":[{"name":"Rice","amount":1,"unit":"cup"}],"steps":[{"text":"Cook the rice."}]}`
-	if r:=call("POST","/v1/recipes",payload,identity,"");r.Code!=401 { t.Fatal("recipe write missing CSRF accepted") }
-	created := call("POST","/v1/recipes",payload,identity,sessionInfo.CSRF)
+	if r:=call("POST","/v1/recipes",payload,accessToken,"");r.Code!=401 { t.Fatal("recipe write missing CSRF accepted") }
+	created := call("POST","/v1/recipes",payload,accessToken,sessionInfo.CSRF)
 	if created.Code!=201 { t.Fatalf("create: %d %s",created.Code,created.Body.String()) }
 	var recipe recipes.Recipe
 	if err:=json.Unmarshal(created.Body.Bytes(),&recipe);err!=nil { t.Fatal(err) }
@@ -77,31 +77,31 @@ func TestRecipeRoutesAndScopedBrowserWrites(t *testing.T) {
 	if response := call("POST", "/v1/recipes/"+recipe.ID+"/restore", restoreRequest, identity, sessionInfo.CSRF); response.Code != 409 {
 		t.Fatalf("stale restore accepted: %d", response.Code)
 	}
-	if r:=call("POST","/v1/tasks",`{"title":"Owner task"}`,identity,sessionInfo.CSRF);r.Code!=201 {
+	if r:=call("POST","/v1/tasks",`{"title":"Owner task"}`,accessToken,sessionInfo.CSRF);r.Code!=201 {
         t.Fatalf("owner task creation rejected: %d %s",r.Code,r.Body.String())
     }
-	if r:=call("POST","/mcp",`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`,identity,sessionInfo.CSRF);r.Code!=401 {
+	if r:=call("POST","/mcp",`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`,accessToken,sessionInfo.CSRF);r.Code!=401 {
 		t.Fatal("recipe-scoped session reached MCP")
 	}
 	meal := `{"recipe_id":"`+recipe.ID+`","date":"2026-11-12","servings":4}`
-	if r:=call("POST","/v1/meals",meal,identity,sessionInfo.CSRF);r.Code!=201 {t.Fatalf("schedule meal: %s",r.Body.String())}
-	if r:=call("GET","/v1/groceries","",identity,"");r.Code!=200 || !strings.Contains(r.Body.String(),`"amount":2`) {
+	if r:=call("POST","/v1/meals",meal,accessToken,sessionInfo.CSRF);r.Code!=201 {t.Fatalf("schedule meal: %s",r.Body.String())}
+	if r:=call("GET","/v1/groceries","",accessToken,"");r.Code!=200 || !strings.Contains(r.Body.String(),`"amount":2`) {
 		t.Fatalf("consolidated grocery list: %s",r.Body.String())
 	}
 	blockedURL := `{"url":"https://127.0.0.1/latest/meta-data"}`
 	if r:=call("POST","/v1/recipes/import-url",blockedURL,nil,"");r.Code!=401 {
 		t.Fatalf("unauthenticated URL import accepted: %d",r.Code)
 	}
-	if r:=call("POST","/v1/recipes/import-url",blockedURL,identity,"");r.Code!=401 {
+	if r:=call("POST","/v1/recipes/import-url",blockedURL,accessToken,"");r.Code!=401 {
 		t.Fatalf("URL import without CSRF accepted: %d",r.Code)
 	}
-	if r:=call("POST","/v1/recipes/import-url",blockedURL,identity,sessionInfo.CSRF);r.Code!=422 {
+	if r:=call("POST","/v1/recipes/import-url",blockedURL,accessToken,sessionInfo.CSRF);r.Code!=422 {
 		t.Fatalf("local-network URL import accepted: %d %s",r.Code,r.Body.String())
 	}
-	if r:=call("DELETE","/v1/recipes/"+recipe.ID,"",identity,sessionInfo.CSRF);r.Code!=428 {
+	if r:=call("DELETE","/v1/recipes/"+recipe.ID,"",accessToken,sessionInfo.CSRF);r.Code!=428 {
 		t.Fatal("delete without revision accepted")
 	}
-	if r:=call("GET","/v1/recipes/export","",identity,"");r.Code!=200 || !strings.Contains(r.Body.String(),`"version":1`) {
+	if r:=call("GET","/v1/recipes/export","",accessToken,"");r.Code!=200 || !strings.Contains(r.Body.String(),`"version":1`) {
 		t.Fatal("archive not available to authenticated owner")
 	}
 }
