@@ -94,7 +94,8 @@ if [[ "$#" -eq 3 && "$1" == "--run" ]]; then
       if [[ "$rollback_status" -ne 0 ]] ||
           ! systemctl is-active --quiet homelab-securityd; then
         printf 'Rust selection is committed; generating a Go recovery receipt.\n' >&2
-        timeout 420 /run/current-system/sw/bin/bash \
+        bash_bin=$(readlink -f -- "$(command -v bash)") || fail "Bash runtime missing"
+        timeout 420 "$bash_bin" \
           /srv/homelab-migration-src/scripts/saturn-security-recover-go.sh ||
           fail "receipt-backed Go recovery failed; inspect through NanoKVM"
         rollback_status=0
