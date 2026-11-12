@@ -23,7 +23,8 @@ in
 {
   services.homelabSecurity = {
     enable = true;
-    implementation = "go";
+    implementation = "rust";
+    migration.receiptFile = "${secretDir}/authority-rust-cutover.json";
     owner = "owner";
     passwordVerifierFile = "${secretDir}/owner-verifier.json";
     totpSecretFile = "${secretDir}/owner-totp";
