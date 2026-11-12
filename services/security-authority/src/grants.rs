@@ -213,6 +213,7 @@ impl ServiceCredentialPolicy {
         Ok(result)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn use_credential<T>(
         &self,
         peer: &VerifiedServiceIdentity,
