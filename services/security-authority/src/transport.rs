@@ -1,9 +1,10 @@
 //! Owner-only and authenticated-gateway HTTP transports over Unix sockets.
 use std::collections::BTreeMap;
 use std::ffi::CString;
-use std::fs;
-use std::os::unix::fs::{FileTypeExt, PermissionsExt};
+use std::fs::{self, OpenOptions};
+use std::os::unix::fs::{FileTypeExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
+use std::io::Write;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -23,6 +24,7 @@ use serde_json::value::RawValue;
 use tokio::net::UnixListener;
 use zeroize::Zeroizing;
 
+use crate::credentials::PassphraseRecord;
 use crate::sessions::{Authority, AuthorizationWire};
 use crate::Error;
 
@@ -756,6 +758,11 @@ fn browser_page(shared: &Shared, assertion: &str, message: &str) -> Response {
             html.push_str("</div>");
         }
         html.push_str("</section>");
+        html.push_str("<section><h2>Console sign-in</h2><p>Issue a separate console password after re-entering the administrator factors. The new password appears only in the response to this form and replaces the previous console password.</p>");
+        html.push_str(&format!(
+            "<form method=\"post\" action=\"/console-credential\"><input type=\"hidden\" name=\"csrf\" value=\"{}\"><label>Administrator password<input name=\"password\" type=\"password\" autocomplete=\"current-password\" required></label><label>Authenticator code<input name=\"totp\" pattern=\"[0-9]{{6}}\" inputmode=\"numeric\" required></label><button type=\"submit\">Issue console password</button></form></section>",
+            csrf
+        ));
     } else {
         html.push_str(&format!("<section><h2>Sign in</h2><form method=\"post\" action=\"/login\"><input type=\"hidden\" name=\"csrf\" value=\"{}\"><label>Password<input name=\"password\" type=\"password\" required></label><label>Authenticator code<input name=\"totp\" pattern=\"[0-9]{{6}}\" inputmode=\"numeric\" required></label><button type=\"submit\">Unlock administration</button></form></section>", csrf));
     }
@@ -854,11 +861,107 @@ async fn browser_confirm(
     browser_form(shared, headers, raw, "confirm", Some(&id)).await
 }
 
+fn save_console_verifier(record: &PassphraseRecord) -> Result<(), Error> {
+    let directory = Path::new("/var/lib/homelab-console");
+    let metadata = fs::symlink_metadata(directory).map_err(|_| Error::Storage)?;
+    if !metadata.is_dir()
+        || metadata.file_type().is_symlink()
+        || metadata.permissions().mode() & 0o077 != 0
+    {
+        return Err(Error::Storage);
+    }
+    let mut suffix = [0u8; 12];
+    getrandom::fill(&mut suffix).map_err(|_| Error::Storage)?;
+    let temporary = directory.join(format!(".verifier-{}", hex::encode(suffix)));
+    let destination = directory.join("verifier.json");
+    let payload = serde_json::to_vec(record).map_err(|_| Error::Storage)?;
+    let result = (|| -> Result<(), Error> {
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(&temporary)
+            .map_err(|_| Error::Storage)?;
+        file.write_all(&payload).map_err(|_| Error::Storage)?;
+        file.sync_all().map_err(|_| Error::Storage)?;
+        fs::rename(&temporary, &destination).map_err(|_| Error::Storage)?;
+        fs::File::open(directory)
+            .and_then(|dir| dir.sync_all())
+            .map_err(|_| Error::Storage)
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&temporary);
+    }
+    result
+}
+
+async fn browser_console_credential(
+    State(shared): State<Shared>,
+    headers: HeaderMap,
+    raw: Bytes,
+) -> Response {
+    let Ok(assertion) = checked_browser_assertion(&shared, &headers) else {
+        return protected_status("verified owner identity required", StatusCode::FORBIDDEN);
+    };
+    let Some(origin) = shared.browser_origin.as_deref() else {
+        return protected_status("owner browser unavailable", StatusCode::FORBIDDEN);
+    };
+    if headers.get(header::ORIGIN).and_then(|value| value.to_str().ok()) != Some(origin)
+        || headers
+            .get("sec-fetch-site")
+            .and_then(|value| value.to_str().ok())
+            .is_some_and(|value| value != "same-origin")
+        || headers.get(header::CONTENT_TYPE).and_then(|value| value.to_str().ok())
+            != Some("application/x-www-form-urlencoded")
+        || raw.len() > 4096
+    {
+        return protected_status("untrusted owner request", StatusCode::FORBIDDEN);
+    }
+    let Ok(principal) = shared.with_authority(|auth| auth.browser_principal(assertion)) else {
+        return protected_status("verified owner identity required", StatusCode::FORBIDDEN);
+    };
+    let Ok(form) = serde_urlencoded::from_bytes::<BTreeMap<String, String>>(&raw) else {
+        return protected_status("invalid owner form", StatusCode::BAD_REQUEST);
+    };
+    if !shared.take_csrf(&principal, form.get("csrf").map(String::as_str).unwrap_or("")) {
+        return protected_status("invalid owner form", StatusCode::FORBIDDEN);
+    }
+    let password = Zeroizing::new(form.get("password").cloned().unwrap_or_default());
+    let totp = Zeroizing::new(form.get("totp").cloned().unwrap_or_default());
+    let approved = shared.with_authority(|authority| {
+        if !authority.browser_status(assertion)?.active {
+            return Err(Error::Unauthorized);
+        }
+        authority.login_browser(assertion, &password, &totp).map(|_| ())
+    });
+    if approved.is_err() {
+        audit("console_credential_denied");
+        return protected_status("owner authentication required", StatusCode::FORBIDDEN);
+    }
+    let Ok((record, secret)) = PassphraseRecord::generate_console_secret() else {
+        return protected_status("console credential unavailable", StatusCode::SERVICE_UNAVAILABLE);
+    };
+    if save_console_verifier(&record).is_err() {
+        return protected_status("console credential unavailable", StatusCode::SERVICE_UNAVAILABLE);
+    }
+    audit("console_credential_issued");
+    let mut response = Html(format!(
+        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><title>Console password</title><style>body{{font:1rem system-ui;margin:3rem auto;max-width:42rem;padding:1rem;background:#101218;color:#edf0f4}}code{{display:block;margin:2rem 0;padding:1rem;border:1px solid #555;overflow-wrap:anywhere}}</style></head><body><main><h1>Console password issued</h1><p>Record this password securely. It is displayed only once; issuing another password invalidates the previous password after the console service reloads.</p><code>{}</code><p><a href=\"/\">Return to administration</a></p></main></body></html>",
+        escape_html(&secret),
+    )).into_response();
+    response.headers_mut().insert(
+        "content-security-policy",
+        HeaderValue::from_static("default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"),
+    );
+    response
+}
+
 pub fn browser_router(shared: Shared) -> Router {
     Router::new()
         .route("/", get(browser_get))
         .route("/login", post(browser_login))
         .route("/close", post(browser_close))
+        .route("/console-credential", post(browser_console_credential))
         .route("/confirm/{id}", post(browser_confirm))
         .layer(DefaultBodyLimit::max(4096))
         .layer(middleware::from_fn(private_headers))
