@@ -38,7 +38,7 @@ func TestRecipeBundleOwnerSessionAndPhotoRoundTrip(t *testing.T) {
 		handler.ServeHTTP(result, request)
 		return result
 	}
-	identity := &accessTestIdentity{Value: accessAssertion}
+	accessToken := &accessTestIdentity{Value: accessAssertion}
 	var identity struct{ CSRF string `json:"csrf_token"` }
 	info := call("GET", "/ui/session", nil, "", identity, "")
 	if err := json.Unmarshal(info.Body.Bytes(), &identity); err != nil || identity.CSRF == "" {
