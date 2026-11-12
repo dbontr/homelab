@@ -26,7 +26,7 @@ func certificateMaterialFixture(t *testing.T)(string,string){
   Subject:pkix.Name{CommonName:"trusted"},
   NotBefore:now.Add(-time.Hour),NotAfter:now.Add(time.Hour),
   KeyUsage:x509.KeyUsageDigitalSignature,
-  ExtKeyUsage:[]x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}},
+  ExtKeyUsage:[]x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}}
  der,err:=x509.CreateCertificate(rand.Reader,template,template,&key.PublicKey,key)
  if err!=nil{t.Fatal(err)}
  certPath,keyPath:=filepath.Join(dir,"cert.pem"),filepath.Join(dir,"key.pem")
