@@ -1,6 +1,9 @@
 package agentflow
 
-import "testing"
+import (
+ "context"
+ "testing"
+)
 
 func TestNativeVerificationMapsOnlyApprovedChecks(t *testing.T) {
 	allowed := map[string]string{
@@ -31,7 +34,7 @@ func TestNativeVerificationMapsOnlyApprovedChecks(t *testing.T) {
 
 func TestNativeVerificationRejectsUnpinnedWorkflowWithoutCompute(t *testing.T) {
 	engine := &Engine{NativeVerification: true}
-	_, err := engine.verificationCommand(t.Context(), Workflow{}, "dbontr/homelab", "go test ./...")
+	_, err := engine.verificationCommand(context.Background(), Workflow{}, "dbontr/homelab", "go test ./...")
 	if err == nil {
 		t.Fatal("native verification accepted a run without a source identity")
 	}
