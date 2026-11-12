@@ -40,7 +40,7 @@ func TestRecipeBundleOwnerSessionAndPhotoRoundTrip(t *testing.T) {
 	}
 	accessToken := &accessTestIdentity{Value: accessAssertion}
 	var identity struct{ CSRF string `json:"csrf_token"` }
-	info := call("GET", "/ui/session", nil, "", identity, "")
+	info := call("GET", "/ui/session", nil, "", accessToken, "")
 	if err := json.Unmarshal(info.Body.Bytes(), &identity); err != nil || identity.CSRF == "" {
 		t.Fatalf("missing session authorization: %v", err)
 	}
@@ -57,7 +57,7 @@ func TestRecipeBundleOwnerSessionAndPhotoRoundTrip(t *testing.T) {
 	if read := call("GET", "/v1/recipes/bundle", nil, "", nil, ""); read.Code != 401 {
 		t.Fatalf("anonymous ZIP download accepted: %d", read.Code)
 	}
-	exported := call("GET", "/v1/recipes/bundle", nil, "", identity, "")
+	exported := call("GET", "/v1/recipes/bundle", nil, "", accessToken, "")
 	if exported.Code != 200 || exported.Header().Get("Content-Type") != "application/zip" ||
 		exported.Header().Get("Cache-Control") != "no-store" ||
 		exported.Header().Get("X-Content-Type-Options") != "nosniff" {
@@ -67,16 +67,16 @@ func TestRecipeBundleOwnerSessionAndPhotoRoundTrip(t *testing.T) {
 	if read := call("POST", "/v1/recipes/bundle", bundle, "application/zip", nil, ""); read.Code != 401 {
 		t.Fatalf("anonymous ZIP import accepted: %d", read.Code)
 	}
-	if read := call("POST", "/v1/recipes/bundle", bundle, "application/zip", identity, ""); read.Code != 401 {
+	if read := call("POST", "/v1/recipes/bundle", bundle, "application/zip", accessToken, ""); read.Code != 401 {
 		t.Fatalf("CSRF-free ZIP import accepted: %d", read.Code)
 	}
-	if read := call("POST", "/v1/recipes/bundle", bundle, "text/plain", identity, identity.CSRF); read.Code != 401 {
+	if read := call("POST", "/v1/recipes/bundle", bundle, "text/plain", accessToken, identity.CSRF); read.Code != 401 {
 		t.Fatalf("unexpected ZIP media type accepted: %d", read.Code)
 	}
 	target, err := recipes.Open(filepath.Join(root, "target", "recipes.json"))
 	if err != nil { t.Fatal(err) }
 	server.SetRecipes(target)
-	imported := call("POST", "/v1/recipes/bundle", bundle, "application/zip", identity, identity.CSRF)
+	imported := call("POST", "/v1/recipes/bundle", bundle, "application/zip", accessToken, identity.CSRF)
 	if imported.Code != 201 || !strings.Contains(imported.Body.String(), `"imported":1`) {
 		t.Fatalf("ZIP import failed: %d %s", imported.Code, imported.Body.String())
 	}
@@ -87,7 +87,7 @@ func TestRecipeBundleOwnerSessionAndPhotoRoundTrip(t *testing.T) {
 	if err != nil || !bytes.Equal(imageData, picture.Bytes()) {
 		t.Fatalf("ZIP did not contain the original image: %v", err)
 	}
-	if repeated := call("POST", "/v1/recipes/bundle", bundle, "application/zip", identity, identity.CSRF); repeated.Code != 409 {
+	if repeated := call("POST", "/v1/recipes/bundle", bundle, "application/zip", accessToken, identity.CSRF); repeated.Code != 409 {
 		t.Fatalf("repeat ZIP import overwrote records: %d", repeated.Code)
 	}
 }
