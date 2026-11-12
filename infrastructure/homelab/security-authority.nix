@@ -35,6 +35,11 @@ in
       ownerEmailFile = "/srv/homelab/secrets/adaptive-access-owner.email";
       jwksFile = "${secretDir}/access-jwks.json";
     };
+    browser = {
+      enable = true;
+      hostname = "auth.dbontr.me";
+      audience = "51fb5fbe71e4a1e0a110630c3f1325c5e3567927538ee697ff91c4e3165972dd";
+    };
     policies = map (operation: {
       inherit operation;
       targets = [ host ];
