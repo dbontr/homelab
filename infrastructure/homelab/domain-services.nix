@@ -4,6 +4,8 @@
   services.homelabPlatform = {
     enable = true;
     tokenFile = "/srv/homelab/secrets/homelab-platform.token";
+    securityClientSocket = "/run/homelab-securityd/client.sock";
+    executorSocket = "/run/homelab-executord/execute.sock";
     allowedOrigins = [
       "https://dbontr.me"
       "https://chatgpt.com"
