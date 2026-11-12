@@ -185,7 +185,7 @@ fn valid_identifier(id: &str) -> bool {
 
 fn dangerous(name: &str) -> bool {
     name.to_ascii_lowercase()
-        .split(|c: char| matches!(c, '.' | '_' | '-' | '/'))
+        .split(['.', '_', '-', '/'])
         .any(|word| {
             matches!(
                 word,
@@ -818,6 +818,7 @@ impl Authority {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn use_service_credential<T>(
         &mut self,
         peer: &VerifiedServiceIdentity,
@@ -1144,6 +1145,7 @@ impl Authority {
         )
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn authorize_at(
         &mut self,
         principal: &str,
