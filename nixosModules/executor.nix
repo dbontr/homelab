@@ -309,7 +309,7 @@ in
       serviceConfig = {
         Type = "simple";
         User = "root";
-        Group = "root";
+        Group = "homelab-executor-client";
         SupplementaryGroups = lib.optionals (!cfg.authorization.remote.enable) [ "homelab-security-client" ];
         StateDirectory = "homelab-releases";
         StateDirectoryMode = "0700";
