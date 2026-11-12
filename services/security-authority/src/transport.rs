@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use std::ffi::CString;
 use std::fs;
 use std::os::unix::fs::{FileTypeExt, PermissionsExt};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
