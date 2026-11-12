@@ -165,8 +165,15 @@ func (db *Database) PlanWorkspace(req WorkspaceRequest) (map[string]any, error) 
 				score += float64(allHardware["fpga"]) * 2000
 			}
 			score += math.Max(0, cpuFree-req.CPU)*50 + math.Max(0, memoryFree-float64(req.MemoryMB))/1024
+			adapter := ""
+			switch {
+			case asBool(caps["kubernetes"]):
+				adapter = "kubernetes"
+			case asBool(caps["docker"]):
+				adapter = "docker"
+			}
 			candidates = append(candidates, candidate{score: score, values: map[string]any{
-				"node": id, "adapter": "docker", "online": now-asFloat(node["last_seen"]) < 90,
+				"node": id, "adapter": adapter, "online": now-asFloat(node["last_seen"]) < 90,
 				"eligible": eligible, "reasons": reasons, "architecture": normalizeArchitecture(asString(caps["arch"])),
 				"cpu_total": cpuTotal, "memory_mb_total": memoryTotal, "cpu_unreserved": cpuFree,
 				"memory_mb_unreserved": memoryFree, "hardware_total": allHardware,
