@@ -76,7 +76,8 @@ pub struct Settings {
 
 pub fn initialize(directory: &Path) -> Result<Settings, Error> {
     // Switching the authority must not reset replay or lockout history.
-    require_authenticator_record(directory).inspect_err(|_| eprintln!("securityd startup: replay file custody"))?;
+    require_authenticator_record(directory)
+        .inspect_err(|_| eprintln!("securityd startup: replay file custody"))?;
     let verifier = configured_file("HOMELAB_SECURITY_PASSWORD_FILE", true)
         .inspect_err(|_| eprintln!("securityd startup: password verifier custody"))?;
     let verifier: PassphraseRecord =
@@ -102,7 +103,8 @@ pub fn initialize(directory: &Path) -> Result<Settings, Error> {
     );
     let mut secret = zeroize::Zeroizing::new(secret);
     secret.zeroize();
-    let mut authority = opened.inspect_err(|_| eprintln!("securityd startup: state ownership or replay validation"))?;
+    let mut authority = opened
+        .inspect_err(|_| eprintln!("securityd startup: state ownership or replay validation"))?;
 
     if env::var("HOMELAB_SECURITY_VAULT_KEY_FILE").is_ok() {
         let mut raw = configured_file("HOMELAB_SECURITY_VAULT_KEY_FILE", true)
