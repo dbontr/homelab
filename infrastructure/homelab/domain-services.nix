@@ -6,6 +6,7 @@
     tokenFile = "/srv/homelab/secrets/homelab-platform.token";
     securityClientSocket = "/run/homelab-securityd/client.sock";
     executorSocket = "/run/homelab-executord/execute.sock";
+    consolePassphraseFile = "/var/lib/homelab-console/verifier.json";
     allowedOrigins = [
       "https://dbontr.me"
       "https://chatgpt.com"
