@@ -271,7 +271,7 @@ in
       preStart = lib.optionalString cfg.browser.enable ''
         if [ ! -e /var/lib/homelab-console/verifier.json ]; then
           umask 077
-          printf '%s\\n' '{"version":1,"iterations":310000,"salt":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","digest":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}' > /var/lib/homelab-console/verifier.json
+          printf '%s\n' '{"version":1,"iterations":310000,"salt":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","digest":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}' > /var/lib/homelab-console/verifier.json
         fi
         if [ ! -e /var/lib/homelab-console/refresh.trigger ]; then
           umask 077
