@@ -312,11 +312,28 @@ in
       }
     ];
 
+    systemd.paths.homelab-console-verifier = lib.mkIf
+      (cfg.consolePassphraseFile == "/var/lib/homelab-console/verifier.json") {
+        wantedBy = [ "multi-user.target" ];
+        pathConfig = {
+          PathModified = "/var/lib/homelab-console/refresh.trigger";
+          Unit = "homelab-console-verifier-refresh.service";
+        };
+      };
+
+    systemd.services.homelab-console-verifier-refresh = lib.mkIf
+      (cfg.consolePassphraseFile == "/var/lib/homelab-console/verifier.json") {
+        description = "Load owner-authorized console verifier rotation";
+        serviceConfig.Type = "oneshot";
+        script = "${pkgs.systemd}/bin/systemctl try-restart homelab-platform.service";
+      };
+
     systemd.services.homelab-platform = {
       description = "Personal computing platform";
       wantedBy = [ "multi-user.target" ];
       after = [ "network-online.target" ] ++ lib.optional calendarCfg.enable "homelab-calendar.service"
-        ++ lib.optional motivationCfg.enable "homelab-motivation.service";
+        ++ lib.optional motivationCfg.enable "homelab-motivation.service"
+        ++ lib.optional (cfg.consolePassphraseFile != null) "homelab-securityd.service";
       wants = [ "network-online.target" ] ++ lib.optional calendarCfg.enable "homelab-calendar.service"
         ++ lib.optional motivationCfg.enable "homelab-motivation.service";
       environment = {
