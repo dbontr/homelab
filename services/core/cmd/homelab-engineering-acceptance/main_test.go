@@ -137,7 +137,7 @@ func TestWorkspaceStopRequiresConfirmedTerminalStatus(t *testing.T) {
 	f := &fakeWorkspaceControl{states: []string{"ready", "stopped"}}
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
 	defer cancel()
-	if err := stopWorkspace(ctx, f, "research", "aabbccdd"); err != nil {
+	if err := agentflow.StopWorkspace(ctx, f, "research", "aabbccdd"); err != nil {
 		t.Fatal(err)
 	}
 	if f.stopRequests != 1 || f.lists != 2 {
@@ -160,7 +160,7 @@ func TestWorkspaceStopIsIdempotentAcrossRecovery(t *testing.T) {
 			f := &fakeWorkspaceControl{states: tc.states}
 			ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
 			defer cancel()
-			if err := stopWorkspace(ctx, f, "research", "aabbccdd"); err != nil {
+			if err := agentflow.StopWorkspace(ctx, f, "research", "aabbccdd"); err != nil {
 				t.Fatal(err)
 			}
 			if f.stopRequests != 0 || f.lists != tc.lists {
@@ -173,11 +173,11 @@ func TestWorkspaceStopFailsOnUncertainCleanup(t *testing.T) {
 	f := &fakeWorkspaceControl{states: []string{"ready"}}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if err := stopWorkspace(ctx, f, "research", "aabbccdd"); err == nil {
+	if err := agentflow.StopWorkspace(ctx, f, "research", "aabbccdd"); err == nil {
 		t.Fatal("unconfirmed workspace termination accepted")
 	}
 	f = &fakeWorkspaceControl{states: []string{"failed"}}
-	if err := stopWorkspace(context.Background(), f, "research", "aabbccdd"); err == nil {
+	if err := agentflow.StopWorkspace(context.Background(), f, "research", "aabbccdd"); err == nil {
 		t.Fatal("failed workspace state accepted")
 	}
 }
