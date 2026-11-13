@@ -108,6 +108,14 @@ func TestWorkerMaintenanceDrainCountsAndExistingOperationRecovery(t *testing.T) 
     if err != nil || afterStart["drained"] != false {
         t.Fatalf("active workspace became drained: %v %v", afterStart, err)
     }
+    if _, err := db.CallWorkspace("demo", asString(workspace["id"]), "command",
+        map[string]any{"command":"echo maintenance bypass"}); err == nil {
+        t.Fatal("worker maintenance admitted a new command operation")
+    }
+    if _, err := db.CallWorkspace("demo", asString(workspace["id"]), "read_file",
+        map[string]any{"path":"notes.txt"}); err == nil {
+        t.Fatal("worker maintenance admitted a new read operation")
+    }
     if _, err := db.StopWorkspace("demo", asString(workspace["id"])); err != nil { t.Fatal(err) }
     stop, err := db.ClaimOperation("worker-one")
     if err != nil || stop == nil || stop["action"] != "stop" {
