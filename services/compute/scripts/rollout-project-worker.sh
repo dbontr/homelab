@@ -277,12 +277,18 @@ if kubectl -n "$namespace" rollout status "deployment/$deployment" --timeout=90s
    kubectl -n "$namespace" get deployment "$deployment" -o json |
      jq -e --arg image "$image" '
        .status.readyReplicas == 1 and .status.availableReplicas == 1 and
+       .status.updatedReplicas == 1 and
+       .metadata.generation == .status.observedGeneration and
        ([.spec.template.spec.containers[] | select(.name == "worker")][0].image == $image)
      ' >/dev/null; then
+  # The old Pod can heartbeat after the upgrade starts but before its
+  # replacement is Ready. Require an observation after readiness, not
+  # merely one later than Helm invocation.
+  ready_after=$(date +%s)
   for attempt in {1..20}; do
     if controller_get /api/nodes "$scratch/after.json" &&
-      jq -e --arg name "$worker" --argjson since "$started" '
-      any(.[]; .id == $name and .online == true and (.last_seen | tonumber) >= $since)
+      jq -e --arg name "$worker" --argjson since "$ready_after" '
+      any(.[]; .id == $name and .online == true and (.last_seen | tonumber) >= $since + 1)
     ' "$scratch/after.json" >/dev/null; then
       maintenance_get before-resume
       maintenance_require before-resume "$pause_revision"
