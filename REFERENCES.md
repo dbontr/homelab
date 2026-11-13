@@ -1,5 +1,7 @@
 # References
 
+- [Kubernetes Pod Lifecycle](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/) — Kubernetes project. Used for: distinguishing live workload Pods from completed controller records before worker disruption.
+- [Kubernetes Deployments](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/) — Kubernetes project. Used for: asserting worker replicas, rollout readiness, and protected Deployment identity during serial release changes.
 - [curl --header option](https://curl.se/docs/manpage.html#-H) — curl project. Used for: passing protected MCP acceptance bearer headers from restricted local files without including secrets in process arguments.
 - [Helm Upgrade](https://helm.sh/docs/helm/helm_upgrade/) — Helm project. Used for: immutable release upgrades, retained release values, atomic rollback, and compatibility with older optional chart settings.
 - [NixOS Manual](https://nixos.org/manual/nixos/stable/) — NixOS project. Used for: declarative host configuration, systemd services, and state directories, controlled system generation activation, and rollback.
