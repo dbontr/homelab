@@ -50,6 +50,8 @@ func TestAuditJournalRejectsUnsafePaths(t *testing.T){
  dir:=privateAuditDir(t)
  target:=filepath.Join(dir,"real")
  if err:=os.WriteFile(target,[]byte(""),0644);err!=nil{t.Fatal(err)}
+ // Explicitly set the rejected mode; the staging process uses umask 077.
+ if err:=os.Chmod(target,0644);err!=nil{t.Fatal(err)}
  if _,err:=OpenAuditJournal(target);err==nil{t.Fatal("world-readable audit accepted")}
  if err:=os.Symlink(target,filepath.Join(dir,"link"));err!=nil{t.Fatal(err)}
  if _,err:=OpenAuditJournal(filepath.Join(dir,"link"));err==nil{t.Fatal("symlink audit accepted")}
