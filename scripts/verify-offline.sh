@@ -30,6 +30,7 @@ if ! command -v bash >/dev/null 2>&1; then
 fi
 bash "$root/scripts/tests/verify-release-test.sh"
 bash "$root/scripts/tests/mcp-acceptance-token-test.sh"
+bash "$root/scripts/tests/unified-mcp-acceptance-test.sh"
 bash "$root/scripts/tests/stage-component-test.sh"
 bash -n "$root/scripts/saturn-detached-activation.sh"
 
