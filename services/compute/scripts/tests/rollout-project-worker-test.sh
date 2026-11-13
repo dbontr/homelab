@@ -72,7 +72,7 @@ printf '[]\n' > "$scratch/jobs.json"
 printf '[]\n' > "$scratch/workspaces.json"
 cat > "$scratch/workers.json" <<'JSON'
 [{"id":"worker-046910e8ae58-janus","online":true,"last_seen":4102444800,
-"capabilities":{"kubernetes":true,"project_id":"aup-zu3-pynq","workload_node":"janus"}}]
+"capabilities":{"kubernetes":true,"docker":false,"devices":[],"project_id":"aup-zu3-pynq","workload_node":"janus"}}]
 JSON
 
 cat > "$scratch/bin/helm" <<'MOCK'
