@@ -29,6 +29,7 @@ if ! command -v bash >/dev/null 2>&1; then
   exit 1
 fi
 bash "$root/scripts/tests/verify-release-test.sh"
+bash "$root/scripts/tests/mcp-acceptance-token-test.sh"
 bash "$root/scripts/tests/stage-component-test.sh"
 bash -n "$root/scripts/saturn-detached-activation.sh"
 
@@ -160,6 +161,53 @@ helm template homelab-acceptance "$chart" \
   --set controller.enabled=false \
   --set worker.enabled=true \
   --set-string worker.image="$pinned_worker" >/dev/null
+
+for host in jupiter venus mercury janus; do
+  profile="$root/infrastructure/homelab/workspace/worker-$host.yaml"
+  rendered=$(helm template "pwm-workspace-$host" "$chart" -f "$profile")
+  if ! printf '%s\n' "$rendered" |
+      grep -Eq 'image: "ghcr.io/dbontr/homelab/worker@sha256:[a-f0-9]{64}"'; then
+    printf 'Site worker %s is not pinned to the source-owned registry\n' "$host" >&2
+    exit 1
+  fi
+  if printf '%s\n' "$rendered" |
+      grep -Eq '^[[:space:]]+name: pwm-controller
+if ! command -v nix >/dev/null 2>&1; then
+  printf '%s\n' 'Nix is required for offline fleet evaluation.' >&2
+  exit 1
+fi
+if ! command -v jq >/dev/null 2>&1; then
+  printf '%s\n' 'jq is required to enumerate enrolled NixOS hosts.' >&2
+  exit 1
+fi
+
+cd "$root"
+nix --extra-experimental-features 'nix-command flakes' flake check --offline --no-build
+hosts=$(nix --extra-experimental-features 'nix-command flakes' eval --offline --json '.#nixosConfigurations' --apply builtins.attrNames | jq -r '.[]')
+for host in $hosts; do
+  printf 'Evaluating %s\n' "$host"
+  nix --extra-experimental-features 'nix-command flakes' eval --offline --raw ".#nixosConfigurations.$host.config.system.build.toplevel.drvPath"
+done
+# Build every flake-declared package, including disabled-by-default Rust
+# authorities. New packages automatically enter the source acceptance gate.
+packages=$(nix --extra-experimental-features 'nix-command flakes' eval --offline --json \
+  '.#packages.x86_64-linux' --apply builtins.attrNames | jq -r '.[]')
+if [ -z "$packages" ]; then
+  printf '%s\n' 'Flake declares no x86_64-linux release packages' >&2
+  exit 1
+fi
+for package in $packages; do
+  case "$package" in
+    ""|*[!a-z0-9-]*) printf '%s\n' 'Unsafe release package attribute' >&2; exit 1 ;;
+  esac
+  nix --extra-experimental-features 'nix-command flakes' build --offline --no-link ".#packages.x86_64-linux.$package"
+done
+printf '%s\n' 'All local source checks succeeded. No NixOS configuration was activated.'
+; then
+    printf 'Site worker %s rendered a controller resource\n' "$host" >&2
+    exit 1
+  fi
+done
 
 if ! command -v nix >/dev/null 2>&1; then
   printf '%s\n' 'Nix is required for offline fleet evaluation.' >&2
