@@ -270,7 +270,8 @@ printf 'Worker rollout admission and post-upgrade recovery verified\n'
 # A Ready Deployment is insufficient when the controller's only heartbeat
 # belongs to the prior worker process.
 rm -f "$scratch/applied"
-jq '.[0].last_seen = 0' "$scratch/workers.json" > "$scratch/stale-workers.json"
+jq --argjson previous "$(date +%s)" '.[0].last_seen = $previous' \
+  "$scratch/workers.json" > "$scratch/stale-workers.json"
 mv "$scratch/stale-workers.json" "$scratch/workers.json"
 if bash "$script" apply "$release" "$digest" --confirm "$release" \
     > "$scratch/output" 2>&1; then
