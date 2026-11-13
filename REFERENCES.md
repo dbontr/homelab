@@ -1,6 +1,8 @@
 # References
 
 - [NixOS Manual](https://nixos.org/manual/nixos/stable/) — NixOS project. Used for: declarative host configuration, systemd services, and state directories.
+- [systemd Special Units](https://www.freedesktop.org/software/systemd/man/latest/systemd.special.html) — systemd project. Used for: ordering Nginx after network-online.target before binding the services VLAN address.
+- [systemd tmpfiles.d](https://www.freedesktop.org/software/systemd/man/latest/tmpfiles.d.html) — systemd project. Used for: boot-time creation and restrictive ownership of the Nginx error log.
 - [Nix Flake Reference](https://nixos.org/manual/nix/stable/command-ref/new-cli/nix3-flake) — Nix project. Used for: pinned, reproducible host composition.
 - [SQLite Foreign Key Support](https://www.sqlite.org/foreignkeys.html) — SQLite project. Used for: transactional research claim and source-evidence ownership constraints.
 - [Go Documentation](https://go.dev/doc/) — Go project. Used for: Go services, HTTP handling, and file persistence.
