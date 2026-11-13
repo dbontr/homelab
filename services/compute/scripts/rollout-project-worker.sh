@@ -204,7 +204,11 @@ grep -Fq "image: \"$image\"" "$scratch/candidate.yaml" ||
   fail 'Candidate does not contain the approved worker image.'
 sed "s#image: \"$current_image\"#image: \"$image\"#g" \
   "$scratch/current.yaml" > "$scratch/expected.yaml"
-diff -u "$scratch/expected.yaml" "$scratch/candidate.yaml" > "$scratch/manifest.diff" ||
+# Helm's stored manifest can end with one extra empty line after the
+# final resource. Compare the resource bodies without that terminal separator.
+sed '${/^$/d;}' "$scratch/expected.yaml" > "$scratch/expected-normalized.yaml"
+sed '${/^$/d;}' "$scratch/candidate.yaml" > "$scratch/candidate-normalized.yaml"
+diff -u "$scratch/expected-normalized.yaml" "$scratch/candidate-normalized.yaml" > "$scratch/manifest.diff" ||
   fail 'Candidate changes resources beyond the worker image; review the manifest separately.'
 helm upgrade "$release" "$PWM_HELM_CHART" --namespace "$namespace" \
   --reset-then-reuse-values --set controller.enabled=false \
