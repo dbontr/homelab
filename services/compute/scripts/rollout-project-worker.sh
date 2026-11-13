@@ -28,7 +28,7 @@ namespace="${PWM_SYSTEM_NAMESPACE:-pwm-system}"
 [[ "$namespace" == pwm-system ]] || { echo 'Unexpected system namespace.' >&2; exit 2; }
 [[ -d "$PWM_HELM_CHART" && -f "$PWM_HELM_CHART/Chart.yaml" ]] ||
   { echo 'The Helm chart directory is unavailable.' >&2; exit 2; }
-for command in kubectl helm jq curl base64 sed diff date grep; do
+for command in kubectl helm jq curl base64 sed diff date grep sha256sum; do
   command -v "$command" >/dev/null || { echo "Required command unavailable: $command" >&2; exit 2; }
 done
 host="${release##*-}"
@@ -69,6 +69,8 @@ ca_secret=$(jq -r '.worker.controllerCASecretName' "$scratch/values.json")
 current_image=$(jq -r '.worker.image' "$scratch/values.json")
 key="${release#pwm-project-}"
 key="${key%-$host}"
+expected_key=$(printf '%s' "$project" | sha256sum | cut -c1-12)
+[[ "$key" == "$expected_key" ]] || fail 'Worker release hash does not match the project identifier.'
 [[ "$project" =~ ^[a-z0-9]([-a-z0-9]{0,50}[a-z0-9])?$ &&
    "$instance" == "p-$key-$host" &&
    "$worker" == "worker-$key-$host" &&
@@ -158,7 +160,9 @@ check_admission() {
     ([.[] | select(.id == $name and .online == true and
       .capabilities.project_id == $project and
       .capabilities.workload_node == $host and
-      .capabilities.kubernetes == true)] | length) == 1
+      .capabilities.kubernetes == true and
+      .capabilities.docker == false and
+      .capabilities.devices == [])] | length) == 1
   ' "$scratch/workers-$phase.json"
 }
 
