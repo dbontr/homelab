@@ -25,11 +25,10 @@
     tokenFile = "/srv/homelab/secrets/homelab-motivation.token";
   };
 
-  # Promote only the exact, source-bound console artifact. Keep the existing
-  # homepage selected until owner login and browser API flows are accepted.
+  # Serve the Rust console on the public origin behind Cloudflare Access.
   services.homelabConsole = {
     enable = true;
-    replaceHomepage = false;
+    replaceHomepage = true;
     package = import ../../packages/console.nix { inherit pkgs; };
   };
 
