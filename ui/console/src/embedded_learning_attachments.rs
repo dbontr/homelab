@@ -114,6 +114,16 @@ pub fn EmbeddedAttachments(owner_kind: String, owner_id: String) -> Element {
     let mut download_url = use_signal(String::new);
     let mut download_name = use_signal(String::new);
     let mut preview_mime = use_signal(String::new);
+    let file_list = files();
+    let records = file_list
+        .as_ref()
+        .and_then(|data| {
+            data.get("attachments")
+                .and_then(Value::as_array)
+                .or_else(|| data.get("items").and_then(Value::as_array))
+        })
+        .cloned()
+        .unwrap_or_default();
     rsx! {
         Card{
             title:"Original Learning files".to_owned(),
@@ -194,10 +204,7 @@ pub fn EmbeddedAttachments(owner_kind: String, owner_id: String) -> Element {
                         }
                     }
                 }
-                if let Some(data)=files(){
-                    let records=data.get("attachments").and_then(Value::as_array)
-                        .or_else(||data.get("items").and_then(Value::as_array))
-                        .cloned().unwrap_or_default();
+                if file_list.is_some(){
                     if records.is_empty(){
                         Empty{title:"No originals".to_owned(),
                             description:"Attach a file to preserve the source evidence.".to_owned()}
