@@ -19,8 +19,8 @@ if [[ "$mode" == apply ]]; then
 else
   (( $# == 2 )) || usage
 fi
-: "\${PWM_HELM_CHART:?Set PWM_HELM_CHART to the source-owned Compute chart directory}"
-system_namespace="\${PWM_SYSTEM_NAMESPACE:-pwm-system}"
+: "${PWM_HELM_CHART:?Set PWM_HELM_CHART to the source-owned Compute chart directory}"
+system_namespace="${PWM_SYSTEM_NAMESPACE:-pwm-system}"
 [[ "$system_namespace" == pwm-system ]] ||
   { echo 'Unexpected controller namespace.' >&2; exit 2; }
 for command in helm kubectl jq bash cmp; do
