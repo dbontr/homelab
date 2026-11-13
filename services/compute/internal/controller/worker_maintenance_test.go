@@ -10,12 +10,20 @@ import (
 func TestWorkerMaintenanceFencesAllocationAndJobClaims(t *testing.T) {
     db, _, srv := fixture(t)
     project(t, srv)
-    if _, err := db.RegisterNode("worker-one", kubeWorkerCaps("demo")); err != nil { t.Fatal(err) }
+    workerToken, err := db.RegisterNode("worker-one", kubeWorkerCaps("demo"))
+    if err != nil { t.Fatal(err) }
     if _, err := db.SubmitJob("demo", "printf retained", "debian:bookworm-slim", 1, 256); err != nil { t.Fatal(err) }
 
     route := "/api/nodes/worker-one/maintenance"
     if code, _ := call(t, srv, http.MethodGet, route, "", nil); code != http.StatusUnauthorized {
         t.Fatalf("unauthorized maintenance inspection returned %d", code)
+    }
+    if code, _ := call(t, srv, http.MethodGet, route, workerToken, nil); code != http.StatusUnauthorized {
+        t.Fatalf("worker token could inspect administrator maintenance state: %d", code)
+    }
+    if code, _ := call(t, srv, http.MethodPost, route, workerToken,
+        map[string]any{"paused":true,"expected_revision":0}); code != http.StatusUnauthorized {
+        t.Fatalf("worker token could change administrator maintenance state: %d", code)
     }
     if code, _ := call(t, srv, http.MethodPost, route, "", map[string]any{"paused":true,"expected_revision":0}); code != http.StatusUnauthorized {
         t.Fatalf("unauthorized maintenance request returned %d", code)
