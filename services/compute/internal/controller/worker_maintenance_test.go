@@ -143,3 +143,65 @@ func TestWorkerMaintenanceDrainWaitsForLeasedJobs(t *testing.T) {
         t.Fatalf("finished job failed to drain: %v %v", state, err)
     }
 }
+
+func TestWorkerMaintenanceDoesNotBlockOtherWorkers(t *testing.T) {
+    db, _, srv := fixture(t)
+    project(t, srv)
+    for _, node := range []string{"worker-one", "worker-two"} {
+        if _, err := db.RegisterNode(node, kubeWorkerCaps("demo")); err != nil {
+            t.Fatal(err)
+        }
+    }
+    if _, err := db.SetNodeMaintenance("worker-one", true, 0); err != nil {
+        t.Fatal(err)
+    }
+    if _, err := db.SubmitJob("demo", "printf isolated", "debian:bookworm-slim", 1, 256); err != nil {
+        t.Fatal(err)
+    }
+    if job, err := db.ClaimJob("worker-one"); err != nil || job != nil {
+        t.Fatalf("paused worker received a job: %v %v", job, err)
+    }
+    if job, err := db.ClaimJob("worker-two"); err != nil || job == nil {
+        t.Fatalf("unpaused worker could not claim work: %v %v", job, err)
+    }
+    workspace, err := db.CreateWorkspace(WorkspaceRequest{
+        ProjectID: "demo", Image: "debian:bookworm-slim",
+        CPU: 1, MemoryMB: 512, DurationMinutes: 15,
+    })
+    if err != nil || asString(workspace["node"]) != "worker-two" {
+        t.Fatalf("workspace was not routed away from maintenance: %v %v", workspace, err)
+    }
+    maintained, err := db.NodeMaintenance("worker-one")
+    if err != nil || maintained["drained"] != true {
+        t.Fatalf("other worker's workload contaminated maintenance drain: %v %v", maintained, err)
+    }
+}
+
+func TestMaintenanceSchemaReopensExistingControllerRecords(t *testing.T) {
+    db, _, srv := fixture(t)
+    project(t, srv)
+    if _, err := db.RegisterNode("worker-one", kubeWorkerCaps("demo")); err != nil {
+        t.Fatal(err)
+    }
+    job, err := db.SubmitJob("demo", "printf persisted", "debian:bookworm-slim", 1, 256)
+    if err != nil { t.Fatal(err) }
+    // A database from before worker maintenance has no maintenance table.
+    if err := db.exec("DROP TABLE node_maintenance"); err != nil { t.Fatal(err) }
+    if err := db.InitSchema(); err != nil { t.Fatal(err) }
+    status, err := db.NodeMaintenance("worker-one")
+    if err != nil || status["paused"] != false || asInt(status["revision"]) != 0 {
+        t.Fatalf("schema migration failed to initialize worker state: %v %v", status, err)
+    }
+    retained, err := db.Jobs("demo")
+    if err != nil || len(retained) != 1 || retained[0]["id"] != job["id"] {
+        t.Fatalf("schema migration altered existing jobs: %v %v", retained, err)
+    }
+    if _, err := db.SetNodeMaintenance("worker-one", true, 0); err != nil {
+        t.Fatalf("migrated worker could not be paused: %v", err)
+    }
+    if err := db.InitSchema(); err != nil { t.Fatal(err) }
+    status, err = db.NodeMaintenance("worker-one")
+    if err != nil || status["paused"] != true || asInt(status["revision"]) != 1 {
+        t.Fatalf("repeated schema initialization reset pause state: %v %v", status, err)
+    }
+}
