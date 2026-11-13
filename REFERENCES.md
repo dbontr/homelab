@@ -1,5 +1,6 @@
 # References
 
+- [SQLite Transaction Isolation](https://www.sqlite.org/isolation.html) — SQLite project. Used for: serializing worker maintenance state changes with workspace allocation and job leasing under one write transaction.
 - [Kubernetes Pod Lifecycle](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/) — Kubernetes project. Used for: distinguishing live workload Pods from completed controller records before worker disruption.
 - [Kubernetes Deployments](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/) — Kubernetes project. Used for: asserting worker replicas, rollout readiness, and protected Deployment identity during serial release changes.
 - [curl --header option](https://curl.se/docs/manpage.html#-H) — curl project. Used for: passing protected MCP acceptance bearer headers from restricted local files without including secrets in process arguments.
