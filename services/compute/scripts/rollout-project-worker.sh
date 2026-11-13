@@ -28,7 +28,7 @@ namespace="${PWM_SYSTEM_NAMESPACE:-pwm-system}"
 [[ "$namespace" == pwm-system ]] || { echo 'Unexpected system namespace.' >&2; exit 2; }
 [[ -d "$PWM_HELM_CHART" && -f "$PWM_HELM_CHART/Chart.yaml" ]] ||
   { echo 'The Helm chart directory is unavailable.' >&2; exit 2; }
-for command in kubectl helm jq curl base64 sed diff date grep sha256sum; do
+for command in kubectl helm jq curl base64 sed diff awk date grep sha256sum; do
   command -v "$command" >/dev/null || { echo "Required command unavailable: $command" >&2; exit 2; }
 done
 host="${release##*-}"
@@ -208,8 +208,32 @@ sed "s#image: \"$current_image\"#image: \"$image\"#g" \
 # final resource. Compare the resource bodies without that terminal separator.
 sed '${/^$/d;}' "$scratch/expected.yaml" > "$scratch/expected-normalized.yaml"
 sed '${/^$/d;}' "$scratch/candidate.yaml" > "$scratch/candidate-normalized.yaml"
-diff -u "$scratch/expected-normalized.yaml" "$scratch/candidate-normalized.yaml" > "$scratch/manifest.diff" ||
-  fail 'Candidate changes resources beyond the worker image; review the manifest separately.'
+# A release can predate the worker's read-only check of its isolation
+# NetworkPolicy. This is the only non-image chart migration admitted here:
+# one "get" permission for one named NetworkPolicy in its own namespace.
+if ! diff -u "$scratch/expected-normalized.yaml" "$scratch/candidate-normalized.yaml" > "$scratch/manifest.diff"; then
+  ! grep -Fq '    resourceNames: ["pwm-isolate-workloads"]' "$scratch/expected-normalized.yaml" ||
+    fail 'Candidate changes resources beyond the worker image.'
+  awk '
+    /^  - apiGroups: \["batch"\]$/ { in_jobs = 1 }
+    {
+      print
+      if (in_jobs && $0 == "    verbs: [\"get\", \"list\", \"watch\", \"create\", \"delete\"]") {
+        print "  - apiGroups: [\"networking.k8s.io\"]"
+        print "    resources: [\"networkpolicies\"]"
+        print "    resourceNames: [\"pwm-isolate-workloads\"]"
+        print "    verbs: [\"get\"]"
+        additions++
+        in_jobs = 0
+      }
+    }
+    END { if (additions != 1) exit 1 }
+  ' "$scratch/expected-normalized.yaml" > "$scratch/expected-scoped-policy.yaml" ||
+    fail 'The worker Role does not match the expected narrow policy migration.'
+  diff -u "$scratch/expected-scoped-policy.yaml" "$scratch/candidate-normalized.yaml" > "$scratch/manifest.diff" ||
+    fail 'Candidate changes resources beyond the worker image and the named policy read.'
+  printf 'ADMISSION: scoped read of the workload isolation NetworkPolicy is the only chart change.\n'
+fi
 helm upgrade "$release" "$PWM_HELM_CHART" --namespace "$namespace" \
   --reset-then-reuse-values --set controller.enabled=false \
   --set worker.enabled=true --set-string "worker.image=$image" \
