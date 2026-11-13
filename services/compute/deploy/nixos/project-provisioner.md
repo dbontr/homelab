@@ -41,6 +41,46 @@ Do not store controller or worker credentials in shell histories, Git, Helm valu
 Projects must use Kubernetes-compatible identifiers of at most 52 characters. The operator can exclude historical, archived or resource-restricted projects explicitly. Each project-host pair consumes a small worker Pod; capacity and project-count budgets must be set appropriately for the cluster.
 
 
+## Fleet image reconciliation
+
+Inspect the deployed project-worker releases as a set before upgrading any
+individual worker:
+
+```sh
+export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+export PWM_HELM_CHART=services/compute/deploy/helm/project-workspace
+image=ghcr.io/dbontr/homelab/worker@sha256:c7ab035296db9aec360611c52737ca4e94143fb959c7ad56ca536cc20fd6ee4f
+
+bash services/compute/scripts/rollout-project-fleet.sh plan "$image"
+```
+
+The fleet utility compares Helm's deployed project releases with the
+Kubernetes worker Deployments and refuses missing, duplicate, or mismatched
+ownership. It selects only project workers whose deployed image differs from
+the approved digest. Every selected worker must pass the individual release
+preflight before any upgrade is permitted.
+
+For an operator-approved maintenance window with project submissions
+temporarily suspended, apply the exact planned set by confirming its current
+size. For example, if the plan discovers twelve releases:
+
+```sh
+bash services/compute/scripts/rollout-project-fleet.sh apply "$image" --confirm-count 12
+```
+
+The fleet inventory is checked again before application. Upgrades proceed
+strictly one release at a time. Each release revalidates its own admission,
+revision and image before mutation, and has a separate Helm rollback boundary.
+A failed release stops the fleet; earlier accepted releases are not rolled
+back merely because a later release failed. Preserve those Helm histories
+for independently authorized reversion.
+
+Do not run a fleet apply without a genuine project-submission freeze and a
+confirmed image release receipt. The admission API provides a bounded job
+history, and the individual tool rejects truncated histories. The script
+does not acquire a controller-wide scheduler lock; a plan alone cannot
+prevent new work from arriving.
+
 ## Existing worker image rollout
 
 The provisioner enrolls missing project/host pairs. It intentionally does not
