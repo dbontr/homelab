@@ -30,9 +30,12 @@ token=$(<"$token_file")
   exit 2
 }
 
+umask 077
 scratch=$(mktemp -d)
 trap 'rm -rf -- "$scratch"; unset token' EXIT
 chmod 700 "$scratch"
+printf 'Authorization: Bearer %s\n' "$token" > "$scratch/authorization.header"
+unset token
 
 rpc() {
   local data=$1
@@ -45,7 +48,7 @@ rpc() {
     --header 'Accept: application/json, text/event-stream'
   )
   if [[ "$authenticated" == yes ]]; then
-    arguments+=(--header "Authorization: Bearer $token")
+    arguments+=(--header "@$scratch/authorization.header")
   fi
   status=$(printf '%s' "$data" | curl "${arguments[@]}" --data-binary @- --output "$scratch/$path" --write-out '%{http_code}' "$url")
   printf '%s' "$status"
