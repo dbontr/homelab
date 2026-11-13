@@ -52,6 +52,10 @@ func TestCredentialFileMustRemainProtectedAtUseTime(t *testing.T) {
 	if err := os.WriteFile(tokenPath, []byte(secret), 0644); err != nil {
 		t.Fatal(err)
 	}
+	// Exercise the unsafe mode explicitly when the test runner uses umask 077.
+	if err := os.Chmod(tokenPath, 0644); err != nil {
+		t.Fatal(err)
+	}
 	if err := p.Call(context.Background(), "infrastructure__workspace_stop", args); err == nil {
 		t.Fatal("world-readable replacement reached provider")
 	}
