@@ -36,8 +36,9 @@ chmod 700 "$scratch"
 
 inventory() {
   helm -n "$system_namespace" list --deployed --max 1024 -o json > "$scratch/helm.json"
-  kubectl -n "$system_namespace" get deployments -l app=pwm-worker \
-    -o json > "$scratch/deployments.json"
+  # Helm ownership annotations are authoritative. The worker Pod template has
+  # app labels, but the Deployment metadata does not promise those labels.
+  kubectl -n "$system_namespace" get deployments -o json > "$scratch/deployments.json"
 
   # A project release must own exactly one worker Deployment. A missing or
   # unexpected Deployment makes the inventory incomplete and blocks the fleet.
