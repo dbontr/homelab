@@ -136,6 +136,20 @@ func TestWorkerMaintenanceDrainCountsAndExistingOperationRecovery(t *testing.T) 
     if err != nil || drained["paused"] != true || drained["drained"] != true {
         t.Fatalf("completed teardown did not drain worker: %v %v", drained, err)
     }
+    if err := db.exec("UPDATE nodes SET last_seen=0 WHERE id=?", "worker-one"); err != nil {
+        t.Fatal(err)
+    }
+    if _, err := db.SetNodeMaintenance("worker-one", false, 1); err == nil {
+        t.Fatal("offline worker resumed scheduling")
+    }
+    offline, err := db.NodeMaintenance("worker-one")
+    if err != nil || offline["online"] != false || offline["paused"] != true ||
+        asInt(offline["revision"]) != 1 {
+        t.Fatalf("offline worker did not retain the maintenance fence: %v %v", offline, err)
+    }
+    if err := db.Heartbeat("worker-one", kubeWorkerCaps("demo")); err != nil {
+        t.Fatal(err)
+    }
     resumed, err := db.SetNodeMaintenance("worker-one", false, 1)
     if err != nil || resumed["paused"] != false || asInt(resumed["revision"]) != 2 {
         t.Fatalf("drained worker could not resume: %v %v", resumed, err)
