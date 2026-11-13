@@ -84,6 +84,11 @@ func (db *Database) SetNodeMaintenance(node string, paused bool, expectedRevisio
         if current["paused"].(bool) == paused {
             return errors.New("maintenance state unchanged")
         }
+        // Do not admit new workloads while cleanup or device ownership is
+        // unresolved, even when an administrator requests a resume.
+        if !paused && !current["drained"].(bool) {
+            return errors.New("worker is not drained; maintenance cannot resume")
+        }
         next := 0
         if paused { next = 1 }
         if revision == 0 {
