@@ -151,7 +151,7 @@ maintenance_get() {
 maintenance_require() {
   local phase=$1 revision=$2
   read_json --arg worker "$worker" --argjson rev "$revision" '
-    .worker_id == $worker and .paused == true and .drained == true and
+    .worker_id == $worker and .online == true and .paused == true and .drained == true and
     .revision == $rev and
     .active_jobs == 0 and .active_workspaces == 0 and
     .unfinished_operations == 0 and .hardware_leases == 0 and
@@ -214,7 +214,7 @@ helm upgrade "$release" "$PWM_HELM_CHART" --namespace "$namespace" \
 check_admission preflight
 maintenance_get preflight
 read_json --arg worker "$worker" '
-  .worker_id == $worker and .paused == false and .drained == true and
+  .worker_id == $worker and .online == true and .paused == false and .drained == true and
   (.revision | type) == "number" and
   .active_jobs == 0 and .active_workspaces == 0 and
   .unfinished_operations == 0 and .hardware_leases == 0 and
@@ -238,7 +238,7 @@ fi
 check_admission apply
 maintenance_get before-pause
 read_json --arg worker "$worker" '
-  .worker_id == $worker and .paused == false and .drained == true and
+  .worker_id == $worker and .online == true and .paused == false and .drained == true and
   (.revision | type) == "number"
 ' "$scratch/maintenance-before-pause.json"
 maintenance_previous_revision=$(jq -er '.revision | tonumber' "$scratch/maintenance-before-pause.json")
@@ -295,7 +295,7 @@ if kubectl -n "$namespace" rollout status "deployment/$deployment" --timeout=90s
       controller_post "/api/nodes/$worker/maintenance"         "$scratch/resume-request.json" "$scratch/resumed.json" ||
         fail 'Worker upgraded, but scheduler resume is unconfirmed; reconcile the pause explicitly.'
       read_json --arg worker "$worker" --argjson rev "$((pause_revision+1))" '
-        .worker_id == $worker and .paused == false and .revision == $rev
+        .worker_id == $worker and .online == true and .paused == false and .revision == $rev
       ' "$scratch/resumed.json"
       printf 'ACCEPTED: %s running %s with a confirmed heartbeat and resumed scheduler.\n' "$release" "$image"
       exit 0
