@@ -181,13 +181,13 @@ case "${*: -1}" in
       fi
     fi
     if [[ -f "$MOCK_ROLLOUT/paused" ]]; then
-      printf '{"worker_id":"worker-046910e8ae58-janus","paused":true,"revision":1,"drained":true,"active_jobs":0,"active_workspaces":0,"unfinished_operations":0,"hardware_leases":0,"job_device_leases":0}\n' > "$output"
+      printf '{"worker_id":"worker-046910e8ae58-janus","online":true,"paused":true,"revision":1,"drained":true,"active_jobs":0,"active_workspaces":0,"unfinished_operations":0,"hardware_leases":0,"job_device_leases":0}\n' > "$output"
     elif [[ "$method" == POST ]]; then
-      printf '{"worker_id":"worker-046910e8ae58-janus","paused":false,"revision":2,"drained":true,"active_jobs":0,"active_workspaces":0,"unfinished_operations":0,"hardware_leases":0,"job_device_leases":0}\n' > "$output"
+      printf '{"worker_id":"worker-046910e8ae58-janus","online":true,"paused":false,"revision":2,"drained":true,"active_jobs":0,"active_workspaces":0,"unfinished_operations":0,"hardware_leases":0,"job_device_leases":0}\n' > "$output"
     elif [[ -f "$MOCK_ROLLOUT/busy" ]]; then
-      printf '{"worker_id":"worker-046910e8ae58-janus","paused":false,"revision":0,"drained":false,"active_jobs":1,"active_workspaces":0,"unfinished_operations":0,"hardware_leases":0,"job_device_leases":0}\n' > "$output"
+      printf '{"worker_id":"worker-046910e8ae58-janus","online":true,"paused":false,"revision":0,"drained":false,"active_jobs":1,"active_workspaces":0,"unfinished_operations":0,"hardware_leases":0,"job_device_leases":0}\n' > "$output"
     else
-      printf '{"worker_id":"worker-046910e8ae58-janus","paused":false,"revision":0,"drained":true,"active_jobs":0,"active_workspaces":0,"unfinished_operations":0,"hardware_leases":0,"job_device_leases":0}\n' > "$output"
+      printf '{"worker_id":"worker-046910e8ae58-janus","online":true,"paused":false,"revision":0,"drained":true,"active_jobs":0,"active_workspaces":0,"unfinished_operations":0,"hardware_leases":0,"job_device_leases":0}\n' > "$output"
     fi ;;
   *) printf 'Unexpected controller URL\n' >&2; exit 95 ;;
 esac
