@@ -75,11 +75,14 @@ A failed release stops the fleet; earlier accepted releases are not rolled
 back merely because a later release failed. Preserve those Helm histories
 for independently authorized reversion.
 
-Do not run a fleet apply without a genuine project-submission freeze and a
-confirmed image release receipt. The admission API provides a bounded job
-history, and the individual tool rejects truncated histories. The script
-does not acquire a controller-wide scheduler lock; a plan alone cannot
-prevent new work from arriving.
+A fleet apply requires a controller version that supports worker maintenance
+and a verified image release receipt. For each worker, the upgrade script
+sets a durable, revision-fenced scheduling pause through the controller.
+The controller refuses new job leases and workspace allocations to that
+worker while the pause is active. The script checks an authoritative drain
+count under the same database lock used by the scheduler. This does not
+prevent project work from being submitted to *other* workers; coordinate
+project maintenance to avoid an accumulating queue.
 
 ## Existing worker image rollout
 
@@ -103,27 +106,43 @@ bash services/compute/scripts/rollout-project-worker.sh apply "$release" "$image
 The utility operates on exactly one `pwm-project-<hash>-<host>` release.
 It reads the effective Helm values and requires the live Deployment to match
 the same worker, project, namespace, Secret, and node placement. It rejects
-unhealthy nodes, unavailable controller identity, pending/leased jobs, active
-workspaces, and any Kubernetes Pods or Jobs in that project's workload
-namespace. The proposed Helm manifest must differ from the current release
-only in the worker OCI image. The cluster API validates the proposed upgrade
-in server-side dry-run mode before any live change.
+unhealthy nodes, unavailable controller identity, active jobs, workspaces,
+unfinished operations, unreleased hardware leases assigned to this worker,
+and any Kubernetes Pods or Jobs in its workload namespace. The maintenance
+endpoint counts all worker-owned state and does not rely on the controller's
+bounded project history. The proposed Helm manifest must differ from the
+current release only in the worker OCI image. The cluster API validates the
+proposed upgrade in server-side dry-run mode before any live change.
 
-The `plan` command does not change Kubernetes resources. The `apply` command
-requires an explicit release-name confirmation, rechecks admission, and
-upgrades using Helm's atomic rollback. After the rollout it verifies
-Deployment readiness and a controller heartbeat later than the upgrade
-start. A failed post-upgrade acceptance triggers a revision-checked rollback
-to the exact preceding Helm revision. If the revision changes concurrently,
-the utility stops and requires manual reconciliation.
+The `plan` command does not modify Kubernetes resources or controller
+maintenance state. The `apply` command requires an exact release confirmation.
+It reads the worker's maintenance revision, atomically pauses scheduling,
+rechecks drain state, and verifies the revision again before the Helm upgrade.
+On success, it requires Deployment readiness, a controller heartbeat newer
+than the upgrade start, and a revision-fenced scheduler resume.
 
-**Admission is a snapshot, not a project-level scheduling lock.** The
-operator must prevent concurrent project submissions before applying a
-release; otherwise work can arrive between the last admission check and
-the worker restart. The tool refuses chart drift rather than silently
-changing namespaced policies, mounts, or RBAC. A rejected release must be
-reviewed individually and, when necessary, migrated through a separately
-approved, reversible chart upgrade.
+If Helm fails, a concurrent administrator changes the maintenance revision,
+or post-upgrade acceptance cannot be confirmed, the tool fails closed. A
+post-upgrade failure attempts revision-checked Helm rollback; **the durable
+maintenance pause remains until an authorized operator verifies the worker's
+running image, readiness, controller records and hardware cleanup, then
+explicitly resumes scheduling.** A successful NixOS reboot does not clear it.
+
+The controller exposes an owner-only recovery interface at
+`GET /api/nodes/{worker_id}/maintenance` and
+`POST /api/nodes/{worker_id}/maintenance`. Read the current
+`paused`, `revision`, `drained`, active counts and timestamps before
+attempting recovery. A resume requires the exact current revision and body
+`{"paused":false,"expected_revision":N}`. A stale revision returns a
+conflict instead of unpausing a different operator's maintenance session.
+Keep the controller bearer credential in a protected header file; do not
+place it in command-line arguments, logs or Git.
+
+The tool refuses chart drift rather than silently changing namespaced
+policies, mounts, or RBAC. A rejected release must be reviewed individually
+and, when necessary, migrated through a separately approved, reversible
+chart upgrade. The maintenance pause controls controller scheduling for one
+worker, not Kubernetes administration or other independent schedulers.
 
 Each upgrade remains subject to a later end-to-end workspace command,
 image-repull and node-restart qualification. Project workspaces and private
