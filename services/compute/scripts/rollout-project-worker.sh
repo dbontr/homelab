@@ -150,13 +150,13 @@ maintenance_get() {
 }
 maintenance_require() {
   local phase=$1 revision=$2
-  read_json --argjson rev "$revision" '
+  read_json --arg worker "$worker" --argjson rev "$revision" '
     .worker_id == $worker and .paused == true and .drained == true and
     .revision == $rev and
     .active_jobs == 0 and .active_workspaces == 0 and
     .unfinished_operations == 0 and .hardware_leases == 0 and
     .job_device_leases == 0
-  ' --arg worker "$worker" "$scratch/maintenance-$phase.json"
+  ' "$scratch/maintenance-$phase.json"
 }
 check_admission() {
   local phase=$1
