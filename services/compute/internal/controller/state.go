@@ -235,6 +235,9 @@ func (db *Database) ClaimJob(node string) (map[string]any, error) {
 		if n == nil {
 			return errors.New("node not found")
 		}
+		paused, e := db.workerPausedLocked(node)
+		if e != nil { return e }
+		if paused { return nil }
 		caps := decodeObject(asString(n["capabilities"]))
 		personalAllowed, e := db.personalWorkerAllowedLocked(node)
 		if e != nil {
