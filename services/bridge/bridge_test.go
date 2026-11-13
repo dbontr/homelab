@@ -149,6 +149,8 @@ func TestPrivateSystemdCredentialAllowsOnlyProtectedGroupRead(t *testing.T) {
  dir:=t.TempDir()
  credential:=filepath.Join(dir,"service-token")
  if err:=os.WriteFile(credential,[]byte(internalSecret),0440);err!=nil{t.Fatal(err)}
+ // Release staging sets umask 077; exercise systemd's intended 0440 mode.
+ if err:=os.Chmod(credential,0440);err!=nil{t.Fatal(err)}
  t.Setenv("CREDENTIALS_DIRECTORY","")
  if _,err:=protectedToken(credential);err==nil{t.Fatal("group-readable file outside systemd credentials admitted")}
  t.Setenv("CREDENTIALS_DIRECTORY",dir)
