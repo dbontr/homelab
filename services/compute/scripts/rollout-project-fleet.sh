@@ -62,7 +62,11 @@ inventory() {
     ($helm[0] | map(select(.name | startswith("pwm-project-")) | .name) | sort) as $releases |
     ($pods[0].items | map(select(.metadata.annotations["meta.helm.sh/release-name"] |
        startswith("pwm-project-")) | .metadata.annotations["meta.helm.sh/release-name"]) | sort) as $deployed |
-    if $releases == $deployed then "matched" else error("Helm/Deployment ownership mismatch") end
+    if ($releases | length) == 0 then error("no project worker releases were discovered")
+    elif ($releases | unique | length) != ($releases | length) then error("duplicate Helm release")
+    elif ($deployed | unique | length) != ($deployed | length) then error("duplicate worker Deployment")
+    elif $releases == $deployed then "matched"
+    else error("Helm/Deployment ownership mismatch") end
   ' > "$scratch/ownership"
 
   jq -r --arg image "$image" '
