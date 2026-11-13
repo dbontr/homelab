@@ -76,7 +76,12 @@ back merely because a later release failed. Preserve those Helm histories
 for independently authorized reversion.
 
 A fleet apply requires a controller version that supports worker maintenance
-and a verified image release receipt. For each worker, the upgrade script
+and a verified image release receipt. Qualify the controller's maintenance API,
+persistence, authorization and migration against a consistent SQLite snapshot
+before any worker image changes. Do not roll back to a controller binary that
+ignores the maintenance table while any worker remains paused: that binary
+would admit new work despite the recorded pause. Reconcile every paused
+worker and establish a compatible controller rollback target first. For each worker, the upgrade script
 sets a durable, revision-fenced scheduling pause through the controller.
 The controller refuses new job leases and workspace allocations to that
 worker while the pause is active. The script checks an authoritative drain
