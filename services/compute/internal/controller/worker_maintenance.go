@@ -15,7 +15,7 @@ func (db *Database) workerPausedLocked(node string) (bool, error) {
 
 func (db *Database) maintenanceStatusLocked(node string) (map[string]any, error) {
     if !validID.MatchString(node) { return nil, errors.New("invalid worker ID") }
-    found, err := db.lockedOne("SELECT id FROM nodes WHERE id=?", node)
+    found, err := db.lockedOne("SELECT id,last_seen FROM nodes WHERE id=?", node)
     if err != nil { return nil, err }
     if found == nil { return nil, errors.New("worker not found") }
 
@@ -48,6 +48,7 @@ func (db *Database) maintenanceStatusLocked(node string) (map[string]any, error)
     }
     return map[string]any{
         "worker_id": node, "paused": paused, "revision": revision,
+        "last_seen": found["last_seen"], "online": stamp()-asFloat(found["last_seen"]) < 90,
         "updated": updated, "drained": drained,
         "active_jobs": counts["active_jobs"],
         "active_workspaces": counts["active_workspaces"],
@@ -88,6 +89,9 @@ func (db *Database) SetNodeMaintenance(node string, paused bool, expectedRevisio
         // unresolved, even when an administrator requests a resume.
         if !paused && !current["drained"].(bool) {
             return errors.New("worker is not drained; maintenance cannot resume")
+        }
+        if !paused && !current["online"].(bool) {
+            return errors.New("worker heartbeat is stale; maintenance cannot resume")
         }
         next := 0
         if paused { next = 1 }
