@@ -54,6 +54,20 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
+  mcp-bridge-integration:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27.3"
+      - name: Verify complete MCP interface and federated tool path
+        env:
+          GOWORK: "on"
+        run: go test -tags=integration -count=1 -v ./services/bridge
+
+
   native-device:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
