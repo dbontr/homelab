@@ -459,6 +459,13 @@ mod tests {
         assert_eq!(
             physical_from_record("gpu", "/dev/dri/renderD128", &text).unwrap(),
             physical_key("gpu", "/dev/dri/renderD128", metadata.rdev()));
+        let record = root.join("lease");
+        let mut file = OpenOptions::new().write(true).create_new(true).mode(0o600)
+            .open(&record).unwrap();
+        file.write_all(text.as_bytes()).unwrap();
+        file.sync_all().unwrap();
+        assert_eq!(read_owner(&record).unwrap(), workspace);
+        assert_eq!(private_record(&record).unwrap(), text);
         fs::remove_dir_all(root).unwrap();
     }
 
