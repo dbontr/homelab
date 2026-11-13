@@ -75,11 +75,15 @@ cat > "$scratch/workers.json" <<'JSON'
 "capabilities":{"kubernetes":true,"docker":false,"devices":[],"project_id":"aup-zu3-pynq","workload_node":"janus"}}]
 JSON
 
+printf '[{"name":"pwm-project-046910e8ae58-janus","status":"deployed"}]\n' > "$scratch/helm-list.json"
+jq -s '{items:.}' "$scratch/live.json" > "$scratch/deployments.json"
+
 cat > "$scratch/bin/helm" <<'MOCK'
 #!/usr/bin/env bash
 set -euo pipefail
 if [[ "${1:-}" == -n ]]; then shift 2; fi
 case "${1:-}" in
+  list) cat "$MOCK_ROLLOUT/helm-list.json" ;;
   status)
     if [[ -f "$MOCK_ROLLOUT/applied" ]]; then
       printf '{"info":{"status":"deployed"},"version":5}\n'
@@ -111,6 +115,7 @@ cat > "$scratch/bin/kubectl" <<'MOCK'
 set -euo pipefail
 args=" $* "
 case "$args" in
+  *' get deployments '*) cat "$MOCK_ROLLOUT/deployments.json" ;;
   *' get deployment '*)
     if [[ -f "$MOCK_ROLLOUT/applied" ]]; then
       cat "$MOCK_ROLLOUT/after.json"
@@ -206,6 +211,18 @@ if bash "$script" plan "$release" "$digest" > "$scratch/output" 2>&1; then
   fail 'Manifest drift was accepted'
 fi
 mv "$scratch/valid.yaml" "$scratch/candidate.yaml"
+
+fleet="$root/services/compute/scripts/rollout-project-fleet.sh"
+bash "$fleet" plan "$digest" > "$scratch/output"
+grep -q '^PLAN ONLY: 1 releases inspected' "$scratch/output" ||
+  fail 'Fleet planning did not inspect the candidate'
+if bash "$fleet" apply "$digest" --confirm-count 2 > "$scratch/output" 2>&1; then
+  fail 'Fleet accepted an unexpected candidate count'
+fi
+bash "$fleet" apply "$digest" --confirm-count 1 > "$scratch/output"
+grep -q '^ACCEPTED: 1 project-worker Helm releases upgraded serially' "$scratch/output" ||
+  fail 'Fleet did not apply the admitted release'
+rm -f "$scratch/applied"
 
 bash "$script" apply "$release" "$digest" --confirm "$release" > "$scratch/output"
 grep -q '^ACCEPTED:' "$scratch/output" || fail 'Approved worker did not finish'
