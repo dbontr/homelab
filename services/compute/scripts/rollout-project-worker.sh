@@ -126,8 +126,7 @@ controller_get() {
     --resolve "$controller_fqdn:8443:$controller_ip" \
     --header "@$scratch/auth.header" \
     --output "$output" \
-    "https://$controller_fqdn:8443$url" ||
-    fail 'Controller admission API is unavailable.'
+    "https://$controller_fqdn:8443$url"
 }
 check_admission() {
   local phase=$1
@@ -142,9 +141,12 @@ check_admission() {
   kubectl -n "$workload_ns" get pods,jobs -o json > "$scratch/resources-$phase.json"
   read_json '(.items | type) == "array" and (.items | length) == 0' \
     "$scratch/resources-$phase.json"
-  controller_get "/api/projects/$project/jobs" "$scratch/jobs-$phase.json"
-  controller_get "/api/projects/$project/workspaces" "$scratch/workspaces-$phase.json"
-  controller_get /api/nodes "$scratch/workers-$phase.json"
+  controller_get "/api/projects/$project/jobs" "$scratch/jobs-$phase.json" ||
+    fail 'Controller jobs could not be inspected.'
+  controller_get "/api/projects/$project/workspaces" "$scratch/workspaces-$phase.json" ||
+    fail 'Controller workspaces could not be inspected.'
+  controller_get /api/nodes "$scratch/workers-$phase.json" ||
+    fail 'Controller worker heartbeat could not be inspected.'
   read_json '
     type == "array" and
     all(.[]; .status == "succeeded" or .status == "failed" or .status == "expired")
@@ -221,8 +223,8 @@ if kubectl -n "$namespace" rollout status "deployment/$deployment" --timeout=90s
        ([.spec.template.spec.containers[] | select(.name == "worker")][0].image == $image)
      ' >/dev/null; then
   for attempt in {1..20}; do
-    controller_get /api/nodes "$scratch/after.json"
-    if jq -e --arg name "$worker" --argjson since "$started" '
+    if controller_get /api/nodes "$scratch/after.json" &&
+      jq -e --arg name "$worker" --argjson since "$started" '
       any(.[]; .id == $name and .online == true and (.last_seen | tonumber) >= $since)
     ' "$scratch/after.json" >/dev/null; then
       printf 'ACCEPTED: %s running %s with a post-upgrade controller heartbeat.\n' "$release" "$image"
