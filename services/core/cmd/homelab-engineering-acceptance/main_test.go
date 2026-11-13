@@ -134,7 +134,7 @@ func (f *fakeWorkspaceControl) Call(_ context.Context, name string, args map[str
 	}
 }
 func TestWorkspaceStopRequiresConfirmedTerminalStatus(t *testing.T) {
-	f := &fakeWorkspaceControl{states: []string{"stopping", "stopped"}}
+	f := &fakeWorkspaceControl{states: []string{"ready", "stopped"}}
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
 	defer cancel()
 	if err := stopWorkspace(ctx, f, "research", "aabbccdd"); err != nil {
@@ -142,6 +142,31 @@ func TestWorkspaceStopRequiresConfirmedTerminalStatus(t *testing.T) {
 	}
 	if f.stopRequests != 1 || f.lists != 2 {
 		t.Fatalf("workspace stop was not confirmed: %+v", f)
+	}
+}
+
+func TestWorkspaceStopIsIdempotentAcrossRecovery(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		states []string
+		lists  int
+	}{
+		{name: "already_stopped", states: []string{"stopped"}, lists: 1},
+		{name: "already_destroyed", states: []string{"destroyed"}, lists: 1},
+		{name: "already_absent", lists: 1},
+		{name: "teardown_in_progress", states: []string{"stopping", "stopped"}, lists: 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := &fakeWorkspaceControl{states: tc.states}
+			ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+			defer cancel()
+			if err := stopWorkspace(ctx, f, "research", "aabbccdd"); err != nil {
+				t.Fatal(err)
+			}
+			if f.stopRequests != 0 || f.lists != tc.lists {
+				t.Fatalf("terminal or stopping workspace was destroyed again: %+v", f)
+			}
+		})
 	}
 }
 func TestWorkspaceStopFailsOnUncertainCleanup(t *testing.T) {
