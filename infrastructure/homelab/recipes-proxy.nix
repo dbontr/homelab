@@ -1,5 +1,15 @@
 { ... }:
 {
+  # The services VLAN must have its address before nginx binds its local listener.
+  systemd.services.nginx = {
+    wants = [ "network-online.target" ];
+    after = [ "network-online.target" ];
+  };
+
+  systemd.tmpfiles.rules = [
+    "f /var/log/nginx/error.log 0640 nginx nginx -"
+  ];
+
   # Preserve the collector and expose only data, never an alternate UI.
   services.nginx.virtualHosts."recipes.home.arpa" = {
     listen = [{ addr = "10.77.20.1"; port = 80; }];

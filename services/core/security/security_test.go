@@ -66,5 +66,7 @@ func TestOAuthBrokerKeepsVerifierPrivate(t *testing.T) {
 func TestRejectsInsecureExecutorReplayFile(t *testing.T){
  path:=filepath.Join(t.TempDir(),"spent.json")
  if err:=os.WriteFile(path,[]byte("{}"),0644);err!=nil{t.Fatal(err)}
+ // The process umask must not make this deliberately unsafe fixture private.
+ if err:=os.Chmod(path,0644);err!=nil{t.Fatal(err)}
  if _,err:=NewAuthority([]byte(strings.Repeat("k",32)),path);err==nil{t.Fatal("insecure replay file accepted")}
 }

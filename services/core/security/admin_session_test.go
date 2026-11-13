@@ -241,6 +241,8 @@ func TestCorruptStateOrBroadPermissionsFailClosed(t *testing.T) {
 			if err := os.WriteFile(path, []byte(tc.body), tc.mode); err != nil {
 				t.Fatal(err)
 			}
+			// Explicitly set permissions: the process umask may mask the public-mode fixture.
+			if err := os.Chmod(path, tc.mode); err != nil { t.Fatal(err) }
 			if _, err := NewAdminSessions(SessionConfig{Owner: a.owner, Client: a.client, Verifier: a.verifier,
 				TOTPSecret: base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(a.totpKey), StateFile: path,
 				Policies: []OperationPolicy{{Operation: "test", Targets: []string{"resource"}}}}); err == nil {

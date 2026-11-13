@@ -67,6 +67,8 @@ func TestExecutorRejectsMalformedReplayLedgers(t *testing.T) {
 func TestExecutorRejectsPublicReplayState(t *testing.T) {
     state := filepath.Join(t.TempDir(), "replay.json")
     if err := os.WriteFile(state, []byte("{}"), 0644); err != nil { t.Fatal(err) }
+    // The process umask must not make this deliberately unsafe fixture private.
+    if err := os.Chmod(state, 0644); err != nil { t.Fatal(err) }
     if _, err := NewAuthority([]byte(strings.Repeat("k", 32)), state); err == nil {
         t.Fatal("accepted publicly readable replay ledger")
     }
