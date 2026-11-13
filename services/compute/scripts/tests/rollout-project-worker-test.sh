@@ -220,7 +220,114 @@ fi
 
 bash "$script" plan "$release" "$digest" > "$scratch/output"
 grep -q '^PLAN ONLY:' "$scratch/output" || fail 'Plan did not complete'
-! grep -q '^upgrade$' "$scratch/trace" || fail 'Plan changed a release'
+! grep -q '^upgradetouch "$scratch/busy"
+if bash "$script" plan "$release" "$digest" > "$scratch/output" 2>&1; then
+  fail 'Active worker work was ignored'
+fi
+rm -f "$scratch/busy"
+printf '{"items":[{"kind":"Pod"}]}\n' > "$scratch/resources.json"
+if bash "$script" plan "$release" "$digest" > "$scratch/output" 2>&1; then
+  fail 'Active namespace workload was ignored'
+fi
+printf '{"items":[]}\n' > "$scratch/resources.json"
+
+cp "$scratch/candidate.yaml" "$scratch/valid.yaml"
+printf 'unexpected: security-policy-drift\n' >> "$scratch/candidate.yaml"
+if bash "$script" plan "$release" "$digest" > "$scratch/output" 2>&1; then
+  fail 'Manifest drift was accepted'
+fi
+mv "$scratch/valid.yaml" "$scratch/candidate.yaml"
+
+fleet="$root/services/compute/scripts/rollout-project-fleet.sh"
+bash "$fleet" plan "$digest" > "$scratch/output"
+grep -q '^PLAN ONLY: 1 releases inspected' "$scratch/output" ||
+  fail 'Fleet planning did not inspect the candidate'
+if bash "$fleet" apply "$digest" --confirm-count 2 > "$scratch/output" 2>&1; then
+  fail 'Fleet accepted an unexpected candidate count'
+fi
+bash "$fleet" apply "$digest" --confirm-count 1 > "$scratch/output"
+grep -q '^ACCEPTED: 1 project-worker Helm releases upgraded serially' "$scratch/output" ||
+  fail 'Fleet did not apply the admitted release'
+[[ ! -f "$scratch/paused" ]] || fail 'Fleet left the scheduler paused after successful upgrade'
+rm -f "$scratch/applied"
+
+bash "$script" apply "$release" "$digest" --confirm "$release" > "$scratch/output"
+grep -q '^ACCEPTED:' "$scratch/output" || fail 'Approved worker did not finish'
+[[ ! -f "$scratch/paused" ]] || fail 'Scheduler did not resume after successful upgrade'
+grep -q '^upgrade$' "$scratch/trace" || fail 'Confirmed upgrade was not recorded'
+
+# A Ready Deployment cannot be certified by a heartbeat recorded before
+# the replacement worker became Ready.
+rm -f "$scratch/applied"
+jq --argjson previous "$(date +%s)" '.[0].last_seen = $previous' \
+  "$scratch/workers.json" > "$scratch/stale-workers.json"
+mv "$scratch/stale-workers.json" "$scratch/workers.json"
+if bash "$script" apply "$release" "$digest" --confirm "$release" \
+    > "$scratch/output" 2>&1; then
+  fail 'Stale controller heartbeat was accepted'
+fi
+grep -q '^rollback$' "$scratch/trace" || fail 'Stale heartbeat did not trigger rollback'
+[[ -f "$scratch/paused" ]] || fail 'Stale heartbeat incorrectly resumed scheduling'
+[[ ! -f "$scratch/applied" ]] || fail 'Rollback did not restore the prior deployment'
+
+# Simulate a completed, operator-confirmed recovery before testing a
+# separate controller outage.
+rm -f "$scratch/paused"
+jq '.[0].last_seen = 4102444800' "$scratch/workers.json" > "$scratch/fresh-workers.json"
+mv "$scratch/fresh-workers.json" "$scratch/workers.json"
+touch "$scratch/api-down"
+if bash "$script" apply "$release" "$digest" --confirm "$release" \
+    > "$scratch/output" 2>&1; then
+  fail 'Controller outage was accepted after upgrade'
+fi
+grep -q '^rollback$' "$scratch/trace" || fail 'Post-upgrade outage did not request rollback'
+[[ -f "$scratch/paused" ]] || fail 'Failed migration incorrectly resumed scheduling'
+[[ ! -f "$scratch/applied" ]] || fail 'Rollback did not restore the prior deployment'
+
+printf 'Worker rollout admission and post-upgrade recovery verified\n'
+ "$scratch/trace" || fail 'Plan changed a release'
+
+# Historical Helm releases may lack the named isolation-policy read.
+# Admit that exact permission without allowing broader RBAC changes.
+cp "$scratch/current.yaml" "$scratch/baseline-current.yaml"
+cp "$scratch/candidate.yaml" "$scratch/baseline-candidate.yaml"
+cat > "$scratch/legacy-role.yaml" <<'YAML'
+---
+# Source: project-workspace/templates/worker.yaml
+kind: Role
+metadata:
+  name: pwm-worker
+rules:
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+YAML
+cat > "$scratch/scoped-role.yaml" <<'YAML'
+---
+# Source: project-workspace/templates/worker.yaml
+kind: Role
+metadata:
+  name: pwm-worker
+rules:
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["networkpolicies"]
+    resourceNames: ["pwm-isolate-workloads"]
+    verbs: ["get"]
+YAML
+cat "$scratch/legacy-role.yaml" "$scratch/baseline-current.yaml" > "$scratch/current.yaml"
+cat "$scratch/scoped-role.yaml" "$scratch/baseline-candidate.yaml" > "$scratch/candidate.yaml"
+bash "$script" plan "$release" "$digest" > "$scratch/output"
+grep -q '^ADMISSION: scoped read' "$scratch/output" ||
+  fail 'Named policy-read migration was refused'
+sed -i 's/    verbs: \["get"\]$/    verbs: ["get", "list"]/' "$scratch/candidate.yaml"
+if bash "$script" plan "$release" "$digest" > "$scratch/output" 2>&1; then
+  fail 'Broader NetworkPolicy permissions were accepted'
+fi
+mv "$scratch/baseline-current.yaml" "$scratch/current.yaml"
+mv "$scratch/baseline-candidate.yaml" "$scratch/candidate.yaml"
 
 touch "$scratch/busy"
 if bash "$script" plan "$release" "$digest" > "$scratch/output" 2>&1; then
