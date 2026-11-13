@@ -171,18 +171,10 @@ check_admission() {
   kubectl -n "$workload_ns" get pods,jobs -o json > "$scratch/resources-$phase.json"
   read_json '(.items | type) == "array" and (.items | length) == 0' \
     "$scratch/resources-$phase.json"
-  controller_get "/api/projects/$project/jobs" "$scratch/jobs-$phase.json" ||
-    fail 'Controller jobs could not be inspected.'
-  controller_get "/api/projects/$project/workspaces" "$scratch/workspaces-$phase.json" ||
-    fail 'Controller workspaces could not be inspected.'
+  # The maintenance endpoint counts all active state belonging to this
+  # worker. Project job listings are bounded and cannot prove a worker idle.
   controller_get /api/nodes "$scratch/workers-$phase.json" ||
     fail 'Controller worker heartbeat could not be inspected.'
-  read_json '
-    type == "array" and (length < 100) and
-    all(.[]; .status == "succeeded" or .status == "failed" or .status == "expired")
-  ' "$scratch/jobs-$phase.json"
-  read_json 'type == "array" and all(.[]; .status == "stopped" or .status == "expired")' \
-    "$scratch/workspaces-$phase.json"
   read_json --arg name "$worker" --arg project "$project" --arg host "$host" '
     type == "array" and
     ([.[] | select(.id == $name and .online == true and
