@@ -216,8 +216,8 @@ func TestCorruptStateOrBroadPermissionsFailClosed(t *testing.T) {
 				t.Fatal(err)
 			}
 			// Explicitly set permissions: the process umask may mask the public-mode fixture.
-            if err := os.Chmod(path, tc.mode); err != nil { t.Fatal(err) }
-            if _, err := NewAdminSessions(SessionConfig{Owner: a.owner, Client: a.client, Verifier: a.verifier,
+			if err := os.Chmod(path, tc.mode); err != nil { t.Fatal(err) }
+			if _, err := NewAdminSessions(SessionConfig{Owner: a.owner, Client: a.client, Verifier: a.verifier,
 				TOTPSecret: base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(a.totpKey), StateFile: path,
 				Policies: []OperationPolicy{{Operation: "test", Targets: []string{"resource"}}}}); err == nil {
 				t.Fatal("unsafe authenticator state accepted")
