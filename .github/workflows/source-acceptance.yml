@@ -181,20 +181,12 @@ jobs:
             --set-string "worker.image=$worker" \
             --set-json 'hardware={"nvidia":null,"intelNpu":null}' \
             > "$RUNNER_TEMP/worker-without-plugins.yaml"
-          grep -q '^kind: Deployment
-
+          grep -q '^kind: Deployment$' "$RUNNER_TEMP/worker-without-plugins.yaml"
       - name: Verify project-worker rollout admission and rollback
         shell: bash
         run: |
+          set -euo pipefail
           bash -n services/compute/scripts/rollout-project-worker.sh
           bash -n services/compute/scripts/rollout-project-fleet.sh
-          bash -n services/compute/scripts/tests/rollout-project-worker-test.sh
-          bash services/compute/scripts/tests/rollout-project-worker-test.sh
- "$RUNNER_TEMP/worker-without-plugins.yaml"
-
-      - name: Verify project-worker rollout admission and rollback
-        shell: bash
-        run: |
-          bash -n services/compute/scripts/rollout-project-worker.sh
           bash -n services/compute/scripts/tests/rollout-project-worker-test.sh
           bash services/compute/scripts/tests/rollout-project-worker-test.sh
