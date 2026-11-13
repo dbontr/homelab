@@ -255,16 +255,8 @@ rm -f "$scratch/applied"
 bash "$script" apply "$release" "$digest" --confirm "$release" > "$scratch/output"
 grep -q '^ACCEPTED:' "$scratch/output" || fail 'Approved worker did not finish'
 [[ ! -f "$scratch/paused" ]] || fail 'Scheduler did not resume after successful upgrade'
-grep -q '^upgrade
-touch "$scratch/api-down"
-if bash "$script" apply "$release" "$digest" --confirm "$release" \
-    > "$scratch/output" 2>&1; then
-  fail 'Controller outage was accepted after upgrade'
-fi
-grep -q '^rollback
+grep -q '^upgrade$' "$scratch/trace" || fail 'Confirmed upgrade was not recorded'
 
-printf 'Worker rollout admission and post-upgrade recovery verified\n'
- "$scratch/trace" || fail 'Confirmed upgrade was not recorded'
 rm -f "$scratch/applied"
 touch "$scratch/api-down"
 if bash "$script" apply "$release" "$digest" --confirm "$release" \
@@ -272,22 +264,7 @@ if bash "$script" apply "$release" "$digest" --confirm "$release" \
   fail 'Controller outage was accepted after upgrade'
 fi
 grep -q '^rollback$' "$scratch/trace" || fail 'Post-upgrade outage did not request rollback'
-[[ ! -f "$scratch/applied" ]] || fail 'Rollback did not restore the prior deployment'
-
-printf 'Worker rollout admission and post-upgrade recovery verified\n'
- "$scratch/trace" || fail 'Post-upgrade outage did not request rollback'
 [[ -f "$scratch/paused" ]] || fail 'Failed migration incorrectly resumed scheduling'
-[[ ! -f "$scratch/applied" ]] || fail 'Rollback did not restore the prior deployment'
-
-printf 'Worker rollout admission and post-upgrade recovery verified\n'
- "$scratch/trace" || fail 'Confirmed upgrade was not recorded'
-rm -f "$scratch/applied"
-touch "$scratch/api-down"
-if bash "$script" apply "$release" "$digest" --confirm "$release" \
-    > "$scratch/output" 2>&1; then
-  fail 'Controller outage was accepted after upgrade'
-fi
-grep -q '^rollback$' "$scratch/trace" || fail 'Post-upgrade outage did not request rollback'
 [[ ! -f "$scratch/applied" ]] || fail 'Rollback did not restore the prior deployment'
 
 printf 'Worker rollout admission and post-upgrade recovery verified\n'
