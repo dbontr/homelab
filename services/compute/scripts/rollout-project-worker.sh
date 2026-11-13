@@ -266,7 +266,6 @@ kubectl -n "$namespace" get deployment "$deployment" -o json |
     ([.spec.template.spec.containers[] | select(.name == "worker")][0].image == $image)
   ' >/dev/null || fail 'The running worker changed during admission.'
 
-started=$(date +%s)
 if ! helm upgrade "$release" "$PWM_HELM_CHART" --namespace "$namespace" \
   --reset-then-reuse-values --set controller.enabled=false \
   --set worker.enabled=true --set-string "worker.image=$image" \
