@@ -19,6 +19,7 @@ import (
 func TestAutonomousEngineeringHTTPAndUnixEndToEnd(t *testing.T) {
 	worker := &fakeCompute{files: map[string]string{"repos/example__repo/README.md": "package sample"}}
 	serviceToken := strings.Repeat("s", 40)
+	identityChecks, grantChecks, rpcCalls := 0, 0, 0
 	compute := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer "+serviceToken {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -62,7 +63,6 @@ func TestAutonomousEngineeringHTTPAndUnixEndToEnd(t *testing.T) {
 
 	decisions := agentDecisions()
 	modelCalls := 0
-	identityChecks, grantChecks, rpcCalls := 0, 0, 0
 	model := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/chat/completions" || r.Method != http.MethodPost || modelCalls >= len(decisions) {
 			http.Error(w, "invalid model request", http.StatusBadRequest)
