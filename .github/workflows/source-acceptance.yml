@@ -5,6 +5,10 @@ on:
     paths:
       - ".github/workflows/source-acceptance.yml"
       - "services/**"
+      - "scripts/**"
+      - "mcp/**"
+      - "api/**"
+      - "infrastructure/**"
       - "ui/console/**"
       - "nixosModules/**"
       - "packages/**"
