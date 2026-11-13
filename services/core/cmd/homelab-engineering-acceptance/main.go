@@ -198,9 +198,7 @@ func verifyLinkedRepository(ctx context.Context, compute agentflow.ToolCaller, p
 // stopWorkspace requests deletion and verifies the resulting terminal state.
 // A queued stop request is not evidence that the worker has stopped.
 func stopWorkspace(ctx context.Context, compute agentflow.ToolCaller, project, id string) error {
-	if _, err := compute.Call(ctx, "workspace_destroy", map[string]any{"project_id": project, "workspace_id": id}); err != nil {
-		return fmt.Errorf("workspace stop request rejected: %w", err)
-	}
+	requested := false
 	for {
 		response, err := compute.Call(ctx, "workspace_list", map[string]any{"project_id": project})
 		if err != nil {
@@ -210,7 +208,7 @@ func stopWorkspace(ctx context.Context, compute agentflow.ToolCaller, project, i
 		if !ok {
 			return errors.New("invalid workspace status listing")
 		}
-		present := false
+		status := ""
 		for _, raw := range records {
 			entry, ok := raw.(map[string]any)
 			if !ok {
@@ -219,18 +217,27 @@ func stopWorkspace(ctx context.Context, compute agentflow.ToolCaller, project, i
 			if entry["id"] != id {
 				continue
 			}
-			present = true
-			switch entry["status"] {
-			case "stopped", "destroyed":
-				return nil
-			case "starting", "ready", "stopping":
-			default:
-				return fmt.Errorf("workspace stop returned unexpected state %q", entry["status"])
+			value, ok := entry["status"].(string)
+			if !ok || value == "" {
+				return errors.New("workspace has an invalid status")
 			}
+			status = value
 			break
 		}
-		if !present {
+		switch status {
+		case "", "stopped", "destroyed":
 			return nil
+		case "starting", "ready":
+			if !requested {
+				if _, err := compute.Call(ctx, "workspace_destroy", map[string]any{"project_id": project, "workspace_id": id}); err != nil {
+					return fmt.Errorf("workspace stop request rejected: %w", err)
+				}
+				requested = true
+			}
+		case "stopping":
+			// Another cleanup owner may already have submitted teardown.
+		default:
+			return fmt.Errorf("workspace stop returned unexpected state %q", status)
 		}
 		select {
 		case <-ctx.Done():
