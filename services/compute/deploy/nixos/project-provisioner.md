@@ -138,8 +138,11 @@ The controller exposes an owner-only recovery interface at
 `POST /api/nodes/{worker_id}/maintenance`. Read the current
 `paused`, `revision`, `drained`, active counts and timestamps before
 attempting recovery. A resume requires the exact current revision and body
-`{"paused":false,"expected_revision":N}`. A stale revision returns a
-conflict instead of unpausing a different operator's maintenance session.
+`{"paused":false,"expected_revision":N}`. The controller requires a drained
+worker and an authenticated worker heartbeat within the preceding 90 seconds.
+An offline worker must be recovered before scheduling can resume. A stale
+revision returns a conflict instead of unpausing a different operator's
+maintenance session.
 Keep the controller bearer credential in a protected header file; do not
 place it in command-line arguments, logs or Git.
 
