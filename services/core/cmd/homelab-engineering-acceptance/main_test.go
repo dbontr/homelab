@@ -15,7 +15,7 @@ import (
 
 func testConfig() acceptanceConfig {
 	return acceptanceConfig{
-		Project: "homelab-platform", Repository: "dbontr/homelab-new", BaseBranch: "main",
+		Project: "homelab-platform", Repository: "dbontr/homelab", BaseBranch: "main",
 		Revision: strings.Repeat("a", 40), ComputeURL: "https://example.org/mcp",
 		ComputeTokenFile: "/tmp/protected-identity", ModelURL: "https://model.example.org/v1/chat/completions",
 		ModelName: "model", ImagePoolID: "debian-bookworm-slim", Timeout: 20 * time.Minute,
@@ -65,7 +65,7 @@ func TestAcceptanceProgramUsesOneFileAndFixedCheck(t *testing.T) {
 
 func TestDraftMustMatchExactRepositoryAndPinnedRevision(t *testing.T) {
 	c := testConfig()
-	valid := map[string]any{"draft": true, "base_sha": c.Revision, "url": "https://github.com/dbontr/homelab-new/pull/198"}
+	valid := map[string]any{"draft": true, "base_sha": c.Revision, "url": "https://github.com/dbontr/homelab/pull/198"}
 	makeRun := func(v map[string]any) agentflow.RunSummary {
 		b, _ := json.Marshal(v)
 		return agentflow.RunSummary{Steps: []agentflow.StepSummary{{Kind: "publish", Status: agentflow.Succeeded, Result: b}}}
@@ -76,10 +76,10 @@ func TestDraftMustMatchExactRepositoryAndPinnedRevision(t *testing.T) {
 	for _, change := range []func(map[string]any){
 		func(v map[string]any) { v["draft"] = false },
 		func(v map[string]any) { v["base_sha"] = strings.Repeat("b", 40) },
-		func(v map[string]any) { v["url"] = "https://evil.example.org/dbontr/homelab-new/pull/198" },
-		func(v map[string]any) { v["url"] = "https://github.com/dbontr/homelab-new/pull/198/merge" },
+		func(v map[string]any) { v["url"] = "https://evil.example.org/dbontr/homelab/pull/198" },
+		func(v map[string]any) { v["url"] = "https://github.com/dbontr/homelab/pull/198/merge" },
 	} {
-		v := map[string]any{"draft": true, "base_sha": c.Revision, "url": "https://github.com/dbontr/homelab-new/pull/198"}
+		v := map[string]any{"draft": true, "base_sha": c.Revision, "url": "https://github.com/dbontr/homelab/pull/198"}
 		change(v)
 		if _, err := draftURL(makeRun(v), c.Revision, c.Repository); err == nil {
 			t.Fatal("untrusted draft result accepted")
