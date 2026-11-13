@@ -1,10 +1,10 @@
 # Site-specific placement, not application implementation. No credentials belong in this file.
-# Built from dbontr/workspace-mcp commit 9967ebc7c96393bc92415869260c746f3bfa239c.
+# Use the source-owned, digest-verified Compute worker release.
 controller:
   enabled: false
 worker:
   enabled: true
-  image: docker.io/library/project-workspace-worker:git-9967ebc7c963
+  image: ghcr.io/dbontr/homelab/worker@sha256:c7ab035296db9aec360611c52737ca4e94143fb959c7ad56ca536cc20fd6ee4f
   imagePullPolicy: IfNotPresent
   name: pwm-venus
   projectID: workspace-mcp
