@@ -28,7 +28,7 @@ for host in jupiter venus mercury janus; do
   helm --namespace pwm-system get values "$release" --all
 done
 kubectl get nodes
-kubectl --namespace pwm-system get deployments -l app=pwm-worker -o wide
+kubectl --namespace pwm-system get deployments -o wide
 ```
 
 Confirm the intended image is retrievable on each host, that the live worker
@@ -38,7 +38,7 @@ To inventory image drift without triggering reconciliation or restarting Pods:
 
 ```sh
 target='ghcr.io/dbontr/homelab/worker@sha256:c7ab035296db9aec360611c52737ca4e94143fb959c7ad56ca536cc20fd6ee4f'
-kubectl --namespace pwm-system get deployments -l app=pwm-worker -o json |
+kubectl --namespace pwm-system get deployments -o json |
   jq -r --arg target "$target" '
 .items[] | . as $deployment |
 (.spec.template.spec.containers[] | select(.name == "worker") | .image) as $image |
@@ -50,12 +50,14 @@ kubectl --namespace pwm-system get deployments -l app=pwm-worker -o json |
 ```
 
 A `drift` entry is a maintenance candidate, not authorization to upgrade.
+The Deployment metadata does not carry the Pod's `app=pwm-worker` label;
+inventory releases by their Helm ownership annotations instead.
+
 This Kubernetes-only inventory does not establish controller queue emptiness,
 worker-heartbeat freshness, or host registry configuration. Those require
-separate admission checks.
- The controller's
-job registry and worker heartbeat must be inspected separately: a Ready Pod
-alone does not prove the worker is accepting jobs.
+separate admission checks. The controller's job registry and worker
+heartbeat must be inspected separately: a Ready Pod alone does not prove
+the worker is accepting jobs.
 
 For an approved single-worker upgrade, render the proposed source-owned Helm
 chart against the exact live values first. Always set
