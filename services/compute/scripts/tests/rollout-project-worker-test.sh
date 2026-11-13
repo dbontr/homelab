@@ -61,6 +61,7 @@ spec:
       containers:
         - name: worker
           image: "docker.io/library/project-workspace-worker:cuda-exec-756b88c"
+
 YAML
 sed "s#image: \"$old\"#image: \"$digest\"#" \
   "$scratch/current.yaml" > "$scratch/candidate.yaml"
