@@ -151,7 +151,7 @@ fn sync_directory(root: &Path) -> Result<(), &'static str> {
 
 fn record_contents(workspace: &str, kind: &str, alias: &str,
     resolved: &str, metadata: &fs::Metadata) -> String {
-    format!("v2\\n{workspace}\\n{kind}\\n{alias}\\n{resolved}\\n{}\\n{}\\n{}\\n",
+    format!("v2\n{workspace}\n{kind}\n{alias}\n{resolved}\n{}\n{}\n{}\n",
         metadata.rdev(), metadata.dev(), metadata.ino())
 }
 
@@ -437,6 +437,28 @@ mod tests {
             "0123456789abcdef0123456789abcdef","gpu",
             "/dev/dri/renderD128","/dev/dri/renderD128",&current);
         assert_ne!(owned,substituted);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn custody_record_serialization_round_trips_through_reader() {
+        let root = std::env::temp_dir().join(format!(
+            "native-custody-record-{}-{:?}",
+            std::process::id(), std::thread::current().id()));
+        fs::create_dir(&root).unwrap();
+        let device = root.join("device");
+        fs::write(&device, b"test").unwrap();
+        let metadata = fs::metadata(&device).unwrap();
+        let workspace = "0123456789abcdef0123456789abcdef";
+        let text = record_contents(
+            workspace, "gpu", "/dev/dri/renderD128",
+            "/dev/dri/renderD128", &metadata);
+        assert_eq!(text.lines().count(), 8);
+        assert_eq!(text.lines().next(), Some("v2"));
+        assert_eq!(text.lines().nth(1), Some(workspace));
+        assert_eq!(
+            physical_from_record("gpu", "/dev/dri/renderD128", &text).unwrap(),
+            physical_key("gpu", "/dev/dri/renderD128", metadata.rdev()));
         fs::remove_dir_all(root).unwrap();
     }
 
