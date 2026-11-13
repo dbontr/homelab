@@ -63,10 +63,18 @@ func TestWorkerMaintenanceFencesAllocationAndJobClaims(t *testing.T) {
     reopened, err := OpenDatabase(db.filename)
     if err != nil { t.Fatal(err) }
     loaded, err := reopened.NodeMaintenance("worker-one")
-    reopened.Close()
     if err != nil || loaded["paused"] != true || asInt(loaded["revision"]) != 1 {
         t.Fatalf("maintenance state was not durable: %v %v", loaded, err)
     }
+    if job, err := reopened.ClaimJob("worker-one"); err != nil || job != nil {
+        t.Fatalf("separate database connection ignored maintenance when leasing: %v %v", job, err)
+    }
+    if _, err := reopened.CreateWorkspace(WorkspaceRequest{
+        ProjectID: "demo", Image: "debian:bookworm-slim", NodeID: "worker-one",
+    }); err == nil {
+        t.Fatal("separate database connection ignored maintenance during workspace allocation")
+    }
+    if err := reopened.Close(); err != nil { t.Fatal(err) }
 
     code, resumed := call(t, srv, http.MethodPost, route, testOwner, map[string]any{"paused":false,"expected_revision":1})
     if code != 200 || resumed["paused"] != false || asInt(resumed["revision"]) != 2 {
