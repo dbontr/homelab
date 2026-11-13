@@ -33,7 +33,27 @@ kubectl --namespace pwm-system get deployments -l app=pwm-worker -o wide
 
 Confirm the intended image is retrievable on each host, that the live worker
 Deployment and controller heartbeat are healthy, and that no project job or
-workspace is active before a worker release is upgraded. The controller's
+workspace is active before a worker release is upgraded.
+To inventory image drift without triggering reconciliation or restarting Pods:
+
+```sh
+target='ghcr.io/dbontr/homelab/worker@sha256:c7ab035296db9aec360611c52737ca4e94143fb959c7ad56ca536cc20fd6ee4f'
+kubectl --namespace pwm-system get deployments -l app=pwm-worker -o json |
+  jq -r --arg target "$target" '
+.items[] | . as $deployment |
+(.spec.template.spec.containers[] | select(.name == "worker") | .image) as $image |
+[($deployment.metadata.annotations["meta.helm.sh/release-name"] // "unmanaged"),
+ $deployment.metadata.name,
+ (if $image == $target then "pinned" else "drift" end),
+ $image] | @tsv
+'
+```
+
+A `drift` entry is a maintenance candidate, not authorization to upgrade.
+This Kubernetes-only inventory does not establish controller queue emptiness,
+worker-heartbeat freshness, or host registry configuration. Those require
+separate admission checks.
+ The controller's
 job registry and worker heartbeat must be inspected separately: a Ready Pod
 alone does not prove the worker is accepting jobs.
 
