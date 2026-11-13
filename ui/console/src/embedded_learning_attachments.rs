@@ -216,8 +216,11 @@ pub fn EmbeddedAttachments(owner_kind: String, owner_id: String) -> Element {
                                         strong{ {file.get("filename").and_then(Value::as_str)
                                             .unwrap_or("Original file").to_owned()} }
                                         span{class:"small muted",
-                                            "{file.get("mime_type").and_then(Value::as_str).unwrap_or("unknown")} · "
-                                            "{file.get("size_bytes").and_then(Value::as_u64).unwrap_or(0)} bytes"
+                                            {format!(
+                                                "{} · {} bytes",
+                                                file.get("mime_type").and_then(Value::as_str).unwrap_or("unknown"),
+                                                file.get("size_bytes").and_then(Value::as_u64).unwrap_or(0)
+                                            )}
                                         }
                                         if let Some(annotations)=file.get("annotations").and_then(Value::as_array){
                                             for (index,annotation) in annotations.iter().enumerate(){
