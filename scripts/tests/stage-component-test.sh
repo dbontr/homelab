@@ -31,6 +31,11 @@ case "${1-}" in
       printf '%s\n' 'Release build used the mutable checkout' >&2
       exit 43
     fi
+    source_root=$(git rev-parse --show-toplevel)
+    if [ ! -d "$source_root/.git" ]; then
+      printf '%s\n' 'Release build requires an independent Git object store' >&2
+      exit 43
+    fi
     if [ "${HOMELAB_RELEASE_TEST_MUTATE_SOURCE:-0}" = 1 ]; then
       printf 'mutated\n' >> fixture.txt
     fi
@@ -122,7 +127,7 @@ if [[ -e "$scratch/mutated-release" ]]; then
   exit 1
 fi
 
-# Every successful and failed stage must release its detached Git worktree.
+# A stage must remove temporary clones and must not register worktrees.
 if [[ -n "$(find "$scratch" -maxdepth 1 \
     \( -name '.homelab-release.*' -o -name '.homelab-source.*' \) -print -quit)" ||
       "$(git -C "$fixture" worktree list --porcelain | grep -c '^worktree ')" != 1 ]]; then
