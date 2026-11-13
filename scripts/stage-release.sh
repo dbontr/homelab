@@ -85,9 +85,6 @@ stage=""
 snapshot_parent=""
 source_root=""
 cleanup() {
-  if [[ -n "$source_root" ]]; then
-    git -c core.hooksPath=/dev/null -C "$root" worktree remove --force -- "$source_root" >/dev/null 2>&1 || true
-  fi
   local temporary
   for temporary in "$stage" "$snapshot_parent"; do
     if [[ -z "$temporary" || ! -d "$temporary" || -L "$temporary" ]]; then
@@ -101,11 +98,15 @@ trap cleanup EXIT
 stage=$(mktemp -d "$parent/.homelab-release.XXXXXXXX")
 snapshot_parent=$(mktemp -d "$parent/.homelab-source.XXXXXXXX")
 source_root="$snapshot_parent/checkout"
-# A detached worktree ensures that verification and compilation use one Git
-# commit even when another process edits the operator's working directory.
-# Suppress checkout hooks: a release build must not execute local Git hooks.
-if ! git -c core.hooksPath=/dev/null -C "$root" worktree add --detach -- "$source_root" "$revision" >/dev/null 2>&1; then
-  printf '%s\n' 'Unable to create isolated checkout of the requested source revision' >&2
+# An independent object store keeps Git-backed Nix flakes independent of
+# parent worktree history, while the detached checkout pins the exact commit.
+# Local cloning does not contact a remote. Disable checkout hooks.
+if ! git -c core.hooksPath=/dev/null clone --local --no-hardlinks --no-checkout --quiet -- "$root" "$source_root"; then
+  printf '%s\n' 'Unable to clone the source repository for release verification' >&2
+  exit 1
+fi
+if ! git -c core.hooksPath=/dev/null -C "$source_root" checkout --detach --force "$revision" >/dev/null 2>&1; then
+  printf '%s\n' 'Unable to check out the requested source revision' >&2
   exit 1
 fi
 printf 'Verifying locally pinned source at %s\n' "$revision"
@@ -226,9 +227,9 @@ if [[ "$(git -C "$source_root" rev-parse --verify 'HEAD^{commit}')" != "$revisio
   exit 1
 fi
 bash "$source_root/scripts/verify-release.sh" "$stage"
-git -c core.hooksPath=/dev/null -C "$root" worktree remove --force -- "$source_root"
+chmod -R u+w -- "$snapshot_parent"
+rm -rf -- "$snapshot_parent"
 source_root=""
-rmdir -- "$snapshot_parent"
 snapshot_parent=""
 mv -- "$stage" "$destination"
 stage=""
