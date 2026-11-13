@@ -6,7 +6,12 @@ on:
       - feature/rust-native-execution-boundaries
     paths:
       - ".github/workflows/compute-images.yml"
-      - "services/compute/**"
+      - "services/compute/go.mod"
+      - "services/compute/go.sum"
+      - "services/compute/cmd/**"
+      - "services/compute/internal/**"
+      - "services/compute/deploy/kubernetes/Dockerfile.controller"
+      - "services/compute/deploy/kubernetes/Dockerfile.worker"
       - "scripts/build-compute-images.sh"
   workflow_dispatch:
 
