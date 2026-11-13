@@ -47,6 +47,8 @@ read_json() {
 # Take the release's effective values from Helm, not from a stale site profile.
 helm -n "$namespace" status "$release" -o json > "$scratch/release.json"
 read_json '.info.status == "deployed"' "$scratch/release.json"
+initial_revision=$(jq -er '.version | tonumber' "$scratch/release.json")
+[[ "$initial_revision" =~ ^[1-9][0-9]*$ ]] || fail 'Helm release revision is invalid.'
 helm -n "$namespace" get values "$release" --all -o json > "$scratch/values.json"
 
 read_json --arg host "$host" --arg release "$release" '
@@ -150,7 +152,7 @@ check_admission() {
   controller_get /api/nodes "$scratch/workers-$phase.json" ||
     fail 'Controller worker heartbeat could not be inspected.'
   read_json '
-    type == "array" and
+    type == "array" and (length < 100) and
     all(.[]; .status == "succeeded" or .status == "failed" or .status == "expired")
   ' "$scratch/jobs-$phase.json"
   read_json 'type == "array" and all(.[]; .status == "stopped" or .status == "expired")' \
@@ -210,8 +212,13 @@ fi
 check_admission apply
 previous_revision=$(helm -n "$namespace" status "$release" -o json |
   jq -er '.version | tonumber')
-[[ "$previous_revision" =~ ^[1-9][0-9]*$ ]] ||
-  fail 'Helm rollback revision was not available.'
+[[ "$previous_revision" =~ ^[1-9][0-9]*$ && "$previous_revision" == "$initial_revision" ]] ||
+  fail 'The Helm revision changed during admission.'
+kubectl -n "$namespace" get deployment "$deployment" -o json |
+  jq -e --arg image "$current_image" '
+    .status.readyReplicas == 1 and .status.updatedReplicas == 1 and
+    ([.spec.template.spec.containers[] | select(.name == "worker")][0].image == $image)
+  ' >/dev/null || fail 'The running worker changed during admission.'
 
 started=$(date +%s)
 if ! helm upgrade "$release" "$PWM_HELM_CHART" --namespace "$namespace" \
