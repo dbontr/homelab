@@ -131,10 +131,10 @@ pub fn LearningGraph(data: Value, on_select: EventHandler<String>) -> Element {
                         zoom.set(1.0);pan_x.set(0.0);pan_y.set(0.0);
                     },"Reset view"}
             }
-            svg{
-                role:"img",
+            div{role:"img",
                 aria_label:"Concept relationship graph; all concepts are also available as text controls.",
-                viewBox:"{bounds}",
+                svg{
+                view_box:"{bounds}",
                 preserve_aspect_ratio:"xMidYMid meet",
                 style:"display:block;width:100%;height:auto;max-height:500px;background:var(--surface);border:1px solid var(--border);border-radius:10px",
                 for (index,(a,b,kind)) in edges.iter().enumerate(){
@@ -161,6 +161,7 @@ pub fn LearningGraph(data: Value, on_select: EventHandler<String>) -> Element {
                             }
                         }
                     }
+                }
                 }
             }
             div{class:"task-items",
