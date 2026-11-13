@@ -134,6 +134,7 @@ pub fn OpenQuestion(question: Value) -> Element {
 
 #[component]
 pub fn TeacherConversation(kind: String, record_id: String) -> Element {
+    let submit_record_id = record_id.clone();
     let mut request_text = use_signal(String::new);
     let mut busy = use_signal(|| false);
     let mut error = use_signal(String::new);
@@ -146,7 +147,7 @@ pub fn TeacherConversation(kind: String, record_id: String) -> Element {
                 onsubmit:move |event|{
                     event.prevent_default();
                     if busy(){return}
-                    let request=match bounded_host_request(&request_text(),&kind,&record_id,None){
+                    let request=match bounded_host_request(&request_text(),&kind,&submit_record_id,None){
                         Ok(value)=>value,
                         Err(message)=>{error.set(message);return}
                     };
