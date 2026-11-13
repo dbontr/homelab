@@ -42,7 +42,7 @@ type acceptanceConfig struct {
 func readConfig() acceptanceConfig {
 	var c acceptanceConfig
 	flag.StringVar(&c.Project, "project", "homelab-platform", "Approved project ID")
-	flag.StringVar(&c.Repository, "repository", "dbontr/homelab-new", "Project-linked repository")
+	flag.StringVar(&c.Repository, "repository", "dbontr/homelab", "Project-linked repository")
 	flag.StringVar(&c.BaseBranch, "base", "main", "Draft pull-request base branch")
 	flag.StringVar(&c.Revision, "revision", os.Getenv("HOMELAB_ACCEPTANCE_REVISION"), "Pinned 40-character Git commit")
 	flag.StringVar(&c.ComputeURL, "compute-url", os.Getenv("HOMELAB_COMPUTE_URL"), "Compute MCP HTTPS endpoint")
