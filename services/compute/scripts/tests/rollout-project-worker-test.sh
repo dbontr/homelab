@@ -255,20 +255,10 @@ rm -f "$scratch/applied"
 bash "$script" apply "$release" "$digest" --confirm "$release" > "$scratch/output"
 grep -q '^ACCEPTED:' "$scratch/output" || fail 'Approved worker did not finish'
 [[ ! -f "$scratch/paused" ]] || fail 'Scheduler did not resume after successful upgrade'
-grep -q '^upgrade
-if bash "$script" apply "$release" "$digest" --confirm "$release" \
-    > "$scratch/output" 2>&1; then
-  fail 'Controller outage was accepted after upgrade'
-fi
-grep -q '^rollback$' "$scratch/trace" || fail 'Post-upgrade outage did not request rollback'
-[[ -f "$scratch/paused" ]] || fail 'Failed migration incorrectly resumed scheduling'
-[[ ! -f "$scratch/applied" ]] || fail 'Rollback did not restore the prior deployment'
+grep -q '^upgrade$' "$scratch/trace" || fail 'Confirmed upgrade was not recorded'
 
-printf 'Worker rollout admission and post-upgrade recovery verified\n'
- "$scratch/trace" || fail 'Confirmed upgrade was not recorded'
-
-# A Ready Deployment is insufficient when the controller's only heartbeat
-# belongs to the prior worker process.
+# A Ready Deployment cannot be certified by a heartbeat recorded before
+# the replacement worker became Ready.
 rm -f "$scratch/applied"
 jq --argjson previous "$(date +%s)" '.[0].last_seen = $previous' \
   "$scratch/workers.json" > "$scratch/stale-workers.json"
@@ -277,23 +267,12 @@ if bash "$script" apply "$release" "$digest" --confirm "$release" \
     > "$scratch/output" 2>&1; then
   fail 'Stale controller heartbeat was accepted'
 fi
-grep -q '^rollback
-if bash "$script" apply "$release" "$digest" --confirm "$release" \
-    > "$scratch/output" 2>&1; then
-  fail 'Controller outage was accepted after upgrade'
-fi
-grep -q '^rollback$' "$scratch/trace" || fail 'Post-upgrade outage did not request rollback'
-[[ -f "$scratch/paused" ]] || fail 'Failed migration incorrectly resumed scheduling'
-[[ ! -f "$scratch/applied" ]] || fail 'Rollback did not restore the prior deployment'
-
-printf 'Worker rollout admission and post-upgrade recovery verified\n'
- "$scratch/trace" || fail 'Stale heartbeat did not trigger rollback'
+grep -q '^rollback$' "$scratch/trace" || fail 'Stale heartbeat did not trigger rollback'
 [[ -f "$scratch/paused" ]] || fail 'Stale heartbeat incorrectly resumed scheduling'
 [[ ! -f "$scratch/applied" ]] || fail 'Rollback did not restore the prior deployment'
 
-# The operator must reconcile and explicitly resume a paused worker. Tests
-# return the mock controller to a clean state without issuing a production
-# release operation.
+# Simulate a completed, operator-confirmed recovery before testing a
+# separate controller outage.
 rm -f "$scratch/paused"
 jq '.[0].last_seen = 4102444800' "$scratch/workers.json" > "$scratch/fresh-workers.json"
 mv "$scratch/fresh-workers.json" "$scratch/workers.json"
