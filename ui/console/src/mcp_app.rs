@@ -105,7 +105,7 @@ impl Bridge {
         let closed_for_listener = closed.clone();
         let expected_source = parent.clone();
         let reply_destination = parent.clone();
-        let listener = Closure::<dyn FnMut(MessageEvent)>::new(move |event| {
+        let listener = Closure::<dyn FnMut(MessageEvent)>::new(move |event: MessageEvent| {
             let Some(source) = event.source() else { return };
             if !Object::is(&JsValue::from(source), expected_source.as_ref()) {
                 return;
