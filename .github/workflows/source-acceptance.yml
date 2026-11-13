@@ -67,8 +67,6 @@ jobs:
         with:
           go-version: "1.27.3"
       - name: Verify complete MCP interface and federated tool path
-        env:
-          GOWORK: "on"
         run: go test -tags=integration -count=1 -v ./services/bridge
 
 
