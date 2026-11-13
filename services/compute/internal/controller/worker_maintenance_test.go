@@ -90,6 +90,13 @@ func TestWorkerMaintenanceDrainCountsAndExistingOperationRecovery(t *testing.T) 
         asInt(paused["unfinished_operations"]) != 1 {
         t.Fatalf("active workspace was not protected: %v %v", paused, err)
     }
+    if _, err := db.SetNodeMaintenance("worker-one", false, 1); err == nil {
+        t.Fatal("maintenance resumed with active workspace state")
+    }
+    stillPaused, err := db.NodeMaintenance("worker-one")
+    if err != nil || stillPaused["paused"] != true || asInt(stillPaused["revision"]) != 1 {
+        t.Fatalf("unsafe resume changed the maintenance revision: %v %v", stillPaused, err)
+    }
     start, err := db.ClaimOperation("worker-one")
     if err != nil || start == nil || start["action"] != "start" {
         t.Fatalf("maintenance prevented existing workspace progress: %v %v", start, err)
@@ -112,6 +119,10 @@ func TestWorkerMaintenanceDrainCountsAndExistingOperationRecovery(t *testing.T) 
     drained, err := db.NodeMaintenance("worker-one")
     if err != nil || drained["paused"] != true || drained["drained"] != true {
         t.Fatalf("completed teardown did not drain worker: %v %v", drained, err)
+    }
+    resumed, err := db.SetNodeMaintenance("worker-one", false, 1)
+    if err != nil || resumed["paused"] != false || asInt(resumed["revision"]) != 2 {
+        t.Fatalf("drained worker could not resume: %v %v", resumed, err)
     }
 }
 
