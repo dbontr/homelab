@@ -35,6 +35,8 @@ func TestRejectsUnsafePathsPermissionsAndSymlinks(t *testing.T){
  }
  unsafe:=filepath.Join(t.TempDir(),"shared")
  if err:=os.Mkdir(unsafe,0755);err!=nil{t.Fatal(err)}
+ // Establish the unsafe mode explicitly; release staging runs with umask 077.
+ if err:=os.Chmod(unsafe,0755);err!=nil{t.Fatal(err)}
  if lease,err:=Acquire(unsafe,"security");err==nil{
   lease.Close();t.Fatal("shared state directory was accepted")
  }
