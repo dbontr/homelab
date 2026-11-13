@@ -119,13 +119,13 @@ func (s *Server) handleAdmin(w http.ResponseWriter, r *http.Request, p []string)
 		case http.MethodPost:
 			var in struct {
 				Paused *bool `json:"paused"`
-				ExpectedRevision int `json:"expected_revision"`
+				ExpectedRevision *int `json:"expected_revision"`
 			}
-			if err := bodyJSON(r, &in); err != nil || in.Paused == nil {
+			if err := bodyJSON(r, &in); err != nil || in.Paused == nil || in.ExpectedRevision == nil {
 				fail(w, 400, "paused and expected_revision are required")
 				return
 			}
-			status, err := db.SetNodeMaintenance(p[2], *in.Paused, in.ExpectedRevision)
+			status, err := db.SetNodeMaintenance(p[2], *in.Paused, *in.ExpectedRevision)
 			send(w, status, err)
 		default:
 			fail(w, 405, "method not allowed")
