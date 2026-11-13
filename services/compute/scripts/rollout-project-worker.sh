@@ -132,6 +132,32 @@ controller_get() {
     --output "$output" \
     "https://$controller_fqdn:8443$url"
 }
+controller_post() {
+  local url=$1 payload=$2 output=$3
+  curl --fail-with-body --silent --show-error --noproxy '*' --max-time 20 \
+    --cacert "$scratch/controller-ca.pem" \
+    --resolve "$controller_fqdn:8443:$controller_ip" \
+    --header "@$scratch/auth.header" \
+    --header 'Content-Type: application/json' \
+    --request POST --data-binary "@$payload" \
+    --output "$output" \
+    "https://$controller_fqdn:8443$url"
+}
+maintenance_get() {
+  local phase=$1
+  controller_get "/api/nodes/$worker/maintenance" "$scratch/maintenance-$phase.json" ||
+    fail 'Cannot inspect authoritative worker maintenance state.'
+}
+maintenance_require() {
+  local phase=$1 revision=$2
+  read_json --argjson rev "$revision" '
+    .worker_id == $worker and .paused == true and .drained == true and
+    .revision == $rev and
+    .active_jobs == 0 and .active_workspaces == 0 and
+    .unfinished_operations == 0 and .hardware_leases == 0 and
+    .job_device_leases == 0
+  ' --arg worker "$worker" "$scratch/maintenance-$phase.json"
+}
 check_admission() {
   local phase=$1
   kubectl get nodes -o json > "$scratch/nodes-$phase.json"
@@ -194,6 +220,14 @@ helm upgrade "$release" "$PWM_HELM_CHART" --namespace "$namespace" \
   --dry-run=server --hide-secret > "$scratch/dry-run.txt"
 
 check_admission preflight
+maintenance_get preflight
+read_json --arg worker "$worker" '
+  .worker_id == $worker and .paused == false and .drained == true and
+  (.revision | type) == "number" and
+  .active_jobs == 0 and .active_workspaces == 0 and
+  .unfinished_operations == 0 and .hardware_leases == 0 and
+  .job_device_leases == 0
+' "$scratch/maintenance-preflight.json"
 if [[ "$current_image" == "$image" ]]; then
   printf 'ACCEPTED: %s is already digest-pinned and ready; no release change.\n' "$release"
   exit 0
@@ -206,10 +240,30 @@ if [[ "$mode" == plan ]]; then
   exit 0
 fi
 
-# Recheck workload admission immediately before mutation. This does not freeze
-# concurrent project submissions; the operator must prevent new submissions
-# until the release has completed and the worker has resumed heartbeats.
+# A controller-side pause is serialized with job leases and workspace
+# allocation by the same SQLite write lock. A stale plan is not a scheduler
+# barrier. The revision prevents this release from clearing another pause.
 check_admission apply
+maintenance_get before-pause
+read_json --arg worker "$worker" '
+  .worker_id == $worker and .paused == false and .drained == true and
+  (.revision | type) == "number"
+' "$scratch/maintenance-before-pause.json"
+maintenance_previous_revision=$(jq -er '.revision | tonumber' "$scratch/maintenance-before-pause.json")
+jq -n --argjson rev "$maintenance_previous_revision" '
+  {paused:true,expected_revision:$rev}
+' > "$scratch/pause-request.json"
+controller_post "/api/nodes/$worker/maintenance"   "$scratch/pause-request.json" "$scratch/paused.json" ||
+  fail 'Cannot confirm scheduler pause; inspect maintenance state before retrying.'
+pause_revision=$(jq -er '.revision | tonumber' "$scratch/paused.json") ||
+  fail 'Pause result lacks a maintenance revision. Leave this worker paused.'
+[[ "$pause_revision" == "$((maintenance_previous_revision + 1))" ]] ||
+  fail 'Unexpected maintenance revision after pause. Leave this worker paused.'
+cp "$scratch/paused.json" "$scratch/maintenance-paused.json"
+maintenance_require paused "$pause_revision"
+check_admission paused
+maintenance_get before-upgrade
+maintenance_require before-upgrade "$pause_revision"
 previous_revision=$(helm -n "$namespace" status "$release" -o json |
   jq -er '.version | tonumber')
 [[ "$previous_revision" =~ ^[1-9][0-9]*$ && "$previous_revision" == "$initial_revision" ]] ||
@@ -238,7 +292,15 @@ if kubectl -n "$namespace" rollout status "deployment/$deployment" --timeout=90s
       jq -e --arg name "$worker" --argjson since "$started" '
       any(.[]; .id == $name and .online == true and (.last_seen | tonumber) >= $since)
     ' "$scratch/after.json" >/dev/null; then
-      printf 'ACCEPTED: %s running %s with a post-upgrade controller heartbeat.\n' "$release" "$image"
+      maintenance_get before-resume
+      maintenance_require before-resume "$pause_revision"
+      jq -n --argjson rev "$pause_revision" '{paused:false,expected_revision:$rev}'         > "$scratch/resume-request.json"
+      controller_post "/api/nodes/$worker/maintenance"         "$scratch/resume-request.json" "$scratch/resumed.json" ||
+        fail 'Worker upgraded, but scheduler resume is unconfirmed; reconcile the pause explicitly.'
+      read_json --arg worker "$worker" --argjson rev "$((pause_revision+1))" '
+        .worker_id == $worker and .paused == false and .revision == $rev
+      ' "$scratch/resumed.json"
+      printf 'ACCEPTED: %s running %s with a confirmed heartbeat and resumed scheduler.\n' "$release" "$image"
       exit 0
     fi
     sleep 3
@@ -260,4 +322,4 @@ kubectl -n "$namespace" get deployment "$deployment" -o json |
     ([.spec.template.spec.containers[] | select(.name == "worker")][0].image == $image)
   ' >/dev/null ||
   fail 'Rollback readiness and image were not confirmed; manual recovery required.'
-fail 'Post-upgrade acceptance failed; the previous Helm release was restored.'
+fail 'Post-upgrade acceptance failed; the prior Helm image was restored, but the controller pause remains active until explicit recovery.'
