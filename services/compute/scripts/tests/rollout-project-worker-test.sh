@@ -184,6 +184,8 @@ case "${*: -1}" in
       printf '{"worker_id":"worker-046910e8ae58-janus","paused":true,"revision":1,"drained":true,"active_jobs":0,"active_workspaces":0,"unfinished_operations":0,"hardware_leases":0,"job_device_leases":0}\n' > "$output"
     elif [[ "$method" == POST ]]; then
       printf '{"worker_id":"worker-046910e8ae58-janus","paused":false,"revision":2,"drained":true,"active_jobs":0,"active_workspaces":0,"unfinished_operations":0,"hardware_leases":0,"job_device_leases":0}\n' > "$output"
+    elif [[ -f "$MOCK_ROLLOUT/busy" ]]; then
+      printf '{"worker_id":"worker-046910e8ae58-janus","paused":false,"revision":0,"drained":false,"active_jobs":1,"active_workspaces":0,"unfinished_operations":0,"hardware_leases":0,"job_device_leases":0}\n' > "$output"
     else
       printf '{"worker_id":"worker-046910e8ae58-janus","paused":false,"revision":0,"drained":true,"active_jobs":0,"active_workspaces":0,"unfinished_operations":0,"hardware_leases":0,"job_device_leases":0}\n' > "$output"
     fi ;;
@@ -219,11 +221,11 @@ bash "$script" plan "$release" "$digest" > "$scratch/output"
 grep -q '^PLAN ONLY:' "$scratch/output" || fail 'Plan did not complete'
 ! grep -q '^upgrade$' "$scratch/trace" || fail 'Plan changed a release'
 
-printf '[{"status":"queued"}]\n' > "$scratch/jobs.json"
+touch "$scratch/busy"
 if bash "$script" plan "$release" "$digest" > "$scratch/output" 2>&1; then
-  fail 'Queued project work was ignored'
+  fail 'Active worker work was ignored'
 fi
-printf '[]\n' > "$scratch/jobs.json"
+rm -f "$scratch/busy"
 printf '{"items":[{"kind":"Pod"}]}\n' > "$scratch/resources.json"
 if bash "$script" plan "$release" "$digest" > "$scratch/output" 2>&1; then
   fail 'Active namespace workload was ignored'
