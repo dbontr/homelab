@@ -143,6 +143,8 @@ cat > "$scratch/bin/curl" <<'MOCK'
 set -euo pipefail
 output=''
 header=''
+payload=''
+method=''
 previous=''
 for arg in "$@"; do
   if [[ "$arg" == *'controller-test-admin-token'* ]]; then
@@ -151,6 +153,8 @@ for arg in "$@"; do
   fi
   if [[ "$previous" == --output ]]; then output="$arg"; fi
   if [[ "$previous" == --header && "$arg" == @* ]]; then header="${arg#@}"; fi
+  if [[ "$previous" == --request ]]; then method="$arg"; fi
+  if [[ "$previous" == --data-binary && "$arg" == @* ]]; then payload="${arg#@}"; fi
   previous="$arg"
 done
 [[ -n "$output" && -n "$header" ]] || exit 94
@@ -162,6 +166,27 @@ case "${*: -1}" in
   */jobs) cat "$MOCK_ROLLOUT/jobs.json" > "$output" ;;
   */workspaces) cat "$MOCK_ROLLOUT/workspaces.json" > "$output" ;;
   */nodes) cat "$MOCK_ROLLOUT/workers.json" > "$output" ;;
+  */maintenance)
+    if [[ "$method" == POST ]]; then
+      [[ -n "$payload" ]] || exit 96
+      if jq -e '.paused == true and .expected_revision == 0' "$payload" >/dev/null; then
+        [[ ! -f "$MOCK_ROLLOUT/paused" ]] || exit 97
+        touch "$MOCK_ROLLOUT/paused"
+      elif jq -e '.paused == false and .expected_revision == 1' "$payload" >/dev/null; then
+        [[ -f "$MOCK_ROLLOUT/paused" ]] || exit 98
+        rm -f "$MOCK_ROLLOUT/paused"
+      else
+        printf 'Invalid maintenance revision request\n' >&2
+        exit 99
+      fi
+    fi
+    if [[ -f "$MOCK_ROLLOUT/paused" ]]; then
+      printf '{"worker_id":"worker-046910e8ae58-janus","paused":true,"revision":1,"drained":true,"active_jobs":0,"active_workspaces":0,"unfinished_operations":0,"hardware_leases":0,"job_device_leases":0}\n' > "$output"
+    elif [[ "$method" == POST ]]; then
+      printf '{"worker_id":"worker-046910e8ae58-janus","paused":false,"revision":2,"drained":true,"active_jobs":0,"active_workspaces":0,"unfinished_operations":0,"hardware_leases":0,"job_device_leases":0}\n' > "$output"
+    else
+      printf '{"worker_id":"worker-046910e8ae58-janus","paused":false,"revision":0,"drained":true,"active_jobs":0,"active_workspaces":0,"unfinished_operations":0,"hardware_leases":0,"job_device_leases":0}\n' > "$output"
+    fi ;;
   *) printf 'Unexpected controller URL\n' >&2; exit 95 ;;
 esac
 MOCK
@@ -222,11 +247,38 @@ fi
 bash "$fleet" apply "$digest" --confirm-count 1 > "$scratch/output"
 grep -q '^ACCEPTED: 1 project-worker Helm releases upgraded serially' "$scratch/output" ||
   fail 'Fleet did not apply the admitted release'
+[[ ! -f "$scratch/paused" ]] || fail 'Fleet left the scheduler paused after successful upgrade'
 rm -f "$scratch/applied"
 
 bash "$script" apply "$release" "$digest" --confirm "$release" > "$scratch/output"
 grep -q '^ACCEPTED:' "$scratch/output" || fail 'Approved worker did not finish'
-grep -q '^upgrade$' "$scratch/trace" || fail 'Confirmed upgrade was not recorded'
+[[ ! -f "$scratch/paused" ]] || fail 'Scheduler did not resume after successful upgrade'
+grep -q '^upgrade
+touch "$scratch/api-down"
+if bash "$script" apply "$release" "$digest" --confirm "$release" \
+    > "$scratch/output" 2>&1; then
+  fail 'Controller outage was accepted after upgrade'
+fi
+grep -q '^rollback
+
+printf 'Worker rollout admission and post-upgrade recovery verified\n'
+ "$scratch/trace" || fail 'Confirmed upgrade was not recorded'
+rm -f "$scratch/applied"
+touch "$scratch/api-down"
+if bash "$script" apply "$release" "$digest" --confirm "$release" \
+    > "$scratch/output" 2>&1; then
+  fail 'Controller outage was accepted after upgrade'
+fi
+grep -q '^rollback$' "$scratch/trace" || fail 'Post-upgrade outage did not request rollback'
+[[ ! -f "$scratch/applied" ]] || fail 'Rollback did not restore the prior deployment'
+
+printf 'Worker rollout admission and post-upgrade recovery verified\n'
+ "$scratch/trace" || fail 'Post-upgrade outage did not request rollback'
+[[ -f "$scratch/paused" ]] || fail 'Failed migration incorrectly resumed scheduling'
+[[ ! -f "$scratch/applied" ]] || fail 'Rollback did not restore the prior deployment'
+
+printf 'Worker rollout admission and post-upgrade recovery verified\n'
+ "$scratch/trace" || fail 'Confirmed upgrade was not recorded'
 rm -f "$scratch/applied"
 touch "$scratch/api-down"
 if bash "$script" apply "$release" "$digest" --confirm "$release" \
