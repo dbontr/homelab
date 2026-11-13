@@ -2,7 +2,7 @@
 set -euo pipefail
 umask 077
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
+root=$(CDPATH= cd -- "$(dirname -- "$0")/../../../.." && pwd)
 scratch=$(mktemp -d)
 trap 'rm -rf -- "$scratch"' EXIT
 mkdir -p "$scratch/bin" "$scratch/chart"
