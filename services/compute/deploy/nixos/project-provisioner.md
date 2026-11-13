@@ -39,3 +39,54 @@ bash scripts/reconcile-kubernetes-projects.sh
 Do not store controller or worker credentials in shell histories, Git, Helm values or environment files. The script obtains the controller administrator credential directly from the protected Kubernetes Secret and transfers one-use worker credentials into separate Kubernetes Secrets without printing their contents.
 
 Projects must use Kubernetes-compatible identifiers of at most 52 characters. The operator can exclude historical, archived or resource-restricted projects explicitly. Each project-host pair consumes a small worker Pod; capacity and project-count budgets must be set appropriately for the cluster.
+
+
+## Existing worker image rollout
+
+The provisioner enrolls missing project/host pairs. It intentionally does not
+replace a registered worker's release or overwrite an existing worker token.
+Use the source-owned, single-release rollout utility for that operation:
+
+```sh
+export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+export PWM_HELM_CHART=services/compute/deploy/helm/project-workspace
+image=ghcr.io/dbontr/homelab/worker@sha256:c7ab035296db9aec360611c52737ca4e94143fb959c7ad56ca536cc20fd6ee4f
+release=pwm-project-046910e8ae58-janus
+
+bash services/compute/scripts/rollout-project-worker.sh plan "$release" "$image"
+
+# During an operator-approved project maintenance window:
+bash services/compute/scripts/rollout-project-worker.sh apply "$release" "$image" \
+  --confirm "$release"
+```
+
+The utility operates on exactly one `pwm-project-<hash>-<host>` release.
+It reads the effective Helm values and requires the live Deployment to match
+the same worker, project, namespace, Secret, and node placement. It rejects
+unhealthy nodes, unavailable controller identity, pending/leased jobs, active
+workspaces, and any Kubernetes Pods or Jobs in that project's workload
+namespace. The proposed Helm manifest must differ from the current release
+only in the worker OCI image. The cluster API validates the proposed upgrade
+in server-side dry-run mode before any live change.
+
+The `plan` command does not change Kubernetes resources. The `apply` command
+requires an explicit release-name confirmation, rechecks admission, and
+upgrades using Helm's atomic rollback. After the rollout it verifies
+Deployment readiness and a controller heartbeat later than the upgrade
+start. A failed post-upgrade acceptance triggers a revision-checked rollback
+to the exact preceding Helm revision. If the revision changes concurrently,
+the utility stops and requires manual reconciliation.
+
+**Admission is a snapshot, not a project-level scheduling lock.** The
+operator must prevent concurrent project submissions before applying a
+release; otherwise work can arrive between the last admission check and
+the worker restart. The tool refuses chart drift rather than silently
+changing namespaced policies, mounts, or RBAC. A rejected release must be
+reviewed individually and, when necessary, migrated through a separately
+approved, reversible chart upgrade.
+
+Each upgrade remains subject to a later end-to-end workspace command,
+image-repull and node-restart qualification. Project workspaces and private
+artifacts must not be deleted to accelerate worker rollout. The release
+utility does not configure K3s registries or change compute-host NixOS
+generations; each host requires its independent registry/rollback procedure.
