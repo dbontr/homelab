@@ -72,7 +72,7 @@ func (db *Database) PlanWorkspace(req WorkspaceRequest) (map[string]any, error) 
 			preferred = asString(env["node"])
 		}
 		chosenImage = image
-		nodes, err := db.queryLocked("SELECT id,last_seen,capabilities FROM nodes ORDER BY id")
+		nodes, err := db.queryLocked("SELECT n.id,n.last_seen,n.capabilities,COALESCE(m.paused,0) maintenance_paused FROM nodes n LEFT JOIN node_maintenance m ON m.node=n.id ORDER BY n.id")
 		if err != nil {
 			return err
 		}
@@ -118,6 +118,9 @@ func (db *Database) PlanWorkspace(req WorkspaceRequest) (map[string]any, error) 
 				freeHardware[kind]++
 			}
 			reasons := append([]string(nil), blockers...)
+			if asInt(node["maintenance_paused"]) != 0 {
+				reasons = append(reasons, "worker is in maintenance")
+			}
 			if now-asFloat(node["last_seen"]) >= 90 {
 				reasons = append(reasons, "worker heartbeat expired")
 			}
