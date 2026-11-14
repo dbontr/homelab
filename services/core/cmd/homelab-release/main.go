@@ -31,7 +31,7 @@ func configured()( *release.Controller,error){
   Git:os.Getenv("HOMELAB_RELEASE_GIT"),
   Systemctl:os.Getenv("HOMELAB_RELEASE_SYSTEMCTL"),
   HealthServices:health,
-  Run:release.Exec,
+  Run:release.ExecWithHome(state),
   Current:func()(string,error){
    path,err:=filepath.EvalSymlinks("/nix/var/nix/profiles/system")
    if err!=nil{return "",err}
