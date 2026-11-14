@@ -57,13 +57,32 @@ type Journal struct {
 
 type Controller struct{Config Config}
 
+// ExecWithHome runs fixed binaries with a sanitized environment and a private,
+// writable release-state directory for tools such as Nix that require a cache.
+// The trusted controller owns and validates this directory before invoking Run.
+func ExecWithHome(home string) Run {
+ return func(ctx context.Context,name string,args ...string)(string,error){
+  if !filepath.IsAbs(home)||filepath.Clean(home)!=home||home=="/"{
+   return "",errors.New("release command requires an absolute private home directory")
+  }
+  cmd:=exec.CommandContext(ctx,name,args...)
+  cmd.Env=[]string{
+   "PATH=/run/current-system/sw/bin:/usr/bin:/bin",
+   "LANG=C",
+   "HOME="+home,
+   "XDG_CACHE_HOME="+filepath.Join(home,".cache"),
+  }
+  data,err:=cmd.CombinedOutput()
+  if len(data)>8192{data=data[:8192]}
+  if err!=nil{return "",fmt.Errorf("release command %s failed: %w (%s)",filepath.Base(name),err,strings.TrimSpace(string(data)))}
+  return string(data),nil
+ }
+}
+
+// Exec preserves the legacy runner signature. Release owners must supply their
+// private state directory through ExecWithHome instead of relying on /var/empty.
 func Exec(ctx context.Context,name string,args ...string)(string,error){
- cmd:=exec.CommandContext(ctx,name,args...)
- cmd.Env=[]string{"PATH=/run/current-system/sw/bin:/usr/bin:/bin","LANG=C","HOME=/var/empty"}
- data,err:=cmd.CombinedOutput()
- if len(data)>8192{data=data[:8192]}
- if err!=nil{return "",fmt.Errorf("release command %s failed: %w (%s)",filepath.Base(name),err,strings.TrimSpace(string(data)))}
- return string(data),nil
+ return ExecWithHome("/var/empty")(ctx,name,args...)
 }
 
 func New(cfg Config)(*Controller,error){
