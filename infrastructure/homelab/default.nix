@@ -76,7 +76,8 @@
     };
   };
 
-  homelab.native.applications.recipesage.enable = true;
+  # The first-party Recipes page supersedes the retired RecipeSage runtime.
+  homelab.native.applications.recipesage.enable = false;
 
   homelab.personalHealth = {
     enable = true;
