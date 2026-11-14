@@ -3,6 +3,7 @@
 package statelease
 
 import (
+ "context"
  "errors"
  "fmt"
  "os"
@@ -10,6 +11,7 @@ import (
  "regexp"
  "sync"
  "syscall"
+ "time"
 )
 
 var lockName=regexp.MustCompile(`^[a-z][a-z0-9-]{0,47}$`)
@@ -55,6 +57,24 @@ func Acquire(dir,name string)(*Lease,error){
   return fail(errors.New("state lease lock inode changed during acquisition"))
  }
  return &Lease{file:file},nil
+}
+
+// AcquireWhenAvailable waits only for an existing owner of the same lease.
+// All path, ownership, and inode validation errors still fail immediately.
+// A caller must give this operation a finite context deadline.
+func AcquireWhenAvailable(ctx context.Context,dir,name string)(*Lease,error){
+ ticker:=time.NewTicker(100*time.Millisecond)
+ defer ticker.Stop()
+ for{
+  if err:=ctx.Err();err!=nil{return nil,err}
+  lease,err:=Acquire(dir,name)
+  if err==nil{return lease,nil}
+  if !errors.Is(err,syscall.EWOULDBLOCK)&&!errors.Is(err,syscall.EAGAIN){return nil,err}
+  select{
+  case <-ctx.Done():return nil,ctx.Err()
+  case <-ticker.C:
+  }
+ }
 }
 
 // Close releases ownership only when the process is terminating or all state
