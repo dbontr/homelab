@@ -15,6 +15,7 @@ import (
  "strconv"
  "strings"
  "syscall"
+ "time"
 
  "github.com/dbontr/homelab-new/system/privileged"
  "github.com/dbontr/homelab-new/system/release"
@@ -61,6 +62,8 @@ func authorizationClient()(privileged.Authorizer,error){
 
 func main(){
  log.SetFlags(log.LstdFlags|log.LUTC)
+ ctx,stop:=signal.NotifyContext(context.Background(),syscall.SIGINT,syscall.SIGTERM)
+ defer stop()
  host:=required("HOMELAB_EXECUTOR_HOST")
  client,err:=authorizationClient()
  if err!=nil{log.Fatal(err)}
@@ -75,7 +78,13 @@ func main(){
  if len(health)==0{log.Fatal("at least one health service is required")}
  source:=required("HOMELAB_EXECUTOR_SOURCE")
  state:=required("HOMELAB_EXECUTOR_RELEASE_STATE")
- lease,err:=statelease.Acquire(state,"executord")
+ // A guarded NixOS release may restart this Type=simple unit while the
+ // release CLI still owns the same state. Wait without binding any socket;
+ // after the CLI exits, the executor acquires ownership and becomes usable.
+ leaseCtx,cancelLease:=context.WithTimeout(ctx,5*time.Minute)
+ defer cancelLease()
+ lease,err:=statelease.AcquireWhenAvailable(leaseCtx,state,"executord")
+ if errors.Is(err,context.Canceled){return}
  if err!=nil{log.Fatal("cannot acquire exclusive executor state ownership: ",err)}
  defer lease.Close()
  nix:=required("HOMELAB_EXECUTOR_NIX")
@@ -145,8 +154,6 @@ func main(){
  if err!=nil{log.Fatal(err)}
  group,err:=user.LookupGroup("homelab-executor-client");if err!=nil{log.Fatal(err)}
  gid,err:=strconv.Atoi(group.Gid);if err!=nil||gid<=0{log.Fatal("invalid executor client group")}
- ctx,stop:=signal.NotifyContext(context.Background(),syscall.SIGINT,syscall.SIGTERM)
- defer stop()
  path:="/run/homelab-executord/execute.sock"
  if strings.ContainsAny(path,"\x00") {log.Fatal(errors.New("invalid socket path"))}
  failures:=make(chan error,2)
