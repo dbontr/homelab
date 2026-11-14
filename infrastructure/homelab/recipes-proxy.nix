@@ -1,6 +1,6 @@
 { ... }:
 {
-  # The services VLAN must have its address before nginx binds its local listener.
+  # Nginx starts only after the services VLAN is configured.
   systemd.services.nginx = {
     wants = [ "network-online.target" ];
     after = [ "network-online.target" ];
@@ -10,28 +10,25 @@
     "f /var/log/nginx/error.log 0640 nginx nginx -"
   ];
 
-  # Preserve the collector and expose only data, never an alternate UI.
+  # Retain both trusted hostnames but direct browsers to the owner-authenticated
+  # first-party Recipes page. The Cloudflare tunnel keeps its Access policy.
   services.nginx.virtualHosts."recipes.home.arpa" = {
     listen = [{ addr = "10.77.20.1"; port = 80; }];
     locations."/" = {
-      proxyPass = "http://127.0.0.1:7270";
-      proxyWebsockets = true;
+      extraConfig = ''
+        add_header Cache-Control "no-store" always;
+        return 302 https://dbontr.me/recipes;
+      '';
     };
-    extraConfig = "client_max_body_size 32m;";
   };
 
-  # The Cloudflare tunnel authenticates requests before these local origins.
   services.nginx.virtualHosts."recipes.dbontr.me" = {
     listen = [{ addr = "127.0.0.1"; port = 8099; }];
     locations."/" = {
-      proxyPass = "http://127.0.0.1:7270";
-      proxyWebsockets = true;
       extraConfig = ''
-        proxy_redirect http://recipes.dbontr.me/ https://recipes.dbontr.me/;
-        proxy_redirect http://recipes.home.arpa/ https://recipes.dbontr.me/;
+        add_header Cache-Control "no-store" always;
+        return 302 https://dbontr.me/recipes;
       '';
     };
-    extraConfig = "client_max_body_size 32m;";
   };
-
 }
