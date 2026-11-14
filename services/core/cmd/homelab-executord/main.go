@@ -84,7 +84,7 @@ func main(){
  systemctl:=required("HOMELAB_EXECUTOR_SYSTEMCTL")
  releases,err:=release.New(release.Config{
   Host:host,FlakeDir:source,StateDir:state,TrustedSource:true,Nix:nix,NixEnv:nixEnv,Git:git,Systemctl:systemctl,
-  HealthServices:health,Run:release.Exec,
+  HealthServices:health,Run:release.ExecWithHome(state),
   Current:func()(string,error){return filepath.EvalSymlinks("/nix/var/nix/profiles/system")},
  })
  if err!=nil{log.Fatal("invalid release policy: ",err)}
