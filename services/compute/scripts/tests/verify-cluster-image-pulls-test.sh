@@ -50,25 +50,25 @@ chmod 0700 "$KUBECTL_BIN"
 controller=ghcr.io/example/controller@sha256:$(printf 'a%.0s' {1..64})
 worker=ghcr.io/example/worker@sha256:$(printf 'b%.0s' {1..64})
 
-"$script" "$controller" "$worker" janus jupiter > "$tmp/receipt.jsonl"
+bash "$script" "$controller" "$worker" janus jupiter > "$tmp/receipt.jsonl"
 [[ $(jq -s 'length' "$tmp/receipt.jsonl") == 4 ]]
 [[ $(jq -s '[.[] | select(.result=="passed" and .pull_policy=="Always")] | length' "$tmp/receipt.jsonl") == 4 ]]
 [[ $(cat "$tmp/cleanups") == deleted ]]
 [[ $(cat "$tmp/count") == 4 ]]
 
-if "$script" "$controller" ghcr.io/example/worker:latest janus >/dev/null 2>&1; then
+if bash "$script" "$controller" ghcr.io/example/worker:latest janus >/dev/null 2>&1; then
   echo 'Mutable tag was accepted' >&2
   exit 1
 fi
 [[ $(cat "$tmp/count") == 4 ]]
 
-if MOCK_NODE_READY=False "$script" "$controller" "$worker" janus >/dev/null 2>&1; then
+if MOCK_NODE_READY=False bash "$script" "$controller" "$worker" janus >/dev/null 2>&1; then
   echo 'Unready node was accepted' >&2
   exit 1
 fi
 [[ $(cat "$tmp/count") == 4 ]]
 
-if MOCK_WAIT_FAIL=1 "$script" "$controller" "$worker" janus >/dev/null 2>&1; then
+if MOCK_WAIT_FAIL=1 bash "$script" "$controller" "$worker" janus >/dev/null 2>&1; then
   echo 'Failed pod was accepted' >&2
   exit 1
 fi
