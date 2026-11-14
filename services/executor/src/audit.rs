@@ -5,6 +5,7 @@ use std::io::{Read, Seek, SeekFrom, Write};
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 use chrono::{DateTime, Datelike, Utc};
 use fs2::FileExt;
@@ -66,8 +67,13 @@ impl StateLease {
         ) {
             return Err(Error::Storage("unsafe executor state lock"));
         }
-        file.try_lock_exclusive()
-            .map_err(|_| Error::Storage("another executor owns the state"))?;
+        match file.try_lock_exclusive() {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                return Err(Error::Storage("another executor owns the state"));
+            }
+            Err(_) => return Err(Error::Storage("executor state lock unavailable")),
+        }
         Ok(Self { _file: file })
     }
 }
@@ -152,6 +158,25 @@ fn transition(seen: &BTreeMap<String, Event>, current: &Event) -> Result<(), Err
 }
 
 impl AuditJournal {
+    /// The service manager can restart executord while a trusted release CLI
+    /// holds the exclusive lease. Wait before constructing the journal or
+    /// opening any privileged transport. Unsafe files and unrelated I/O
+    /// failures always fail closed without retrying.
+    pub fn open_waiting_for_release(path: &Path, maximum_wait: Duration) -> Result<Self, Error> {
+        let started = Instant::now();
+        loop {
+            match Self::open(path) {
+                Ok(journal) => return Ok(journal),
+                Err(Error::Storage("another executor owns the state"))
+                    if started.elapsed() < maximum_wait =>
+                {
+                    std::thread::sleep(Duration::from_millis(100));
+                }
+                Err(error) => return Err(error),
+            }
+        }
+    }
+
     pub fn open(path: &Path) -> Result<Self, Error> {
         let parent = path
             .parent()
@@ -887,4 +912,33 @@ mod tests {
         event.outcome = "unknown".into();
         assert!(!event.valid());
     }
+    #[test]
+    fn service_waits_for_release_owner_without_sharing_the_lease() {
+        let directory = std::env::temp_dir().join(format!(
+            "homelab-executor-wait-{}",
+            crate::random_hex::<12>().unwrap()
+        ));
+        fs::create_dir(&directory).unwrap();
+        fs::set_permissions(&directory, fs::Permissions::from_mode(0o700)).unwrap();
+        let path = directory.join("executor-actions.jsonl");
+        let owner = StateLease::acquire(&directory).unwrap();
+        assert!(matches!(
+            AuditJournal::open_waiting_for_release(&path, Duration::ZERO),
+            Err(Error::Storage("another executor owns the state"))
+        ));
+        let waiting_path = path.clone();
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let worker = std::thread::spawn(move || {
+            let success =
+                AuditJournal::open_waiting_for_release(&waiting_path, Duration::from_secs(2))
+                    .is_ok();
+            sender.send(success).unwrap();
+        });
+        assert!(receiver.recv_timeout(Duration::from_millis(50)).is_err());
+        drop(owner);
+        assert!(receiver.recv_timeout(Duration::from_secs(2)).unwrap());
+        worker.join().unwrap();
+        fs::remove_dir_all(directory).unwrap();
+    }
+
 }

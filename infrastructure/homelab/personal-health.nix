@@ -53,14 +53,13 @@ in {
     systemd.services.personal-health-mcp = {
       description = "Personal Health MCP";
       wantedBy = [ "multi-user.target" ];
-      after = [ "network-online.target" "saturn-recipesage.service" ];
-      wants = [ "network-online.target" "saturn-recipesage.service" ];
+      after = [ "network-online.target" ];
+      wants = [ "network-online.target" ];
       environment = {
         MCP_TRANSPORT = "http";
         MCP_LISTEN = "127.0.0.1:8201";
         MCP_ALLOWED_ORIGINS = "https://chatgpt.com,https://chat.openai.com";
         PERSONAL_HEALTH_DB_PATH = "/var/lib/personal-health/health.db";
-        RECIPE_SAGE_ALLOW_HTTP = "true";
         PERSONAL_HEALTH_ACCESS_ISSUER = cfg.access.issuer;
         PERSONAL_HEALTH_ACCESS_AUDIENCE = cfg.access.audience;
         PERSONAL_HEALTH_ACCESS_CERTS_URL = cfg.access.certsURL;

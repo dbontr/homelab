@@ -286,6 +286,20 @@ func(c *Controller) Recover(ctx context.Context)error{
   if err:=c.read("journal.json",&txn);err!=nil{return err}
   if txn.Phase!="activating"&&txn.Phase!="reverting"&&txn.Phase!="rollback-failed"{return errors.New("no interrupted release")}
   if !checkStorePath(txn.Previous){return errors.New("invalid recovery generation")}
+  current,err:=c.Config.Current()
+  if err!=nil||!checkStorePath(current){return errors.New("current generation cannot be verified")}
+  if current==txn.Previous{
+   // An interrupted rollback can already have restored the boot profile.
+   // Do not restart privileged services while the release lease is held.
+   // Trusted hosts must also prove the actual running generation.
+   if c.Config.TrustedSource{
+    running,err:=filepath.EvalSymlinks("/run/current-system")
+    if err!=nil||running!=txn.Previous{return errors.New("running generation differs from recovery target")}
+   }
+   if err:=c.health(ctx);err!=nil{return err}
+   txn.Phase="rolled-back"
+   return c.atomic("journal.json",txn)
+  }
   return c.rollback(ctx,txn)
  })
 }

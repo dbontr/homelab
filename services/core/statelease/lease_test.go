@@ -1,9 +1,11 @@
 package statelease
 
 import (
+ "context"
  "os"
  "path/filepath"
  "testing"
+ "time"
 )
 
 func TestExclusiveOwnershipAndReacquisition(t *testing.T){
@@ -83,6 +85,40 @@ func TestLeaseRejectsSharedInodes(t *testing.T){
  lease,err:=Acquire(dir,"securityd")
  if err!=nil{t.Fatal(err)}
  if err:=lease.Close();err!=nil{t.Fatal(err)}
+}
+
+func TestAcquireWhenAvailableWaitsForOwner(t *testing.T){
+ dir:=privateDir(t)
+ first,err:=Acquire(dir,"executord");if err!=nil{t.Fatal(err)}
+ defer first.Close()
+ ctx,cancel:=context.WithTimeout(context.Background(),2*time.Second);defer cancel()
+ acquired:=make(chan *Lease,1)
+ failures:=make(chan error,1)
+ go func(){lease,err:=AcquireWhenAvailable(ctx,dir,"executord");if err!=nil{failures<-err;return};acquired<-lease}()
+ select{
+ case lease:=<-acquired:lease.Close();t.Fatal("second owner acquired lease before release")
+ case err:=<-failures:t.Fatal(err)
+ case <-time.After(30*time.Millisecond):
+ }
+ if err:=first.Close();err!=nil{t.Fatal(err)}
+ select{
+ case lease:=<-acquired:defer lease.Close()
+ case err:=<-failures:t.Fatal(err)
+ case <-ctx.Done():t.Fatal("second owner never acquired released lease")
+ }
+}
+
+func TestAcquireWhenAvailableHonorsCancellationAndUnsafeState(t *testing.T){
+ dir:=privateDir(t)
+ owner,err:=Acquire(dir,"executord");if err!=nil{t.Fatal(err)}
+ defer owner.Close()
+ ctx,cancel:=context.WithTimeout(context.Background(),30*time.Millisecond);defer cancel()
+ if lease,err:=AcquireWhenAvailable(ctx,dir,"executord");lease!=nil||err!=context.DeadlineExceeded{
+  if lease!=nil{lease.Close()};t.Fatalf("expected cancellation, got %v",err)
+ }
+ if lease,err:=AcquireWhenAvailable(context.Background(),dir+"/../escape","executord");lease!=nil||err==nil{
+  if lease!=nil{lease.Close()};t.Fatal("unsafe path was retried or accepted")
+ }
 }
 
 func privateDir(t *testing.T)string{
