@@ -940,5 +940,4 @@ mod tests {
         worker.join().unwrap();
         fs::remove_dir_all(directory).unwrap();
     }
-
 }
