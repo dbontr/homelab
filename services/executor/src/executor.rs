@@ -112,8 +112,9 @@ impl Executor {
     pub fn initialize() -> Result<Arc<Self>, Error> {
         let policy = Arc::new(Policy::load()?);
         let authorization = AuthorizationClient::load()?;
-        let audit = Arc::new(AuditJournal::open(
+        let audit = Arc::new(AuditJournal::open_waiting_for_release(
             &policy.state_dir.join("executor-actions.jsonl"),
+            Duration::from_secs(300),
         )?);
         let release = Arc::new(ReleaseController::new(policy.clone()));
         Ok(Arc::new(Self {
