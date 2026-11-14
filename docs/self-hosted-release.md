@@ -40,6 +40,19 @@ The default `--load` mode installs source-built images into the operator's local
 
 The local Compute Helm chart disables both components by default and refuses to render an enabled controller or worker with an empty or mutable image reference. After independently verifying the source revision and registry artifact custody, configure `controller.enabled` / `worker.enabled` and their exact digest-qualified `image` fields, or set the matching `services.workspaceMcp.controllerImage` and `workerImage` NixOS options. Registry publish does not imply Kubernetes deployment, worker enrollment or source-repository retirement. The current Dockerfiles rely on external base images and package repositories; independent base-image and package provenance must be accepted before claiming fully reproducible builds. The existing controller database volume, paired worker credentials, namespaces and jobs must survive the separately approved live cutover.
 
+### Per-node registry pull acceptance
+
+Use an operator-controlled Kubernetes context and independently verified, digest-qualified image references to test image retrieval without changing running Deployments:
+
+```sh
+IMAGE_PULL_NAMESPACE=pwm-system bash services/compute/scripts/verify-cluster-image-pulls.sh \
+  "$CONTROLLER_IMAGE_DIGEST" "$WORKER_IMAGE_DIGEST" jupiter venus mercury janus
+```
+
+The validator first requires Ready nodes. For each node, it creates a restricted, non-root, single-use Pod for each role, with `imagePullPolicy: Always`, no service-account token, no privilege escalation, a read-only root filesystem, and bounded resource use. It verifies the completed container's image digest and exit code, an execution marker, and a Kubernetes `Pulled` event. JSON-lines receipts are printed to standard output; label-scoped Pods are removed on success or failure. Capture the receipts in an operator-controlled directory when release evidence must be retained. Registry and node errors fail acceptance.
+
+A successful `Pulled` event verifies that kubelet retrieved or resolved the exact image reference; it does **not** prove the node's containerd cache was initially empty, certify the upstream image's source, or establish a fully reproducible build. For cold-node acceptance, separately record the node's pre-test image inventory, compare published registry digests with the approved source receipt, and test actual worker registration and workload recovery. Confirm effective `registries.yaml` and K3s embedded-registry enrollment on each node before relying on peer-to-peer mirrors. The validator does not change registry settings, restart agents, or activate any deployment.
+
 ### Compute controller Helm activation
 
 The controller holds project and worker identities in a node-local SQLite database. Treat a controller image change as a stateful release: verify the immutable image digest, retain the live persistent volume and its owner node, and capture a restricted, consistent SQLite snapshot together with its artifact directory. A raw copy of a database in WAL mode is not a consistent snapshot. Verify the snapshot with `PRAGMA integrity_check` and keep it separate from the live volume. Do not start a second controller against the same database.
