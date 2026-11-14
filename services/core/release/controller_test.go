@@ -157,3 +157,27 @@ func TestExplicitRevertRequiresExactActiveGeneration(t *testing.T) {
  runner.current="/nix/store/cccccccccccccccccccccccccccccccc-out-of-band"
  if err:=ctrl.Revert(context.Background(),staged.ID);err==nil{t.Fatal("out-of-band generation overwritten")}
 }
+
+func TestRecoveryAlreadyRestoredAvoidsAnotherSwitch(t *testing.T){
+ runner:=&fakeReleaseRunner{}
+ ctrl:=releaseTestController(t,runner)
+ staged,err:=ctrl.Stage(context.Background(),testRevision);if err!=nil{t.Fatal(err)}
+ if err:=ctrl.atomic("journal.json",Journal{Phase:"rollback-failed",ID:staged.ID,Previous:priorSystem,Target:builtSystem});err!=nil{t.Fatal(err)}
+ start:=len(runner.calls)
+ if err:=ctrl.Recover(context.Background());err!=nil{t.Fatal(err)}
+ for _,call:=range runner.calls[start:]{
+  if strings.Contains(call,"switch-to-configuration")||strings.Contains(call,"/nix-env"){
+   t.Fatalf("already restored system was switched again: %s",call)
+  }
+ }
+ journal,err:=ctrl.Status();if err!=nil||journal.Phase!="rolled-back"{t.Fatalf("recovery not recorded: %+v %v",journal,err)}
+}
+
+func TestRecoveryAlreadyRestoredStillRequiresHealth(t *testing.T){
+ runner:=&fakeReleaseRunner{failHealth:true}
+ ctrl:=releaseTestController(t,runner)
+ staged,err:=ctrl.Stage(context.Background(),testRevision);if err!=nil{t.Fatal(err)}
+ if err:=ctrl.atomic("journal.json",Journal{Phase:"rollback-failed",ID:staged.ID,Previous:priorSystem,Target:builtSystem});err!=nil{t.Fatal(err)}
+ if err:=ctrl.Recover(context.Background());err==nil{t.Fatal("unhealthy runtime accepted as recovered")}
+ journal,err:=ctrl.Status();if err!=nil||journal.Phase!="rollback-failed"{t.Fatalf("failed recovery changed journal: %+v %v",journal,err)}
+}
