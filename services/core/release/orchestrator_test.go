@@ -2,6 +2,7 @@ package release
 
 import (
  "context"
+ "errors"
  "os"
  "path/filepath"
  "strings"
@@ -15,6 +16,16 @@ func(f *orchestratorFake)Preview(_ context.Context,id,action string)(ReleasePrep
 }
 func(f *orchestratorFake)Activate(_ context.Context,id string)error{f.actions=append(f.actions,"activate:"+id);return nil}
 func(f *orchestratorFake)Revert(_ context.Context,id string)error{f.actions=append(f.actions,"revert:"+id);return nil}
+func(f *orchestratorFake)ActivateWithID(ctx context.Context,requestID,id string)error{
+ if !validRemoteExecutionID(requestID){return errors.New("invalid activation request identity")}
+ return f.Activate(ctx,id)
+}
+func(f *orchestratorFake)RevertWithID(ctx context.Context,requestID,id string)error{
+ if !validRemoteExecutionID(requestID){return errors.New("invalid rollback request identity")}
+ return f.Revert(ctx,id)
+}
+
+
 
 func TestOrchestratorPersistsExactHostPlan(t *testing.T){
  dir:=t.TempDir()

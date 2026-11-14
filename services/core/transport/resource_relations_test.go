@@ -56,7 +56,7 @@ func TestOwnerResourcesExposeReversibleRelationsWithoutCopyingRecords(t *testing
   !hasResourceLink(childRef.Links,"prerequisite",resourceRef("task",root.ID)){
   t.Fatalf("task parent and prerequisite links did not survive: %+v",childRef.Links)
  }
- recipeStore,err:=recipes.Open(filepath.Join(t.TempDir(),"recipes.json"))
+ recipeStore,err:=recipes.Open(filepath.Join(t.TempDir(),"recipes","recipes.json"))
  if err!=nil{t.Fatal(err)}
  recipe,err:=recipeStore.Save(recipes.Recipe{
   Title:"Beans",Servings:2,

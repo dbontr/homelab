@@ -2,10 +2,10 @@
 use std::ffi::CString;
 use std::path::Path;
 
-use homelab_security_authority::bootstrap;
 use homelab_security_authority::oauth::{self, Broker};
 use homelab_security_authority::remote::Remote;
 use homelab_security_authority::transport::{self, Shared};
+use homelab_security_authority::{bootstrap, migration};
 
 fn group_id(name: &str) -> Result<u32, &'static str> {
     let value = CString::new(name).map_err(|_| "invalid security group")?;
@@ -26,40 +26,68 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let remote = Remote::from_environment()?;
     let broker = Broker::from_environment()?
         .map(|broker| std::sync::Arc::new(tokio::sync::Mutex::new(broker)));
-    if broker.is_some() {
+    if broker.is_some() || std::env::var_os("HOMELAB_SECURITY_VAULT_KEY_FILE").is_some() {
         settings.authority.validate_vault()?;
     }
     let browser_enabled = settings.browser_origin.is_some();
-    let shared = Shared::new(settings.authority, settings.browser_origin, broker.clone())?;
-
     let client_gid = group_id("homelab-security-client")?;
+    let browser_gid = if browser_enabled {
+        Some(group_id("homelab-security-browser")?)
+    } else {
+        None
+    };
+    let shared = Shared::new(settings.authority, settings.browser_origin, broker.clone())?;
+    // The shared authority retains the exclusive state lease. Commit the
+    // selection only after configuration validation and before binding sockets.
+    let receipt = if std::env::var_os("HOMELAB_SECURITY_MIGRATION_RECEIPT_FILE").is_some() {
+        Some(bootstrap::configured_file(
+            "HOMELAB_SECURITY_MIGRATION_RECEIPT_FILE",
+            true,
+        )?)
+    } else {
+        None
+    };
+    migration::admit(
+        Path::new("/var/lib/homelab-securityd"),
+        "rust",
+        receipt.as_deref(),
+    )?;
+
     let mut listeners = tokio::task::JoinSet::new();
     {
         let shared = shared.clone();
         listeners.spawn(async move {
             transport::serve_unix(
-                Path::new("/run/homelab-securityd/owner.sock"), 0o600, None,
-                transport::owner_router(shared)
-            ).await
+                Path::new("/run/homelab-securityd/owner.sock"),
+                0o600,
+                None,
+                transport::owner_router(shared),
+            )
+            .await
         });
     }
     {
         let shared = shared.clone();
         listeners.spawn(async move {
             transport::serve_unix(
-                Path::new("/run/homelab-securityd/client.sock"), 0o660, Some(client_gid),
-                transport::client_router(shared)
-            ).await
+                Path::new("/run/homelab-securityd/client.sock"),
+                0o660,
+                Some(client_gid),
+                transport::client_router(shared),
+            )
+            .await
         });
     }
-    if browser_enabled {
-        let browser_gid = group_id("homelab-security-browser")?;
+    if let Some(browser_gid) = browser_gid {
         let shared_browser = shared.clone();
         listeners.spawn(async move {
             transport::serve_unix(
-                Path::new("/run/homelab-security-browser/browser.sock"), 0o660,
-                Some(browser_gid), transport::browser_router(shared_browser)
-            ).await
+                Path::new("/run/homelab-security-browser/browser.sock"),
+                0o660,
+                Some(browser_gid),
+                transport::browser_router(shared_browser),
+            )
+            .await
         });
     }
     if let Some(remote) = remote {
@@ -74,9 +102,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     }
 
     #[cfg(unix)]
-    let mut termination = tokio::signal::unix::signal(
-        tokio::signal::unix::SignalKind::terminate()
-    )?;
+    let mut termination =
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
 
     tokio::select! {
         next = listeners.join_next() => {
@@ -84,7 +111,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             match next {
                 Some(Ok(Ok(()))) => Err("security listener stopped unexpectedly".into()),
                 Some(Ok(Err(e))) => Err(e),
-                Some(Err(e)) => Err(Box::new(e)),
+                Some(Err(e)) => Err(e.into()),
                 None => Err("security service has no listeners".into())
             }
         }

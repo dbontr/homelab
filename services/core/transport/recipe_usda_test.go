@@ -78,7 +78,7 @@ func TestUSDARecipeReviewPersistsOnlyAfterDigestConfirmation(t *testing.T){
  if err!=nil{t.Fatal(err)}
  s,err:=New(state,strings.Repeat("t",40),[]Backend{{Name:"health",URL:health.URL}})
  if err!=nil{t.Fatal(err)}
- recipesDB,err:=recipes.Open(filepath.Join(t.TempDir(),"recipes.json"))
+ recipesDB,err:=recipes.Open(filepath.Join(t.TempDir(),"recipes","recipes.json"))
  if err!=nil{t.Fatal(err)}
  saved,err:=recipesDB.Save(recipes.Recipe{
   Title:"Beans",Servings:2,

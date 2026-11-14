@@ -36,9 +36,8 @@ fn clock_label(instant: &str) -> String {
 
 #[component]
 pub fn Calendar() -> Element {
-    let mut window = use_resource(|| async {
-        api::get::<CalendarWindow>("/v1/calendar/occurrences").await
-    });
+    let mut window =
+        use_resource(|| async { api::get::<CalendarWindow>("/v1/calendar/occurrences").await });
     let mut search = use_signal(String::new);
     let needle = search().to_lowercase();
     rsx! {

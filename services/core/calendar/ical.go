@@ -57,7 +57,7 @@ func field(line string)(name,attrs,value string){
 }
 func timeZone(attrs string)string{
  for _,part:=range strings.Split(attrs,";"){
-  if strings.HasPrefix(strings.ToUpper(part),"TZID="){return strings.Trim(part[6:],"\"")}
+  if strings.HasPrefix(strings.ToUpper(part),"TZID="){return strings.Trim(part[len("TZID="):],"\"")}
  }
  return ""
 }

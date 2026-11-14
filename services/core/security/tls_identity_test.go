@@ -26,7 +26,7 @@ func certificateMaterialFixture(t *testing.T)(string,string){
   Subject:pkix.Name{CommonName:"trusted"},
   NotBefore:now.Add(-time.Hour),NotAfter:now.Add(time.Hour),
   KeyUsage:x509.KeyUsageDigitalSignature,
-  ExtKeyUsage:[]x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}},
+  ExtKeyUsage:[]x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}}
  der,err:=x509.CreateCertificate(rand.Reader,template,template,&key.PublicKey,key)
  if err!=nil{t.Fatal(err)}
  certPath,keyPath:=filepath.Join(dir,"cert.pem"),filepath.Join(dir,"key.pem")
@@ -58,7 +58,9 @@ func TestTLSMaterialRequiresBoundedValidFiles(t *testing.T){
  if err:=os.WriteFile(key,bytes.Repeat([]byte("X"),maxTLSFileBytes+1),0600);err!=nil{t.Fatal(err)}
  if _,err:=LoadTLSIdentity(cert,key);err==nil{t.Fatal("oversized TLS key accepted")}
  if _,err:=LoadTLSRoots(cert);err!=nil{t.Fatal(err)}
- if err:=os.WriteFile(cert,[]byte(strings.Repeat("invalid",128)),0444);err!=nil{t.Fatal(err)}
+ if err:=os.Chmod(cert,0600);err!=nil{t.Fatal(err)}
+ if err:=os.WriteFile(cert,[]byte(strings.Repeat("invalid",128)),0600);err!=nil{t.Fatal(err)}
+ if err:=os.Chmod(cert,0444);err!=nil{t.Fatal(err)}
  if _,err:=LoadTLSRoots(cert);err==nil{t.Fatal("invalid trust roots accepted")}
  if _,err:=LoadTLSIdentity("relative-cert",key);err==nil{t.Fatal("relative path accepted")}
 }

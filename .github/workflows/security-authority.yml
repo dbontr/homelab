@@ -7,17 +7,33 @@ on:
     paths:
       - services/security-authority/**
       - services/core/security/**
+      - services/core/statelease/**
+      - services/core/cmd/homelab-securityd/**
+      - services/core/cmd/homelab-security-preflight/**
+      - packages/security.nix
+      - packages/security-authority.nix
+      - nixosModules/security.nix
+      - scripts/verify-security-authority.sh
       - .github/workflows/security-authority.yml
   pull_request:
     paths:
       - services/security-authority/**
       - services/core/security/**
+      - services/core/statelease/**
+      - services/core/cmd/homelab-securityd/**
+      - services/core/cmd/homelab-security-preflight/**
+      - packages/security.nix
       - packages/security-authority.nix
       - nixosModules/security.nix
+      - scripts/verify-security-authority.sh
       - .github/workflows/security-authority.yml
 
 permissions:
   contents: read
+
+concurrency:
+  group: security-authority-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   rust-authority:
@@ -28,15 +44,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - name: Generate dependency lockfile
-        working-directory: services/security-authority
-        run: cargo generate-lockfile
-      - name: Export dependency lockfile
-        uses: actions/upload-artifact@v4
-        with:
-          name: security-authority-cargo-lock
-          path: services/security-authority/Cargo.lock
-          if-no-files-found: error
+      - name: Verify committed security dependency lock
+        run: |
+          test -s services/security-authority/Cargo.lock
+          git ls-files --error-unmatch services/security-authority/Cargo.lock >/dev/null
       - name: Check formatting
         working-directory: services/security-authority
         run: cargo fmt --all -- --check
@@ -64,4 +75,4 @@ jobs:
         run: go test -race -count=1 ./security -run TestSecurityAuthority
       - name: Security and executor regressions
         working-directory: services/core
-        run: go test -race -count=1 ./security ./privileged
+        run: go test -race -count=1 ./security ./privileged ./statelease ./cmd/homelab-securityd ./cmd/homelab-security-preflight

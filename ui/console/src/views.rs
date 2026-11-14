@@ -15,14 +15,19 @@ fn total<T>(value: Option<Result<Vec<T>, String>>) -> String {
 pub fn Overview() -> Element {
     let mut nodes = use_resource(|| async { api::get::<Vec<Node>>("/v1/nodes").await });
     let mut devices = use_resource(|| async { api::get::<Vec<Device>>("/v1/devices").await });
-    let mut profiles = use_resource(|| async { api::get::<Vec<Profile>>("/v1/compute/profiles").await });
+    let mut profiles =
+        use_resource(|| async { api::get::<Vec<Profile>>("/v1/compute/profiles").await });
     let mut tasks = use_resource(|| async { api::get::<Vec<Task>>("/v1/tasks").await });
 
     let node_count = total(nodes.cloned());
     let device_count = total(devices.cloned());
     let profile_count = total(profiles.cloned());
     let pending_count = match tasks.cloned() {
-        Some(Ok(all)) => all.iter().filter(|item| item.status == "open").count().to_string(),
+        Some(Ok(all)) => all
+            .iter()
+            .filter(|item| item.status == "open")
+            .count()
+            .to_string(),
         _ => "—".to_owned(),
     };
     let node_preview = nodes.cloned().and_then(Result::ok).unwrap_or_default();
@@ -129,42 +134,67 @@ pub fn Overview() -> Element {
 pub fn Projects() -> Element {
     let mut data = use_resource(|| async { api::get::<Value>("/v1/engineering/projects").await });
     let mut filter = use_signal(String::new);
-    let mut selected = use_signal(||None::<String>);
-    let mut jobs = use_resource(||{
-        let project=selected();
-        async move{
-            match project{
-                Some(id)=>api::get::<Value>(&format!("/v1/engineering/projects/{id}/jobs")).await,
-                None=>Ok(Value::Null),
+    let mut selected = use_signal(|| None::<String>);
+    let mut jobs = use_resource(move || {
+        let project = selected();
+        async move {
+            match project {
+                Some(id) => api::get::<Value>(&format!("/v1/engineering/projects/{id}/jobs")).await,
+                None => Ok(Value::Null),
             }
         }
     });
-    let mut workspaces = use_resource(||{
-        let project=selected();
-        async move{
-            match project{
-                Some(id)=>api::get::<Value>(&format!("/v1/engineering/projects/{id}/workspaces")).await,
-                None=>Ok(Value::Null),
+    let mut workspaces = use_resource(move || {
+        let project = selected();
+        async move {
+            match project {
+                Some(id) => {
+                    api::get::<Value>(&format!("/v1/engineering/projects/{id}/workspaces")).await
+                }
+                None => Ok(Value::Null),
             }
         }
     });
-    let rows = data.cloned().and_then(Result::ok)
+    let mut artifacts = use_resource(move || {
+        let project = selected();
+        async move {
+            match project {
+                Some(id) => {
+                    api::get::<Value>(&format!("/v1/engineering/projects/{id}/artifacts")).await
+                }
+                None => Ok(Value::Null),
+            }
+        }
+    });
+    let rows = data
+        .cloned()
+        .and_then(Result::ok)
         .map(|value| api::list(&value, &["projects", "items", "results"]))
         .unwrap_or_default();
     let search = filter().trim().to_ascii_lowercase();
-    let filtered: Vec<Value> = rows.iter().filter(|project| {
-        if search.is_empty() { return true; }
-        ["name","title","id","description","summary"]
-            .iter()
-            .any(|field|project.get(*field).and_then(Value::as_str)
-                .is_some_and(|text|text.to_ascii_lowercase().contains(&search)))
-    }).cloned().collect();
+    let filtered: Vec<Value> = rows
+        .iter()
+        .filter(|project| {
+            if search.is_empty() {
+                return true;
+            }
+            ["name", "title", "id", "description", "summary"]
+                .iter()
+                .any(|field| {
+                    project
+                        .get(*field)
+                        .and_then(Value::as_str)
+                        .is_some_and(|text| text.to_ascii_lowercase().contains(&search))
+                })
+        })
+        .cloned()
+        .collect();
     rsx! {
         Heading {
             title: "Projects".to_owned(),
             description: "Research, engineering and isolated development workspaces.".to_owned(),
             button { class: "btn btn-outline", onclick: move |_| {
-                data.restart();jobs.restart();workspaces.restart();
+                data.restart();jobs.restart();workspaces.restart();artifacts.restart();
             },
                 Icon { name: "refresh".to_owned() } "Refresh"
             }
@@ -215,6 +245,52 @@ pub fn Projects() -> Element {
             }
         }
         if let Some(id) = selected() {
+            Card {
+                title: "Durable artifacts".to_owned(),
+                description:format!("Confirmed outputs associated with project {id}; no files are transferred by this view."),
+                match artifacts.cloned() {
+                    None => rsx! { Loading {} },
+                    Some(Err(message)) => rsx! { Notice { message } },
+                    Some(Ok(value)) => {
+                        let items = api::list(&value,&["artifacts","items","results"]);
+                        rsx! {
+                            if items.is_empty() {
+                                Empty {
+                                    title: "No saved artifacts".to_owned(),
+                                    description: "The compute controller reported no durable project outputs.".to_owned()
+                                }
+                            } else {
+                                div { class: "table-clip",
+                                    table { class: "table",
+                                        thead { tr {
+                                            th { "Artifact" }
+                                            th { "Type" }
+                                            th { "Size" }
+                                            th { "SHA-256" }
+                                        } }
+                                        tbody {
+                                            for item in items.into_iter().take(100) {
+                                                tr {
+                                                    td { {api::property(&item,&["name","id","artifact_id"])} }
+                                                    td { class: "muted",
+                                                        {api::property(&item,&["media_type","mime_type","kind","type"])}
+                                                    }
+                                                    td { class: "muted",
+                                                        {api::property(&item,&["size_bytes","size"])}
+                                                    }
+                                                    td { class: "mono muted",
+                                                        {api::property(&item,&["sha256","digest"])}
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             Card {
                 title: "Execution jobs".to_owned(),
                 description:format!("Project {id}; observed jobs only. Agent execution is not controlled here."),
@@ -288,14 +364,19 @@ pub fn Projects() -> Element {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum ComputeTab { Nodes, Devices, Profiles }
+enum ComputeTab {
+    Nodes,
+    Devices,
+    Profiles,
+}
 
 #[component]
-pub fn Compute() -> Element {
+pub fn Compute(csrf: String) -> Element {
     let mut tab = use_signal(|| ComputeTab::Nodes);
     let mut nodes = use_resource(|| async { api::get::<Vec<Node>>("/v1/nodes").await });
     let mut devices = use_resource(|| async { api::get::<Vec<Device>>("/v1/devices").await });
-    let mut profiles = use_resource(|| async { api::get::<Vec<Profile>>("/v1/compute/profiles").await });
+    let mut profiles =
+        use_resource(|| async { api::get::<Vec<Profile>>("/v1/compute/profiles").await });
     let mut workers = use_resource(|| async { api::get::<Value>("/v1/engineering/nodes").await });
     rsx! {
         Heading { title: "Compute".to_owned(),
@@ -323,6 +404,7 @@ pub fn Compute() -> Element {
             ComputeTab::Devices => rsx!{ DeviceTable { records: devices.cloned() } },
             ComputeTab::Profiles => rsx!{ ProfileTable { records: profiles.cloned() } },
         }
+        crate::compute_manage::ComputeManagement { csrf: csrf.clone() }
     }
 }
 
@@ -358,13 +440,17 @@ fn NodeTable(records: Option<Result<Vec<Node>, String>>) -> Element {
     }
 }
 
-
 #[component]
 fn WorkerTable(records: Option<Result<Value, String>>) -> Element {
-    let workers = records.as_ref().and_then(|result|result.as_ref().ok())
-        .map(|value|api::list(value,&["nodes","workers","results"]))
+    let workers = records
+        .as_ref()
+        .and_then(|result| result.as_ref().ok())
+        .map(|value| api::list(value, &["nodes", "workers", "results"]))
         .unwrap_or_default();
-    let error = records.as_ref().and_then(|result| result.as_ref().err()).cloned();
+    let error = records
+        .as_ref()
+        .and_then(|result| result.as_ref().err())
+        .cloned();
     let loading = records.is_none();
     rsx! {
         Card { title: "Compute workers".to_owned(), description: "Reported by the compute service, not inferred from inventory.".to_owned(),
@@ -515,9 +601,17 @@ fn SoftwareCollection(title: String, description: String, records: Vec<Value>) -
 
 #[component]
 pub fn Capabilities(title: String, description: String, prefix: String) -> Element {
-    let mut data=use_resource(|| async{api::get::<ToolList>("/v1/tools").await});
-    let tools: Vec<api::Tool> = data.cloned().and_then(Result::ok)
-        .map(|catalog| catalog.tools.into_iter().filter(|tool|tool.name.starts_with(&prefix)).collect())
+    let mut data = use_resource(|| async { api::get::<ToolList>("/v1/tools").await });
+    let tools: Vec<api::Tool> = data
+        .cloned()
+        .and_then(Result::ok)
+        .map(|catalog| {
+            catalog
+                .tools
+                .into_iter()
+                .filter(|tool| tool.name.starts_with(&prefix))
+                .collect()
+        })
         .unwrap_or_default();
     rsx! {
         Heading {title: title.clone(),description,
@@ -553,8 +647,12 @@ pub fn Capabilities(title: String, description: String, prefix: String) -> Eleme
 
 #[component]
 pub fn Media() -> Element {
-    let mut data=use_resource(|| async{api::get::<Value>("/v1/media/requests").await});
-    let records=data.cloned().and_then(Result::ok).map(|v|api::list(&v,&["results","requests","items"])).unwrap_or_default();
+    let mut data = use_resource(|| async { api::get::<Value>("/v1/media/requests").await });
+    let records = data
+        .cloned()
+        .and_then(Result::ok)
+        .map(|v| api::list(&v, &["results", "requests", "items"]))
+        .unwrap_or_default();
     rsx! {
         Heading {title:"Media".to_owned(),description:"Media requests from your configured Seerr service.".to_owned(),
             button {class:"btn btn-outline",onclick:move |_|data.restart(),
@@ -586,8 +684,8 @@ pub fn Media() -> Element {
                         tbody {
                             for (index,request) in records.iter().enumerate(){
                                 tr {key:"{index}",
-                                    td {"{api::property(request,&["title","name","mediaType","type"])}"}
-                                    td {class:"mono muted","{api::property(request,&["mediaId","id"])}"}
+                                    td {{api::property(request,&["title","name","mediaType","type"])}}
+                                    td {class:"mono muted",{api::property(request,&["mediaId","id"])}}
                                     td {Badge{text:api::property(request,&["status","state"])}}
                                 }
                             }
@@ -601,7 +699,7 @@ pub fn Media() -> Element {
 
 #[component]
 pub fn Administration() -> Element {
-    let mut data=use_resource(|| async{api::get::<ToolList>("/v1/tools").await});
+    let mut data = use_resource(|| async { api::get::<ToolList>("/v1/tools").await });
     rsx! {
         Heading {title:"Administration".to_owned(),description:"Capabilities and protected operations.".to_owned(),
             button {class:"btn btn-outline",onclick:move |_|data.restart(),

@@ -28,6 +28,11 @@ in {
       certificateFile = lib.mkOption { type = lib.types.nullOr lib.types.str; default = null; description = "Dedicated Engineering service client certificate."; };
       keyFile = lib.mkOption { type = lib.types.nullOr lib.types.str; default = null; description = "Dedicated Engineering service private key."; };
     };
+    nativeVerification = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "Require typed, revision-bound verification in a separate Rust Kubernetes Job. The worker must have a pinned verifier image.";
+    };
     allowedProjects = lib.mkOption {
       type = lib.types.listOf lib.types.str;
       default = [];
@@ -55,6 +60,11 @@ in {
 
   config = lib.mkIf cfg.enable {
     assertions = [
+      {
+        assertion = cfg.computeVaultAlias == "" && cfg.model.vaultAlias == "" &&
+          cfg.vault.endpoint == null;
+        message = "Unattended engineering jobs require protected service credentials. Owner-bound vault tickets cannot be issued without a current signed human operation.";
+      }
       {
         assertion = cfg.computeURL != "" &&
           ((cfg.computeTokenFile != null) != (cfg.computeVaultAlias != ""));
@@ -101,6 +111,7 @@ in {
         HOMELAB_ENGINEERING_SOCKET = "/run/homelab-engineeringd/engineering.sock";
         HOMELAB_ENGINEERING_DIR = "/var/lib/homelab-engineeringd/runs";
         HOMELAB_ENGINEERING_PROJECTS = lib.concatStringsSep "," cfg.allowedProjects;
+        HOMELAB_ENGINEERING_NATIVE_VERIFICATION = if cfg.nativeVerification then "1" else "0";
         HOMELAB_COMPUTE_URL = cfg.computeURL;
       } // lib.optionalAttrs (cfg.computeTokenFile != null) {
         HOMELAB_COMPUTE_TOKEN_FILE = "/run/credentials/homelab-engineeringd.service/compute-token";

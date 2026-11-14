@@ -2,10 +2,11 @@
 let
   cfg = config.services.homelabPlatform;
   calendarCfg = config.services.homelabCalendar;
+  motivationCfg = config.services.homelabMotivation;
   package = import ../packages/platform.nix { inherit pkgs; };
 in
 {
-  imports = [ ./calendar.nix ];
+  imports = [ ./calendar.nix ./motivation.nix ];
   options.services.homelabPlatform = {
     enable = lib.mkEnableOption "the independent domain service runtime";
     mcpInterfaceTokenFile = lib.mkOption { type = lib.types.nullOr lib.types.str; default = null; description = "Service-only token for the optional unified MCP listener."; };
@@ -147,10 +148,11 @@ in
       default = null;
       description = "Protected client socket of the independent owner security service. Enabling this disables legacy gateway approval access.";
     };
-    consolePassphraseFile = lib.mkOption {
-      type = lib.types.nullOr lib.types.str;
-      default = null;
-      description = "Owner-only path to the browser console passphrase verifier. This verifier must not grant cluster administration privileges.";
+    consoleAccess = {
+      issuer = lib.mkOption { type = lib.types.str; default = ""; description = "Exact Cloudflare Access issuer for the console."; };
+      audience = lib.mkOption { type = lib.types.str; default = ""; description = "Dedicated Cloudflare Access audience for the console."; };
+      ownerEmailFile = lib.mkOption { type = lib.types.nullOr lib.types.str; default = null; description = "Protected owner identity file."; };
+      jwksFile = lib.mkOption { type = lib.types.nullOr lib.types.str; default = null; description = "Pinned Cloudflare Access signing keys."; };
     };
     calendarURLFile = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
@@ -166,6 +168,11 @@ in
       url = lib.mkOption { type = lib.types.str; default = ""; };
       tokenFile = lib.mkOption { type = lib.types.nullOr lib.types.str; default = null; };
       vaultAlias = lib.mkOption { type = lib.types.str; default = ""; };
+      forwardOwnerAssertion = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = "Permit forwarding signed owner assertions only to the explicitly trusted Workspace controller, for operation-bound provider authorization.";
+      };
     });
   };
 
@@ -182,6 +189,15 @@ in
           calendarCfg.tokenFile != cfg.apiInterfaceTokenFile
         );
         message = "The calendar service must not reuse platform or external-interface credentials.";
+      }
+      {
+        assertion = !motivationCfg.enable || (
+          motivationCfg.tokenFile != cfg.tokenFile &&
+          motivationCfg.tokenFile != cfg.mcpInterfaceTokenFile &&
+          motivationCfg.tokenFile != cfg.apiInterfaceTokenFile &&
+          motivationCfg.tokenFile != calendarCfg.tokenFile
+        );
+        message = "The motivation domain service must use its own credential.";
       }
       {
         assertion = (cfg.apiInterfaceTokenFile != null || cfg.apiInterfaceWritePaths == []) &&
@@ -230,6 +246,24 @@ in
         message = "Platform vault endpoint requires complete pinned TLS trust and service identity.";
       }
       {
+        assertion = lib.all (name: !cfg.integrations.${name}.forwardOwnerAssertion)
+          [ "learning" "health" ];
+        message = "Signed owner assertions may only be forwarded to the Workspace integration.";
+      }
+      {
+        assertion = lib.all (name: cfg.integrations.${name}.vaultAlias == "")
+          [ "workspace" "learning" "health" ];
+        message = "Federated MCP discovery requires a protected service identity. Human owner vault tickets are restricted to individually authorized operations.";
+      }
+      {
+        assertion = !cfg.integrations.workspace.forwardOwnerAssertion ||
+          (cfg.integrations.workspace.url != "" &&
+            (lib.hasPrefix "https://" cfg.integrations.workspace.url ||
+             lib.hasPrefix "http://127.0.0.1:" cfg.integrations.workspace.url ||
+             lib.hasPrefix "http://localhost:" cfg.integrations.workspace.url));
+        message = "Owner assertion forwarding requires a trusted HTTPS or loopback Workspace endpoint.";
+      }
+      {
         assertion = let
           aliases = [ cfg.capabilityModel.vaultAlias cfg.seerr.vaultAlias ]
             ++ map (route: route.vaultAlias) cfg.capabilityModel.routes
@@ -268,6 +302,14 @@ in
         message = "Browser authentication requires an HTTPS origin and independent security client socket.";
       }
       {
+        assertion = !cfg.enable ||
+          (lib.hasPrefix "https://" cfg.consoleAccess.issuer &&
+           cfg.consoleAccess.audience != "" &&
+           cfg.consoleAccess.ownerEmailFile != null &&
+           cfg.consoleAccess.jwksFile != null);
+        message = "The platform requires a signed console Access identity and protected verification credentials.";
+      }
+      {
         assertion = cfg.tokenFile != null;
         message = "The platform requires a protected API token file.";
       }
@@ -282,8 +324,10 @@ in
     systemd.services.homelab-platform = {
       description = "Personal computing platform";
       wantedBy = [ "multi-user.target" ];
-      after = [ "network-online.target" ] ++ lib.optional calendarCfg.enable "homelab-calendar.service";
-      wants = [ "network-online.target" ] ++ lib.optional calendarCfg.enable "homelab-calendar.service";
+      after = [ "network-online.target" ] ++ lib.optional calendarCfg.enable "homelab-calendar.service"
+        ++ lib.optional motivationCfg.enable "homelab-motivation.service";
+      wants = [ "network-online.target" ] ++ lib.optional calendarCfg.enable "homelab-calendar.service"
+        ++ lib.optional motivationCfg.enable "homelab-motivation.service";
       environment = {
         HOMELAB_LISTEN_ADDR = cfg.listenAddress;
         HOMELAB_ALLOWED_ORIGINS = lib.concatStringsSep "," cfg.allowedOrigins;
@@ -339,8 +383,11 @@ in
         HOMELAB_FLEET_SOCKET = cfg.fleetSocket;
       } // lib.optionalAttrs (cfg.books.contactFile != null) {
         HOMELAB_BOOKS_CONTACT_FILE = "/run/credentials/homelab-platform.service/books_contact";
-      } // lib.optionalAttrs (cfg.consolePassphraseFile != null) {
-        HOMELAB_CONSOLE_PASSPHRASE_FILE = "/run/credentials/homelab-platform.service/console_passphrase";
+      } // lib.optionalAttrs (cfg.consoleAccess.audience != "") {
+        HOMELAB_CONSOLE_ACCESS_ISSUER = cfg.consoleAccess.issuer;
+        HOMELAB_CONSOLE_ACCESS_AUDIENCE = cfg.consoleAccess.audience;
+        HOMELAB_CONSOLE_ACCESS_OWNER_FILE = "/run/credentials/homelab-platform.service/console-access-owner";
+        HOMELAB_CONSOLE_ACCESS_JWKS_FILE = "/run/credentials/homelab-platform.service/console-access-jwks";
       } // lib.optionalAttrs (cfg.seerr.url != "") {
         HOMELAB_SEERR_URL = cfg.seerr.url;
       } // lib.optionalAttrs (cfg.seerr.apiKeyFile != null) {
@@ -352,6 +399,9 @@ in
       } // lib.optionalAttrs calendarCfg.enable {
         HOMELAB_CALENDAR_SERVICE_URL = "http://" + calendarCfg.listenAddress;
         HOMELAB_CALENDAR_SERVICE_TOKEN_FILE = "/run/credentials/homelab-platform.service/calendar-service-token";
+      } // lib.optionalAttrs motivationCfg.enable {
+        HOMELAB_MOTIVATION_SERVICE_URL = "http://" + motivationCfg.listenAddress;
+        HOMELAB_MOTIVATION_SERVICE_TOKEN_FILE = "/run/credentials/homelab-platform.service/motivation-service-token";
       } // (lib.foldl' (acc: name:
         let
           integration = cfg.integrations.${name};
@@ -366,6 +416,9 @@ in
           }
           // lib.optionalAttrs (integration.vaultAlias != "") {
             "HOMELAB_${upper}_MCP_VAULT_ALIAS" = integration.vaultAlias;
+          }
+          // lib.optionalAttrs (name == "workspace" && integration.forwardOwnerAssertion) {
+            HOMELAB_WORKSPACE_MCP_FORWARD_OWNER_ASSERTION = "1";
           }
       ) {} [ "workspace" "learning" "health" ]);
       serviceConfig = {
@@ -385,7 +438,11 @@ in
           ++ lib.optional (cfg.apiInterfaceTokenFile != null) "api-interface:${cfg.apiInterfaceTokenFile}"
           ++ lib.optional (cfg.calendarURLFile != null) "calendar_url:${cfg.calendarURLFile}"
           ++ lib.optional calendarCfg.enable "calendar-service-token:${calendarCfg.tokenFile}"
-          ++ lib.optional (cfg.consolePassphraseFile != null) "console_passphrase:${cfg.consolePassphraseFile}"
+          ++ lib.optional motivationCfg.enable "motivation-service-token:${motivationCfg.tokenFile}"
+          ++ lib.optionals (cfg.consoleAccess.audience != "") [
+            "console-access-owner:${cfg.consoleAccess.ownerEmailFile}"
+            "console-access-jwks:${cfg.consoleAccess.jwksFile}"
+          ]
           ++ lib.optional (cfg.books.contactFile != null) "books_contact:${cfg.books.contactFile}"
           ++ lib.optional (cfg.seerr.apiKeyFile != null) "seerr_api_key:${cfg.seerr.apiKeyFile}"
           ++ lib.optionals (cfg.vault.endpoint != null) [

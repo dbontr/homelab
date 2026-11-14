@@ -72,11 +72,17 @@ enum Section {
 }
 
 const METRICS: &[(&str, &str)] = &[
-    ("cpu", "CPU"), ("memory", "Memory"), ("disk", "Root disk"),
-    ("network-rx", "Network received"), ("network-tx", "Network sent"),
-    ("disk-read", "Disk reads"), ("disk-write", "Disk writes"),
-    ("gpu", "GPU utilization"), ("gpu-vram", "GPU memory"),
-    ("gpu-temp", "GPU temperature"), ("gpu-age", "GPU freshness"),
+    ("cpu", "CPU"),
+    ("memory", "Memory"),
+    ("disk", "Root disk"),
+    ("network-rx", "Network received"),
+    ("network-tx", "Network sent"),
+    ("disk-read", "Disk reads"),
+    ("disk-write", "Disk writes"),
+    ("gpu", "GPU utilization"),
+    ("gpu-vram", "GPU memory"),
+    ("gpu-temp", "GPU temperature"),
+    ("gpu-age", "GPU freshness"),
     ("availability", "Collector availability"),
 ];
 
@@ -85,7 +91,9 @@ fn time_label(value: &str) -> String {
 }
 
 fn series_name(series: &Series) -> String {
-    series.labels.get("node")
+    series
+        .labels
+        .get("node")
         .or_else(|| series.labels.get("instance"))
         .or_else(|| series.labels.get("job"))
         .cloned()
@@ -94,8 +102,12 @@ fn series_name(series: &Series) -> String {
 
 fn value_label(value: f64, unit: &str) -> String {
     if unit == "up/down" {
-        if value == 1.0 { return "Up".to_owned(); }
-        if value == 0.0 { return "Down".to_owned(); }
+        if value == 1.0 {
+            return "Up".to_owned();
+        }
+        if value == 0.0 {
+            return "Down".to_owned();
+        }
         return "Unknown".to_owned();
     }
     if unit == "B/s" {
@@ -103,23 +115,34 @@ fn value_label(value: f64, unit: &str) -> String {
             format!("{:.1} MiB/s", value / 1_048_576.0)
         } else if value.abs() >= 1024.0 {
             format!("{:.1} KiB/s", value / 1024.0)
-        } else { format!("{value:.0} B/s") };
+        } else {
+            format!("{value:.0} B/s")
+        };
     }
     format!("{value:.1} {unit}")
 }
 
 fn line_path(points: &[Point]) -> String {
-    if points.is_empty() { return String::new(); }
-    let (min, max) = points.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(low, high), p| {
-        (low.min(p.value), high.max(p.value))
-    });
+    if points.is_empty() {
+        return String::new();
+    }
+    let (min, max) = points
+        .iter()
+        .fold((f64::INFINITY, f64::NEG_INFINITY), |(low, high), p| {
+            (low.min(p.value), high.max(p.value))
+        });
     let range = (max - min).max(0.000001);
     let denom = points.len().saturating_sub(1).max(1) as f64;
-    points.iter().enumerate().map(|(i, point)| {
-        let x = 8.0 + (i as f64 / denom) * 684.0;
-        let y = 141.0 - (point.value - min) / range * 122.0;
-        format!("{}{x:.1},{y:.1}", if i == 0 {"M"} else {" L"})
-    }).collect::<Vec<_>>().join("")
+    points
+        .iter()
+        .enumerate()
+        .map(|(i, point)| {
+            let x = 8.0 + (i as f64 / denom) * 684.0;
+            let y = 141.0 - (point.value - min) / range * 122.0;
+            format!("{}{x:.1},{y:.1}", if i == 0 { "M" } else { " L" })
+        })
+        .collect::<Vec<_>>()
+        .join("")
 }
 
 #[component]
@@ -174,8 +197,8 @@ fn HistoryChart(measurement: Measurement) -> Element {
                                 svg {
                                     class: "monitoring-sparkline",
                                     role: "img",
-                                    aria_label: "Recorded history for {series_name(series)}",
-                                    viewBox: "0 0 700 160",
+                                    "aria-label": "Recorded history for {series_name(series)}",
+                                    view_box: "0 0 700 160",
                                     preserve_aspect_ratio: "none",
                                     line { x1: "8", y1: "141", x2: "692", y2: "141", stroke: "currentColor", stroke_opacity: "0.15" }
                                     path { d: "{line_path(&series.points)}", fill: "none", stroke: "currentColor",
@@ -202,36 +225,41 @@ pub fn Monitoring() -> Element {
     let mut log_window = use_signal(|| "1h".to_owned());
     let mut search = use_signal(String::new);
 
-    let mut overview = use_resource(|| async {
-        api::get::<Snapshot>("/v1/monitoring/summary").await
-    });
-    let mut targets = use_resource(|| async {
-        api::get::<Vec<Target>>("/v1/monitoring/targets").await
-    });
-    let mut alerts = use_resource(|| async {
-        api::get::<Vec<Alert>>("/v1/monitoring/alerts").await
-    });
+    let mut overview =
+        use_resource(|| async { api::get::<Snapshot>("/v1/monitoring/summary").await });
+    let mut targets =
+        use_resource(|| async { api::get::<Vec<Target>>("/v1/monitoring/targets").await });
+    let mut alerts =
+        use_resource(|| async { api::get::<Vec<Alert>>("/v1/monitoring/alerts").await });
     let mut history = use_resource(move || {
         let key = metric();
         let interval = window();
         async move {
-            api::get::<Measurement>(&format!("/v1/monitoring/series?metric={key}&range={interval}")).await
+            api::get::<Measurement>(&format!(
+                "/v1/monitoring/series?metric={key}&range={interval}"
+            ))
+            .await
         }
     });
     let mut logs = use_resource(move || {
         let interval = log_window();
         async move {
-            api::get::<Vec<LogEntry>>(&format!("/v1/monitoring/logs?range={interval}&limit=150")).await
+            api::get::<Vec<LogEntry>>(&format!("/v1/monitoring/logs?range={interval}&limit=150"))
+                .await
         }
     });
 
     let query = search().to_lowercase();
-    let filtered_logs: Vec<LogEntry> = logs.cloned()
-        .and_then(Result::ok).unwrap_or_default()
+    let filtered_logs: Vec<LogEntry> = logs
+        .cloned()
+        .and_then(Result::ok)
+        .unwrap_or_default()
         .into_iter()
-        .filter(|entry| query.is_empty()
-            || entry.line.to_lowercase().contains(&query)
-            || entry.unit.to_lowercase().contains(&query))
+        .filter(|entry| {
+            query.is_empty()
+                || entry.line.to_lowercase().contains(&query)
+                || entry.unit.to_lowercase().contains(&query)
+        })
         .collect();
 
     rsx! {
@@ -246,7 +274,7 @@ pub fn Monitoring() -> Element {
                 "Refresh"
             }
         }
-        div { class: "tabs monitoring-tabs", role: "tablist", aria_label: "Monitoring views",
+        div { class: "tabs monitoring-tabs", role: "tablist", "aria-label": "Monitoring views",
             for (tab, label) in [
                 (Section::Overview,"Overview"), (Section::Charts,"History"),
                 (Section::Targets,"Collectors"), (Section::Alerts,"Alerts"), (Section::Logs,"Logs")

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dbontr/personal-health-mcp/internal/recipesage"
+	"github.com/dbontr/homelab-new/system/health/internal/recipesage"
 )
 
 func newServer(t *testing.T, handler http.HandlerFunc) *Server {

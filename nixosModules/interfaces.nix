@@ -73,7 +73,14 @@ let
     };
   };
   secure = settings:
-    builtins.match "^(127\\.0\\.0\\.1|\\[::1\\]):[0-9]+$" settings.listenAddress != null
+    let
+      address = settings.listenAddress;
+      port = if lib.hasPrefix "127.0.0.1:" address then
+        lib.removePrefix "127.0.0.1:" address
+      else if lib.hasPrefix "[::1]:" address then
+        lib.removePrefix "[::1]:" address
+      else "";
+    in port != "" && builtins.match "[0-9]+" port != null
       && settings.clientTokenFile != null
       && settings.serviceTokenFile != null
       && settings.clientTokenFile != settings.serviceTokenFile

@@ -1,26 +1,33 @@
 # References
 
-- [NixOS Manual](https://nixos.org/manual/nixos/stable/) — NixOS project. Used for: declarative host configuration, systemd services, and state directories.
+- [SQLite Transaction Isolation](https://www.sqlite.org/isolation.html) — SQLite project. Used for: serializing worker maintenance state changes with workspace allocation and job leasing under one write transaction.
+- [Kubernetes Pod Lifecycle](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/) — Kubernetes project. Used for: distinguishing live workload Pods from completed controller records before worker disruption.
+- [Kubernetes Deployments](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/) — Kubernetes project. Used for: asserting worker replicas, rollout readiness, and protected Deployment identity during serial release changes.
+- [curl --header option](https://curl.se/docs/manpage.html#-H) — curl project. Used for: passing protected MCP acceptance bearer headers from restricted local files without including secrets in process arguments.
+- [Helm Upgrade](https://helm.sh/docs/helm/helm_upgrade/) — Helm project. Used for: immutable release upgrades, retained release values, atomic rollback, and compatibility with older optional chart settings.
+- [NixOS Manual](https://nixos.org/manual/nixos/stable/) — NixOS project. Used for: declarative host configuration, systemd services, and state directories, controlled system generation activation, and rollback.
 - [systemd Special Units](https://www.freedesktop.org/software/systemd/man/latest/systemd.special.html) — systemd project. Used for: ordering Nginx after network-online.target before binding the services VLAN address.
 - [systemd tmpfiles.d](https://www.freedesktop.org/software/systemd/man/latest/tmpfiles.d.html) — systemd project. Used for: boot-time creation and restrictive ownership of the Nginx error log.
 - [Nix Flake Reference](https://nixos.org/manual/nix/stable/command-ref/new-cli/nix3-flake) — Nix project. Used for: pinned, reproducible host composition.
+- [Git clone](https://git-scm.com/docs/git-clone) — Git project. Used for: isolated offline release-source snapshots with independent object storage and detached, revision-pinned checkouts.
 - [SQLite Foreign Key Support](https://www.sqlite.org/foreignkeys.html) — SQLite project. Used for: transactional research claim and source-evidence ownership constraints.
 - [Go Documentation](https://go.dev/doc/) — Go project. Used for: Go services, HTTP handling, and file persistence.
 - [Go exec.Cmd](https://pkg.go.dev/os/exec#Cmd.Cancel) — Go project. Used for: context-driven cancellation of privileged actuator process groups.
 - [Linux kill(2)](https://man7.org/linux/man-pages/man2/kill.2.html) — Linux man-pages project. Used for: sending SIGKILL to the actuator's process group when administrative execution is cancelled.
-- [Go ReverseProxy](https://pkg.go.dev/net/http/httputil#ReverseProxy) — Go project. Used for: response-header policy in the optional MCP and API interfaces.
+- [Go ReverseProxy](https://pkg.go.dev/net/http/httputil#ReverseProxy) — Go project. Used for: fixed-origin proxying, request-header sanitization, and response-header policy in independent MCP and API interfaces.
 - [Go HTTP Transport](https://pkg.go.dev/net/http#Transport) — Go project. Used for: private upstream connection timeouts and response-header size limits.
 - [Go tls.X509KeyPair](https://pkg.go.dev/crypto/tls#X509KeyPair) — Go project. Used for: parsing validated PEM key pairs after enforcing private-key file permissions.
 - [Linux flock(2)](https://man7.org/linux/man-pages/man2/flock.2.html) — Linux man-pages project. Used for: nonblocking, process-lifetime advisory locks on state resources before opening service stores.
-- [Linux open(2)](https://man7.org/linux/man-pages/man2/open.2.html) — Linux man-pages project. Used for: O_NOFOLLOW descriptor-bound reads of protected interface and executor credential files.
+- [Linux open(2)](https://man7.org/linux/man-pages/man2/open.2.html) — Linux man-pages project. Used for: O_NOFOLLOW descriptor-bound reads of protected credentials and O_EXCL admission records for cooperating hardware workers.
 - [bytes crate: Bytes::from_owner](https://docs.rs/bytes/latest/bytes/struct.Bytes.html#method.from_owner) — bytes project. Used for: retaining a zeroizing owner of remote credential response buffers until the last HTTP body reference is released.
 - [Rust Standard Library: Command](https://doc.rust-lang.org/std/process/struct.Command.html) — Rust project. Used for: shell-free, explicit-argument privileged command dispatch in the Rust actuator.
 - [RustCrypto PBKDF2](https://docs.rs/pbkdf2/0.12.2/pbkdf2/) — RustCrypto project. Used for: verifying the owner PBKDF2-HMAC-SHA256 credential record in Rust.
 - [RustCrypto HMAC](https://docs.rs/hmac/0.12.1/hmac/) — RustCrypto project. Used for: six-digit HMAC-SHA1 TOTP verification.
 - [RustCrypto AES-GCM](https://docs.rs/aes-gcm/0.10.3/aes_gcm/) — RustCrypto project. Used for: Go-compatible encrypted credential custody in Rust.
 - [Serde JSON](https://docs.rs/serde_json/latest/serde_json/) — Serde project. Used for: canonical request parsing, duplicate-key rejection and arbitrary-precision values in the Rust authority.
+- [RFC 8259: The JavaScript Object Notation (JSON) Data Interchange Format](https://www.rfc-editor.org/rfc/rfc8259) — IETF. Used for: interoperable migration receipts with unique, exact field names and explicit JSON object structure.
 - [jsonwebtoken 9.3.1](https://docs.rs/crate/jsonwebtoken/9.3.1) — Rust jsonwebtoken project. Used for: RS256 owner assertion verification against pinned JWKS in the Rust security authority.
-- [fs2](https://docs.rs/fs2/latest/fs2/) — Rust community crate. Used for: exclusive Linux state-directory locks during authority migration.
+- [fs2](https://docs.rs/fs2/latest/fs2/) — Rust community crate. Used for: exclusive Linux state-directory locks during authority migration and process-lifetime motivation-state ownership.
 - [Axum](https://docs.rs/axum/0.8.6/axum/) — Tokio project. Used for: bounded HTTP owner, gateway, browser, and remote authorization routes over isolated transports.
 - [Tokio](https://docs.rs/tokio/1.47.1/tokio/) — Tokio project. Used for: owned Unix sockets, remote TLS streams, asynchronous OAuth requests, and controlled service shutdown.
 - [Rustls](https://docs.rs/rustls/0.23.0/rustls/) — Rustls project. Used for: TLS 1.3 client authentication and certificate-chain verification in the independent authority.
@@ -29,10 +36,15 @@
 - [Rust Standard Library: PermissionsExt](https://doc.rust-lang.org/std/os/unix/fs/trait.PermissionsExt.html) — Rust project. Used for: rejecting writable Nix policy files in the Rust actuator.
 - [Go archive/zip Package](https://pkg.go.dev/archive/zip) — Go project. Used for: portable recipe bundle generation and bounded ZIP entry reading.
 - [Model Context Protocol Specification](https://modelcontextprotocol.io/specification/2025-06-18) — MCP project; 2025-06-18. Used for: stateless JSON-RPC transport, tool discovery, and tool calls.
+- [OpenAI Responses API compaction](https://developers.openai.com/api/docs/guides/compaction) — OpenAI. Used for: model-host-controlled context compaction and separation from human-readable durable handoffs.
+- [OpenAI Responses conversation state](https://developers.openai.com/api/docs/guides/conversation-state) — OpenAI. Used for: context-window accounting and preserving API conversation state.
+- [OpenAI Responses input token counting](https://developers.openai.com/api/reference/resources/responses/subresources/input_tokens/methods/count) — OpenAI. Used for: optional host-supplied token measurements rather than MCP-only guesses.
 - [RFC 5545: Internet Calendaring and Scheduling Core Object Specification](https://www.rfc-editor.org/rfc/rfc5545) — IETF. Used for: the read-only iCalendar parser; recurrence support is partial.
 - [kubectl rollout restart](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_rollout/kubectl_rollout_restart/) — Kubernetes project. Used for: validated deployment restart arguments in the privileged executor.
 - [kubectl scale](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_scale/) — Kubernetes project. Used for: bounded replica count adjustments in the privileged executor.
 - [Kubernetes Documentation](https://kubernetes.io/docs/) — Kubernetes project. Used for: scheduled compute workers and workload isolation.
+- [GitHub Container Registry](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry) — GitHub Docs. Used for: source-bound Compute OCI publication, package permissions, and digest-qualified registry pulls.
+- [K3s Embedded Registry Mirror](https://docs.k3s.io/installation/registry-mirror) — K3s project. Used for: verified peer-to-peer image-cache eligibility, mirrored-registry enrollment and compute-node image distribution acceptance.
 - [Seerr API: Create New Request](https://docs.seerr.dev/api/create-new-request/) — Seerr project. Used for: media request payloads and supported movie/TV media types.
 - [Seerr OpenAPI](https://github.com/seerr-team/seerr/blob/develop/seerr-api.yml) — Seerr project. Used for: authenticated media search, request listing, and API key headers.
 - [RFC 7636: Proof Key for Code Exchange by OAuth Public Clients](https://www.rfc-editor.org/rfc/rfc7636) — IETF. Used for: OAuth authorization-code PKCE and one-time state.
@@ -49,6 +61,15 @@
 - [shadcn/ui](https://github.com/shadcn-ui/ui) — shadcn/ui project. Used for: semantic component composition, design vocabulary, and accessible interaction patterns in the Rust console.
 - [shadcn/ui Theming](https://ui.shadcn.com/docs/theming) — shadcn/ui project. Used for: exact neutral light/dark design tokens, sidebar colors, and radius scale for the Rust/Dioxus console.
 - [Dioxus 0.7 Documentation](https://dioxuslabs.com/learn/0.7/) — Dioxus project. Used for: Rust RSX components, WASM rendering and future desktop packaging.
+- [Dioxus v0.7.10 Release](https://github.com/DioxusLabs/dioxus/releases/tag/v0.7.10) — Dioxus project. Used for: pinned, checksummed WebAssembly console bundling.
+- [wasm-bindgen v0.2.130 Release](https://github.com/wasm-bindgen/wasm-bindgen/releases/tag/0.2.130) — wasm-bindgen project. Used for: pinned JavaScript binding generation matching the compiled console.
+- [actions/upload-artifact](https://github.com/actions/upload-artifact) — GitHub Actions project. Used for: storing source-bound static console bundles as inspectable CI artifacts.
+- [actions/download-artifact](https://github.com/actions/download-artifact) — GitHub Actions project. Used for: consuming source-bound console artifacts in a separated, permission-scoped publication job.
+- [MCP Apps specification (2026-01-26)](https://github.com/modelcontextprotocol/ext-apps/blob/main/specification/2026-01-26/apps.mdx) — Model Context Protocol project. Used for: embedded view lifecycle, JSON-RPC tool messages, UI resource MIME types and host iframe security contracts.
+- [Go MCP SDK v1.8.0 ResourceContents](https://pkg.go.dev/github.com/modelcontextprotocol/go-sdk@v1.8.0/mcp#ResourceContents) — Model Context Protocol Go SDK maintainers. Used for: resource-level UI CSP metadata and verified Learning MCP App resource publication.
+- [Web Blob API](https://developer.mozilla.org/en-US/docs/Web/API/Blob) — MDN Web Docs. Used for: browser-local, credential-free original-file downloads after Learning verifies source bytes.
+- [URL.createObjectURL()](https://developer.mozilla.org/en-US/docs/Web/API/URL/createObjectURL_static) — MDN Web Docs. Used for: bounded download links created from verified Learning original files.
+- [URL.revokeObjectURL()](https://developer.mozilla.org/en-US/docs/Web/API/URL/revokeObjectURL_static) — MDN Web Docs. Used for: release of previously generated browser download object URLs.
 - [Dioxus 0.7 Handling User Input](https://dioxuslabs.com/learn/0.7/essentials/basics/event_handlers/) — Dioxus project. Used for: browser file selection, `FileData` metadata and asynchronous image reads in the Rust recipe editor.
 - [OpenAI Plugins UI Reference](https://developers.openai.com/plugins/reference) — OpenAI. Used for: opening a vetted owner authentication URL from a ChatGPT component without exposing credentials through tool inputs.
 - [MCP Elicitation — URL Mode](https://modelcontextprotocol.io/specification/2025-11-25/client/elicitation) — MCP project. Used for: treating password and second-factor entry as a trusted out-of-band browser interaction rather than client-side form elicitation.
@@ -57,7 +78,8 @@
 - [RFC 7518: JSON Web Algorithms](https://www.rfc-editor.org/rfc/rfc7518) — IETF. Used for: RS256 verification with pinned RSA signing keys.
 - [RFC 7517: JSON Web Key](https://www.rfc-editor.org/rfc/rfc7517) — IETF. Used for: locally provisioned Cloudflare Access JWKS key validation.
 - [Cloudflare Access application tokens](https://developers.cloudflare.com/cloudflare-one/identity/authorization-cookie/validating-json/) — Cloudflare. Used for: application-audience JWT verification at the independent security boundary.
-- [NixOS systemd switching](https://nixos.org/manual/nixos/stable/#sec-changing-config) — NixOS project. Used for: locally staged system generation activation and controlled rollback.
+- [Cloudflare Access session management](https://developers.cloudflare.com/cloudflare-one/access-controls/access-settings/session-management/) — Cloudflare. Used for: ending a user's browser Access session through the application-domain logout endpoint.
+- [MDN Referrer-Policy](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Referrer-Policy) — MDN Web Docs. Used for: same-origin owner form submissions and preventing cross-origin referrer disclosure.
 - [OWASP Session Management Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html) — OWASP. Used for: short-lived browser sessions, HttpOnly/Secure/SameSite cookies, credential separation and session invalidation.
 - [Dioxus Styling and Assets](https://dioxuslabs.com/learn/0.7/essentials/ui/styling/) — Dioxus project. Used for: RSX, CSS assets and native SVG controls in the Rust console.
 - [RFC 9110: HTTP Semantics, If-Match](https://www.rfc-editor.org/rfc/rfc9110#section-13.1.1) — IETF. Used for: revision-qualified deletion of first-party recipe records.
@@ -77,10 +99,11 @@
 - [OCI Image Specification](https://github.com/opencontainers/image-spec) — Open Containers Initiative. Used for: digest-qualified image identities in the registry build pipeline.
 - [Dioxus 0.7 Deployment](https://dioxuslabs.com/learn/0.7/guides/deploy/) — Dioxus project. Used for: packaging static Rust/WASM console assets for an independent native release.
 - [Open Library Search API](https://openlibrary.org/dev/docs/api/search) — Open Library/Internet Archive. Used for: bounded on-demand work discovery, stable work identifiers, authors and publication metadata.
-- [Open Library API Usage Guidelines](https://openlibrary.org/developers/api) — Open Library/Internet Archive. Used for: identified human-initiated requests, conservative one-request-per-second pacing, and short-lived search caching.
+- [Open Library API Usage Guidelines](https://openlibrary.org/developers/api) — Open Library/Internet Archive. Used for: identified human-initiated requests, conservative one-request-per-second pacing, rate limits, short-lived search caching and bounded book availability lookup.
 
 - [RFC 8446: The Transport Layer Security (TLS) Protocol Version 1.3](https://www.rfc-editor.org/rfc/rfc8446) — IETF. Used for: TLS 1.3 transport between trusted release coordinator and host executors.
 - [RFC 5280: Internet X.509 Public Key Infrastructure Certificate Profile](https://www.rfc-editor.org/rfc/rfc5280) — IETF. Used for: verified server and client certificate identities and trust anchors in authenticated release transport.
+- [RFC 1123: Requirements for Internet Hosts — Application and Support](https://www.rfc-editor.org/rfc/rfc1123) — IETF. Used for: canonical ASCII DNS host-label syntax in certificate-bound service identities and credential grants.
 - [OpenAI Embeddings API](https://platform.openai.com/docs/api-reference/embeddings/create) — OpenAI. Used for: a configurable bounded embeddings-compatible provider contract for consented research indexing and semantic queries.
 - [OpenAI Chat Completions API](https://platform.openai.com/docs/api-reference/chat/create) — OpenAI. Used for: the optional bounded chat-completions wire format that returns proposed source-file contents from a configured model endpoint.
 - [Go types package](https://pkg.go.dev/go/types) — Go project. Used for: type-aware identifier and definition analysis using the standard Go type checker, with explicit partial results when imports are unavailable.
@@ -93,7 +116,6 @@
 - [USDA FoodData Central API Guide](https://fdc.nal.usda.gov/api-guide/) — USDA Agricultural Research Service. Used for: API-key protected food lookups, Food Details schema, and reviewed FDC identifiers.
 - [USDA FoodData Central Foundation Foods Documentation](https://fdc.nal.usda.gov/Foundation_Foods_Documentation/) — USDA Agricultural Research Service. Used for: source-reported nutrients per 100 grams, Atwater energy identifiers, and explicit missing-nutrient treatment.
 - [Open Library Read API](https://openlibrary.org/dev/docs/api/read) — Open Library. Used for: provider-owned online reading and borrowing availability lookup by exact ISBN and documented result status.
-- [Open Library API Usage Guidelines](https://openlibrary.org/developers/api) — Open Library. Used for: identified requests, rate limits, and bounded human-initiated book availability lookup.
 - [GNU Coreutils sha2sum utilities](https://www.gnu.org/software/coreutils/manual/html_node/sha2-utilities.html) — GNU project. Used for: reproducible SHA-256 manifests and offline staged-release file integrity checks.
 - [Docker Buildx Build Reference](https://docs.docker.com/reference/cli/docker/buildx/build/) — Docker. Used for: source-owned Compute OCI image builds, registry push/load modes and metadata digest receipts.
 - [RFC 8628: OAuth 2.0 Device Authorization Grant](https://www.rfc-editor.org/rfc/rfc8628) — IETF. Used for: owner-only device-code enrollment, verification URI presentation, interval-constrained authorization polling and provider error handling.
@@ -102,9 +124,15 @@
 - [GitLab commits API](https://docs.gitlab.com/api/commits/) — GitLab. Used for: resolving exact Git repository revisions and distinguishing file-guarded writes from whole-branch commit operations.
 - [GitLab repositories API](https://docs.gitlab.com/api/repositories/) — GitLab. Used for: pinned Git archive downloads and project-scoped repository snapshots.
 - [GitLab personal access tokens](https://docs.gitlab.com/user/profile/personal_access_tokens/) — GitLab. Used for: user-scoped API credentials, expiration and scope review.
-- [Go httputil.ReverseProxy](https://pkg.go.dev/net/http/httputil#ReverseProxy) — Go project. Used for: fixed-origin reverse proxying, request header sanitization and independent HTTP interface transport.
 - [The Rust Programming Language: Understanding Ownership](https://doc.rust-lang.org/book/ch04-00-understanding-ownership.html) — Rust project. Used for: ownership and borrowing guarantees when selecting Rust for memory-sensitive service implementations.
 - [Hyper 1 HTTP/1 Connection API](https://docs.rs/hyper/1.7.0/hyper/client/conn/http1/) — Hyper project. Used for: fixed-path authorization requests over verified Unix and TLS streams in the independent Rust executor.
 - [Tokio Process API](https://docs.rs/tokio/1.47.1/tokio/process/index.html) — Tokio project. Used for: shell-free bounded privileged subprocesses and termination during cancellation or timeouts.
 - [Rust Standard Library: CommandExt::process_group](https://doc.rust-lang.org/std/os/unix/process/trait.CommandExt.html#tymethod.process_group) — Rust project. Used for: separate Linux process groups for restricted actuator and NixOS release commands.
 - [RFC 3339: Date and Time on the Internet](https://www.rfc-editor.org/rfc/rfc3339) — IETF. Used for: bounded, explicit expiration of pinned service credential grants and audit timestamps.
+- [Linux sysfs device model](https://docs.kernel.org/driver-api/driver-model/overview.html) — Linux kernel documentation. Used for: independently validating actual USB device ancestry before passthrough.
+- [util-linux lsblk](https://man7.org/linux/man-pages/man8/lsblk.8.html) — util-linux project. Used for: conservative whole-disk, holder and mounted-partition checks before USB access.
+- [Axum Documentation](https://docs.rs/axum/latest/axum/) — Tokio/Axum project. Used for: the owner-authenticated, loopback-only motivation service HTTP interface.
+- [Finite-time Analysis of the Multiarmed Bandit Problem](https://homes.di.unimi.it/~cesabian/Pubblicazioni/ml-02.pdf) — Auer, Cesa-Bianchi and Fischer, 2002. Used for: an exploratory upper-confidence-bound strategy selector over self-reported results.
+- [gloo-timers Documentation](https://docs.rs/gloo-timers/latest/gloo_timers/) — Rust/WASM Gloo maintainers. Used for: bounded in-app refresh of the scheduled motivation inbox while the console view is active.
+- [Bubblewrap project](https://github.com/containers/bubblewrap) — Bubblewrap maintainers. Used for: Linux mount namespace, network isolation, parent-death process control and read-only sandbox bindings.
+- [Git rev-parse](https://git-scm.com/docs/git-rev-parse) — Git project. Used for: verifying the workspace's expected source revision before permitted build/test execution.

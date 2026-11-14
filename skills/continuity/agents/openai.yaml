@@ -1,0 +1,3 @@
+interface:
+  display_name: Continuity
+  short_description: Durable project checkpoints and safe handoffs across conversation limits

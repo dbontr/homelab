@@ -3,8 +3,7 @@ package recipes
 import (
 	"encoding/json"
 	"errors"
-	"path/filepath"
-	"strings"
+		"strings"
 	"testing"
 )
 
@@ -52,7 +51,7 @@ func sageRecipeRecord(id, title string, ingredients ...string) map[string]any {
 }
 
 func TestRecipeSagePreviewAndSelectiveImport(t *testing.T) {
-	db, err := Open(filepath.Join(t.TempDir(), "recipes.json"))
+	db, err := Open(privateRecipeTestPath(t, "recipes.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +121,7 @@ func TestRecipeSagePreviewAndSelectiveImport(t *testing.T) {
 		t.Fatalf("deduplication lost on restart: %+v %v", later, err)
 	}
 	archive := reopened.Export()
-	imported, err := Open(filepath.Join(t.TempDir(), "another.json"))
+	imported, err := Open(privateRecipeTestPath(t, "another.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -135,7 +134,7 @@ func TestRecipeSagePreviewAndSelectiveImport(t *testing.T) {
 }
 
 func TestRecipeSageTitlesDoNotDetermineSourceIdentity(t *testing.T) {
-	db, err := Open(filepath.Join(t.TempDir(), "recipes.json"))
+	db, err := Open(privateRecipeTestPath(t, "recipes.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,7 +155,7 @@ func TestRecipeSageTitlesDoNotDetermineSourceIdentity(t *testing.T) {
 }
 
 func TestRecipeSageRejectsDuplicateAndMalformedInputs(t *testing.T) {
-	db, err := Open(filepath.Join(t.TempDir(), "recipes.json"))
+	db, err := Open(privateRecipeTestPath(t, "recipes.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -197,7 +196,7 @@ func TestRecipeSageRejectsDuplicateAndMalformedInputs(t *testing.T) {
 
 
 func TestRecipeSageOwnerCorrectionsKeepImportIdentity(t *testing.T) {
-	db, err := Open(filepath.Join(t.TempDir(), "recipes.json"))
+	db, err := Open(privateRecipeTestPath(t, "recipes.json"))
 	if err != nil {
 		t.Fatal(err)
 	}

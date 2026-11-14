@@ -76,6 +76,7 @@ let
       allowedImages = lib.concatStringsSep "," worker.allowedImages;
       workspaceImagePullSecret = worker.workspaceImagePullSecret;
       builder = worker.builder;
+      verification.image = worker.verificationImage;
     };
     quota = worker.quota;
   });
@@ -162,6 +163,11 @@ let
         type = lib.types.str;
         default = "";
         description = "Registry pull Secret in the worker's project namespace.";
+      };
+      verificationImage = lib.mkOption {
+        type = lib.types.str;
+        default = "";
+        description = "Digest-pinned OCI image for credential-free Rust engineering verification Jobs.";
       };
       builder = lib.mkOption {
         type = lib.types.submodule {
@@ -335,6 +341,11 @@ in {
       {
         assertion = cfg.workers == {} || imageIsPinned cfg.workerImage;
         message = "Enabled Workspace workers require a digest-pinned worker image.";
+      }
+      {
+        assertion = lib.all (worker: worker.verificationImage == "" || imageIsPinned worker.verificationImage)
+          (lib.attrValues cfg.workers);
+        message = "Rust verification Jobs require a digest-pinned image per worker.";
       }
       {
         assertion = lib.all (worker:

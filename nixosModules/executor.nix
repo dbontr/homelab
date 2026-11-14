@@ -114,8 +114,23 @@ in
       };
       projects = lib.mkOption { type = lib.types.listOf lib.types.str; default = []; };
       workers = lib.mkOption { type = lib.types.listOf lib.types.str; default = []; };
+      devices = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = [];
+        description = "Exact enrolled USB device identities authorized for privileged passthrough.";
+      };
       images = lib.mkOption { type = lib.types.listOf lib.types.str; default = []; };
+      imageReferences = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = [];
+        description = "Exact digest-qualified OCI references authorized for image-catalog registration.";
+      };
       software = lib.mkOption { type = lib.types.listOf lib.types.str; default = []; };
+      programs = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = [];
+        description = "Exact program catalog identities authorized for proposals and status reviews.";
+      };
       packages = lib.mkOption { type = lib.types.listOf lib.types.str; default = []; };
     };
     kubernetes = {
@@ -228,6 +243,9 @@ in
       export HOMELAB_RELEASE_SYSTEMCTL=${lib.escapeShellArg ("${pkgs.systemd}/bin/systemctl")}
       export HOMELAB_RELEASE_HEALTH_FILE=${lib.escapeShellArg (pkgs.writeText "homelab-release-health.json" (builtins.toJSON cfg.healthServices))}
       exec ${cfg.package}/bin/homelab-release "$@"
+    '') (pkgs.writeShellScriptBin "homelab-audit-inspect" ''
+      export HOMELAB_EXECUTOR_RELEASE_STATE=${lib.escapeShellArg cfg.stateDirectory}
+      exec ${if cfg.implementation == "rust" then "${rustPackage}/bin/audit-inspect" else "${cfg.package}/bin/homelab-audit-recovery"} "$@"
     '') ] ++ lib.optional (cfg.implementation == "rust") rustPackage;
     systemd.services.homelab-executord = {
       description = "Restricted local infrastructure executor";
@@ -269,8 +287,11 @@ in
           Endpoint = cfg.workspace.endpoint;
           Projects = cfg.workspace.projects;
           Workers = cfg.workspace.workers;
+          Devices = cfg.workspace.devices;
           Images = cfg.workspace.images;
+          ImageReferences = cfg.workspace.imageReferences;
           Software = cfg.workspace.software;
+          Programs = cfg.workspace.programs;
           Packages = cfg.workspace.packages;
         });
       } // lib.optionalAttrs (cfg.workspace.enable && cfg.workspace.rootTokenFile != null) {
@@ -288,7 +309,7 @@ in
       serviceConfig = {
         Type = "simple";
         User = "root";
-        Group = "root";
+        Group = "homelab-executor-client";
         SupplementaryGroups = lib.optionals (!cfg.authorization.remote.enable) [ "homelab-security-client" ];
         StateDirectory = "homelab-releases";
         StateDirectoryMode = "0700";

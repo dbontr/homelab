@@ -1,11 +1,14 @@
-{ workspaceMcp, ... }:
+{ workspaceMcp, pkgs, ... }:
 {
   imports = [
     ../../nixosModules/platform.nix
     ../../nixosModules/security.nix
     ../../nixosModules/executor.nix
     ../../nixosModules/console.nix
+    ../../nixosModules/interfaces.nix
     ./shared.nix
+    ./security-authority.nix
+    ./domain-services.nix
     ./cloudflare.nix
     ./mcp-ingress.nix
     ./orchestration.nix
@@ -40,8 +43,7 @@
 
   homelab.learning = {
     enable = true;
-    binaryPath = "/srv/releases/adaptive-teaching/access-20261106/bin/adaptive-teaching";
-    binarySHA256 = "a732a7cdd9bac6e0232e4f10a77daa22a65d0027cfbf91dbe890d8d3830d3861";
+    package = import ../../packages/learning.nix { inherit pkgs; };
     bearerCredentialFile = "/srv/homelab/secrets/adaptive-teaching.token";
     listenAddress = "127.0.0.1:8200";
     allowedHosts = "127.0.0.1:*,localhost:*";
@@ -56,7 +58,7 @@
 
   services.workspaceMcpProjectProvisioner = {
     enable = true;
-    workerImage = "docker.io/library/project-workspace-worker:cuda-exec-756b88c";
+    workerImage = "ghcr.io/dbontr/homelab/worker@sha256:c7ab035296db9aec360611c52737ca4e94143fb959c7ad56ca536cc20fd6ee4f";
     computeNodes = [ "jupiter" "venus" "mercury" "janus" ];
     excludeProjects = [ "acceptance" ];
     interval = "2min";
@@ -78,8 +80,7 @@
 
   homelab.personalHealth = {
     enable = true;
-    binaryPath = "/srv/releases/personal-health-mcp/a64580e41715a9c7b680c8ee3f186e9b1e550f5c/bin/personal-health-mcp";
-    binarySHA256 = "6ca3a23a77e076df857ca1746f769a193b6d20aad76060be87124e4579737b97";
+    package = import ../../packages/health.nix { inherit pkgs; };
     access = {
       issuer = "https://dbontr.cloudflareaccess.com";
       audience = "85181fd33a10983cc64020e9155ffeeea8f9e4c6b7af6dd1a51f5c3588f63f25";

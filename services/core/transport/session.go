@@ -1,20 +1,10 @@
 package transport
 
 import (
-	"crypto/subtle"
-	"encoding/json"
+		"encoding/json"
 	"net/http"
 	"strings"
-	"time"
-)
-
-const uiCookie = "__Host-homelab-ui"
-
-func (s *Server) sessionCookie(r *http.Request) string {
-	cookie, err := r.Cookie(uiCookie)
-	if err != nil { return "" }
-	return cookie.Value
-}
+	)
 
 // Browser reads are restricted to allowlisted routes. Owner writes require
 // independent path authorization, a valid session, Origin and CSRF token.
@@ -25,6 +15,8 @@ func (s *Server) sessionReadAllowed(r *http.Request) bool {
 		"/v1/nodes":true,
 		"/v1/devices":true,
 		"/v1/tasks":true,
+        "/v1/motivation/state":true,
+        "/v1/motivation/metrics":true,
         "/v1/tasks/delegations":true,
         "/v1/tasks/agenda":true,
         "/v1/tasks/conflicts":true,
@@ -37,6 +29,8 @@ func (s *Server) sessionReadAllowed(r *http.Request) bool {
         "/v1/recipes/export":true,
         "/v1/recipes/bundle":true,
         "/v1/meals":true,
+        "/v1/engineering/projects":true,
+        "/v1/engineering/nodes":true,
         "/v1/learning/summary":true,
         "/v1/learning/sessions":true,
         "/v1/learning/reviews":true,
@@ -83,54 +77,36 @@ func (s *Server) sessionReadAllowed(r *http.Request) bool {
     !(strings.HasPrefix(p,"/v1/workflows/") && len(strings.Split(p,"/"))==4) &&
     !(strings.HasPrefix(p,"/v1/automations/") && len(strings.Split(p,"/"))==4) &&
     !(strings.HasPrefix(p,"/v1/workspace/projects/") && len(strings.Split(p,"/"))==6 && (strings.HasSuffix(p,"/jobs")||strings.HasSuffix(p,"/workspaces"))) &&
-    !(strings.HasPrefix(p,"/v1/learning/sessions/") && (len(strings.Split(p,"/"))==5 || len(strings.Split(p,"/"))==6 && strings.HasSuffix(p,"/pending"))) {
+    !(strings.HasPrefix(p,"/v1/engineering/projects/") && len(strings.Split(p,"/"))==6 &&
+        (strings.HasSuffix(p,"/jobs") || strings.HasSuffix(p,"/workspaces") || strings.HasSuffix(p,"/artifacts") ||
+         strings.HasSuffix(p,"/context") || strings.HasSuffix(p,"/repositories") ||
+         strings.HasSuffix(p,"/research") || strings.HasSuffix(p,"/research-sources"))) &&
+    !ownerLearningAttachmentReadPath(p) &&
+    !(strings.HasPrefix(p,"/v1/learning/sessions/") && (len(strings.Split(p,"/"))==5 || len(strings.Split(p,"/"))==6 && (strings.HasSuffix(p,"/pending") || strings.HasSuffix(p,"/next") || strings.HasSuffix(p,"/probe")))) {
 		return false
 	}
-	_,_,ok := s.sessions.Check(s.sessionCookie(r))
+	_, ok := s.sessions.Check(r.Header.Get("Cf-Access-Jwt-Assertion"))
 	return ok
 }
 
-func (s *Server) uiSession(w http.ResponseWriter,r *http.Request) {
-	if s.sessions == nil {
-		writeError(w,http.StatusServiceUnavailable,"browser sessions are not configured")
+func (s *Server) uiSession(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	cookie := s.sessionCookie(r)
-	csrf,expiry,valid := s.sessions.Check(cookie)
-	switch r.Method {
-	case http.MethodGet:
-		if !valid { writeJSON(w,200,map[string]any{"authenticated":false});return }
-		writeJSON(w,200,map[string]any{"authenticated":true,"expires_at":expiry,"csrf_token":csrf})
-	case http.MethodPost:
-		if r.Header.Get("Origin")=="" {writeError(w,http.StatusForbidden,"origin required");return}
-		if valid {writeError(w,http.StatusConflict,"browser session already exists");return}
-		var input struct { Passphrase string `json:"passphrase"` }
-		if err:=decode(r,&input);err!=nil{writeError(w,400,"invalid login request");return}
-		pass:=[]byte(input.Passphrase)
-		input.Passphrase=""
-		defer func(){for i:=range pass{pass[i]=0}}()
-		token,_,until,err:=s.sessions.Login(pass)
-		if err!=nil {writeError(w,http.StatusUnauthorized,"authentication failed");return}
-		http.SetCookie(w,&http.Cookie{
-			Name:uiCookie,Value:token,Path:"/",HttpOnly:true,Secure:true,
-			SameSite:http.SameSiteStrictMode,Expires:until,
-		})
-		writeJSON(w,200,map[string]any{"authenticated":true,"expires_at":until})
-	case http.MethodDelete:
-		if r.Header.Get("Origin")=="" {writeError(w,http.StatusForbidden,"origin required");return}
-		if !valid || len(r.Header.Get("X-CSRF-Token"))!=len(csrf) ||
-			subtle.ConstantTimeCompare([]byte(r.Header.Get("X-CSRF-Token")),[]byte(csrf))!=1 {
-			writeError(w,http.StatusForbidden,"session authorization required");return
-		}
-		if !s.sessions.Logout(cookie,csrf) {writeError(w,http.StatusForbidden,"session expired");return}
-		http.SetCookie(w,&http.Cookie{
-			Name:uiCookie,Value:"",Path:"/",HttpOnly:true,Secure:true,
-			SameSite:http.SameSiteStrictMode,MaxAge:-1,Expires:time.Unix(0,0),
-		})
-		w.WriteHeader(http.StatusNoContent)
-	default:
-		writeError(w,http.StatusMethodNotAllowed,"method not allowed")
+	if s.sessions == nil {
+		writeError(w, http.StatusServiceUnavailable, "console identity is not configured")
+		return
 	}
+	csrf, ok := s.sessions.Check(r.Header.Get("Cf-Access-Jwt-Assertion"))
+	if !ok {
+		writeJSON(w, http.StatusOK, map[string]any{"authenticated": false})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"authenticated": true,
+		"csrf_token": csrf,
+	})
 }
 
 func (s *Server) uiBackendRead(w http.ResponseWriter,r *http.Request,backend,tool string) {

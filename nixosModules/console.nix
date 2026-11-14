@@ -33,7 +33,14 @@ in
         }
         ++ lib.optional (cfg.enable && cfg.replaceHomepage) {
           assertion = lib.elem cfg.publicOrigin config.services.homelabPlatform.allowedOrigins;
-          message = "The console's publicOrigin must be included in homelabPlatform.allowedOrigins for browser login.";
+          message = "The console's publicOrigin must be included in homelabPlatform.allowedOrigins for browser requests.";
+        }
+        ++ lib.optional (cfg.enable && cfg.replaceHomepage) {
+          assertion =
+            config.services.homelabPlatform.consoleAccess.audience ==
+              config.homelab.access.consoleAudTag &&
+            config.services.homelabPlatform.consoleAccess.issuer != "";
+          message = "Homepage replacement requires a signed Cloudflare Access identity matching the ingress application.";
         };
     }
     (lib.mkIf (cfg.enable && cfg.replaceHomepage) {
@@ -55,21 +62,18 @@ in
         };
         locations."/v1/" = {
           proxyPass = api;
-          extraConfig = ''
-            proxy_set_header Host $http_host;
-            proxy_set_header X-Forwarded-Proto https;
-          '';
         };
         locations."/ui/" = {
           proxyPass = api;
-          extraConfig = ''
-            proxy_set_header Host $http_host;
-            proxy_set_header X-Forwarded-Proto https;
-          '';
         };
         locations."/mcp" = { return = "404"; };
       };
       services.homepage-dashboard.enable =
+        lib.mkIf cfg.replaceHomepage (lib.mkForce false);
+      # The upstream Homepage NixOS module contributes an unconditional
+      # systemd service fragment even when its feature switch is disabled.
+      # Disable that unit explicitly to avoid a fragment without ExecStart.
+      systemd.services.homepage-dashboard.enable =
         lib.mkIf cfg.replaceHomepage (lib.mkForce false);
     })
   ];

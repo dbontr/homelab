@@ -23,6 +23,7 @@ func TestAuthenticatedRemotePolicyPreviewUsesOnlyPreviewEndpoint(t *testing.T){
    request.Target!="jupiter"||string(request.Arguments)!=`{"host":"jupiter"}`{
    t.Fatal("altered preview scope",request,err)
   }
+  w.Header().Set("Content-Type","application/json")
   _=json.NewEncoder(w).Encode(Authorization{Allowed:false,Reason:"confirmation required",ConfirmationID:"challenge"})
  }))
  defer closeServer()

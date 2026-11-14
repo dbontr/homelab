@@ -2,13 +2,17 @@ use dioxus::prelude::*;
 use serde_json::Value;
 
 use crate::api;
-use crate::engineering_orchestration::{TeamCreate, DependencyGraph, TeamIntegration};
-use crate::engineering_knowledge::KnowledgeApproval;
-use crate::engineering_diff::SourcePreviews;
 use crate::components::{Badge, Card, Empty, Heading, Icon, Loading, Notice};
+use crate::engineering_diff::SourcePreviews;
+use crate::engineering_knowledge::KnowledgeApproval;
+use crate::engineering_orchestration::{DependencyGraph, TeamCreate, TeamIntegration};
 
 fn as_items(value: &Value, key: &str) -> Vec<Value> {
-    value.get(key).and_then(Value::as_array).cloned().unwrap_or_default()
+    value
+        .get(key)
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default()
 }
 
 fn text(value: &Value, key: &str) -> String {
@@ -16,8 +20,14 @@ fn text(value: &Value, key: &str) -> String {
 }
 
 fn draft_url(steps: &[Value]) -> Option<String> {
-    steps.iter()
-        .find(|step| matches!(step.get("kind").and_then(Value::as_str), Some("publish") | Some("integration_publish")))
+    steps
+        .iter()
+        .find(|step| {
+            matches!(
+                step.get("kind").and_then(Value::as_str),
+                Some("publish") | Some("integration_publish")
+            )
+        })
         .and_then(|step| step.get("result"))
         .filter(|result| result.get("draft").and_then(Value::as_bool) == Some(true))
         .and_then(|result| result.get("url").and_then(Value::as_str))
@@ -34,7 +44,8 @@ fn RunDetail(run: Value, csrf: String) -> Element {
     let activity = as_items(&source, "events");
     let diagnostics = as_items(&source, "diagnostics");
     let proposals = as_items(&source, "knowledge");
-    let review = steps.iter()
+    let review = steps
+        .iter()
         .find(|step| step.get("kind").and_then(Value::as_str) == Some("review"))
         .and_then(|step| step.get("result"))
         .cloned()
@@ -46,22 +57,22 @@ fn RunDetail(run: Value, csrf: String) -> Element {
         details { class: "card",
             summary { class: "card-header",
                 div {
-                    h2 { class: "card-title", "{text(&run, "id")}" }
-                    p { class: "card-description", "Project: {text(&run, "project")}" }
+                    h2 { class: "card-title", {text(&run, "id")} }
+                    p { class: "card-description", {format!("Project: {}", text(&run, "project"))} }
                 }
                 Badge { text: text(&run, "status") }
             }
             div { class: "card-body",
                 if source.is_object() {
                     div { class: "inline-row",
-                        span { class: "muted", "Decisions: {text(&source, "turns")}" }
-                        span { class: "muted", "Latest action: {text(&source, "last_action")}" }
+                        span { class: "muted", {format!("Decisions: {}", text(&source, "turns"))} }
+                        span { class: "muted", {format!("Latest action: {}", text(&source, "last_action"))} }
                     }
                     if !plan.is_empty() {
                         h3 { "Engineering plan" }
                         ol {
                             for item in plan {
-                                li { "{item.as_str().unwrap_or("Unspecified step")}" }
+                                li { {item.as_str().unwrap_or("Unspecified step").to_string()} }
                             }
                         }
                     }
@@ -69,7 +80,7 @@ fn RunDetail(run: Value, csrf: String) -> Element {
                         h3 { "Changed files" }
                         ul {
                             for path in changed {
-                                li { class: "mono", "{path.as_str().unwrap_or("")}" }
+                                li { class: "mono", {path.as_str().unwrap_or("").to_string()} }
                             }
                         }
                     }
@@ -78,9 +89,9 @@ fn RunDetail(run: Value, csrf: String) -> Element {
                         ol { class: "engineering-activity",
                             for event in activity {
                                 li {
-                                    strong { "{text(&event, "action")}" }
-                                    span { class:"muted", "{text(&event, "target")}" }
-                                    p { class:"muted", "{text(&event, "reason")}" }
+                                    strong { {text(&event, "action")} }
+                                    span { class:"muted", {text(&event, "target")} }
+                                    p { class:"muted", {text(&event, "reason")} }
                                 }
                             }
                         }
@@ -89,9 +100,9 @@ fn RunDetail(run: Value, csrf: String) -> Element {
                         h3 { "Verification diagnostics" }
                         for diagnostic in diagnostics {
                             div { class:"inline-row",
-                                span { class:"mono", "{text(&diagnostic, "command")}" }
+                                span { class:"mono", {text(&diagnostic, "command")} }
                                 Badge { text:text(&diagnostic,"category") }
-                                span { class:"muted", "Exit: {text(&diagnostic, "exit_code")}" }
+                                span { class:"muted", {format!("Exit: {}", text(&diagnostic, "exit_code"))} }
                             }
                         }
                     }
@@ -106,7 +117,7 @@ fn RunDetail(run: Value, csrf: String) -> Element {
                     }
                 }
                 if let Some(cleanup) = run.get("cleanup") {
-                    p { class:"muted", "Workspace cleanup: {text(cleanup, "status")}" }
+                    p { class:"muted", {format!("Workspace cleanup: {}", text(cleanup, "status"))} }
                 }
                 SourcePreviews { run_id:text(&run,"id") }
                 h3 { "Execution and verification" }
@@ -116,9 +127,9 @@ fn RunDetail(run: Value, csrf: String) -> Element {
                         tbody {
                             for step in &steps {
                                 tr {
-                                    td { "{text(step, "kind")}" }
+                                    td { {text(step, "kind")} }
                                     td { Badge { text: text(step, "status") } }
-                                    td { "{text(step, "attempts")}" }
+                                    td { {text(step, "attempts")} }
                                 }
                             }
                         }
@@ -128,12 +139,12 @@ fn RunDetail(run: Value, csrf: String) -> Element {
                     h3 { "Source review" }
                     div { class: "inline-row",
                         Badge { text: text(&review, "verdict") }
-                        span { "Risk: {text(&review, "risk")}" }
+                        span { {format!("Risk: {}", text(&review, "risk"))} }
                     }
                     if !findings.is_empty() {
                         ul {
                             for finding in findings {
-                                li { "{finding.as_str().unwrap_or("")}" }
+                                li { {finding.as_str().unwrap_or("").to_string()} }
                             }
                         }
                     }
@@ -155,14 +166,17 @@ fn TeamDetail(team: Value, csrf: String) -> Element {
     let members = as_items(&team, "members");
     let artifacts = as_items(&team, "artifacts");
     let conflicts = as_items(&team, "conflicts");
-    let ready = team.get("ready_for_review").and_then(Value::as_bool).unwrap_or(false);
+    let ready = team
+        .get("ready_for_review")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
     let integration = team.get("integration").cloned().unwrap_or(Value::Null);
     rsx! {
         details { class: "card",
             summary { class: "card-header",
                 div {
-                    h2 { class: "card-title", "{text(&team, "id")}" }
-                    p { class: "card-description", "{text(&team, "project")} · {text(&team, "repository")}" }
+                    h2 { class: "card-title", {text(&team, "id")} }
+                    p { class: "card-description", {format!("{} · {}", text(&team, "project"), text(&team, "repository"))} }
                 }
                 Badge { text: text(&team, "status") }
             }
@@ -173,15 +187,15 @@ fn TeamDetail(team: Value, csrf: String) -> Element {
                     h3 { "Verified artifacts" }
                     for artifact in artifacts {
                         div { class: "inline-row",
-                            span { class: "mono", "{text(&artifact, "path")}" }
-                            span { class: "muted", "Prepared by {text(&artifact, "member")}" }
+                            span { class: "mono", {text(&artifact, "path")} }
+                            span { class: "muted", {format!("Prepared by {}", text(&artifact, "member"))} }
                         }
                     }
                 }
                 if !conflicts.is_empty() {
                     h3 { "Reconciliation conflicts" }
                     for conflict in conflicts {
-                        p { role: "alert", "{conflict.as_str().unwrap_or("")}" }
+                        p { role: "alert", {conflict.as_str().unwrap_or("").to_string()} }
                     }
                 }
                 if ready {

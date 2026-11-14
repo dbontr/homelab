@@ -27,6 +27,40 @@ in {
       default = null;
       description = "Runtime path to an owner-only MCP bearer token, kept outside the Nix store.";
     };
+    appBundle = {
+      directory = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Verified immutable Rust/WASM Learning MCP App release directory.";
+      };
+      origin = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Exact public HTTPS origin serving verified Learning App assets.";
+      };
+    };
+    model = {
+      allowDisclosure = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = "Permit consented learner responses and source passages to leave the Learning service for the configured model.";
+      };
+      endpoint = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Operator-selected HTTPS or loopback chat-completions endpoint for optional model proposals.";
+      };
+      name = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Exact model identifier used only for provisional Learning assessment and extraction.";
+      };
+      tokenCredentialFile = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Optional owner-only API credential, never stored in the Nix store.";
+      };
+    };
     listenAddress = lib.mkOption {
       type = lib.types.str;
       default = "127.0.0.1:8200";
@@ -78,6 +112,27 @@ in {
         message = "Adaptive Teaching requires an external bearer token file.";
       }
       {
+        assertion = (cfg.model.endpoint == null) == (cfg.model.name == null) &&
+          (cfg.model.tokenCredentialFile == null || cfg.model.endpoint != null) &&
+          (!cfg.model.allowDisclosure || cfg.model.endpoint != null);
+        message = "Learning model requires endpoint and name together; credentials and disclosure require a configured provider.";
+      }
+      {
+        assertion = (cfg.appBundle.directory == null) == (cfg.appBundle.origin == null);
+        message = "Learning App requires verified assets and their public origin together.";
+      }
+      {
+        assertion = cfg.appBundle.origin == null ||
+          builtins.match "https://[A-Za-z0-9.-]+(:[0-9]+)?" cfg.appBundle.origin != null;
+        message = "Learning App assets require an exact HTTPS origin.";
+      }
+      {
+        assertion = cfg.model.endpoint == null ||
+          builtins.match "https://[^/?#]+/v1/chat/completions" cfg.model.endpoint != null ||
+          builtins.match "http://(127[.]0[.]0[.]1|localhost|\\[::1\\])(:[0-9]+)?/v1/chat/completions" cfg.model.endpoint != null;
+        message = "Learning model endpoint must use HTTPS or an explicit loopback HTTP host.";
+      }
+      {
         assertion = (cfg.access.issuer == "" && cfg.access.audience == "" &&
           cfg.access.certsURL == "" && cfg.access.ownerCredentialFile == null) ||
           (cfg.access.issuer != "" && cfg.access.audience != "" &&
@@ -105,20 +160,34 @@ in {
         RuntimeDirectoryMode = "0700";
         LoadCredential = [ "mcp_token:${credentialFile}" ] ++
           lib.optional (cfg.access.ownerCredentialFile != null)
-            "access_owner:${cfg.access.ownerCredentialFile}";
+            "access_owner:${cfg.access.ownerCredentialFile}" ++
+          lib.optional (cfg.model.tokenCredentialFile != null)
+            "model_token:${cfg.model.tokenCredentialFile}";
         ExecStart = executable;
         ExecStartPre = (lib.optional (cfg.binaryPath != null)
           "${pkgs.coreutils}/bin/sha256sum --check ${checksum}") ++ [
             "${pkgs.coreutils}/bin/install -m 0600 %d/mcp_token /run/adaptive-teaching/mcp_token"
           ] ++ lib.optional (cfg.access.ownerCredentialFile != null)
-            "${pkgs.coreutils}/bin/install -m 0600 %d/access_owner /run/adaptive-teaching/access_owner";
+            "${pkgs.coreutils}/bin/install -m 0600 %d/access_owner /run/adaptive-teaching/access_owner" ++
+          lib.optional (cfg.model.tokenCredentialFile != null)
+            "${pkgs.coreutils}/bin/install -m 0600 %d/model_token /run/adaptive-teaching/model_token";
         Environment = [
           "ADAPTIVE_TEACHING_DB_PATH=/var/lib/adaptive-teaching/learning.db"
           "ADAPTIVE_TEACHING_LISTEN_ADDR=${cfg.listenAddress}"
           "ADAPTIVE_TEACHING_ALLOWED_HOSTS=${cfg.allowedHosts}"
           "ADAPTIVE_TEACHING_ALLOWED_ORIGINS=${cfg.allowedOrigins}"
           "ADAPTIVE_TEACHING_BEARER_TOKEN_FILE=/run/adaptive-teaching/mcp_token"
-        ] ++ lib.optionals (cfg.access.ownerCredentialFile != null) [
+        ] ++ lib.optionals (cfg.appBundle.directory != null) [
+          "ADAPTIVE_TEACHING_APP_BUNDLE_DIRECTORY=${cfg.appBundle.directory}"
+          "ADAPTIVE_TEACHING_APP_BUNDLE_ORIGIN=${cfg.appBundle.origin}"
+        ] ++ lib.optionals (cfg.model.endpoint != null) [
+          "ADAPTIVE_TEACHING_MODEL_ENDPOINT=${cfg.model.endpoint}"
+          "ADAPTIVE_TEACHING_MODEL_NAME=${cfg.model.name}"
+        ] ++ lib.optional cfg.model.allowDisclosure
+          "ADAPTIVE_TEACHING_MODEL_DISCLOSURE_ENABLED=1" ++
+          lib.optional (cfg.model.tokenCredentialFile != null)
+          "ADAPTIVE_TEACHING_MODEL_TOKEN_FILE=/run/adaptive-teaching/model_token" ++
+          lib.optionals (cfg.access.ownerCredentialFile != null) [
           "ADAPTIVE_TEACHING_ACCESS_ISSUER=${cfg.access.issuer}"
           "ADAPTIVE_TEACHING_ACCESS_AUDIENCE=${cfg.access.audience}"
           "ADAPTIVE_TEACHING_ACCESS_CERTS_URL=${cfg.access.certsURL}"

@@ -102,18 +102,49 @@ func name(id string) (string, error) {
 	return "pwm-" + id, nil
 }
 
+// Raw-device operations use only the Nix-store Docker client selected by
+// the host, not an executable that a worker can inject through its PATH.
+func dockerExecutable() (string,error) {
+    executable,err:=exec.LookPath("docker")
+    if err!=nil{return "",errors.New("Docker is not installed")}
+    if !nativeCustodySelected(){return executable,nil}
+    canonical,err:=filepath.EvalSymlinks(executable)
+    if err!=nil||!filepath.IsAbs(canonical)||
+        !strings.HasPrefix(canonical,"/nix/store/"){
+        return "",errors.New("native device custody requires a pinned Docker client")
+    }
+    info,err:=os.Lstat(canonical)
+    if err!=nil||!info.Mode().IsRegular()||info.Mode().Perm()&0022!=0{
+        return "",errors.New("native device Docker executable is not protected")
+    }
+    return canonical,nil
+}
+
+// Docker custody and the native release verifier must inspect the same
+// local daemon. Explicit CLI selection overrides a configured remote
+// context when raw hardware passthrough is enabled.
+func dockerInvocationArgs(args ...string) []string {
+    if !nativeCustodySelected(){return args}
+    pinned:=make([]string,0,len(args)+2)
+    pinned=append(pinned,"--host","unix:///var/run/docker.sock")
+    return append(pinned,args...)
+}
+
 func (r *Runner) docker(ctx context.Context, timeout time.Duration, input io.Reader, args ...string) ([]byte, []byte, int, error) {
-	if _, err := exec.LookPath("docker"); err != nil {
-		return nil, nil, -1, errors.New("Docker is not installed")
-	}
+	binary,err:=dockerExecutable()
+    if err!=nil{return nil,nil,-1,err}
 	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	cmd := exec.CommandContext(runCtx, "docker", args...)
+	cmd := exec.CommandContext(runCtx, binary, dockerInvocationArgs(args...)...)
+    if nativeCustodySelected(){
+        cmd.Env=append(os.Environ(),
+            "DOCKER_HOST=unix:///var/run/docker.sock","DOCKER_CONTEXT=")
+    }
 	cmd.Stdin = input
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &limitWriter{Writer: &stdout, Limit: 512 * 1024}
 	cmd.Stderr = &limitWriter{Writer: &stderr, Limit: 32 * 1024}
-	err := cmd.Run()
+	err = cmd.Run()
 	if runCtx.Err() != nil {
 		return stdout.Bytes(), stderr.Bytes(), -1, runCtx.Err()
 	}
@@ -218,10 +249,35 @@ func (r *Runner) Start(ctx context.Context, id string, p map[string]any) (map[st
 			return nil, errors.New("USB passthrough requires the worker opt-in and workspace toggle")
 		}
 	}
-	flags, err := DeviceDockerArgsAuthorized(selected, r.AvailableDevices(), r.USBEnabled && p["usb_passthrough"] == true)
+    available:=r.AvailableDevices()
+    nativeLeases:=[]nativeDeviceLease{}
+    custodyArmed:=false
+    if nativeCustodySelected() && len(selected)>0 {
+        if err:=r.assertWorkspaceContainerAbsent(ctx,id);err!=nil{return nil,err}
+        nativeLeases,err=approvedDeviceClaims(selected,available,
+            r.USBEnabled && p["usb_passthrough"]==true)
+        if err!=nil{return nil,err}
+        if err:=acquireNativeLeases(ctx,id,nativeLeases);err!=nil{return nil,err}
+        custodyArmed=true
+        // The device remains reserved until the container's absence is
+        // verified. A failed cleanup deliberately retains the native lease.
+        defer func(){
+            if !custodyArmed{return}
+            recoveryCtx,cancel:=context.WithTimeout(context.Background(),40*time.Second)
+            defer cancel()
+            if r.assertWorkspaceContainerAbsent(recoveryCtx,id)==nil{
+                _=rollbackNativeLeases(nativeLeases,id)
+            }
+        }()
+    }
+	flags, err := DeviceDockerArgsAuthorized(selected,available,
+        r.USBEnabled && p["usb_passthrough"] == true)
 	if err != nil {
 		return nil, err
 	}
+    if custodyArmed{
+        if err:=verifyNativeLeases(ctx,id,nativeLeases);err!=nil{return nil,err}
+    }
 	if _, err := r.checked(ctx, 30*time.Second, nil, "volume", "create", "--label", "project-workspace=volume",
 		"--label", "project-workspace-workspace="+id, n); err != nil {
 		return nil, err
@@ -255,6 +311,16 @@ func (r *Runner) Start(ctx context.Context, id string, p map[string]any) (map[st
 		_, _, _, _ = r.docker(ctx, 30*time.Second, nil, "rm", "-f", n)
 		return nil, err
 	}
+    if custodyArmed {
+        // Recheck kernel identity after Docker has admitted the device. On a
+        // changed identity, destroy the container before releasing any lease.
+        if err:=verifyNativeLeases(ctx,id,nativeLeases);err!=nil{
+            cleanupCtx,cancel:=context.WithTimeout(context.Background(),30*time.Second)
+            _,_,_,_=r.docker(cleanupCtx,20*time.Second,nil,"rm","-f",n)
+            cancel()
+            return nil,fmt.Errorf("native device identity changed during allocation: %w",err)
+        }
+    }
 	if display {
 		if err := r.startVirtualDisplay(ctx, n, int(width), int(height)); err != nil {
 			cleanupCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
@@ -262,8 +328,10 @@ func (r *Runner) Start(ctx context.Context, id string, p map[string]any) (map[st
 			cancel()
 			return nil, fmt.Errorf("virtual display startup failed: %w", err)
 		}
+        custodyArmed=false
 		return map[string]any{"status": "ready", "container": n, "display": ":99", "width": width, "height": height}, nil
 	}
+    custodyArmed=false
 	return map[string]any{"status": "ready", "container": n}, nil
 }
 
@@ -287,6 +355,8 @@ func (r *Runner) Command(ctx context.Context, id, command string, stdin io.Reade
 }
 
 func (r *Runner) streamDocker(ctx context.Context, input io.Reader, args ...string) (*os.File, string, error) {
+    binary,err:=dockerExecutable()
+    if err!=nil{return nil,"",err}
 	file, err := os.CreateTemp("", "pwm-archive-*")
 	if err != nil {
 		return nil, "", err
@@ -294,7 +364,11 @@ func (r *Runner) streamDocker(ctx context.Context, input io.Reader, args ...stri
 	os.Remove(file.Name()) // anonymous temporary data; never persists in the source tree
 	runCtx, cancel := context.WithTimeout(ctx, 2*time.Hour)
 	defer cancel()
-	cmd := exec.CommandContext(runCtx, "docker", args...)
+	cmd := exec.CommandContext(runCtx, binary, dockerInvocationArgs(args...)...)
+    if nativeCustodySelected(){
+        cmd.Env=append(os.Environ(),
+            "DOCKER_HOST=unix:///var/run/docker.sock","DOCKER_CONTEXT=")
+    }
 	cmd.Stdin = input
 	var stderr bytes.Buffer
 	cmd.Stderr = &limitWriter{Writer: &stderr, Limit: 4096}
@@ -571,6 +645,11 @@ func (r *Runner) Handle(ctx context.Context, op Operation, c *Client) (map[strin
 	if err != nil {
 		return nil, err
 	}
+    if nativeCustodySelected() && op.Action!="start" && op.Action!="stop" {
+        if err:=verifyNativeWorkspace(ctx,op.Workspace);err!=nil{
+            return nil,fmt.Errorf("active device custody verification failed: %w",err)
+        }
+    }
 	switch op.Action {
 	case "start":
 		return r.Start(ctx, op.Workspace, payload)
@@ -584,8 +663,19 @@ func (r *Runner) Handle(ctx context.Context, op Operation, c *Client) (map[strin
 		if status != 0 && !strings.Contains(string(stderr), "No such container") {
 			return nil, fmt.Errorf("docker cleanup failed: %s", stderr)
 		}
+        if nativeCustodySelected() {
+            if err:=r.assertWorkspaceContainerAbsent(ctx,op.Workspace);err!=nil {
+                return nil,fmt.Errorf("cannot release native device custody: %w",err)
+            }
+            if err:=releaseNativeWorkspace(op.Workspace);err!=nil {
+                return nil,fmt.Errorf("device custody remains reserved: %w",err)
+            }
+        }
 		return map[string]any{"status": "stopped", "volume": n}, nil
 	case "command":
+		if _, selected := payload["sandbox_check"]; selected {
+			return nil, errors.New("native verification requires isolated Kubernetes worker")
+		}
 		return r.Command(ctx, op.Workspace, getString(payload, "command"), nil)
 	case "read_file":
 		p, err := safePath(getString(payload, "path"))
@@ -751,7 +841,8 @@ func (r *Runner) importArchive(ctx context.Context, op Operation, c *Client) (ma
 		return nil, err
 	}
 	repoName := regexp.MustCompile(`^(local:)?[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)
-	if !repoName.MatchString(p.Repository) || !workspaceID.MatchString(p.ArtifactID) {
+	if !repoName.MatchString(p.Repository) || !regexp.MustCompile("^[a-f0-9]{40}$").MatchString(p.Revision) ||
+		!workspaceID.MatchString(p.ArtifactID) {
 		return nil, errors.New("invalid imported repository")
 	}
 	temp, err := os.CreateTemp("", "pwm-repository-*")
@@ -775,6 +866,7 @@ func (r *Runner) importArchive(ctx context.Context, op Operation, c *Client) (ma
 	dest := tar.NewWriter(&packed)
 	var total int64
 	count := 0
+	seen := map[string]bool{}
 	for {
 		header, err := source.Next()
 		if err == io.EOF {
@@ -792,8 +884,15 @@ func (r *Runner) importArchive(ctx context.Context, op Operation, c *Client) (ma
 			continue
 		}
 		relative := strings.Join(components[1:], "/")
-		if !safeArchiveEntry(relative) || relative == "." {
+		if !safeArchiveEntry(relative) || relative == "." || path.Clean(relative) != relative {
 			return nil, errors.New("unsafe repository archive entry")
+		}
+		if seen[relative] {
+			return nil, errors.New("duplicate repository archive path")
+		}
+		seen[relative] = true
+		if relative == ".pwm-source-revision" {
+			return nil, errors.New("repository archive contains reserved source receipt")
 		}
 		if header.Typeflag == tar.TypeDir {
 			continue
@@ -816,6 +915,15 @@ func (r *Runner) importArchive(ctx context.Context, op Operation, c *Client) (ma
 		if _, err := io.CopyN(dest, source, header.Size); err != nil {
 			return nil, err
 		}
+	}
+	sourceRef := []byte(p.Repository + "\n" + p.Revision + "\n")
+	markerPath := "repos/" + strings.NewReplacer("/", "__", ":", "__").Replace(p.Repository) + "/.pwm-source-revision"
+	if err := dest.WriteHeader(&tar.Header{Name: markerPath, Mode: 0444,
+		Typeflag: tar.TypeReg, Size: int64(len(sourceRef)), Uid: 65534, Gid: 65534}); err != nil {
+		return nil, err
+	}
+	if _, err := dest.Write(sourceRef); err != nil {
+		return nil, err
 	}
 	if err := dest.Close(); err != nil {
 		return nil, err

@@ -32,7 +32,7 @@ func TestTaskConflictPreviewAndCalendarUncertainty(t *testing.T){
  if len(view.Conflicts)!=0{t.Fatal("editing a timebox conflicts with itself")}
 }
 
-func TestTaskConflictPreviewKeepsCalendarRecurrenceCaveat(t *testing.T){
+func TestTaskConflictPreviewExpandsSupportedCalendarRecurrence(t *testing.T){
  source:=httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter,_ *http.Request){
   _,_=w.Write([]byte("BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:1\r\nDTSTART:20261109T120000Z\r\nDTEND:20261109T140000Z\r\nSUMMARY:Lecture\r\nRRULE:FREQ=WEEKLY\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"))
  }))
@@ -42,12 +42,12 @@ func TestTaskConflictPreviewKeepsCalendarRecurrenceCaveat(t *testing.T){
  s,err:=New(tasks,strings.Repeat("t",40),nil);if err!=nil{t.Fatal(err)}
  s.client=source.Client()
  if err:=s.SetCalendarURL(source.URL);err!=nil{t.Fatal(err)}
- w:=request(s.Handler(),"GET","/v1/tasks/conflicts?start=2026-11-09T12:30:00Z&minutes=20","",strings.Repeat("t",40))
+ w:=request(s.Handler(),"GET","/v1/tasks/conflicts?start=2026-11-16T12:30:00Z&minutes=20","",strings.Repeat("t",40))
  if w.Code!=200{t.Fatalf("preview HTTP %d: %s",w.Code,w.Body.String())}
  var result ConflictPreview
  if err:=json.Unmarshal(w.Body.Bytes(),&result);err!=nil{t.Fatal(err)}
  if len(result.Conflicts)!=1||result.Conflicts[0].Source!="calendar"{
   t.Fatalf("calendar event absent: %+v",result)
  }
- if len(result.Limitations)==0{t.Fatal("recurring events incorrectly claimed fully expanded")}
+ if len(result.Limitations)!=0{t.Fatalf("supported weekly recurrence had unexpected limitations: %+v",result.Limitations)}
 }

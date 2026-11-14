@@ -40,6 +40,26 @@ The default `--load` mode installs source-built images into the operator's local
 
 The local Compute Helm chart disables both components by default and refuses to render an enabled controller or worker with an empty or mutable image reference. After independently verifying the source revision and registry artifact custody, configure `controller.enabled` / `worker.enabled` and their exact digest-qualified `image` fields, or set the matching `services.workspaceMcp.controllerImage` and `workerImage` NixOS options. Registry publish does not imply Kubernetes deployment, worker enrollment or source-repository retirement. The current Dockerfiles rely on external base images and package repositories; independent base-image and package provenance must be accepted before claiming fully reproducible builds. The existing controller database volume, paired worker credentials, namespaces and jobs must survive the separately approved live cutover.
 
+### Compute controller Helm activation
+
+The controller holds project and worker identities in a node-local SQLite database. Treat a controller image change as a stateful release: verify the immutable image digest, retain the live persistent volume and its owner node, and capture a restricted, consistent SQLite snapshot together with its artifact directory. A raw copy of a database in WAL mode is not a consistent snapshot. Verify the snapshot with `PRAGMA integrity_check` and keep it separate from the live volume. Do not start a second controller against the same database.
+
+The chart disables both executable roles by default. A controller release created with an older chart may not record `controller.enabled` in its values. **Always set `controller.enabled=true` and `worker.enabled=false` explicitly** when upgrading it. Helm 3.20 or later can merge current chart defaults with stored release overrides using `--reset-then-reuse-values`; using `--reuse-values` alone can omit newly introduced values. A successful dry run is insufficient if its rendered manifest is empty.
+
+For an existing controller release, substitute the verified source-owned chart directory and exact registry digest into this command. Run it with `--dry-run=server --hide-secret` first, then check that the manifest contains exactly the controller ServiceAccount, existing PVC, Service, and Deployment. Compare the proposed PVC name, storage request, storage class, Saturn/node placement, `Recreate` strategy, secret references, and environment with the live release. Resolve all differences before removing the dry-run flags.
+
+```sh
+helm upgrade pwm-controller "$WORKSPACE_HELM_CHART" \
+  --namespace pwm-system \
+  --reset-then-reuse-values \
+  --set controller.enabled=true \
+  --set worker.enabled=false \
+  --set-string "controller.image=$CONTROLLER_IMAGE_DIGEST" \
+  --atomic --wait --timeout 5m --history-max 10
+```
+
+Keep the preceding Helm revision and the verified state snapshot until the new controller passes authenticated project and worker enumeration, heartbeat freshness, read-only resource planning, workspace creation, command execution, workspace destruction, and access-denial checks. If a rollback is required after the database schema has changed, inspect compatibility and restore from the separately held pre-upgrade snapshot only with the controller stopped. A Helm rollback alone does not restore data.
+
 Compute toolchain environments can be built locally with:
 
 `bash services/compute/scripts/build-toolchain-image.sh <approved-image-reference> --load`
@@ -77,16 +97,42 @@ The Go platform and Rust console have separate NixOS activation switches. They r
 
 The internal compute, learning and health services retain their own state and release ownership. The imported source in this repository does not automatically replace their active binaries or modify Kubernetes controllers. An operator must select locally built, digest-qualified artifacts in the relevant service definitions and provide a rollback plan for each replacement.
 
-## Acceptance before activation
+## Acceptance and rollout order
 
-1. Confirm the staged binary and asset SHA-256 manifest and the corresponding source revision.
-2. Validate the Go modules, Rust/WASM build, NixOS host evaluations and service package derivations against the selected revision.
-3. Confirm the owner browser session, MCP authentication, backend discovery, private monitoring access, calendar read-only behavior and blocked unauthorized actions.
-4. Confirm worker image admission, registry push/pull, state retention, hardware identity and Kubernetes Job lifecycle independently of the public gateway.
-5. Inspect existing media, DNS, routing and Cloudflare paths, and preserve access to Moonfin and RecipeSage before any cutover.
-6. Activate one service at a time, verify readiness and retain the previous NixOS generation and immutable release. Avoid changing home routing until every dependent service is accepted.
+Every stage requires an exact source revision, verified release provenance, successful
+relevant Go/Rust/Nix checks, preserved private state, and a tested rollback path.
+Failure of a required check blocks that stage; unrelated services remain active.
 
-Source staging is not evidence of these acceptance checks. Do not delete databases, previous application deployments, existing repositories, recovery points or media merely because a newer source build exists.
+1. **Network and security backbone.** Qualify routing, firewall boundaries,
+   trusted management access, Cloudflare Tunnel and owner-only Access policies,
+   signed identity verification, Rust authority and executor isolation, secret
+   custody, unauthorized-request rejection, and recovery after controlled reboot.
+   Preserve the existing router configuration and an independent recovery path.
+2. **Unified MCP.** Verify the public MCP route, authenticated initialization,
+   tool discovery, exact domain allowlists, private backend delegation,
+   unauthorized-write rejection, CSRF/Origin protection where applicable,
+   session expiry, and service restart recovery. Retain independent domain
+   storage and avoid granting deployment privileges to the gateway.
+3. **Compute and cluster.** Publish worker images by immutable digest through a
+   durable authenticated registry, reconcile K3s worker configuration one node
+   at a time, and verify fresh-node pulls, worker registration, workspace
+   lifecycle, hardware custody, job recovery, and five-node readiness. Do not
+   rely on an image cached by a single node.
+4. **Rust/Dioxus console.** Accept Cloudflare owner sessions and required
+   browser operations before replacing Homepage. Verify the pinned shadcn/ui
+   component contracts, accessibility, light and dark themes, responsive
+   layouts, and authenticated application parity. Retain Homepage as a recovery
+   interface until these checks pass.
+5. **Remaining services and retirement.** Validate the independent Learning,
+   Health, media, monitoring, calendar, and other domain applications, then
+   retire superseded infrastructure only after its replacement has passed
+   acceptance. Preserve media files and every rollback artifact still required
+   for essential infrastructure.
+
+Promote the tested NixOS generation to the boot profile only after a reversible
+activation trial succeeds. A selected boot generation is not proof of cold-boot
+recovery. Do not delete private databases, previous application deployments,
+existing repositories, or recovery points merely because a newer build exists.
 
 ## Canonical resource references
 

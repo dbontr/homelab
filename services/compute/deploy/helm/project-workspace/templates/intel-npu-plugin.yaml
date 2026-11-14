@@ -1,4 +1,5 @@
-{{- if .Values.hardware.intelNpu.enabled }}
+{{- /* Legacy Helm releases may not contain the optional hardware settings. */ -}}
+{{- if and .Values.hardware .Values.hardware.intelNpu .Values.hardware.intelNpu.enabled }}
 {{- if empty .Values.hardware.intelNpu.nodeSelector }}
 {{- fail "hardware.intelNpu.nodeSelector must select explicitly approved NPU worker nodes" }}
 {{- end }}

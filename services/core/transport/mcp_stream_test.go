@@ -48,7 +48,7 @@ func TestMCPStreamableHTTPResponsePreservesJSONRPCIdentity(t *testing.T){
  }{
   {`{"jsonrpc":"2.0","id":"init","method":"initialize","params":{}}`,`"init"`,`"protocolVersion"`},
   {`{"jsonrpc":"2.0","id":2,"method":"tools/list"}`,`2`,`"task_add"`},
-  {`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"task_add","arguments":{"title":"Verify an experiment"}}}`,`3`,`"Verify an experiment"`},
+  {`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"task_add","arguments":{"title":"Verify an experiment"}}}`,`3`,`Verify an experiment`},
   {`{"jsonrpc":"2.0","id":4,"method":"unknown"}`,`4`,`"error"`},
  }
  for _,tc:=range tests{

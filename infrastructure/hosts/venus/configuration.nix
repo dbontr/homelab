@@ -5,10 +5,10 @@
   boot.loader.efi.canTouchEfiVariables = true;
   networking.hostName = hardwareNode.id;
   networking.useDHCP = false;
-  networking.interfaces.${hardwareNode.lanInterface}.useDHCP = false;
-  networking.interfaces.${hardwareNode.lanInterface}.ipv4.addresses = [
-    { address = hardwareNode.nodeIP; prefixLength = 24; }
-  ];
+  networking.interfaces.${hardwareNode.lanInterface} = {
+    useDHCP = false;
+    ipv4.addresses = [ { address = hardwareNode.nodeIP; prefixLength = 24; } ];
+  };
   networking.defaultGateway = {
     address = "10.77.30.1";
     interface = hardwareNode.lanInterface;

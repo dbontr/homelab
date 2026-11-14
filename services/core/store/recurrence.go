@@ -152,6 +152,9 @@ func (s *Store) ParseCapture(phrase string)(TaskInput,error){
   {" every saturday","weekly:sat"},{" every sunday","weekly:sun"},
  }
  for _,candidate:=range rules {
+  if lowered==strings.TrimSpace(candidate.suffix){
+   return TaskInput{},errors.New("task must have a title")
+  }
   if strings.HasSuffix(lowered,candidate.suffix){
    title=strings.TrimSpace(title[:len(title)-len(candidate.suffix)])
    input.Recurrence=candidate.rule;break

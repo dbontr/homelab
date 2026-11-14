@@ -10,6 +10,12 @@ The [Alien Space of Science](https://github.com/alejandrohdez00/alien-space-of-s
 4. Consult the current upstream README and DATA.md before executing commands. Do not vendor model weights or source into the skill bundle; keep the original project's license and attribution intact.
 5. Distinguish published model output from custom heuristic rankings. Cite the original paper and any actual sources examined when discussing novelty.
 
+The following commands execute the original external research implementation,
+which depends on Python and PyTorch. They are not bundled scripts in this
+skill. The skill's own deterministic ranking utility is written in Go and
+has no Python dependency. Do not claim that the released trained model is
+available through the Go ranker.
+
 ## Example upstream commands
 
 Run inside an authorized checkout of the original repository after installing requirements and retrieving the matching checkpoint files from the upstream Hugging Face release:

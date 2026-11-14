@@ -42,6 +42,7 @@ func TestSnapshotExtractionPreservesWorkspaceRoot(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(source, "data", "proof.txt"), []byte("checkpoint integrity"), 0644); err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { _ = os.Chmod(source, 0700) })
 	if err := os.Chmod(source, 0555); err != nil {
 		t.Fatal(err)
 	}

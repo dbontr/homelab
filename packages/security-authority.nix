@@ -11,6 +11,7 @@ pkgs.rustPlatform.buildRustPackage {
   cargoBuildFlags = [
     "--bin" "securityd"
     "--bin" "security-preflight"
+    "--bin" "security-migrate"
   ];
 
   doCheck = true;
@@ -19,6 +20,7 @@ pkgs.rustPlatform.buildRustPackage {
   postInstall = ''
     test -x "$out/bin/securityd"
     test -x "$out/bin/security-preflight"
+    test -x "$out/bin/security-migrate"
   '';
 
   meta = with pkgs.lib; {

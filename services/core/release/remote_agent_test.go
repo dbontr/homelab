@@ -56,6 +56,7 @@ func TestRemoteAgentAuthenticatesTransportAndScopesArguments(t *testing.T){
   if len(r.TLS.VerifiedChains)==0{t.Error("client certificate not verified");w.WriteHeader(403);return}
   if r.URL.Path=="/v1/release/status"{_=json.NewEncoder(w).Encode(ReleaseObservation{ID:id,Phase:"active"});return}
   var request struct{
+   RequestID string `json:"request_id"`
    Operation string `json:"operation"`
    Target string `json:"target"`
    Arguments struct{
@@ -64,11 +65,14 @@ func TestRemoteAgentAuthenticatesTransportAndScopesArguments(t *testing.T){
    } `json:"arguments"`
   }
   if err:=json.NewDecoder(r.Body).Decode(&request);err!=nil{t.Error(err);w.WriteHeader(400);return}
+  if !validRemoteExecutionID(request.RequestID){t.Error("invalid caller request identity")}
   if request.Target!="jupiter"||request.Arguments.Host!="jupiter"||request.Arguments.ReleaseID!=id{
    t.Error("unscoped request",request);w.WriteHeader(403);return
   }
   calls=append(calls,request.Operation)
-  _=json.NewEncoder(w).Encode(map[string]any{"allowed":true})
+  _=json.NewEncoder(w).Encode(map[string]any{
+   "allowed":true,"state":"completed","audit_id":request.RequestID,
+  })
  })
  cfg,closeServer:=remoteFixture(t,handler);defer closeServer()
  agent,err:=NewRemoteReleaseAgent(cfg);if err!=nil{t.Fatal(err)}
@@ -78,6 +82,42 @@ func TestRemoteAgentAuthenticatesTransportAndScopesArguments(t *testing.T){
  if err!=nil||status.ID!=id||status.Phase!="active"{t.Fatal(status,err)}
  if len(calls)!=2||calls[0]!="infrastructure__release_activate"||calls[1]!="infrastructure__release_revert"{t.Fatal(calls)}
  if err:=agent.Activate(context.Background(),"../../etc/passwd");err==nil{t.Fatal("unscoped release ID accepted")}
+}
+
+func TestRemoteReleaseAgentPreservesCallerIdentityAndChecksReceipt(t *testing.T){
+ releaseID:=strings.Repeat("a",48)
+ requestID:=strings.Repeat("b",32)
+ calls:=0
+ mismatch:=false
+ handler:=http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){
+  calls++
+  var input struct{RequestID string `json:"request_id"`}
+  if err:=json.NewDecoder(r.Body).Decode(&input);err!=nil||input.RequestID!=requestID{
+   t.Error("remote agent changed caller request identity",err)
+  }
+  receipt:=requestID
+  if mismatch{receipt=strings.Repeat("c",32)}
+  w.Header().Set("Content-Type","application/json")
+  _=json.NewEncoder(w).Encode(map[string]any{
+   "allowed":true,"state":"completed","audit_id":receipt,
+  })
+ })
+ cfg,closeServer:=remoteFixture(t,handler)
+ defer closeServer()
+ agent,err:=NewRemoteReleaseAgent(cfg)
+ if err!=nil{t.Fatal(err)}
+ for i:=0;i<2;i++{
+  if err:=agent.ActivateWithID(context.Background(),requestID,releaseID);err!=nil{t.Fatal(err)}
+ }
+ if calls!=2{t.Fatal("explicit request ID was not propagated")}
+ mismatch=true
+ if err:=agent.RevertWithID(context.Background(),requestID,releaseID);err==nil{
+  t.Fatal("unrelated audit receipt was accepted")
+ }
+ if err:=agent.ActivateWithID(context.Background(),"bad-id",releaseID);err==nil{
+  t.Fatal("invalid request ID reached host")
+ }
+ if calls!=3{t.Fatal("bad request identity contacted host")}
 }
 
 func TestRemoteAgentFailsClosedWithoutIdentityOrTrust(t *testing.T){

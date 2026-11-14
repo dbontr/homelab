@@ -4,5 +4,5 @@ pkgs.buildGoModule {
   version = "0.1.0";
   src = ../services/core;
   vendorHash = null;
-  subPackages = [ "cmd/homelab-securityd" "cmd/homelab-admin" ];
+  subPackages = [ "cmd/homelab-securityd" "cmd/homelab-admin" "cmd/homelab-security-preflight" ];
 }

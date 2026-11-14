@@ -78,7 +78,7 @@ var tools = []toolDefinition{
 	{"task_claim", "Claim a work key with a fenced, expiring lease", []string{"project_id", "work_key"}, []string{"lease_seconds"}},
 	{"task_claim_renew", "Renew a live task lease by generation and secret token", []string{"project_id", "work_key", "lease_token", "generation"}, []string{"lease_seconds"}},
 	{"task_claim_finish", "Complete or release a task lease, validating result artifact ownership", []string{"project_id", "work_key", "lease_token", "generation", "status"}, []string{"artifact_ids"}},
-	{"resource_plan", "Rank eligible Docker workers and explain resource constraints without reserving anything", []string{"project_id"}, []string{"image", "cpu", "memory_mb", "duration_minutes", "environment", "image_pool_id", "hardware", "usb_passthrough", "usb_node", "usb_device_id", "node_id", "min_gpu_memory_mb", "architecture", "display", "display_width", "display_height"}},
+	{"resource_plan", "Rank eligible Kubernetes and Docker workers and explain resource constraints without reserving anything", []string{"project_id"}, []string{"image", "cpu", "memory_mb", "duration_minutes", "environment", "image_pool_id", "hardware", "usb_passthrough", "usb_node", "usb_device_id", "node_id", "min_gpu_memory_mb", "architecture", "display", "display_width", "display_height"}},
 	{"resource_plan_batch", "Plan project compute workloads by priority and available worker capacity without reserving resources", []string{"project_id", "workloads"}, nil},
 	{"workspace_batch_create", "Atomically reserve a bounded batch of approved project workspaces; exact batch IDs are idempotent", []string{"project_id", "batch_id", "workloads"}, nil},
 	{"workspace_create", "Reserve resources and start a workspace", []string{"project_id"}, []string{"image", "cpu", "memory_mb", "duration_minutes", "environment", "image_pool_id", "hardware", "usb_passthrough", "usb_node", "usb_device_id", "node_id", "min_gpu_memory_mb", "architecture", "display", "display_width", "display_height"}},
@@ -298,6 +298,7 @@ func (s *Server) handleMCP(w http.ResponseWriter, r *http.Request, who caller) {
 	case "tools/call":
 		name := asString(msg.Params["name"])
 		args, _ := msg.Params["arguments"].(map[string]any)
+        if args==nil{args=map[string]any{}}
 		var result any
 		var e error
 		if !s.authorizeTool(who, name, args) {
@@ -305,7 +306,17 @@ func (s *Server) handleMCP(w http.ResponseWriter, r *http.Request, who caller) {
 		} else if !who.Root && name == "list_projects" {
 			result, e = s.DB.ProjectsForPrincipal(who.Principal)
 		} else {
-			result, e = s.callToolFor(who, name, args)
+            scopeArguments,marshalErr:=json.Marshal(args)
+            if marshalErr!=nil{
+                e=errors.New("invalid operation argument object")
+            }else{
+                scoped,finish:=s.forProviderOperation(
+                    r.Context(),r.Header.Get("Cf-Access-Jwt-Assertion"),
+                    name,scopeArguments,
+                )
+                defer finish()
+                result,e=scoped.callToolFor(who,name,args)
+            }
 		}
 		if e != nil {
 			response["result"] = map[string]any{"content": []map[string]any{{"type": "text", "text": e.Error()}}, "isError": true}

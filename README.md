@@ -8,7 +8,7 @@ The system is maintained in one repository but runs as independently operable se
 
 - `skills/` contains portable Development, Writing, Teaching and Ideas skills for consistent assistant behavior and project workflows.
 
-- `services/` contains the domain service implementations and private contracts. `services/core/` contains the application runtime; `services/compute/`, `services/learning/`, and `services/health/` are independently buildable modules. Each service retains its own persistent state.
+- `services/` contains the domain service implementations and private contracts. `services/core/` contains the application runtime; `services/compute/`, `services/learning/`, and `services/health/` are independently buildable modules. `services/motivation/` is an opt-in, private Rust service with its own personal intervention history. Each service retains its own persistent state.
 - `ui/` contains the Rust/Dioxus console and its independent browser interface.
 - `mcp/` contains the independently startable, single aggregated MCP listener.
 - `api/` contains the independently startable, optionally writable native HTTP API listener.
@@ -27,7 +27,7 @@ See [interface boundaries](docs/interface-boundaries.md) for service ownership, 
 
 ## Console
 
-The Rust/Dioxus browser client is in [`ui/console`](ui/console). It uses shadcn/ui neutral design tokens and consumes authenticated native API endpoints for monitoring, workspace inspection, task and recipe workflows, health, teaching, calendar and planning. It does not ship React or embed privileged MCP credentials. See [console architecture](docs/console.md), [observability](docs/observability.md), [books](docs/books.md) and [self-hosted releases](docs/self-hosted-release.md).
+The Rust/Dioxus browser client is in [`ui/console`](ui/console). It uses shadcn/ui neutral design tokens and consumes authenticated native API endpoints for monitoring, workspace inspection, task and recipe workflows, health, teaching, calendar and planning. It does not ship React or embed privileged MCP credentials. See [identity-directed motivation](docs/motivation.md), [console architecture](docs/console.md), [observability](docs/observability.md), [books](docs/books.md) and [self-hosted releases](docs/self-hosted-release.md).
 
 ## Development
 

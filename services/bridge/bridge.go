@@ -225,6 +225,15 @@ func writable(allowed map[string]bool,path string)bool{
  return false
 }
 
+// systemd places service credentials in a private directory. The files can
+// be group-readable to a service with a transient identity; they must never
+// be world-accessible or group-writable.
+func privateCredentialMode(path string, mode os.FileMode) bool {
+ if mode.Perm()&0077==0{return true}
+ directory:=os.Getenv("CREDENTIALS_DIRECTORY")
+ return directory!=""&&filepath.Dir(filepath.Clean(path))==filepath.Clean(directory)&&mode.Perm()&0037==0
+}
+
 func protectedToken(path string)(string,error){
  if !filepath.IsAbs(path){return "",errors.New("credential path must be absolute")}
  // Validate the open descriptor, not a path inspected before opening it.
@@ -232,7 +241,7 @@ func protectedToken(path string)(string,error){
  if err!=nil{return "",errors.New("interface credential file is unavailable or has unsafe access")}
  defer file.Close()
  info,err:=file.Stat()
- if err!=nil||!info.Mode().IsRegular()||info.Mode().Perm()&0077!=0||
+ if err!=nil||!info.Mode().IsRegular()||!privateCredentialMode(path,info.Mode())||
   info.Size()<32||info.Size()>4097{
   return "",errors.New("interface credential file is unavailable or has unsafe access")
  }

@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 use reqwest::Method;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::api;
 use crate::components::{Empty, Notice};
@@ -54,16 +54,31 @@ fn mapped_ingredients(draft: &[Selection]) -> Result<Vec<IngredientSelection>, S
     if draft.is_empty() || draft.len() > 12 {
         return Err("A recipe must contain between 1 and 12 mapped ingredients".to_owned());
     }
-    draft.iter().enumerate().map(|(index, entry)| {
-        let fdc_id = entry.fdc_id.trim().parse::<i64>()
-            .map_err(|_| format!("Ingredient {} requires a USDA food ID", index + 1))?;
-        let grams = entry.grams.trim().parse::<f64>()
-            .map_err(|_| format!("Ingredient {} requires an edible mass in grams", index + 1))?;
-        if fdc_id <= 0 || !grams.is_finite() || grams <= 0.0 || grams > 10000.0 {
-            return Err(format!("Ingredient {} has an invalid USDA ID or edible mass", index + 1));
-        }
-        Ok(IngredientSelection { ingredient_index: index, fdc_id, grams })
-    }).collect()
+    draft
+        .iter()
+        .enumerate()
+        .map(|(index, entry)| {
+            let fdc_id = entry
+                .fdc_id
+                .trim()
+                .parse::<i64>()
+                .map_err(|_| format!("Ingredient {} requires a USDA food ID", index + 1))?;
+            let grams = entry.grams.trim().parse::<f64>().map_err(|_| {
+                format!("Ingredient {} requires an edible mass in grams", index + 1)
+            })?;
+            if fdc_id <= 0 || !grams.is_finite() || grams <= 0.0 || grams > 10000.0 {
+                return Err(format!(
+                    "Ingredient {} has an invalid USDA ID or edible mass",
+                    index + 1
+                ));
+            }
+            Ok(IngredientSelection {
+                ingredient_index: index,
+                fdc_id,
+                grams,
+            })
+        })
+        .collect()
 }
 
 #[component]
@@ -218,7 +233,7 @@ pub fn USDANutrition(
                     }
                     if !result.incomplete.is_empty() {
                         p { class: "small muted",
-                            "Incomplete source coverage (not saved as a total): {result.incomplete.join(", ")}"
+                            {format!("Incomplete source coverage (not saved as a total): {}", result.incomplete.join(", "))}
                         }
                     }
                     p { class: "small muted", "Evidence SHA-256: {result.sha256}" }
@@ -239,6 +254,7 @@ pub fn USDANutrition(
                                 let path = format!("/v1/recipes/{id}/usda-apply");
                                 busy.set(true);
                                 error.set(String::new());
+                                let digest = digest.clone();
                                 spawn(async move {
                                     match api::write::<Value, _>(
                                         Method::POST, &path, &token,
@@ -273,13 +289,22 @@ mod tests {
     use super::*;
     #[test]
     fn ingredient_mass_and_identity_are_explicit() {
-        let good = vec![Selection { fdc_id:"1234".to_owned(), grams:"150".to_owned() }];
-        assert_eq!(mapped_ingredients(&good).unwrap()[0].grams,150.0);
-        for value in ["0","-1","NaN","Infinity","12000",""] {
-            let bad = vec![Selection { fdc_id:"1234".to_owned(), grams:value.to_owned() }];
+        let good = vec![Selection {
+            fdc_id: "1234".to_owned(),
+            grams: "150".to_owned(),
+        }];
+        assert_eq!(mapped_ingredients(&good).unwrap()[0].grams, 150.0);
+        for value in ["0", "-1", "NaN", "Infinity", "12000", ""] {
+            let bad = vec![Selection {
+                fdc_id: "1234".to_owned(),
+                grams: value.to_owned(),
+            }];
             assert!(mapped_ingredients(&bad).is_err());
         }
-        let missing = vec![Selection { fdc_id:"".to_owned(), grams:"100".to_owned() }];
+        let missing = vec![Selection {
+            fdc_id: "".to_owned(),
+            grams: "100".to_owned(),
+        }];
         assert!(mapped_ingredients(&missing).is_err());
     }
 }

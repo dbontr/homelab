@@ -59,13 +59,17 @@ struct LendingResult {
 }
 
 fn encode(value: &str) -> String {
-    value.as_bytes().iter().map(|byte| {
-        if byte.is_ascii_alphanumeric() || matches!(*byte, b'-' | b'.' | b'_' | b'~') {
-            (*byte as char).to_string()
-        } else {
-            format!("%{byte:02X}")
-        }
-    }).collect()
+    value
+        .as_bytes()
+        .iter()
+        .map(|byte| {
+            if byte.is_ascii_alphanumeric() || matches!(*byte, b'-' | b'.' | b'_' | b'~') {
+                (*byte as char).to_string()
+            } else {
+                format!("%{byte:02X}")
+            }
+        })
+        .collect()
 }
 
 #[component]
@@ -83,7 +87,11 @@ pub fn Books(csrf: String) -> Element {
         let query = submitted();
         async move {
             if query.is_empty() {
-                return Ok(SearchResult { query: String::new(), source: String::new(), works: vec![] });
+                return Ok(SearchResult {
+                    query: String::new(),
+                    source: String::new(),
+                    works: vec![],
+                });
             }
             api::get::<SearchResult>(&format!("/v1/books/search?q={}", encode(&query))).await
         }
@@ -97,9 +105,8 @@ pub fn Books(csrf: String) -> Element {
             api::get::<LendingResult>(&format!("/v1/books/lending?isbn={}", encode(&query))).await
         }
     });
-    let mut wishes = use_resource(|| async {
-        api::get::<Vec<BookRequest>>("/v1/books/requests").await
-    });
+    let mut wishes =
+        use_resource(|| async { api::get::<Vec<BookRequest>>("/v1/books/requests").await });
 
     rsx! {
         Heading {

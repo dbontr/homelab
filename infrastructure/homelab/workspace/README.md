@@ -1,38 +1,104 @@
-# Workspace MCP deployment site values
+# Workspace worker site profiles
 
-These four files contain only homelab-specific node placement, quotas, approved image choices and Kubernetes object names. Worker logic, Helm templates, Go binaries, and the distribution process belong to [dbontr/workspace-mcp](https://github.com/dbontr/workspace-mcp).
+The four `worker-<host>.yaml` files define placement, quotas, worker identities,
+and permitted workload images for the K3s compute hosts. The canonical Helm
+chart and Compute binaries belong to this repository under
+`services/compute/deploy/helm/project-workspace` and `services/compute`.
+The worker OCI image is pinned to a registry digest. No credentials belong in
+these files.
 
-Source revision: `9967ebc7c96393bc92415869260c746f3bfa239c`, which added node-scoped worker scheduling in PR #72. A SHA-256-checked offline controller/worker/chart/source bundle was built from this exact revision on Saturn. Registry-published, digest-pinned OCI images remain preferable before switching to the NixOS module's managed release deployment.
+These profiles are source inputs, not a record of the currently installed Helm
+values. The running base-worker releases are named
+`pwm-workspace-jupiter`, `pwm-workspace-venus`,
+`pwm-workspace-mercury`, and `pwm-workspace-janus`.
+Existing releases retain controller-issued worker identities and Kubernetes
+credential Secrets. Before using a profile in an upgrade, compare its
+`worker.name`, `worker.instanceID`, workload namespace, node selector,
+Secret references, quotas, and hardware settings with the live release. Do
+not overwrite live identities merely to make a profile match a template.
 
-The files deliberately set `controller.enabled: false`. Saturn's existing controller and its persistent volume are authoritative and must not be duplicated or replaced. Each worker runs on and schedules workloads to its own named compute host, uses a separate workload namespace and a separate pre-provisioned worker credential Secret, and carries only project-scoped Kubernetes permissions. The worker Secret is not created here.
+## Read-only preflight
 
-The source image tag is valid only after the release archive has been imported to that worker's containerd image store; `IfNotPresent` prevents accidental remote pulls. For new nodes, verify the release `SHA256SUMS` and image archive before import. This tag is not an independently published registry digest and should not be mistaken for one.
-
-## Enrollment and activation
-
-An authorized administrator must issue **fresh**, one-use pairing codes through the controller, pair each worker with ID `pwm-jupiter`, `pwm-venus`, `pwm-mercury` or `pwm-janus`, then provision a distinct `pwm-worker-<node>-credentials` Secret in `pwm-system` containing a `worker_token` key. Do not commit, copy into chat, or log worker tokens. A temporary Venus test credential was revoked; reuse is prohibited. Before enabling the Jupiter GPU/NPU advertisement, retire that same device inventory from the legacy `saturn-acceptance` worker so that scheduling cannot double-count the physical accelerators.
-
-With the operator-owned secrets available, install independently using the **same checked source revision's** `deploy/helm/project-workspace` chart and each `worker-<node>.yaml`:
+Run these commands from the authorized Kubernetes operator host:
 
 ```sh
-helm upgrade --install pwm-ws-jupiter deploy/helm/project-workspace --namespace pwm-system --values homelab/workspace/worker-jupiter.yaml --wait
-helm upgrade --install pwm-ws-venus deploy/helm/project-workspace --namespace pwm-system --values homelab/workspace/worker-venus.yaml --wait
-helm upgrade --install pwm-ws-mercury deploy/helm/project-workspace --namespace pwm-system --values homelab/workspace/worker-mercury.yaml --wait
-helm upgrade --install pwm-ws-janus deploy/helm/project-workspace --namespace pwm-system --values homelab/workspace/worker-janus.yaml --wait
+for host in jupiter venus mercury janus; do
+  release="pwm-workspace-$host"
+  helm --namespace pwm-system status "$release"
+  helm --namespace pwm-system get values "$release" --all
+done
+kubectl get nodes
+kubectl --namespace pwm-system get deployments -o wide
 ```
 
-The Helm chart location above is relative to the **Workspace MCP repository** checkout; values files are relative to the **homelab repository** checkout, so supply absolute paths or adjust the commands when the repositories are separate. Verify live controller heartbeats, per-node Pod scheduling, completion/recovery, authorized hardware leases and exact image IDs before declaring service operational. These manifests are preparation, not evidence of deployment.
+Confirm the intended image is retrievable on each host, that the live worker
+Deployment and controller heartbeat are healthy, and that no project job or
+workspace is active before a worker release is upgraded.
+To inventory image drift without triggering reconciliation or restarting Pods:
 
-Do not enable `services.workspaceMcp` in the NixOS host until matching reachable `@sha256:` controller/worker registry references are available and the source flake lock is updated. The module deliberately requires image digests, and it must preserve Saturn's existing state PVC.
+```sh
+target='ghcr.io/dbontr/homelab/worker@sha256:c7ab035296db9aec360611c52737ca4e94143fb959c7ad56ca536cc20fd6ee4f'
+kubectl --namespace pwm-system get deployments -o json |
+  jq -r --arg target "$target" '
+.items[] | . as $deployment |
+(.spec.template.spec.containers[] | select(.name == "worker") | .image) as $image |
+[($deployment.metadata.annotations["meta.helm.sh/release-name"] // "unmanaged"),
+ $deployment.metadata.name,
+ (if $image == $target then "pinned" else "drift" end),
+ $image] | @tsv
+'
+```
 
-## Accelerator inventory
+A `drift` entry is a maintenance candidate, not authorization to upgrade.
+The Deployment metadata does not carry the Pod's `app=pwm-worker` label;
+inventory releases by their Helm ownership annotations instead.
 
-Jupiter's operator-approved `jupiter-devices.json` describes the two verified K3s extended resources. Recreate the nonsecret inventory ConfigMap only after checking the node's actual `status.allocatable` resources and confirming that the legacy acceptance worker no longer advertises these same physical devices:
+This Kubernetes-only inventory does not establish controller queue emptiness,
+worker-heartbeat freshness, or host registry configuration. Those require
+separate admission checks. The controller's job registry and worker
+heartbeat must be inspected separately: a Ready Pod alone does not prove
+the worker is accepting jobs.
+
+For an approved single-worker upgrade, render the proposed source-owned Helm
+chart against the exact live values first. Always set
+`controller.enabled=false` and `worker.enabled=true` explicitly. Helm
+3.20 or later supports `--reset-then-reuse-values` to combine chart
+defaults with existing release overrides; inspect the rendered Deployment,
+namespace/RBAC objects, Secret references, image digest, and absence of
+controller resources. Then use `--atomic --wait` with a retained Helm revision,
+checking readiness, fresh controller heartbeat, and real workspace execution
+afterward. Do not upgrade all four workers in one operation.
+
+The project-worker reconciler provisions only missing project/host pairs; it
+does not replace registered workers, even if their live image is older. The
+remaining project-worker image migration must be separately admitted and
+performed one release at a time, preserving project credentials and work.
+
+## Enrollment and accelerator custody
+
+New worker enrollment uses a distinct, one-use controller pairing code and a
+separate `pwm-worker-<host>-credentials` Secret containing the
+`worker_token` key in `pwm-system`. Do not commit, print, or distribute
+these credentials. Reuse the live Secret for an existing worker rather than
+pairing it again.
+
+Jupiter's `jupiter-devices.json` declares the operator-approved accelerator
+inventory. Recreate its ConfigMap only after verifying actual Kubernetes
+`status.allocatable` resources and that no legacy worker still advertises
+the same physical devices:
 
 ```sh
 kubectl -n pwm-system create configmap pwm-accelerator-inventory \
-  --from-file=devices.json=homelab/workspace/jupiter-devices.json \
-  --dry-run=client -o yaml | kubectl apply -f -
+  --from-file=devices.json=infrastructure/homelab/workspace/jupiter-devices.json \
+  --dry-run=client -o yaml
 ```
 
-The ConfigMap is mounted by the Jupiter worker release; the file provides declared inventory, not automatic discovery or a guarantee of device health. Helm's project-scoped worker and the Kubernetes scheduler enforce the resource allocation.
+The command above previews the manifest only. Apply it through the approved
+release process after independent device and lease checks. The source
+declaration alone does not establish hardware health.
+
+Compute-host K3s registry configuration is managed through each host's own
+NixOS release and rollback path, not through worker Helm values. Do not use
+privileged Kubernetes debug Pods to bypass a host's SSH or security boundary.
+Keep the existing controller state, Helm revisions, NixOS rollback generations
+and media mounts intact throughout acceptance.

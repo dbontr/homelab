@@ -34,6 +34,7 @@ case "$component" in
   homelab-health) source_module=services/health ;;
   homelab-mcp|homelab-api) source_module=. ;;
   homelab-console) source_module=ui/console ;;
+  homelab-motivation) source_module=services/motivation ;;
   *) printf 'Unknown release component: %s\n' "$component" >&2; exit 2 ;;
 esac
 if [[ "$destination" != /* || "$destination" == "/" || "$destination" == */ ]]; then
@@ -48,9 +49,11 @@ for tool in git sha256sum find sort mktemp; do
   command -v "$tool" >/dev/null || { printf 'Missing build tool: %s\n' "$tool" >&2; exit 1; }
 done
 if [[ "$mode" == complete ]]; then
-  required_tools=(go dx)
+  required_tools=(go cargo dx)
 elif [[ "$component" == homelab-console ]]; then
   required_tools=(cargo dx)
+elif [[ "$component" == homelab-motivation ]]; then
+  required_tools=(cargo)
 else
   required_tools=(go)
 fi
@@ -78,47 +81,84 @@ if [[ ! "$revision" =~ ^[a-f0-9]{40}$ ||
   printf '%s\n' 'Release source must be an exact clean Git revision' >&2
   exit 1
 fi
+stage=""
+snapshot_parent=""
+source_root=""
+cleanup() {
+  local temporary
+  for temporary in "$stage" "$snapshot_parent"; do
+    if [[ -z "$temporary" || ! -d "$temporary" || -L "$temporary" ]]; then
+      continue
+    fi
+    chmod -R u+w -- "$temporary" 2>/dev/null || true
+    rm -rf -- "$temporary"
+  done
+}
+trap cleanup EXIT
+stage=$(mktemp -d "$parent/.homelab-release.XXXXXXXX")
+snapshot_parent=$(mktemp -d "$parent/.homelab-source.XXXXXXXX")
+source_root="$snapshot_parent/checkout"
+# An independent object store keeps Git-backed Nix flakes independent of
+# parent worktree history, while the detached checkout pins the exact commit.
+# Local cloning does not contact a remote. Disable checkout hooks.
+if ! git -c core.hooksPath=/dev/null clone --local --no-hardlinks --no-checkout --quiet -- "$root" "$source_root"; then
+  printf '%s\n' 'Unable to clone the source repository for release verification' >&2
+  exit 1
+fi
+if ! git -c core.hooksPath=/dev/null -C "$source_root" checkout --detach --force "$revision" >/dev/null 2>&1; then
+  printf '%s\n' 'Unable to check out the requested source revision' >&2
+  exit 1
+fi
 printf 'Verifying locally pinned source at %s\n' "$revision"
 if [[ "$mode" == complete ]]; then
-  bash "$root/scripts/verify-offline.sh" --all
+  bash "$source_root/scripts/verify-offline.sh" --all
 elif [[ "$component" == homelab-console ]]; then
   (
-    cd "$root/ui/console"
+    cd "$source_root/ui/console"
     cargo fmt --all -- --check
-    cargo test --offline
-    cargo check --offline --target wasm32-unknown-unknown
+    cargo test --locked --offline
+    cargo check --locked --offline --target wasm32-unknown-unknown
+  )
+elif [[ "$component" == homelab-motivation ]]; then
+  (
+    cd "$source_root/services/motivation"
+    cargo fmt --all -- --check
+    cargo test --locked --offline
+    cargo clippy --locked --offline --all-targets -- -D warnings
   )
 else
   (
-    cd "$root/$source_module"
+    cd "$source_root/$source_module"
     go test ./...
     go test -race ./...
     go vet ./...
   )
 fi
 
-stage=$(mktemp -d "$parent/.homelab-release.XXXXXXXX")
-cleanup() {
-  if [[ -z "$stage" || ! -d "$stage" || -L "$stage" ]]; then
-    return
-  fi
-  # Verification can fail after the staged release becomes read-only.
-  chmod -R u+w -- "$stage" 2>/dev/null || true
-  rm -rf -- "$stage"
-}
-trap cleanup EXIT
 mkdir -p "$stage/bin" "$stage/console"
 
 build_go() {
   local directory=$1 package=$2 name=$3
   printf 'Building %s\n' "$name"
   (
-    cd "$root/$directory"
+    cd "$source_root/$directory"
     go build -trimpath -buildvcs=false -o "$stage/bin/$name" "$package"
   )
 }
 
+build_motivation() {
+  local target="$stage/.motivation-target"
+  printf '%s\n' 'Building homelab-motivation'
+  (
+    cd "$source_root/services/motivation"
+    CARGO_TARGET_DIR="$target" cargo build --locked --offline --release
+  )
+  install -m 0700 "$target/release/homelab-motivation" "$stage/bin/homelab-motivation"
+  rm -rf -- "$target"
+}
+
 if [[ "$mode" == complete ]]; then
+  build_motivation
   build_go services/core ./cmd/homelab-platform homelab-platform
   build_go services/core ./cmd/homelab-calendard homelab-calendard
   build_go . ./mcp homelab-mcp
@@ -132,6 +172,8 @@ if [[ "$mode" == complete ]]; then
   build_go services/compute ./cmd/project-workspace-worker homelab-compute-worker
   build_go services/learning ./cmd/adaptive-teaching homelab-learning
   build_go services/health ./cmd/personal-health-mcp homelab-health
+elif [[ "$component" == homelab-motivation ]]; then
+  build_motivation
 elif [[ "$component" != homelab-console ]]; then
   case "$component" in
     homelab-compute-controller) package=./cmd/project-workspace-controller ;;
@@ -147,7 +189,7 @@ fi
 
 if [[ "$mode" == complete || "$component" == homelab-console ]]; then
   (
-    cd "$root/ui/console"
+    cd "$source_root/ui/console"
     dx bundle --web --release --out-dir "$stage/console-bundle"
   )
   if [[ ! -f "$stage/console-bundle/public/index.html" ]]; then
@@ -177,7 +219,18 @@ find "$stage/bin" -type f -exec chmod 0555 {} +
 find "$stage/bin" "$stage/console" -type d -exec chmod 0555 {} +
 chmod 0444 "$stage/RELEASE" "$stage/SHA256SUMS"
 chmod 0555 "$stage"
-bash "$root/scripts/verify-release.sh" "$stage"
+# Fail if a build or verification step changed a tracked source file.
+# Build outputs belong in the release staging area or external caches.
+if [[ "$(git -C "$source_root" rev-parse --verify 'HEAD^{commit}')" != "$revision" ||
+      -n "$(git -C "$source_root" status --porcelain --untracked-files=all)" ]]; then
+  printf '%s\n' 'Pinned source checkout changed during release construction' >&2
+  exit 1
+fi
+bash "$source_root/scripts/verify-release.sh" "$stage"
+chmod -R u+w -- "$snapshot_parent"
+rm -rf -- "$snapshot_parent"
+source_root=""
+snapshot_parent=""
 mv -- "$stage" "$destination"
 stage=""
 printf 'Staged source-built release: %s\n' "$destination"

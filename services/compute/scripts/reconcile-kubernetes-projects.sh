@@ -68,6 +68,12 @@ while IFS= read -r project; do
       "$scratch/nodes.json" >/dev/null; then
       continue
     fi
+    # Each new worker must be reproducible from a content-addressed registry.
+    # Existing workers retain their workload and credentials during migration.
+    if [[ ! "$PWM_WORKER_IMAGE" =~ @sha256:[0-9a-f]{64}$ ]]; then
+      printf 'Worker enrollment on %s requires a digest-pinned image from an approved registry\n' "$host" >&2
+      continue
+    fi
     node="worker-$key-$host"
     instance="p-$key-$host"
     namespace="pwm-$key-$host"

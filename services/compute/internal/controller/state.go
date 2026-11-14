@@ -235,6 +235,9 @@ func (db *Database) ClaimJob(node string) (map[string]any, error) {
 		if n == nil {
 			return errors.New("node not found")
 		}
+		paused, e := db.workerPausedLocked(node)
+		if e != nil { return e }
+		if paused { return nil }
 		caps := decodeObject(asString(n["capabilities"]))
 		personalAllowed, e := db.personalWorkerAllowedLocked(node)
 		if e != nil {
@@ -417,6 +420,15 @@ func (db *Database) Status() (map[string]any, error) {
 }
 
 func (db *Database) EnqueueLocked(workspace, node, action string, payload any) (string, error) {
+	paused, err := db.workerPausedLocked(node)
+	if err != nil {
+		return "", err
+	}
+	// Stop and snapshot are necessary for preserving or releasing an existing
+	// workspace. All other operation admission is fenced during maintenance.
+	if paused && action != "stop" && action != "snapshot" {
+		return "", errors.New("worker is in maintenance")
+	}
 	id := randomHex(16)
 	now := stamp()
 	e := db.execLocked("INSERT INTO operations(id,workspace,node,action,payload,status,created,updated) VALUES(?,?,?,?,?,'queued',?,?)", id, workspace, node, action, encode(payload), now, now)

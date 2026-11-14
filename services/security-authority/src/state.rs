@@ -11,7 +11,8 @@ use serde::{Deserialize, Serialize};
 use crate::credentials::AuthenticatorState;
 use crate::Error;
 
-const MAX_STATE_BYTES: usize = 16 << 10;
+// The Go authority rejects authentication files at or above 16 KiB.
+const MAX_STATE_BYTES: usize = (16 << 10) - 1;
 const MAX_VAULT_BYTES: usize = 8 << 20;
 const VAULT_NAME: &str = "credentials.json";
 const LOCK_NAME: &str = ".securityd.lock";
@@ -28,12 +29,13 @@ struct PersistedAuthenticator {
 
 fn owner_only(metadata: &fs::Metadata) -> bool {
     metadata.is_file()
+        && metadata.nlink() == 1
         && metadata.mode() & 0o077 == 0
         && metadata.uid() == unsafe { libc::geteuid() }
 }
 
 fn protected_read(path: &Path, limit: usize) -> Result<Option<Vec<u8>>, Error> {
-    let mut file = match OpenOptions::new()
+    let file = match OpenOptions::new()
         .read(true)
         .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
         .open(path)
@@ -97,24 +99,43 @@ fn encode_state(state: &AuthenticatorState) -> Result<Vec<u8>, Error> {
 
 pub struct StateStore {
     directory: PathBuf,
-    _lease: File,
+    _lease: Option<File>,
+    read_only: bool,
     faulted: bool,
 }
 
 impl StateStore {
-    pub fn acquire(directory: &Path) -> Result<Self, Error> {
+    fn validate_directory(directory: &Path) -> Result<(), Error> {
         if !directory.is_absolute()
-            || directory.components().any(|c| matches!(c, std::path::Component::ParentDir))
+            || directory
+                .components()
+                .any(|c| matches!(c, std::path::Component::ParentDir))
         {
             return Err(Error::InvalidConfiguration);
         }
         let md = fs::symlink_metadata(directory).map_err(|_| Error::Storage)?;
-        if !md.is_dir() || md.file_type().is_symlink()
+        if !md.is_dir()
+            || md.file_type().is_symlink()
             || md.mode() & 0o077 != 0
             || md.uid() != unsafe { libc::geteuid() }
         {
             return Err(Error::Storage);
         }
+        Ok(())
+    }
+
+    pub fn inspect(directory: &Path) -> Result<Self, Error> {
+        Self::validate_directory(directory)?;
+        Ok(Self {
+            directory: directory.to_owned(),
+            _lease: None,
+            read_only: true,
+            faulted: false,
+        })
+    }
+
+    pub fn acquire(directory: &Path) -> Result<Self, Error> {
+        Self::validate_directory(directory)?;
         let lease = OpenOptions::new()
             .read(true)
             .write(true)
@@ -127,9 +148,18 @@ impl StateStore {
             return Err(Error::Storage);
         }
         FileExt::try_lock_exclusive(&lease).map_err(|_| Error::Storage)?;
+        // Check that the locked descriptor remains the inode available at
+        // the canonical path. Otherwise another process could lock a
+        // replacement file and claim the same state directory.
+        let locked = lease.metadata().map_err(|_| Error::Storage)?;
+        let named = fs::symlink_metadata(directory.join(LOCK_NAME)).map_err(|_| Error::Storage)?;
+        if !owner_only(&named) || named.dev() != locked.dev() || named.ino() != locked.ino() {
+            return Err(Error::Storage);
+        }
         Ok(Self {
             directory: directory.to_owned(),
-            _lease: lease,
+            _lease: Some(lease),
+            read_only: false,
             faulted: false,
         })
     }
@@ -147,15 +177,21 @@ impl StateStore {
         if self.faulted {
             return Err(Error::Storage);
         }
-        decode_state(protected_read(&self.directory.join(STATE_NAME), MAX_STATE_BYTES)?)
+        decode_state(protected_read(
+            &self.directory.join(STATE_NAME),
+            MAX_STATE_BYTES,
+        )?)
     }
 
     pub fn persist_authenticator(&mut self, state: &AuthenticatorState) -> Result<(), Error> {
-        if self.faulted {
+        if self.faulted || self.read_only {
             return Err(Error::Storage);
         }
         let payload = encode_state(state)?;
-        if self.write_atomically(STATE_NAME, &payload, MAX_STATE_BYTES).is_err() {
+        if self
+            .write_atomically(STATE_NAME, &payload, MAX_STATE_BYTES)
+            .is_err()
+        {
             self.faulted = true;
             return Err(Error::Storage);
         }
@@ -170,10 +206,13 @@ impl StateStore {
     }
 
     pub(crate) fn persist_vault(&mut self, payload: &[u8]) -> Result<(), Error> {
-        if self.faulted {
+        if self.faulted || self.read_only {
             return Err(Error::Storage);
         }
-        if self.write_atomically(VAULT_NAME, payload, MAX_VAULT_BYTES).is_err() {
+        if self
+            .write_atomically(VAULT_NAME, payload, MAX_VAULT_BYTES)
+            .is_err()
+        {
             self.faulted = true;
             return Err(Error::Storage);
         }
@@ -181,12 +220,14 @@ impl StateStore {
     }
 
     fn write_atomically(&self, name: &str, payload: &[u8], limit: usize) -> Result<(), Error> {
-        if payload.len() > limit || name.contains('/') {
+        if self.read_only || payload.len() > limit || name.contains('/') {
             return Err(Error::Storage);
         }
         let mut nonce = [0u8; 16];
         getrandom::fill(&mut nonce).map_err(|_| Error::Storage)?;
-        let temporary = self.directory.join(format!(".auth-state-{}", hex::encode(nonce)));
+        let temporary = self
+            .directory
+            .join(format!(".auth-state-{}", hex::encode(nonce)));
         let result = (|| {
             let mut file = OpenOptions::new()
                 .write(true)
@@ -215,24 +256,50 @@ mod tests {
     fn dir() -> PathBuf {
         let mut id = [0u8; 16];
         getrandom::fill(&mut id).unwrap();
-        let path = std::env::temp_dir().join(format!("security-authority-test-{}", hex::encode(id)));
+        let path =
+            std::env::temp_dir().join(format!("security-authority-test-{}", hex::encode(id)));
         fs::create_dir(&path).unwrap();
         fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
         path
     }
 
     #[test]
+    fn preflight_inspection_does_not_create_or_write_state() {
+        let directory = dir();
+        let mut store = StateStore::inspect(&directory).unwrap();
+        assert!(!directory.join(LOCK_NAME).exists());
+        assert_eq!(
+            store.load_authenticator().unwrap(),
+            AuthenticatorState::default()
+        );
+        assert_eq!(
+            store.persist_authenticator(&AuthenticatorState::default()),
+            Err(Error::Storage)
+        );
+        assert_eq!(store.persist_vault(b"{}"), Err(Error::Storage));
+        assert!(!directory.join(STATE_NAME).exists());
+        assert!(!directory.join(VAULT_NAME).exists());
+        drop(store);
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
     fn exclusive_lease_and_go_authenticator_format() {
         let directory = dir();
         let mut store = StateStore::acquire(&directory).unwrap();
-        assert!(matches!(StateStore::acquire(&directory), Err(Error::Storage)));
+        assert!(matches!(
+            StateStore::acquire(&directory),
+            Err(Error::Storage)
+        ));
         let original = store.load_authenticator().unwrap();
         assert_eq!(original, AuthenticatorState::default());
-        store.persist_authenticator(&AuthenticatorState {
-            last_totp_step: 123,
-            failures: 2,
-            locked_until: 1_700_000_000,
-        }).unwrap();
+        store
+            .persist_authenticator(&AuthenticatorState {
+                last_totp_step: 123,
+                failures: 2,
+                locked_until: 1_700_000_000,
+            })
+            .unwrap();
         let raw = fs::read(directory.join(STATE_NAME)).unwrap();
         assert!(String::from_utf8_lossy(&raw).contains("last_totp_step"));
         drop(store);
@@ -252,6 +319,27 @@ mod tests {
         assert!(matches!(store.load_authenticator(), Err(Error::Storage)));
         drop(store);
         fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn refuses_shared_state_and_lease_inodes() {
+        let directory = dir();
+        let source = directory.with_extension("source");
+        fs::write(&source, b"{}").unwrap();
+        fs::set_permissions(&source, fs::Permissions::from_mode(0o600)).unwrap();
+        fs::hard_link(&source, directory.join(STATE_NAME)).unwrap();
+        let store = StateStore::acquire(&directory).unwrap();
+        assert_eq!(store.load_authenticator(), Err(Error::Storage));
+        drop(store);
+        fs::remove_file(directory.join(STATE_NAME)).unwrap();
+        fs::remove_file(directory.join(LOCK_NAME)).unwrap();
+        fs::hard_link(&source, directory.join(LOCK_NAME)).unwrap();
+        assert!(matches!(
+            StateStore::acquire(&directory),
+            Err(Error::Storage)
+        ));
+        fs::remove_dir_all(directory).unwrap();
+        fs::remove_file(source).unwrap();
     }
 
     #[test]
@@ -275,8 +363,25 @@ mod tests {
     }
 
     #[test]
+    fn rejects_state_at_the_go_size_limit() {
+        let directory = dir();
+        let record = directory.join(STATE_NAME);
+        let mut bytes = br#"{"version":1,"last_totp_step":-1,"failures":0,"locked_until":"0001-01-01T00:00:00Z"}"#.to_vec();
+        bytes.resize(16 << 10, b' ');
+        fs::write(&record, bytes).unwrap();
+        fs::set_permissions(&record, fs::Permissions::from_mode(0o600)).unwrap();
+        let inspector = StateStore::inspect(&directory).unwrap();
+        assert_eq!(inspector.load_authenticator(), Err(Error::Storage));
+        drop(inspector);
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
     fn reads_go_zero_time() {
         let raw = br#"{"version":1,"last_totp_step":-1,"failures":0,"locked_until":"0001-01-01T00:00:00Z"}"#;
-        assert_eq!(decode_state(Some(raw.to_vec())).unwrap(), AuthenticatorState::default());
+        assert_eq!(
+            decode_state(Some(raw.to_vec())).unwrap(),
+            AuthenticatorState::default()
+        );
     }
 }

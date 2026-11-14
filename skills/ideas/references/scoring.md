@@ -1,6 +1,6 @@
 # Candidate comparison and ranking
 
-`rank_candidates.py` ranks already evaluated ideas. It does not generate candidates, determine research novelty, or run the Alien Space of Science models. It uses only Python's standard library.
+`rank_candidates.go` ranks already evaluated ideas. It does not generate candidates, determine research novelty, or run the Alien Space of Science models. It uses only Go's standard library.
 
 ## Input
 
@@ -42,9 +42,9 @@ Defaults: `beta=0.65`, `feasibility_weight=0.20`. Both are within `[0,1]`. Score
 ## Usage
 
 ```bash
-python ideas/scripts/rank_candidates.py candidates.json --top 5
-python ideas/scripts/rank_candidates.py candidates.json --beta 0.4 --feasibility-weight 0.35 --max-per-family 2 --output ranked.json
-python -m unittest discover -s ideas/scripts -p 'test_*.py'
+go run ideas/scripts/rank_candidates.go candidates.json --top 5
+go run ideas/scripts/rank_candidates.go candidates.json --beta 0.4 --feasibility-weight 0.35 --max-per-family 2 --output ranked.json
+go test ideas/scripts/rank_candidates.go ideas/scripts/rank_candidates_test.go
 ```
 
 `--min-coherence` and `--min-tractability` optionally filter weak proposals. Without these flags, all candidates remain eligible. `--max-per-family N` restricts selected candidates to at most N from a single explicitly supplied `family`; missing family values are treated as distinct. If `--top` is omitted, all eligible candidates are selected. Output includes the selected candidates, full ranking, component z-scores, weights, and the original candidate fields. Report any filtering or diversity limits alongside a shortlist.

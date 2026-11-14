@@ -13,10 +13,14 @@ import (
 func TestIntegrationHealthUsesOneBudgetAndKeepsLocalAvailability(t *testing.T){
  healthy:=discoveryBackend(t,"health_food_search","USDA lookup")
  defer healthy.Close()
+ releaseBlocked:=make(chan struct{})
  blocked:=httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter,r *http.Request){
-  <-r.Context().Done()
+  select {
+  case <-r.Context().Done():
+  case <-releaseBlocked:
+  }
  }))
- defer blocked.Close()
+ defer func(){close(releaseBlocked);blocked.Close()}()
  gateway:=discoveryServer(t,[]Backend{
   {Name:"workspace",URL:blocked.URL},
   {Name:"health",URL:healthy.URL},

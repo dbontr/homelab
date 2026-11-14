@@ -5,21 +5,24 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use chrono::{DateTime, SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use zeroize::Zeroizing;
 
 use crate::access::AccessVerifier;
 use crate::canonical::canonical_arguments;
-use sha2::{Digest, Sha256};
 use crate::credentials::{AuthenticatorState, Factors, PassphraseRecord};
+use crate::grants::{ServiceCredentialGrant, ServiceCredentialPolicy, VerifiedServiceIdentity};
 use crate::state::StateStore;
 use crate::vault::{CredentialHandle, Vault};
-use crate::grants::{ServiceCredentialGrant, ServiceCredentialPolicy, VerifiedServiceIdentity};
 use crate::Error;
+use sha2::{Digest, Sha256};
 
 const IDLE_SECONDS: i64 = 120 * 60;
 const ABSOLUTE_SECONDS: i64 = 12 * 60 * 60;
 const CONFIRMATION_SECONDS: i64 = 5 * 60;
 const CONFIRMED_SECONDS: i64 = 2 * 60;
 const MAX_PENDING: usize = 64;
+const MAX_CREDENTIAL_TICKETS: usize = 128;
+const CREDENTIAL_TICKET_SECONDS: i64 = 60;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct OperationPolicy {
@@ -79,10 +82,27 @@ impl SessionStatus {
 pub enum Decision {
     Allowed,
     Denied(&'static str),
-    Confirmation {
-        id: String,
-        expires_at: i64,
-    },
+    Confirmation { id: String, expires_at: i64 },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CredentialTicket {
+    pub alias: String,
+    pub ticket: String,
+}
+
+#[derive(Clone)]
+struct IssuedCredentialTicket {
+    peer: VerifiedServiceIdentity,
+    principal: String,
+    session_id: String,
+    alias: String,
+    operation: String,
+    target: String,
+    arguments_sha256: String,
+    revision: String,
+    expires: i64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -94,6 +114,8 @@ pub struct AuthorizationWire {
     pub confirmation_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub confirmation_expires_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub credential_tickets: Vec<CredentialTicket>,
 }
 
 impl From<Decision> for AuthorizationWire {
@@ -104,18 +126,21 @@ impl From<Decision> for AuthorizationWire {
                 reason: None,
                 confirmation_id: None,
                 confirmation_expires_at: None,
+                credential_tickets: Vec::new(),
             },
             Decision::Denied(reason) => Self {
                 allowed: false,
                 reason: Some(reason.to_owned()),
                 confirmation_id: None,
                 confirmation_expires_at: None,
+                credential_tickets: Vec::new(),
             },
             Decision::Confirmation { id, expires_at } => Self {
                 allowed: false,
                 reason: Some("confirmation required".into()),
                 confirmation_id: Some(id),
                 confirmation_expires_at: Some(wire_time(expires_at)),
+                credential_tickets: Vec::new(),
             },
         }
     }
@@ -143,6 +168,7 @@ pub struct Authority {
     pending: BTreeMap<String, Confirmation>,
     vault: Option<Vault>,
     service_grants: Option<ServiceCredentialPolicy>,
+    credential_tickets: BTreeMap<String, IssuedCredentialTicket>,
     access: Option<AccessVerifier>,
     gateway_audience: String,
     browser_audience: Option<String>,
@@ -150,30 +176,65 @@ pub struct Authority {
 
 fn valid_identifier(id: &str) -> bool {
     id.len() <= 128
+        && id.bytes().next().is_some_and(|b| b.is_ascii_alphanumeric())
         && id
             .bytes()
-            .next()
-            .is_some_and(|b| b.is_ascii_alphanumeric())
-        && id.bytes().skip(1).all(|b| {
-            b.is_ascii_alphanumeric() || matches!(b, b'_' | b'.' | b'/' | b':' | b'-')
-        })
+            .skip(1)
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'.' | b'/' | b':' | b'-'))
 }
 
 fn dangerous(name: &str) -> bool {
     name.to_ascii_lowercase()
-        .split(|c: char| matches!(c, '.' | '_' | '-' | '/'))
+        .split(['.', '_', '-', '/'])
         .any(|word| {
             matches!(
                 word,
-                "delete" | "destroy" | "purge" | "revoke" | "rotate" | "reset"
-                    | "remove" | "wipe" | "drop" | "format" | "shutdown"
-                    | "reboot" | "restart" | "start" | "stop" | "reload"
-                    | "build" | "register" | "scale" | "activate" | "revert"
-                    | "switch" | "prune" | "firewall" | "router" | "network"
-                    | "credential" | "credentials" | "trust" | "rollback"
-                    | "reinstall" | "merge" | "deploy" | "apply" | "force"
-                    | "configure" | "cleanup" | "restore" | "clear" | "recover"
-                    | "grant" | "update" | "patch"
+                "delete"
+                    | "destroy"
+                    | "purge"
+                    | "revoke"
+                    | "rotate"
+                    | "reset"
+                    | "remove"
+                    | "wipe"
+                    | "drop"
+                    | "format"
+                    | "shutdown"
+                    | "reboot"
+                    | "restart"
+                    | "start"
+                    | "stop"
+                    | "reload"
+                    | "build"
+                    | "register"
+                    | "scale"
+                    | "activate"
+                    | "revert"
+                    | "switch"
+                    | "prune"
+                    | "firewall"
+                    | "router"
+                    | "network"
+                    | "credential"
+                    | "credentials"
+                    | "trust"
+                    | "rollback"
+                    | "reinstall"
+                    | "merge"
+                    | "deploy"
+                    | "apply"
+                    | "force"
+                    | "configure"
+                    | "cleanup"
+                    | "restore"
+                    | "clear"
+                    | "recover"
+                    | "grant"
+                    | "create"
+                    | "propose"
+                    | "review"
+                    | "update"
+                    | "patch"
             )
         })
 }
@@ -203,9 +264,18 @@ fn redact(value: &mut Value) {
             for (name, item) in fields {
                 let lower = name.to_ascii_lowercase();
                 let private = [
-                    "password", "passphrase", "token", "secret", "credential",
-                    "api_key", "cookie", "private_key", "otp", "totp",
-                    "authorization", "session",
+                    "password",
+                    "passphrase",
+                    "token",
+                    "secret",
+                    "credential",
+                    "api_key",
+                    "cookie",
+                    "private_key",
+                    "otp",
+                    "totp",
+                    "authorization",
+                    "session",
                 ]
                 .iter()
                 .any(|part| lower.contains(part));
@@ -226,8 +296,8 @@ fn redact(value: &mut Value) {
 }
 
 fn redacted_arguments(canonical: &[u8]) -> Result<String, Error> {
-    let mut value: Value = serde_json::from_slice(canonical)
-        .map_err(|_| Error::InvalidArguments)?;
+    let mut value: Value =
+        serde_json::from_slice(canonical).map_err(|_| Error::InvalidArguments)?;
     redact(&mut value);
     serde_json::to_string(&value).map_err(|_| Error::InvalidArguments)
 }
@@ -241,8 +311,51 @@ impl Authority {
         totp_base32: &str,
         policies: Vec<OperationPolicy>,
     ) -> Result<Self, Error> {
-        if !valid_identifier(&owner) || !valid_identifier(&client)
-            || policies.is_empty() || policies.len() > 256
+        Self::open_with_mode(
+            directory,
+            owner,
+            client,
+            verifier,
+            totp_base32,
+            policies,
+            false,
+        )
+    }
+
+    /// Inspect a protected state copy without acquiring a writer lease or
+    /// creating files. All persistence operations remain disabled.
+    pub fn inspect(
+        directory: &std::path::Path,
+        owner: String,
+        client: String,
+        verifier: PassphraseRecord,
+        totp_base32: &str,
+        policies: Vec<OperationPolicy>,
+    ) -> Result<Self, Error> {
+        Self::open_with_mode(
+            directory,
+            owner,
+            client,
+            verifier,
+            totp_base32,
+            policies,
+            true,
+        )
+    }
+
+    fn open_with_mode(
+        directory: &std::path::Path,
+        owner: String,
+        client: String,
+        verifier: PassphraseRecord,
+        totp_base32: &str,
+        policies: Vec<OperationPolicy>,
+        read_only: bool,
+    ) -> Result<Self, Error> {
+        if !valid_identifier(&owner)
+            || !valid_identifier(&client)
+            || policies.is_empty()
+            || policies.len() > 256
         {
             return Err(Error::InvalidConfiguration);
         }
@@ -262,7 +375,11 @@ impl Authority {
             }
         }
         let factors = Factors::new(verifier, totp_base32)?;
-        let store = StateStore::acquire(directory)?;
+        let store = if read_only {
+            StateStore::inspect(directory)?
+        } else {
+            StateStore::acquire(directory)?
+        };
         let replay = store.load_authenticator()?;
         Ok(Self {
             owner,
@@ -275,6 +392,7 @@ impl Authority {
             pending: BTreeMap::new(),
             vault: None,
             service_grants: None,
+            credential_tickets: BTreeMap::new(),
             access: None,
             gateway_audience: String::new(),
             browser_audience: None,
@@ -291,7 +409,9 @@ impl Authority {
     ) -> Result<(), Error> {
         if self.access.is_some()
             || gateway_audience.is_empty()
-            || browser_audience.as_ref().is_some_and(|v| v.is_empty() || *v == gateway_audience)
+            || browser_audience
+                .as_ref()
+                .is_some_and(|v| v.is_empty() || *v == gateway_audience)
         {
             return Err(Error::InvalidConfiguration);
         }
@@ -301,9 +421,7 @@ impl Authority {
         Ok(())
     }
 
-    fn verified_principal(&self, assertion: &str, audience: &str)
-        -> Result<String, Error>
-    {
+    fn verified_principal(&self, assertion: &str, audience: &str) -> Result<String, Error> {
         self.access
             .as_ref()
             .ok_or(Error::Unauthorized)?
@@ -317,8 +435,11 @@ impl Authority {
         if !self.live(now) {
             return SessionStatus::inactive();
         }
-        let principal = self.session.as_ref()
-            .map(|session| session.principal.clone()).unwrap_or_default();
+        let principal = self
+            .session
+            .as_ref()
+            .map(|session| session.principal.clone())
+            .unwrap_or_default();
         self.status_at(&principal, now)
     }
 
@@ -329,19 +450,21 @@ impl Authority {
         if !self.live(now) {
             return Vec::new();
         }
-        let principal = self.session.as_ref()
-            .map(|session| session.principal.clone()).unwrap_or_default();
+        let principal = self
+            .session
+            .as_ref()
+            .map(|session| session.principal.clone())
+            .unwrap_or_default();
         self.pending_at(&principal, now)
     }
 
     pub(crate) fn local_revoke(&mut self) {
         self.session = None;
         self.pending.clear();
+        self.credential_tickets.clear();
     }
 
-    pub(crate) fn verify_owner_factors(
-        &mut self, password: &str, otp: &str
-    ) -> Result<(), Error> {
+    pub(crate) fn verify_owner_factors(&mut self, password: &str, otp: &str) -> Result<(), Error> {
         self.authenticate_factors(password, otp, unix_now()?)
     }
 
@@ -359,14 +482,19 @@ impl Authority {
     // A trusted OAuth broker may store a token only for a currently active
     // owner session that initiated the one-use provider authorization.
     pub(crate) fn store_broker_credential(
-        &mut self, session_id: &str, provider: &str, token: &[u8]
+        &mut self,
+        session_id: &str,
+        provider: &str,
+        token: &[u8],
     ) -> Result<CredentialHandle, Error> {
         if !self.live(unix_now()?) {
             return Err(Error::Unauthorized);
         }
-        if self.session.as_ref().is_none_or(|s|
-            s.principal != "local-operator" || s.id != session_id
-        ) {
+        if self
+            .session
+            .as_ref()
+            .is_none_or(|s| s.principal != "local-operator" || s.id != session_id)
+        {
             return Err(Error::Unauthorized);
         }
         let vault = self.vault.as_mut().ok_or(Error::InvalidConfiguration)?;
@@ -374,65 +502,80 @@ impl Authority {
     }
 
     pub(crate) fn replace_broker_credential(
-        &mut self, session_id: &str, id: &str, provider: &str, token: &[u8]
+        &mut self,
+        session_id: &str,
+        id: &str,
+        provider: &str,
+        expected_revision: &str,
+        token: &[u8],
     ) -> Result<(), Error> {
         if !self.live(unix_now()?)
-            || self.session.as_ref().is_none_or(|s|
-                s.principal != "local-operator" || s.id != session_id
-            )
+            || self
+                .session
+                .as_ref()
+                .is_none_or(|s| s.principal != "local-operator" || s.id != session_id)
         {
             return Err(Error::Unauthorized);
         }
         let vault = self.vault.as_mut().ok_or(Error::InvalidConfiguration)?;
-        vault.rotate(&mut self.store, id, provider, token)
+        vault.rotate_if_revision(&mut self.store, id, provider, expected_revision, token)
     }
 
-    pub(crate) fn with_broker_credential<R>(
+    /// Return a generation-fenced snapshot under the authority lock.
+    /// The refresh may execute over the network, but its later commit must
+    /// compare the same encrypted credential revision and owner session.
+    pub(crate) fn broker_credential_snapshot(
         &mut self,
-        session_id: &str, id: &str, provider: &str,
-        callback: impl FnOnce(&[u8]) -> R
-    ) -> Result<R, Error> {
+        session_id: &str,
+        id: &str,
+        provider: &str,
+    ) -> Result<(Zeroizing<Vec<u8>>, String), Error> {
         if !self.live(unix_now()?)
-            || self.session.as_ref().is_none_or(|s|
-                s.principal != "local-operator" || s.id != session_id
-            )
+            || self
+                .session
+                .as_ref()
+                .is_none_or(|s| s.principal != "local-operator" || s.id != session_id)
         {
             return Err(Error::Unauthorized);
         }
         let vault = self.vault.as_ref().ok_or(Error::InvalidConfiguration)?;
-        vault.with_secret(id, provider, None, callback)
+        let revision = vault.revision(id, provider)?;
+        let bytes = vault.with_secret(id, provider, Some(&revision), |secret| {
+            Zeroizing::new(secret.to_vec())
+        })?;
+        Ok((bytes, revision))
     }
-
 
     pub(crate) fn browser_principal(&self, assertion: &str) -> Result<String, Error> {
         let audience = self.browser_audience.as_ref().ok_or(Error::Unauthorized)?;
         self.verified_principal(assertion, audience)
     }
 
-    pub(crate) fn browser_pending(&mut self, assertion: &str)
-        -> Result<Vec<ConfirmationPreview>, Error>
-    {
+    pub(crate) fn browser_pending(
+        &mut self,
+        assertion: &str,
+    ) -> Result<Vec<ConfirmationPreview>, Error> {
         let principal = self.browser_principal(assertion)?;
         self.pending(&principal)
     }
 
-    pub(crate) fn browser_status(&mut self, assertion: &str)
-        -> Result<SessionStatus, Error>
-    {
+    pub(crate) fn browser_status(&mut self, assertion: &str) -> Result<SessionStatus, Error> {
         let principal = self.browser_principal(assertion)?;
         self.status(&principal)
     }
 
     pub(crate) fn browser_confirm(
-        &mut self, assertion: &str, id: &str, password: &str, otp: &str
+        &mut self,
+        assertion: &str,
+        id: &str,
+        password: &str,
+        otp: &str,
     ) -> Result<(), Error> {
         let principal = self.browser_principal(assertion)?;
         self.confirm(&principal, id, password, otp)
     }
 
-    pub(crate) fn browser_revoke(&mut self, assertion: &str)
-        -> Result<bool, Error>
-    {
+    pub(crate) fn browser_revoke(&mut self, assertion: &str) -> Result<bool, Error> {
         let principal = self.browser_principal(assertion)?;
         self.revoke(&principal)
     }
@@ -443,7 +586,10 @@ impl Authority {
         password: &str,
         otp: &str,
     ) -> Result<SessionStatus, Error> {
-        let audience = self.browser_audience.as_deref().ok_or(Error::Unauthorized)?;
+        let audience = self
+            .browser_audience
+            .as_deref()
+            .ok_or(Error::Unauthorized)?;
         let principal = self.verified_principal(assertion, audience)?;
         self.login(&principal, password, otp)
     }
@@ -460,6 +606,153 @@ impl Authority {
         self.authorize(&principal, &client, operation, target, args)
     }
 
+    /// Credential tickets are issued only on the mTLS executor route, after
+    /// consuming the exact independent owner authorization decision.
+    pub(crate) fn authorize_remote_gateway(
+        &mut self,
+        assertion: &str,
+        peer: &VerifiedServiceIdentity,
+        operation: &str,
+        target: &str,
+        args: &[u8],
+    ) -> Result<AuthorizationWire, Error> {
+        let principal = self.verified_principal(assertion, &self.gateway_audience)?;
+        let client = self.client.clone();
+        let decision = self.authorize(&principal, &client, operation, target, args)?;
+        let mut wire = AuthorizationWire::from(decision);
+        if wire.allowed {
+            wire.credential_tickets =
+                self.issue_credential_tickets(&principal, peer, operation, target, args)?;
+        }
+        Ok(wire)
+    }
+
+    fn issue_credential_tickets(
+        &mut self,
+        principal: &str,
+        peer: &VerifiedServiceIdentity,
+        operation: &str,
+        target: &str,
+        args: &[u8],
+    ) -> Result<Vec<CredentialTicket>, Error> {
+        let now = unix_now()?;
+        if !self.live(now)
+            || self
+                .session
+                .as_ref()
+                .is_none_or(|s| s.principal != principal)
+        {
+            return Err(Error::Unauthorized);
+        }
+        let canonical = canonical_arguments(args)?;
+        let digest = hex::encode(Sha256::digest(&canonical));
+        let scoped = match &self.service_grants {
+            Some(grants) => grants.scoped(peer, operation, target, &digest, now)?,
+            None => Vec::new(),
+        };
+        self.prune(now);
+        if self.credential_tickets.len().saturating_add(scoped.len()) > MAX_CREDENTIAL_TICKETS {
+            return Err(Error::Unauthorized);
+        }
+        let session = self.session.as_ref().ok_or(Error::Unauthorized)?;
+        let expires = (now + CREDENTIAL_TICKET_SECONDS)
+            .min(session.last_activity + IDLE_SECONDS)
+            .min(session.created + ABSOLUTE_SECONDS);
+        if expires <= now {
+            return Err(Error::Unauthorized);
+        }
+        let session_id = session.id.clone();
+        // Prepare the entire batch before mutating the ledger. Entropy
+        // failures and identifier collisions cannot strand partial grants.
+        let mut staged = Vec::with_capacity(scoped.len());
+        let mut reserved = BTreeSet::new();
+        for grant in scoped {
+            let mut token = None;
+            for _ in 0..4 {
+                let candidate = random_id()?;
+                if !self.credential_tickets.contains_key(&candidate)
+                    && reserved.insert(candidate.clone())
+                {
+                    token = Some(candidate);
+                    break;
+                }
+            }
+            let token = token.ok_or(Error::Storage)?;
+            let deadline = grant.expires_at.map_or(expires, |end| end.min(expires));
+            if now >= deadline {
+                return Err(Error::Unauthorized);
+            }
+            let ticket = IssuedCredentialTicket {
+                peer: peer.clone(),
+                principal: principal.into(),
+                session_id: session_id.clone(),
+                alias: grant.alias.clone(),
+                operation: operation.into(),
+                target: target.into(),
+                arguments_sha256: digest.clone(),
+                revision: grant.revision,
+                expires: deadline,
+            };
+            staged.push((token, ticket));
+        }
+        let mut issued = Vec::with_capacity(staged.len());
+        for (token, entry) in staged {
+            issued.push(CredentialTicket {
+                alias: entry.alias.clone(),
+                ticket: token.clone(),
+            });
+            self.credential_tickets.insert(token, entry);
+        }
+        Ok(issued)
+    }
+
+    /// Replay observation checks the current signed owner, session and exact
+    /// operation policy without consuming a destructive confirmation or
+    /// issuing credentials. Only the executor may apply this to a journaled ID.
+    pub(crate) fn replay_gateway(
+        &mut self,
+        assertion: &str,
+        operation: &str,
+        target: &str,
+        args: &[u8],
+    ) -> Result<Decision, Error> {
+        let principal = self.verified_principal(assertion, &self.gateway_audience)?;
+        let client = self.client.clone();
+        self.replay_at(&principal, &client, operation, target, args, unix_now()?)
+    }
+
+    fn replay_at(
+        &mut self,
+        principal: &str,
+        client: &str,
+        operation: &str,
+        target: &str,
+        args: &[u8],
+        now: i64,
+    ) -> Result<Decision, Error> {
+        if client != self.client {
+            return Ok(Decision::Denied("unauthorized client"));
+        }
+        if !self.live(now)
+            || self
+                .session
+                .as_ref()
+                .is_none_or(|session| session.principal != principal)
+        {
+            return Ok(Decision::Denied("owner authentication required"));
+        }
+        let Some(rule) = self.policy.get(operation) else {
+            return Ok(Decision::Denied("operation not permitted"));
+        };
+        if !rule.targets.iter().any(|allowed| allowed == target) {
+            return Ok(Decision::Denied("resource not permitted"));
+        }
+        if canonical_arguments(args).is_err() {
+            return Ok(Decision::Denied("invalid operation arguments"));
+        }
+        Ok(Decision::Allowed)
+    }
+
     pub fn preview_gateway(
         &mut self,
         assertion: &str,
@@ -472,9 +765,7 @@ impl Authority {
         self.preview(&principal, &client, operation, target, args)
     }
 
-    pub fn status_gateway(&mut self, assertion: &str)
-        -> Result<SessionStatus, Error>
-    {
+    pub fn status_gateway(&mut self, assertion: &str) -> Result<SessionStatus, Error> {
         let principal = self.verified_principal(assertion, &self.gateway_audience)?;
         self.status(&principal)
     }
@@ -486,7 +777,10 @@ impl Authority {
 
     /// Validate all persisted credential authentication tags before activation.
     pub fn validate_vault(&self) -> Result<(), Error> {
-        self.vault.as_ref().ok_or(Error::InvalidConfiguration)?.validate_all()
+        self.vault
+            .as_ref()
+            .ok_or(Error::InvalidConfiguration)?
+            .validate_all()
     }
 
     /// The vault and authenticator share a process-lifetime ownership lease.
@@ -508,25 +802,79 @@ impl Authority {
         if self.service_grants.is_some() {
             return Err(Error::InvalidConfiguration);
         }
+        // Credential scopes may only narrow an existing owner authorization
+        // rule; they cannot invent an additional privileged operation.
+        for grant in &grants {
+            let rule = self
+                .policy
+                .get(&grant.operation)
+                .ok_or(Error::InvalidConfiguration)?;
+            if !rule.targets.iter().any(|target| target == &grant.target) {
+                return Err(Error::InvalidConfiguration);
+            }
+        }
         let vault = self.vault.as_ref().ok_or(Error::InvalidConfiguration)?;
         self.service_grants = Some(ServiceCredentialPolicy::new(grants, vault)?);
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn use_service_credential<T>(
-        &self,
+        &mut self,
         peer: &VerifiedServiceIdentity,
         alias: &str,
+        ticket: &str,
+        operation: &str,
+        target: &str,
+        args: &[u8],
         use_secret: impl FnOnce(&[u8]) -> T,
     ) -> Result<T, Error> {
-        // A failed vault mutation invalidates credential access until
-        // persistent state has been reconciled by the exclusive owner.
+        let now = unix_now()?;
+        if !self.live(now) {
+            return Err(Error::Unauthorized);
+        }
+        self.prune(now);
+        if ticket.len() != 48 || !ticket.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return Err(Error::Unauthorized);
+        }
+        // Consume before comparing the context. A stolen or substituted ticket
+        // cannot be retried, and neither an error nor an interrupted response
+        // can authorize another credential read.
+        let issued = self
+            .credential_tickets
+            .remove(ticket)
+            .ok_or(Error::Unauthorized)?;
+        let session = self.session.as_ref().ok_or(Error::Unauthorized)?;
+        if now >= issued.expires
+            || &issued.peer != peer
+            || issued.alias != alias
+            || issued.operation != operation
+            || issued.target != target
+            || issued.session_id != session.id
+            || issued.principal != session.principal
+        {
+            return Err(Error::Unauthorized);
+        }
+        let canonical = canonical_arguments(args)?;
+        let digest = hex::encode(Sha256::digest(&canonical));
+        if issued.arguments_sha256 != digest {
+            return Err(Error::Unauthorized);
+        }
         if !self.store.healthy() {
             return Err(Error::Storage);
         }
         let policy = self.service_grants.as_ref().ok_or(Error::Unauthorized)?;
         let vault = self.vault.as_ref().ok_or(Error::Unauthorized)?;
-        policy.use_credential(peer, alias, vault, use_secret)
+        policy.use_credential(
+            peer,
+            alias,
+            operation,
+            target,
+            &digest,
+            &issued.revision,
+            vault,
+            use_secret,
+        )
     }
 
     /// Owner-only credential enrollment is gated by an active owner session
@@ -541,7 +889,10 @@ impl Authority {
     ) -> Result<CredentialHandle, Error> {
         let now = unix_now()?;
         if !self.live(now)
-            || self.session.as_ref().is_none_or(|s| s.principal != principal)
+            || self
+                .session
+                .as_ref()
+                .is_none_or(|s| s.principal != principal)
         {
             return Err(Error::Unauthorized);
         }
@@ -561,7 +912,10 @@ impl Authority {
     ) -> Result<CredentialHandle, Error> {
         let now = unix_now()?;
         if !self.live(now)
-            || self.session.as_ref().is_none_or(|s| s.principal != principal)
+            || self
+                .session
+                .as_ref()
+                .is_none_or(|s| s.principal != principal)
         {
             return Err(Error::Unauthorized);
         }
@@ -580,7 +934,10 @@ impl Authority {
     ) -> Result<(), Error> {
         let now = unix_now()?;
         if !self.live(now)
-            || self.session.as_ref().is_none_or(|s| s.principal != principal)
+            || self
+                .session
+                .as_ref()
+                .is_none_or(|s| s.principal != principal)
         {
             return Err(Error::Unauthorized);
         }
@@ -589,29 +946,35 @@ impl Authority {
         vault.delete(&mut self.store, id)
     }
 
-    pub(crate) fn credential_handles(&mut self, principal: &str)
-        -> Result<Vec<CredentialHandle>, Error>
-    {
+    pub(crate) fn credential_handles(
+        &mut self,
+        principal: &str,
+    ) -> Result<Vec<CredentialHandle>, Error> {
         if !self.live(unix_now()?)
-            || self.session.as_ref().is_none_or(|s| s.principal != principal)
+            || self
+                .session
+                .as_ref()
+                .is_none_or(|s| s.principal != principal)
         {
             return Err(Error::Unauthorized);
         }
-        Ok(self.vault.as_ref().ok_or(Error::InvalidConfiguration)?.handles())
+        Ok(self
+            .vault
+            .as_ref()
+            .ok_or(Error::InvalidConfiguration)?
+            .handles())
     }
 
-    fn authenticate_factors(
-        &mut self,
-        password: &str,
-        otp: &str,
-        now: i64,
-    ) -> Result<(), Error> {
-        let result = self.factors.verify(&mut self.replay, password, otp, now, |next| {
-            self.store.persist_authenticator(next)
-        });
+    fn authenticate_factors(&mut self, password: &str, otp: &str, now: i64) -> Result<(), Error> {
+        let result = self
+            .factors
+            .verify(&mut self.replay, password, otp, now, |next| {
+                self.store.persist_authenticator(next)
+            });
         if !self.store.healthy() {
             self.session = None;
             self.pending.clear();
+            self.credential_tickets.clear();
             return Err(Error::Storage);
         }
         result
@@ -644,6 +1007,7 @@ impl Authority {
             last_activity: now,
         });
         self.pending.clear();
+        self.credential_tickets.clear();
         Ok(self.status_at(principal, now))
     }
 
@@ -651,6 +1015,7 @@ impl Authority {
         if !self.store.healthy() {
             self.session = None;
             self.pending.clear();
+            self.credential_tickets.clear();
             return false;
         }
         let Some(session) = &self.session else {
@@ -662,6 +1027,7 @@ impl Authority {
         {
             self.session = None;
             self.pending.clear();
+            self.credential_tickets.clear();
             return false;
         }
         true
@@ -695,17 +1061,22 @@ impl Authority {
 
     fn revoke_at(&mut self, principal: &str, now: i64) -> bool {
         if !self.live(now)
-            || self.session.as_ref().is_none_or(|s| s.principal != principal)
+            || self
+                .session
+                .as_ref()
+                .is_none_or(|s| s.principal != principal)
         {
             return false;
         }
         self.session = None;
         self.pending.clear();
+        self.credential_tickets.clear();
         true
     }
 
     fn prune(&mut self, now: i64) {
         self.pending.retain(|_, item| now < item.expires);
+        self.credential_tickets.retain(|_, item| now < item.expires);
     }
 
     pub(crate) fn pending(&mut self, principal: &str) -> Result<Vec<ConfirmationPreview>, Error> {
@@ -714,7 +1085,10 @@ impl Authority {
 
     fn pending_at(&mut self, principal: &str, now: i64) -> Vec<ConfirmationPreview> {
         if !self.live(now)
-            || self.session.as_ref().is_none_or(|s| s.principal != principal)
+            || self
+                .session
+                .as_ref()
+                .is_none_or(|s| s.principal != principal)
         {
             return Vec::new();
         }
@@ -741,7 +1115,15 @@ impl Authority {
         target: &str,
         args: &[u8],
     ) -> Result<Decision, Error> {
-        self.authorize_at(principal, client, operation, target, args, false, unix_now()?)
+        self.authorize_at(
+            principal,
+            client,
+            operation,
+            target,
+            args,
+            false,
+            unix_now()?,
+        )
     }
 
     pub(crate) fn authorize(
@@ -752,9 +1134,18 @@ impl Authority {
         target: &str,
         args: &[u8],
     ) -> Result<Decision, Error> {
-        self.authorize_at(principal, client, operation, target, args, true, unix_now()?)
+        self.authorize_at(
+            principal,
+            client,
+            operation,
+            target,
+            args,
+            true,
+            unix_now()?,
+        )
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn authorize_at(
         &mut self,
         principal: &str,
@@ -769,7 +1160,10 @@ impl Authority {
             return Ok(Decision::Denied("unauthorized client"));
         }
         if !self.live(now)
-            || self.session.as_ref().is_none_or(|s| s.principal != principal)
+            || self
+                .session
+                .as_ref()
+                .is_none_or(|s| s.principal != principal)
         {
             return Ok(Decision::Denied("owner authentication required"));
         }
@@ -786,7 +1180,10 @@ impl Authority {
         let digest: [u8; 32] = Sha256::digest(&canonical).into();
         if !rule.destructive {
             if consume {
-                self.session.as_mut().expect("live session exists").last_activity = now;
+                self.session
+                    .as_mut()
+                    .expect("live session exists")
+                    .last_activity = now;
             }
             return Ok(Decision::Allowed);
         }
@@ -796,13 +1193,17 @@ impl Authority {
             (item.session_id == session.id
                 && item.operation == operation
                 && item.target == target
-                && item.digest == digest).then(|| (id.clone(), item.clone()))
+                && item.digest == digest)
+                .then(|| (id.clone(), item.clone()))
         });
         if let Some((id, item)) = matching {
             if item.confirmed {
                 if consume {
                     self.pending.remove(&id);
-                    self.session.as_mut().expect("live session exists").last_activity = now;
+                    self.session
+                        .as_mut()
+                        .expect("live session exists")
+                        .last_activity = now;
                 }
                 return Ok(Decision::Allowed);
             }
@@ -815,8 +1216,7 @@ impl Authority {
             return Ok(Decision::Denied("confirmation capacity exhausted"));
         }
         let id = random_id()?;
-        let expires = (now + CONFIRMATION_SECONDS)
-            .min(session.created + ABSOLUTE_SECONDS);
+        let expires = (now + CONFIRMATION_SECONDS).min(session.created + ABSOLUTE_SECONDS);
         self.pending.insert(
             id.clone(),
             Confirmation {
@@ -854,7 +1254,10 @@ impl Authority {
         now: i64,
     ) -> Result<(), Error> {
         if !self.live(now)
-            || self.session.as_ref().is_none_or(|s| s.principal != principal)
+            || self
+                .session
+                .as_ref()
+                .is_none_or(|s| s.principal != principal)
         {
             return Err(Error::Unauthorized);
         }
@@ -863,15 +1266,24 @@ impl Authority {
             return Err(Error::ConfirmationRequired);
         };
         if challenge.confirmed
-            || self.session.as_ref().is_none_or(|s| s.id != challenge.session_id)
+            || self
+                .session
+                .as_ref()
+                .is_none_or(|s| s.id != challenge.session_id)
         {
             return Err(Error::ConfirmationRequired);
         }
         self.authenticate_factors(password, otp, now)?;
-        let item = self.pending.get_mut(id).ok_or(Error::ConfirmationRequired)?;
+        let item = self
+            .pending
+            .get_mut(id)
+            .ok_or(Error::ConfirmationRequired)?;
         item.confirmed = true;
         item.expires = item.expires.min(now + CONFIRMED_SECONDS);
-        self.session.as_mut().expect("live session exists").last_activity = now;
+        self.session
+            .as_mut()
+            .expect("live session exists")
+            .last_activity = now;
         Ok(())
     }
 }
@@ -887,8 +1299,8 @@ mod tests {
     fn fixture() -> Authority {
         let mut random = [0u8; 16];
         getrandom::fill(&mut random).unwrap();
-        let directory = std::env::temp_dir()
-            .join(format!("authority-session-test-{}", hex::encode(random)));
+        let directory =
+            std::env::temp_dir().join(format!("authority-session-test-{}", hex::encode(random)));
         fs::create_dir(&directory).unwrap();
         fs::set_permissions(&directory, fs::Permissions::from_mode(0o700)).unwrap();
         Authority::open(
@@ -933,61 +1345,161 @@ mod tests {
     #[test]
     fn owner_session_expires_and_denied_requests_do_not_refresh_it() {
         let mut a = fixture();
-        a.login_at("principal-a", PASSWORD, &otp(100), 3_000).unwrap();
+        a.login_at("principal-a", PASSWORD, &otp(100), 3_000)
+            .unwrap();
         let args = br#"{"host":"jupiter"}"#;
         assert_eq!(
-            a.authorize_at("principal-b","platform-gateway","workspace__status","jupiter",args,true,3_010).unwrap(),
+            a.authorize_at(
+                "principal-b",
+                "platform-gateway",
+                "workspace__status",
+                "jupiter",
+                args,
+                true,
+                3_010
+            )
+            .unwrap(),
             Decision::Denied("owner authentication required")
         );
         assert_eq!(
-            a.authorize_at("principal-a","untrusted","workspace__status","jupiter",args,true,3_010).unwrap(),
+            a.authorize_at(
+                "principal-a",
+                "untrusted",
+                "workspace__status",
+                "jupiter",
+                args,
+                true,
+                3_010
+            )
+            .unwrap(),
             Decision::Denied("unauthorized client")
         );
         assert!(!a.status_at("principal-a", 3_000 + IDLE_SECONDS).active);
     }
 
     #[test]
+    fn privileged_compute_mutations_require_one_use_confirmation() {
+        for operation in [
+            "infrastructure__workspace_create",
+            "infrastructure__workspace_register_image",
+            "infrastructure__workspace_register_software",
+            "infrastructure__workspace_propose_program",
+            "infrastructure__workspace_review_program",
+            "infrastructure__workspace_update_entry",
+            "infrastructure__workspace_stop",
+        ] {
+            assert!(
+                dangerous(operation),
+                "{operation} must require owner confirmation"
+            );
+        }
+    }
+
+    #[test]
     fn destructive_confirmation_is_single_use_and_exact() {
         let mut a = fixture();
-        a.login_at("principal-a", PASSWORD, &otp(200), 6_000).unwrap();
+        a.login_at("principal-a", PASSWORD, &otp(200), 6_000)
+            .unwrap();
         let exact = br#"{"host":"jupiter","service":"homelab-platform.service"}"#;
         let changed = br#"{"host":"jupiter","service":"homelab-bridge.service"}"#;
-        let pending = a.authorize_at("principal-a","platform-gateway",
-            "infrastructure__service_restart","jupiter",exact,true,6_005).unwrap();
-        let Decision::Confirmation { id, .. } = pending else { panic!("confirmation missing") };
-        a.confirm_at("principal-a", &id, PASSWORD, &otp(201), 6_030).unwrap();
+        let pending = a
+            .authorize_at(
+                "principal-a",
+                "platform-gateway",
+                "infrastructure__service_restart",
+                "jupiter",
+                exact,
+                true,
+                6_005,
+            )
+            .unwrap();
+        let Decision::Confirmation { id, .. } = pending else {
+            panic!("confirmation missing")
+        };
+        a.confirm_at("principal-a", &id, PASSWORD, &otp(201), 6_030)
+            .unwrap();
         assert!(matches!(
-            a.authorize_at("principal-a","platform-gateway","infrastructure__service_restart","jupiter",changed,true,6_031).unwrap(),
+            a.authorize_at(
+                "principal-a",
+                "platform-gateway",
+                "infrastructure__service_restart",
+                "jupiter",
+                changed,
+                true,
+                6_031
+            )
+            .unwrap(),
             Decision::Confirmation { .. }
         ));
-        assert_eq!(a.authorize_at("principal-a","platform-gateway",
-            "infrastructure__service_restart","jupiter",exact,true,6_032).unwrap(),Decision::Allowed);
+        assert_eq!(
+            a.authorize_at(
+                "principal-a",
+                "platform-gateway",
+                "infrastructure__service_restart",
+                "jupiter",
+                exact,
+                true,
+                6_032
+            )
+            .unwrap(),
+            Decision::Allowed
+        );
         assert!(matches!(
-            a.authorize_at("principal-a","platform-gateway","infrastructure__service_restart","jupiter",exact,true,6_033).unwrap(),
+            a.authorize_at(
+                "principal-a",
+                "platform-gateway",
+                "infrastructure__service_restart",
+                "jupiter",
+                exact,
+                true,
+                6_033
+            )
+            .unwrap(),
             Decision::Confirmation { .. }
         ));
         assert!(a.revoke_at("principal-a", 6_034));
-        assert_eq!(a.authorize_at("principal-a","platform-gateway",
-            "infrastructure__service_restart","jupiter",exact,true,6_035).unwrap(),
-            Decision::Denied("owner authentication required"));
+        assert_eq!(
+            a.authorize_at(
+                "principal-a",
+                "platform-gateway",
+                "infrastructure__service_restart",
+                "jupiter",
+                exact,
+                true,
+                6_035
+            )
+            .unwrap(),
+            Decision::Denied("owner authentication required")
+        );
     }
 
     #[test]
     fn concurrent_requests_consume_one_destructive_confirmation() {
-        use std::sync::{Arc, Mutex};
         use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::{Arc, Mutex};
         let mut authority = fixture();
-        authority.login_at("principal-a", PASSWORD, &otp(500), 15_000).unwrap();
+        authority
+            .login_at("principal-a", PASSWORD, &otp(500), 15_000)
+            .unwrap();
         let args = br#"{"host":"jupiter","service":"homelab-platform.service"}"#;
         let operation = "infrastructure__service_restart";
-        let challenge = authority.authorize_at(
-            "principal-a", "platform-gateway", operation, "jupiter",
-            args, true, 15_001
-        ).unwrap();
+        let challenge = authority
+            .authorize_at(
+                "principal-a",
+                "platform-gateway",
+                operation,
+                "jupiter",
+                args,
+                true,
+                15_001,
+            )
+            .unwrap();
         let Decision::Confirmation { id, .. } = challenge else {
             panic!("destructive policy did not require confirmation")
         };
-        authority.confirm_at("principal-a", &id, PASSWORD, &otp(501), 15_030).unwrap();
+        authority
+            .confirm_at("principal-a", &id, PASSWORD, &otp(501), 15_030)
+            .unwrap();
         let authority = Arc::new(Mutex::new(authority));
         let accepted = Arc::new(AtomicUsize::new(0));
         std::thread::scope(|scope| {
@@ -995,10 +1507,19 @@ mod tests {
                 let authority = Arc::clone(&authority);
                 let accepted = Arc::clone(&accepted);
                 scope.spawn(move || {
-                    let decision = authority.lock().unwrap().authorize_at(
-                        "principal-a", "platform-gateway", operation, "jupiter",
-                        args, true, 15_031
-                    ).unwrap();
+                    let decision = authority
+                        .lock()
+                        .unwrap()
+                        .authorize_at(
+                            "principal-a",
+                            "platform-gateway",
+                            operation,
+                            "jupiter",
+                            args,
+                            true,
+                            15_031,
+                        )
+                        .unwrap();
                     if decision == Decision::Allowed {
                         accepted.fetch_add(1, Ordering::SeqCst);
                     }
@@ -1011,25 +1532,42 @@ mod tests {
     #[test]
     fn absolute_limit_survives_repeated_valid_activity() {
         let mut authority = fixture();
-        authority.login_at("principal-a", PASSWORD, &otp(300), 9_000).unwrap();
+        authority
+            .login_at("principal-a", PASSWORD, &otp(300), 9_000)
+            .unwrap();
         let arguments = br#"{"host":"jupiter"}"#;
         for step in 1..=7 {
             let at = 9_000 + step * 6_000;
             assert_eq!(
-                authority.authorize_at("principal-a", "platform-gateway",
-                    "workspace__status", "jupiter", arguments, true, at).unwrap(),
+                authority
+                    .authorize_at(
+                        "principal-a",
+                        "platform-gateway",
+                        "workspace__status",
+                        "jupiter",
+                        arguments,
+                        true,
+                        at
+                    )
+                    .unwrap(),
                 Decision::Allowed
             );
         }
-        assert!(!authority.status_at("principal-a", 9_000 + ABSOLUTE_SECONDS).active);
+        assert!(
+            !authority
+                .status_at("principal-a", 9_000 + ABSOLUTE_SECONDS)
+                .active
+        );
     }
 
     #[test]
     fn serialization_matches_client_authorization_contract() {
         let approved: AuthorizationWire = Decision::Allowed.into();
-        assert_eq!(serde_json::to_string(&approved).unwrap(), r#"{"allowed":true}"#);
-        let rejected: AuthorizationWire =
-            Decision::Denied("owner authentication required").into();
+        assert_eq!(
+            serde_json::to_string(&approved).unwrap(),
+            r#"{"allowed":true}"#
+        );
+        let rejected: AuthorizationWire = Decision::Denied("owner authentication required").into();
         assert_eq!(
             serde_json::to_string(&rejected).unwrap(),
             r#"{"allowed":false,"reason":"owner authentication required"}"#
@@ -1037,7 +1575,8 @@ mod tests {
         let pending: AuthorizationWire = Decision::Confirmation {
             id: "abc".into(),
             expires_at: 1_770_000_000,
-        }.into();
+        }
+        .into();
         let response = serde_json::to_value(&pending).unwrap();
         assert_eq!(response["allowed"], false);
         assert_eq!(response["confirmation_id"], "abc");
@@ -1045,49 +1584,286 @@ mod tests {
     }
 
     #[test]
+    fn credential_tickets_require_one_exact_live_approval() {
+        let mut authority = fixture();
+        authority.attach_vault([b'k'; 32]).unwrap();
+        let handle = authority
+            .vault
+            .as_mut()
+            .unwrap()
+            .store(&mut authority.store, "research", b"protected")
+            .unwrap();
+        authority
+            .configure_service_grants(vec![ServiceCredentialGrant {
+                client_dns: "worker.internal".into(),
+                alias: "service_token".into(),
+                provider: "research".into(),
+                handle: handle.id,
+                operation: "workspace__status".into(),
+                target: "jupiter".into(),
+                arguments_sha256: None,
+                revision: None,
+                expires_at: None,
+            }])
+            .unwrap();
+        let now = unix_now().unwrap();
+        authority
+            .login_at("principal-a", PASSWORD, &otp(now / 30), now)
+            .unwrap();
+        let peer =
+            VerifiedServiceIdentity::from_authenticated_peer("worker.internal".into()).unwrap();
+        let other =
+            VerifiedServiceIdentity::from_authenticated_peer("other.internal".into()).unwrap();
+        let exact = br#"{"host":"jupiter"}"#;
+        let tickets = authority
+            .issue_credential_tickets("principal-a", &peer, "workspace__status", "jupiter", exact)
+            .unwrap();
+        assert_eq!(tickets.len(), 1);
+        assert!(matches!(
+            authority.use_service_credential(
+                &other,
+                "service_token",
+                &tickets[0].ticket,
+                "workspace__status",
+                "jupiter",
+                exact,
+                |_| ()
+            ),
+            Err(Error::Unauthorized)
+        ));
+        assert!(matches!(
+            authority.use_service_credential(
+                &peer,
+                "service_token",
+                &tickets[0].ticket,
+                "workspace__status",
+                "jupiter",
+                exact,
+                |_| ()
+            ),
+            Err(Error::Unauthorized)
+        ));
+        let tickets = authority
+            .issue_credential_tickets("principal-a", &peer, "workspace__status", "jupiter", exact)
+            .unwrap();
+        assert!(matches!(
+            authority.use_service_credential(
+                &peer,
+                "service_token",
+                &tickets[0].ticket,
+                "workspace__status",
+                "jupiter",
+                br#"{"host":"venus"}"#,
+                |_| ()
+            ),
+            Err(Error::Unauthorized)
+        ));
+        let tickets = authority
+            .issue_credential_tickets("principal-a", &peer, "workspace__status", "jupiter", exact)
+            .unwrap();
+        assert_eq!(
+            authority
+                .use_service_credential(
+                    &peer,
+                    "service_token",
+                    &tickets[0].ticket,
+                    "workspace__status",
+                    "jupiter",
+                    exact,
+                    |secret| secret.to_vec()
+                )
+                .unwrap(),
+            b"protected"
+        );
+        assert!(matches!(
+            authority.use_service_credential(
+                &peer,
+                "service_token",
+                &tickets[0].ticket,
+                "workspace__status",
+                "jupiter",
+                exact,
+                |_| ()
+            ),
+            Err(Error::Unauthorized)
+        ));
+        let tickets = authority
+            .issue_credential_tickets("principal-a", &peer, "workspace__status", "jupiter", exact)
+            .unwrap();
+        authority.revoke_at("principal-a", now + 1);
+        assert!(matches!(
+            authority.use_service_credential(
+                &peer,
+                "service_token",
+                &tickets[0].ticket,
+                "workspace__status",
+                "jupiter",
+                exact,
+                |_| ()
+            ),
+            Err(Error::Unauthorized)
+        ));
+    }
+
+    #[test]
     fn credential_grants_fail_closed_after_persistence_fault() {
         let mut authority = fixture();
         authority.attach_vault([b'k'; 32]).unwrap();
-        let handle = authority.vault.as_mut().unwrap()
-            .store(&mut authority.store, "research", b"protected").unwrap();
-        authority.configure_service_grants(vec![ServiceCredentialGrant {
-            client_dns: "worker.internal".into(),
-            alias: "service_token".into(),
-            provider: "research".into(),
-            handle: handle.id,
-            revision: None,
-            expires_at: None,
-        }]).unwrap();
-        let peer = VerifiedServiceIdentity::from_authenticated_peer(
-            "worker.internal".into()
-        ).unwrap();
-        assert_eq!(
-            authority.use_service_credential(&peer, "service_token",
-                |secret| secret.to_vec()).unwrap(),
-            b"protected"
-        );
+        let handle = authority
+            .vault
+            .as_mut()
+            .unwrap()
+            .store(&mut authority.store, "research", b"protected")
+            .unwrap();
+        authority
+            .configure_service_grants(vec![ServiceCredentialGrant {
+                client_dns: "worker.internal".into(),
+                alias: "service_token".into(),
+                provider: "research".into(),
+                handle: handle.id,
+                operation: "workspace__status".into(),
+                target: "jupiter".into(),
+                arguments_sha256: None,
+                revision: None,
+                expires_at: None,
+            }])
+            .unwrap();
+        let now = unix_now().unwrap();
+        authority
+            .login_at("principal-a", PASSWORD, &otp(now / 30), now)
+            .unwrap();
+        let peer =
+            VerifiedServiceIdentity::from_authenticated_peer("worker.internal".into()).unwrap();
+        let tickets = authority
+            .issue_credential_tickets("principal-a", &peer, "workspace__status", "jupiter", b"{}")
+            .unwrap();
         authority.store.fault_for_test();
         assert_eq!(
-            authority.use_service_credential(&peer, "service_token",
-                |secret| secret.to_vec()),
-            Err(Error::Storage)
+            authority.use_service_credential(
+                &peer,
+                "service_token",
+                &tickets[0].ticket,
+                "workspace__status",
+                "jupiter",
+                b"{}",
+                |secret| secret.to_vec()
+            ),
+            Err(Error::Unauthorized)
         );
+    }
+
+    #[test]
+    fn replay_observation_checks_owner_without_consuming_confirmation() {
+        let mut authority = fixture();
+        authority
+            .login_at("principal-a", PASSWORD, &otp(400), 12_000)
+            .unwrap();
+        let args = br#"{"host":"jupiter","service":"homelab-platform.service"}"#;
+        let operation = "infrastructure__service_restart";
+        assert_eq!(
+            authority
+                .replay_at(
+                    "principal-a",
+                    "platform-gateway",
+                    operation,
+                    "jupiter",
+                    args,
+                    12_001
+                )
+                .unwrap(),
+            Decision::Allowed
+        );
+        assert!(authority.pending.is_empty());
+        assert!(matches!(
+            authority
+                .replay_at(
+                    "principal-b",
+                    "platform-gateway",
+                    operation,
+                    "jupiter",
+                    args,
+                    12_002
+                )
+                .unwrap(),
+            Decision::Denied(_)
+        ));
+        assert!(matches!(
+            authority
+                .replay_at(
+                    "principal-a",
+                    "foreign-client",
+                    operation,
+                    "jupiter",
+                    args,
+                    12_002
+                )
+                .unwrap(),
+            Decision::Denied(_)
+        ));
+        assert!(matches!(
+            authority
+                .replay_at(
+                    "principal-a",
+                    "platform-gateway",
+                    operation,
+                    "venus",
+                    args,
+                    12_002
+                )
+                .unwrap(),
+            Decision::Denied(_)
+        ));
+        assert!(matches!(
+            authority
+                .replay_at(
+                    "principal-a",
+                    "platform-gateway",
+                    operation,
+                    "jupiter",
+                    b"[]",
+                    12_002
+                )
+                .unwrap(),
+            Decision::Denied(_)
+        ));
+        authority.revoke_at("principal-a", 12_003);
+        assert!(matches!(
+            authority
+                .replay_at(
+                    "principal-a",
+                    "platform-gateway",
+                    operation,
+                    "jupiter",
+                    args,
+                    12_004
+                )
+                .unwrap(),
+            Decision::Denied(_)
+        ));
     }
 
     #[test]
     fn pending_confirmation_never_exposes_secret_fields() {
         let mut authority = fixture();
-        authority.login_at("principal-a", PASSWORD, &otp(400), 12_000).unwrap();
+        authority
+            .login_at("principal-a", PASSWORD, &otp(400), 12_000)
+            .unwrap();
         let args = br#"{"host":"jupiter","password":"private-value","service":"homelab-platform.service"}"#;
-        let result = authority.authorize_at(
-            "principal-a", "platform-gateway", "infrastructure__service_restart",
-            "jupiter", args, true, 12_001,
-        ).unwrap();
+        let result = authority
+            .authorize_at(
+                "principal-a",
+                "platform-gateway",
+                "infrastructure__service_restart",
+                "jupiter",
+                args,
+                true,
+                12_001,
+            )
+            .unwrap();
         assert!(matches!(result, Decision::Confirmation { .. }));
         let pending = authority.pending_at("principal-a", 12_002);
         assert_eq!(pending.len(), 1);
         assert!(pending[0].arguments.contains("[REDACTED]"));
         assert!(!pending[0].arguments.contains("private-value"));
     }
-
 }

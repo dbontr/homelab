@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/dbontr/homelab-new/system/learning/internal/store"
+    "github.com/dbontr/homelab-new/system/learning/internal/teacheval"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"net/http"
 	"strings"
@@ -21,6 +22,10 @@ var appHTML string
 type Service struct {
 	Store  *store.Store
 	Server *mcp.Server
+    model teacheval.CompletionClient
+    modelName string
+    modelDisclosureEnabled bool
+    bundle *LearningAppBundle
 }
 
 func register[In any](server *mcp.Server, name, description string, handler func(In) (store.Value, error), app bool) {
@@ -49,9 +54,18 @@ func withView(view string, result store.Value) store.Value {
 }
 func NewService(db *store.Store) *Service {
 	server := mcp.NewServer(&mcp.Implementation{Name: "Adaptive Teaching", Version: "1.0.0"}, nil)
+    svc := &Service{Store:db,Server:server}
 	server.AddResource(&mcp.Resource{URI: UIURI, Name: "Adaptive Teaching learning workspace", MIMEType: "text/html;profile=mcp-app"},
 		func(context.Context, *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
-			return &mcp.ReadResourceResult{Contents: []*mcp.ResourceContents{{URI: UIURI, MIMEType: "text/html;profile=mcp-app", Text: appHTML}}}, nil
+            html:=appHTML
+            var meta mcp.Meta
+            if svc.bundle!=nil {
+                html=svc.bundle.resourceHTML()
+                meta=svc.bundle.resourceMeta()
+            }
+			return &mcp.ReadResourceResult{Contents: []*mcp.ResourceContents{{
+                URI:UIURI,MIMEType:"text/html;profile=mcp-app",Text:html,Meta:meta,
+            }}},nil
 		})
 	register(server, "show_knowledge_graph", "Open an interactive knowledge graph inside ChatGPT.", func(in struct {
 		Focus string `json:"focus,omitempty"`
@@ -722,7 +736,8 @@ func NewService(db *store.Store) *Service {
 		}
 		return db.DueReassessments(limit)
 	}, false)
-	return &Service{db, server}
+    registerModelTools(svc)
+    return svc
 }
 
 // Handler serves the local MCP transport. Remote listeners must use
@@ -759,6 +774,11 @@ func (svc *Service) HandlerWithAccess(allowedHosts, allowedOrigins, bearerToken 
 		fmt.Fprintln(w, "ok")
 	})
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        if strings.HasPrefix(r.URL.Path,"/mcp-assets/") {
+            if svc.bundle==nil {http.NotFound(w,r);return}
+            svc.bundle.ServeStatic(w,r)
+            return
+        }
 		ok := false
 		for _, entry := range hosts {
 			entry = strings.TrimSpace(entry)

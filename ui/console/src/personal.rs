@@ -7,43 +7,51 @@ use crate::components::{Card, Empty, Heading, Loading, Notice};
 #[component]
 pub fn Learning(csrf: String) -> Element {
     let csrf = use_signal(|| csrf);
-    let mut summary=use_resource(||async{api::get::<Value>("/v1/learning/summary").await});
-    let mut sessions=use_resource(||async{api::get::<Value>("/v1/learning/sessions").await});
-    let mut reviews=use_resource(||async{api::get::<Value>("/v1/learning/reviews").await});
-    let mut selected=use_signal(||None::<String>);
-    let mut detail=use_resource(||{
-        let id=selected();
-        async move{
-            match id{
-                Some(session_id)=>api::get::<Value>(&format!("/v1/learning/sessions/{session_id}")).await,
-                None=>Ok(Value::Null)
+    let mut summary = use_resource(|| async { api::get::<Value>("/v1/learning/summary").await });
+    let mut sessions = use_resource(|| async { api::get::<Value>("/v1/learning/sessions").await });
+    let mut reviews = use_resource(|| async { api::get::<Value>("/v1/learning/reviews").await });
+    let mut selected = use_signal(|| None::<String>);
+    let mut detail = use_resource(move || {
+        let id = selected();
+        async move {
+            match id {
+                Some(session_id) => {
+                    api::get::<Value>(&format!("/v1/learning/sessions/{session_id}")).await
+                }
+                None => Ok(Value::Null),
             }
         }
     });
-    let mut pending=use_resource(||{
-        let id=selected();
-        async move{
-            match id{
-                Some(session_id)=>api::get::<Value>(&format!("/v1/learning/sessions/{session_id}/pending")).await,
-                None=>Ok(Value::Null)
+    let mut pending = use_resource(move || {
+        let id = selected();
+        async move {
+            match id {
+                Some(session_id) => {
+                    api::get::<Value>(&format!("/v1/learning/sessions/{session_id}/pending")).await
+                }
+                None => Ok(Value::Null),
             }
         }
     });
-    let mut goal=use_signal(String::new);
-    let mut target=use_signal(String::new);
-    let mut mode=use_signal(||"learn".to_owned());
-    let mut answer=use_signal(String::new);
-    let mut reasoning=use_signal(String::new);
-    let mut assisted=use_signal(||false);
-    let mut busy=use_signal(||false);
-    let mut error=use_signal(String::new);
-    let mut notice=use_signal(String::new);
-    let current_question=pending.cloned().and_then(Result::ok).and_then(|value|
-        if value.get("pending").and_then(Value::as_bool)==Some(true) {
+    let mut goal = use_signal(String::new);
+    let mut target = use_signal(String::new);
+    let mut mode = use_signal(|| "learn".to_owned());
+    let mut busy = use_signal(|| false);
+    let mut error = use_signal(String::new);
+    let mut notice = use_signal(String::new);
+    let current_question = pending.cloned().and_then(Result::ok).and_then(|value| {
+        if value.get("pending").and_then(Value::as_bool) == Some(true) {
             value.get("question").cloned()
-        } else {None}
-    );
-    rsx!{
+        } else {
+            None
+        }
+    });
+    let current_question_id = current_question
+        .as_ref()
+        .and_then(|question| question.get("id").and_then(Value::as_str))
+        .unwrap_or("")
+        .to_owned();
+    rsx! {
         Heading{
             title:"Learning".to_owned(),
             description:"Build durable understanding through independent reasoning and delayed reassessment.".to_owned(),
@@ -159,74 +167,44 @@ pub fn Learning(csrf: String) -> Element {
                     }
                  }
             }
-            if let Some(question)=current_question{
-                section{class:"card",
-                    div{class:"card-header",
-                        h2{class:"card-title","Pending question"}
-                        p{class:"card-description",
-                            "Your answer will be saved without automatic grading or mastery credit."}
+            if let Some(Ok(value)) = detail.cloned() {
+                crate::learning_route::LearningRoute {
+                    key: "{session_id}",
+                    csrf: csrf(),
+                    session_id: session_id.clone(),
+                    detail: value,
+                    on_saved: move |_| {
+                        detail.restart();
+                        pending.restart();
+                        sessions.restart();
+                        reviews.restart();
                     }
-                    div{class:"card-body stack",
-                        p{ {api::property(&question,&["prompt"])} }
-                        if let Some(options)=question.get("options").and_then(Value::as_array){
-                            div{class:"task-items",
-                                for option in options{
-                                    div{class:"task-item",
-                                        span{class:"small muted",{api::property(option,&["id"])}}
-                                        span{ {api::property(option,&["label"])} }
-                                    }
-                                }
-                            }
-                        }
-                        form{class:"task-editor-fields",
-                            onsubmit:move |event|{
-                                event.prevent_default();
-                                if busy(){return}
-                                let Some(value)=pending.cloned().and_then(Result::ok) else{return};
-                                let Some(id)=value.get("question").and_then(|q|q.get("id")).and_then(Value::as_str) else{return};
-                                let path=format!("/v1/learning/questions/{id}/answer");
-                                let payload=serde_json::json!({
-                                    "learner_response":answer(),"learner_reasoning":reasoning(),"assisted":assisted()
-                                });
-                                let token=csrf();
-                                busy.set(true);error.set(String::new());
-                                spawn(async move{
-                                    match api::write::<Value,_>(reqwest::Method::POST,&path,&token,&payload).await{
-                                        Ok(_)=>{
-                                            answer.set(String::new());
-                                            reasoning.set(String::new());
-                                            notice.set("Response saved; it awaits independent assessment".to_owned());
-                                            pending.restart();detail.restart();sessions.restart();
-                                        },
-                                        Err(e)=>error.set(e),
-                                    }
-                                    busy.set(false);
-                                });
-                            },
-                            label{class:"form-row",
-                                span{class:"label","Your answer"}
-                                textarea{class:"field",required:true,rows:"3",
-                                    value:"{answer()}",oninput:move |e|answer.set(e.value())}
-                            }
-                            label{class:"form-row",
-                                span{class:"label","Your reasoning"}
-                                textarea{class:"field",rows:"4",
-                                    value:"{reasoning()}",oninput:move |e|reasoning.set(e.value())}
-                            }
-                            label{class:"inline-row",
-                                input{r#type:"checkbox",checked:assisted(),
-                                    onchange:move |e|assisted.set(e.checked())}
-                                span{"I used assistance"}
-                            }
-                            button{class:"btn btn-primary",disabled:busy(),"Submit response"}
-                        }
+                }
+            }
+            crate::learning_attachments::LearningAttachments {
+                key: "{session_id}",
+                csrf: csrf(),
+                owner_kind: "session".to_owned(),
+                owner_id: session_id.clone(),
+            }
+            if let Some(question)=current_question{
+                LearningQuestion {
+                    key: "{current_question_id}",
+                    csrf: csrf(),
+                    question,
+                    on_saved: move |_| {
+                        pending.restart();
+                        detail.restart();
+                        sessions.restart();
+                        reviews.restart();
+                        notice.set("Your response is saved. Independent assessment is still required.".to_owned());
                     }
                 }
             } else {
                 Card{title:"Pending work".to_owned(),
-                    description:"No unanswered learning question is available.".to_owned(),
+                    description:"No ungraded learning question is available.".to_owned(),
                     div{class:"card-body",
-                        p{class:"small muted","Continue planning and asking questions through the Adaptive Teaching MCP."}
+                        p{class:"small muted","Continue planning and asking questions through Adaptive Teaching."}
                     }
                 }
             }
@@ -282,32 +260,33 @@ pub fn Learning(csrf: String) -> Element {
 }
 
 #[component]
-pub fn Health(csrf: String) -> Element{
+pub fn Health(csrf: String) -> Element {
     let csrf = use_signal(|| csrf);
-    let mut proposals=use_resource(||async{api::get::<Value>("/v1/health/food-proposals").await});
-    let mut health_busy=use_signal(||false);
-    let mut health_error=use_signal(String::new);
-    let mut plans=use_resource(||async{api::get::<Value>("/v1/health/plans").await});
-    let mut records=use_resource(||async{api::get::<Value>("/v1/health/records").await});
-    let mut goals=use_resource(||async{api::get::<Value>("/v1/health/goals").await});
-    let mut sets=use_resource(||async{api::get::<Value>("/v1/health/training-sets").await});
-    let mut exercise=use_signal(String::new);
-    let mut activity=use_signal(||"strength".to_owned());
-    let mut training_plan=use_signal(String::new);
-    let mut training_session=use_signal(String::new);
-    let mut set_number=use_signal(||"1".to_owned());
-    let mut repetitions=use_signal(||"8".to_owned());
-    let mut load=use_signal(String::new);
-    let mut duration=use_signal(String::new);
-    let mut distance=use_signal(String::new);
-    let mut rpe=use_signal(String::new);
-    let mut progression=use_signal(||None::<Value>);
-    let mut obs_domain=use_signal(||"biometric".to_owned());
-    let mut obs_metric=use_signal(||"weight".to_owned());
-    let mut obs_value=use_signal(String::new);
-    let mut obs_unit=use_signal(||"kg".to_owned());
-    let mut obs_method=use_signal(||"measured".to_owned());
-    rsx!{
+    let mut proposals =
+        use_resource(|| async { api::get::<Value>("/v1/health/food-proposals").await });
+    let mut health_busy = use_signal(|| false);
+    let mut health_error = use_signal(String::new);
+    let mut plans = use_resource(|| async { api::get::<Value>("/v1/health/plans").await });
+    let mut records = use_resource(|| async { api::get::<Value>("/v1/health/records").await });
+    let mut goals = use_resource(|| async { api::get::<Value>("/v1/health/goals").await });
+    let mut sets = use_resource(|| async { api::get::<Value>("/v1/health/training-sets").await });
+    let mut exercise = use_signal(String::new);
+    let mut activity = use_signal(|| "strength".to_owned());
+    let mut training_plan = use_signal(String::new);
+    let mut training_session = use_signal(String::new);
+    let mut set_number = use_signal(|| "1".to_owned());
+    let mut repetitions = use_signal(|| "8".to_owned());
+    let mut load = use_signal(String::new);
+    let mut duration = use_signal(String::new);
+    let mut distance = use_signal(String::new);
+    let mut rpe = use_signal(String::new);
+    let mut progression = use_signal(|| None::<Value>);
+    let mut obs_domain = use_signal(|| "biometric".to_owned());
+    let mut obs_metric = use_signal(|| "weight".to_owned());
+    let mut obs_value = use_signal(String::new);
+    let mut obs_unit = use_signal(|| "kg".to_owned());
+    let mut obs_method = use_signal(|| "measured".to_owned());
+    rsx! {
         Heading{
             title:"Health".to_owned(),
             description:"Training plans, recorded observations, and nutrient goals.".to_owned(),
@@ -357,7 +336,7 @@ pub fn Health(csrf: String) -> Element{
                         "distance_meters":meters,"rpe":exertion
                     });
                     let token=csrf();
-                    health_error.set(String::new);health_busy.set(true);
+                    health_error.set(String::new());health_busy.set(true);
                     spawn(async move{
                         match api::write::<Value,_>(reqwest::Method::POST,"/v1/health/training-sets",&token,&payload).await{
                             Ok(_)=>{sets.restart();},
@@ -511,7 +490,7 @@ pub fn Health(csrf: String) -> Element{
                     health_busy.set(true);health_error.set(String::new());
                     spawn(async move{
                         match api::write::<Value,_>(reqwest::Method::POST,"/v1/health/records",&token,&request).await{
-                            Ok(_)=>{obs_value.set(String::new);records.restart();},
+                            Ok(_)=>{obs_value.set(String::new());records.restart();},
                             Err(error)=>health_error.set(error),
                         }
                         health_busy.set(false);
@@ -703,5 +682,272 @@ pub fn Health(csrf: String) -> Element{
                 }
             }
         }
+    }
+}
+
+fn valid_learning_answer(question: &Value, response: &str) -> bool {
+    let Some(id) = question.get("id").and_then(Value::as_str) else {
+        return false;
+    };
+    if id.is_empty()
+        || id.len() > 128
+        || !id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+        || response.trim().is_empty()
+        || response.len() > 12000
+        || question.get("status").and_then(Value::as_str) != Some("pending")
+    {
+        return false;
+    }
+    match question.get("response_kind").and_then(Value::as_str) {
+        Some("multiple_choice") => question
+            .get("options")
+            .and_then(Value::as_array)
+            .is_some_and(|options| {
+                options
+                    .iter()
+                    .any(|option| option.get("id").and_then(Value::as_str) == Some(response))
+            }),
+        Some("free_response") => true,
+        _ => false,
+    }
+}
+
+#[component]
+fn LearningQuestion(question: Value, csrf: String, on_saved: EventHandler<()>) -> Element {
+    let mut answer = use_signal(String::new);
+    let mut reasoning = use_signal(String::new);
+    let mut confidence = use_signal(String::new);
+    let mut assisted = use_signal(|| false);
+    let mut busy = use_signal(|| false);
+    let mut error = use_signal(String::new);
+
+    let id = question
+        .get("id")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_owned();
+    let status = question.get("status").and_then(Value::as_str).unwrap_or("");
+    let multiple_choice =
+        question.get("response_kind").and_then(Value::as_str) == Some("multiple_choice");
+    let options = question
+        .get("options")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let saved_response = question
+        .get("learner_response")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let saved_option = options
+        .iter()
+        .find(|option| option.get("id").and_then(Value::as_str) == Some(saved_response))
+        .and_then(|option| option.get("label").and_then(Value::as_str));
+    let saved_confidence = question
+        .get("self_confidence")
+        .and_then(Value::as_f64)
+        .map(|value| format!("{:.0}%", value * 100.0));
+
+    rsx! {
+        Card {
+            title: "Learning question".to_owned(),
+            description: "An answer is saved before a separate evaluator assesses correctness and reasoning.".to_owned(),
+            div { class: "card-body stack",
+                p { {api::property(&question, &["prompt"])} }
+                if !error().is_empty() { Notice { message: error() } }
+                if status == "answered" {
+                    div { role: "status", class: "alert",
+                        "Response recorded. Independent assessment is pending."
+                    }
+                    div { class: "kv-list",
+                        div { class: "kv-entry",
+                            span { class: "small muted", "Your answer" }
+                            span { "{saved_option.unwrap_or(saved_response)}" }
+                        }
+                        if let Some(explanation) = question.get("learner_reasoning")
+                            .and_then(Value::as_str).filter(|value| !value.is_empty()) {
+                            div { class: "kv-entry",
+                                span { class: "small muted", "Your reasoning" }
+                                span { "{explanation}" }
+                            }
+                        }
+                        if let Some(value) = saved_confidence {
+                            div { class: "kv-entry",
+                                span { class: "small muted", "Your confidence" }
+                                span { "{value}" }
+                            }
+                        }
+                        div { class: "kv-entry",
+                            span { class: "small muted", "Assistance used" }
+                            span { if question.get("assisted").and_then(Value::as_bool) == Some(true) {
+                                "Yes"
+                            } else {
+                                "No"
+                            } }
+                        }
+                    }
+                    p { class: "small muted",
+                        "The committed answer key remains sealed. This record does not establish mastery."
+                    }
+                } else if status == "pending" {
+                    form {
+                        class: "task-editor-fields",
+                        onsubmit: {
+                            let id = id.clone();
+                            let token = csrf.clone();
+                            let question = question.clone();
+                            move |event| {
+                                event.prevent_default();
+                                if busy() { return; }
+                                let response = answer();
+                                if !valid_learning_answer(&question, &response) {
+                                    error.set("Select a valid answer before submitting.".to_owned());
+                                    return;
+                                }
+                                let explanation = reasoning();
+                                if response.len() > 12000 || explanation.len() > 16000 {
+                                    error.set("The response exceeds the accepted length.".to_owned());
+                                    return;
+                                }
+                                let belief = confidence().parse::<f64>().ok()
+                                    .filter(|value| value.is_finite() && (0.0..=1.0).contains(value));
+                                let payload = serde_json::json!({
+                                    "learner_response": response,
+                                    "learner_reasoning": explanation,
+                                    "assisted": assisted(),
+                                    "self_confidence": belief,
+                                });
+                                let url = format!("/v1/learning/questions/{id}/answer");
+                                let token = token.clone();
+                                error.set(String::new());
+                                busy.set(true);
+                                spawn(async move {
+                                    match api::write::<Value, _>(
+                                        reqwest::Method::POST, &url, &token, &payload
+                                    ).await {
+                                        Ok(_) => on_saved.call(()),
+                                        Err(message) => error.set(format!(
+                                            "The response was not saved: {message}. Refresh before retrying."
+                                        )),
+                                    }
+                                    busy.set(false);
+                                });
+                            }
+                        },
+                        if multiple_choice {
+                            label { class: "form-row",
+                                span { class: "label", "Your answer" }
+                                select {
+                                    class: "field",
+                                    required: true,
+                                    disabled: busy(),
+                                    value: "{answer()}",
+                                    onchange: move |event| answer.set(event.value()),
+                                    option { value: "", "Choose an answer" }
+                                    for option in &options {
+                                        if let (Some(value), Some(title)) = (
+                                            option.get("id").and_then(Value::as_str),
+                                            option.get("label").and_then(Value::as_str)
+                                        ) {
+                                            option { value: "{value}", "{title}" }
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            label { class: "form-row",
+                                span { class: "label", "Your answer" }
+                                textarea {
+                                    class: "field", required: true, rows: "4",
+                                    maxlength: "12000", disabled: busy(),
+                                    value: "{answer()}",
+                                    oninput: move |event| answer.set(event.value())
+                                }
+                            }
+                        }
+                        label { class: "form-row",
+                            span { class: "label", "Your reasoning" }
+                            textarea {
+                                class: "field", rows: "4", maxlength: "16000", disabled: busy(),
+                                value: "{reasoning()}",
+                                oninput: move |event| reasoning.set(event.value())
+                            }
+                        }
+                        label { class: "form-row",
+                            span { class: "label", "Confidence (optional)" }
+                            select {
+                                class: "field", disabled: busy(),
+                                value: "{confidence()}",
+                                onchange: move |event| confidence.set(event.value()),
+                                option { value: "", "Not specified" }
+                                option { value: "0.0", "0% — certain it is incorrect" }
+                                option { value: "0.25", "25%" }
+                                option { value: "0.5", "50%" }
+                                option { value: "0.75", "75%" }
+                                option { value: "1.0", "100% — certain it is correct" }
+                            }
+                        }
+                        label { class: "inline-row",
+                            input {
+                                r#type: "checkbox", checked: assisted(), disabled: busy(),
+                                onchange: move |event| assisted.set(event.checked())
+                            }
+                            span { "I used assistance" }
+                        }
+                        button {
+                            class: "btn btn-primary",
+                            disabled: busy() || answer().trim().is_empty(),
+                            "Save answer"
+                        }
+                        p { class: "small muted",
+                            "Your answer, reasoning, confidence and assistance report are preserved together. Submission does not grade the response."
+                        }
+                    }
+                } else {
+                    p { class: "small muted",
+                        "This question is not awaiting an answer. Refresh its Learning session to inspect the latest state."
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod learning_question_tests {
+    use super::*;
+
+    #[test]
+    fn accepts_only_a_pending_question_and_a_committed_choice() {
+        let mut question = serde_json::json!({
+            "id": "question-1",
+            "status": "pending",
+            "response_kind": "multiple_choice",
+            "options": [{"id": "a", "label": "First"}, {"id": "b", "label": "Second"}],
+        });
+        assert!(valid_learning_answer(&question, "b"));
+        assert!(!valid_learning_answer(&question, "uncommitted"));
+        assert!(!valid_learning_answer(&question, ""));
+        question["status"] = serde_json::json!("answered");
+        assert!(!valid_learning_answer(&question, "a"));
+        question["status"] = serde_json::json!("pending");
+        question["id"] = serde_json::json!("../another-session");
+        assert!(!valid_learning_answer(&question, "b"));
+    }
+
+    #[test]
+    fn free_response_has_separate_bounds_and_cannot_use_unknown_question_types() {
+        let mut question = serde_json::json!({
+            "id": "question_2", "status": "pending", "response_kind": "free_response"
+        });
+        assert!(valid_learning_answer(
+            &question,
+            "A derivation with explicit assumptions"
+        ));
+        assert!(!valid_learning_answer(&question, "  "));
+        assert!(!valid_learning_answer(&question, &"a".repeat(12001)));
+        question["response_kind"] = serde_json::json!("unrecognized");
+        assert!(!valid_learning_answer(&question, "answer"));
     }
 }

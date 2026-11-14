@@ -3,6 +3,8 @@ package media
 import (
 	"bytes"
 	"context"
+    "crypto/sha256"
+    "encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -20,24 +22,36 @@ type Client struct {
 	base *url.URL
 	key  string
  keySource func()(string,error)
+ scopedKeySource func(context.Context,string,string,json.RawMessage)(string,error)
 	http *http.Client
 }
 
 func NewSeerr(raw, apiKey string) (*Client, error) {
- return newSeerr(raw,apiKey,nil)
+ return newSeerr(raw,apiKey,nil,nil)
 }
 
 // NewSeerrWithSource takes the key from a trusted service identity on each
 // request. A failed source never falls back to a previously cached key.
 func NewSeerrWithSource(raw string,source func()(string,error))(*Client,error){
  if source==nil{return nil,errors.New("Seerr credential source required")}
- return newSeerr(raw,"",source)
+ return newSeerr(raw,"",source,nil)
 }
 
-func newSeerr(raw,apiKey string,source func()(string,error))(*Client,error){
- if (strings.TrimSpace(apiKey)=="")==(source==nil){
-  return nil,errors.New("exactly one Seerr credential authority is required")
- }
+// NewSeerrWithScopedSource redeems a one-use vault ticket for each
+// authenticated media action. There is no ambient provider credential.
+func NewSeerrWithScopedSource(raw string,source func(context.Context,string,string,json.RawMessage)(string,error))(*Client,error){
+ if source==nil{return nil,errors.New("Seerr owner authorization source required")}
+ return newSeerr(raw,"",nil,source)
+}
+
+func newSeerr(raw,apiKey string,source func()(string,error),
+ scoped func(context.Context,string,string,json.RawMessage)(string,error),
+)(*Client,error){
+ sources:=0
+ if strings.TrimSpace(apiKey)!=""{sources++}
+ if source!=nil{sources++}
+ if scoped!=nil{sources++}
+ if sources!=1{return nil,errors.New("exactly one Seerr credential authority is required")}
 	u, err := url.Parse(raw)
 	if err != nil || u == nil || u.User != nil || u.Fragment != "" || u.RawQuery != "" || (u.Path != "" && u.Path != "/") {
 		return nil, errors.New("Seerr URL must be an origin without credentials")
@@ -61,6 +75,7 @@ func newSeerr(raw,apiKey string,source func()(string,error))(*Client,error){
 		base: u,
 		key: apiKey,
   keySource: source,
+  scopedKeySource:scoped,
 		http: &http.Client{
 			Timeout: 15 * time.Second,
 			CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
@@ -83,11 +98,13 @@ func (c *Client) request(ctx context.Context, method, path string, body any) (js
 		dest.RawQuery = ""
 	}
 	var payload io.Reader
+    var bodyBytes []byte
 	if body != nil {
 		b, err := json.Marshal(body)
 		if err != nil {
 			return nil, err
 		}
+        bodyBytes=b
 		payload = bytes.NewReader(b)
 	}
 	req, err := http.NewRequestWithContext(ctx, method, dest.String(), payload)
@@ -95,12 +112,24 @@ func (c *Client) request(ctx context.Context, method, path string, body any) (js
 		return nil, err
 	}
  key:=c.key
- if c.keySource!=nil{
-  if key!=""{return nil,errors.New("conflicting Seerr credential authority")}
+ if c.scopedKeySource!=nil {
+  digest:=sha256.Sum256(bodyBytes)
+  scope,marshalErr:=json.Marshal(map[string]string{
+   "method":method,"path":path,
+   "body_sha256":hex.EncodeToString(digest[:]),
+  })
+  if marshalErr!=nil{return nil,errors.New("invalid Seerr credential scope")}
+  var tokenErr error
+  key,tokenErr=c.scopedKeySource(
+   ctx,"media__seerr_request","seerr",scope)
+  if tokenErr!=nil{return nil,errors.New("Seerr owner authorization denied")}
+ }else if c.keySource!=nil{
   key,err=c.keySource()
-  if err!=nil||len(key)<20||strings.ContainsAny(key,"\x00\r\n\t "){
-   return nil,errors.New("Seerr credential unavailable")
-  }
+  if err!=nil{return nil,errors.New("Seerr credential unavailable")}
+ }
+ if key==""||strings.ContainsAny(key,"\x00\r\n\t ")||
+  (c.keySource!=nil||c.scopedKeySource!=nil)&&len(key)<20{
+  return nil,errors.New("invalid Seerr credential")
  }
  req.Header.Set("X-Api-Key",key)
 	req.Header.Set("Accept", "application/json")

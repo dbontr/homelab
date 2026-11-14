@@ -66,7 +66,7 @@ Use this sequence for text that must be ASD-STE100 verified:
 1. Identify the passage type and applicable Issue 9 rules.
 2. Mark protected literals and approved technical nouns and technical verbs.
 3. Rewrite the prose to the applicable structural rules.
-4. Run `scripts/ste100_check.py` as a mechanical precheck when Python is available.
+4. Run `go run scripts/ste100_check.go` as a mechanical precheck when Go is available.
 5. Review every applicable writing rule against the authoritative Issue 9 standard.
 6. Check each non-technical word against the authoritative Issue 9 dictionary for approval, meaning, part of speech, and permitted form.
 7. Check every technical noun and technical verb against the approved project or subject-field terminology source.

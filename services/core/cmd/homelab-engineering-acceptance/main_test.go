@@ -15,7 +15,7 @@ import (
 
 func testConfig() acceptanceConfig {
 	return acceptanceConfig{
-		Project: "homelab-platform", Repository: "dbontr/homelab-new", BaseBranch: "main",
+		Project: "homelab-platform", Repository: "dbontr/homelab", BaseBranch: "main",
 		Revision: strings.Repeat("a", 40), ComputeURL: "https://example.org/mcp",
 		ComputeTokenFile: "/tmp/protected-identity", ModelURL: "https://model.example.org/v1/chat/completions",
 		ModelName: "model", ImagePoolID: "debian-bookworm-slim", Timeout: 20 * time.Minute,
@@ -65,7 +65,7 @@ func TestAcceptanceProgramUsesOneFileAndFixedCheck(t *testing.T) {
 
 func TestDraftMustMatchExactRepositoryAndPinnedRevision(t *testing.T) {
 	c := testConfig()
-	valid := map[string]any{"draft": true, "base_sha": c.Revision, "url": "https://github.com/dbontr/homelab-new/pull/198"}
+	valid := map[string]any{"draft": true, "base_sha": c.Revision, "url": "https://github.com/dbontr/homelab/pull/198"}
 	makeRun := func(v map[string]any) agentflow.RunSummary {
 		b, _ := json.Marshal(v)
 		return agentflow.RunSummary{Steps: []agentflow.StepSummary{{Kind: "publish", Status: agentflow.Succeeded, Result: b}}}
@@ -76,10 +76,10 @@ func TestDraftMustMatchExactRepositoryAndPinnedRevision(t *testing.T) {
 	for _, change := range []func(map[string]any){
 		func(v map[string]any) { v["draft"] = false },
 		func(v map[string]any) { v["base_sha"] = strings.Repeat("b", 40) },
-		func(v map[string]any) { v["url"] = "https://evil.example.org/dbontr/homelab-new/pull/198" },
-		func(v map[string]any) { v["url"] = "https://github.com/dbontr/homelab-new/pull/198/merge" },
+		func(v map[string]any) { v["url"] = "https://evil.example.org/dbontr/homelab/pull/198" },
+		func(v map[string]any) { v["url"] = "https://github.com/dbontr/homelab/pull/198/merge" },
 	} {
-		v := map[string]any{"draft": true, "base_sha": c.Revision, "url": "https://github.com/dbontr/homelab-new/pull/198"}
+		v := map[string]any{"draft": true, "base_sha": c.Revision, "url": "https://github.com/dbontr/homelab/pull/198"}
 		change(v)
 		if _, err := draftURL(makeRun(v), c.Revision, c.Repository); err == nil {
 			t.Fatal("untrusted draft result accepted")
@@ -134,25 +134,50 @@ func (f *fakeWorkspaceControl) Call(_ context.Context, name string, args map[str
 	}
 }
 func TestWorkspaceStopRequiresConfirmedTerminalStatus(t *testing.T) {
-	f := &fakeWorkspaceControl{states: []string{"stopping", "stopped"}}
+	f := &fakeWorkspaceControl{states: []string{"ready", "stopped"}}
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
 	defer cancel()
-	if err := stopWorkspace(ctx, f, "research", "aabbccdd"); err != nil {
+	if err := agentflow.StopWorkspace(ctx, f, "research", "aabbccdd"); err != nil {
 		t.Fatal(err)
 	}
 	if f.stopRequests != 1 || f.lists != 2 {
 		t.Fatalf("workspace stop was not confirmed: %+v", f)
 	}
 }
+
+func TestWorkspaceStopIsIdempotentAcrossRecovery(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		states []string
+		lists  int
+	}{
+		{name: "already_stopped", states: []string{"stopped"}, lists: 1},
+		{name: "already_destroyed", states: []string{"destroyed"}, lists: 1},
+		{name: "already_absent", lists: 1},
+		{name: "teardown_in_progress", states: []string{"stopping", "stopped"}, lists: 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := &fakeWorkspaceControl{states: tc.states}
+			ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+			defer cancel()
+			if err := agentflow.StopWorkspace(ctx, f, "research", "aabbccdd"); err != nil {
+				t.Fatal(err)
+			}
+			if f.stopRequests != 0 || f.lists != tc.lists {
+				t.Fatalf("terminal or stopping workspace was destroyed again: %+v", f)
+			}
+		})
+	}
+}
 func TestWorkspaceStopFailsOnUncertainCleanup(t *testing.T) {
 	f := &fakeWorkspaceControl{states: []string{"ready"}}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if err := stopWorkspace(ctx, f, "research", "aabbccdd"); err == nil {
+	if err := agentflow.StopWorkspace(ctx, f, "research", "aabbccdd"); err == nil {
 		t.Fatal("unconfirmed workspace termination accepted")
 	}
 	f = &fakeWorkspaceControl{states: []string{"failed"}}
-	if err := stopWorkspace(context.Background(), f, "research", "aabbccdd"); err == nil {
+	if err := agentflow.StopWorkspace(context.Background(), f, "research", "aabbccdd"); err == nil {
 		t.Fatal("failed workspace state accepted")
 	}
 }

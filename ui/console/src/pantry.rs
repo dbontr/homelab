@@ -67,13 +67,19 @@ fn parse_nutrient_targets(text: &str) -> Result<Vec<NutrientTarget>, String> {
         }
         let fields: Vec<&str> = line.split('|').map(str::trim).collect();
         if fields.len() != 3 || fields[0].is_empty() || fields[1].is_empty() {
-            return Err(format!("Nutrient target line {} must be name | unit | remaining", index + 1));
+            return Err(format!(
+                "Nutrient target line {} must be name | unit | remaining",
+                index + 1
+            ));
         }
         let remaining: f64 = fields[2]
             .parse()
             .map_err(|_| format!("Invalid remaining nutrient amount on line {}", index + 1))?;
         if !remaining.is_finite() || remaining < 0.0 {
-            return Err(format!("Remaining nutrient amount must be nonnegative on line {}", index + 1));
+            return Err(format!(
+                "Remaining nutrient amount must be nonnegative on line {}",
+                index + 1
+            ));
         }
         targets.push(NutrientTarget {
             name: fields[0].to_owned(),
@@ -338,7 +344,7 @@ pub fn Pantry(csrf: String) -> Element {
                                         }
                                         if !candidate.unknown_targets.is_empty() {
                                             p { class: "small muted",
-                                                "Unknown nutrients: {candidate.unknown_targets.join(", ")}"
+                                                {format!("Unknown nutrients: {}", candidate.unknown_targets.join(", "))}
                                             }
                                         }
                                     }
@@ -364,7 +370,10 @@ mod tests {
         assert_eq!(values[1].name, "fiber");
 
         for malformed in [
-            "protein | 40", "protein | g | -3", "protein | g | NaN", "protein | g | infinity",
+            "protein | 40",
+            "protein | g | -3",
+            "protein | g | NaN",
+            "protein | g | infinity",
         ] {
             assert!(parse_nutrient_targets(malformed).is_err());
         }

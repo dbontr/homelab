@@ -9,12 +9,11 @@ import (
 	"errors"
 	"os"
 	"strings"
-	"path/filepath"
-	"testing"
+		"testing"
 )
 
 func TestRecipeBundlePreservesImagesAndHistory(t *testing.T) {
-	source, err := Open(filepath.Join(t.TempDir(), "recipes.json"))
+	source, err := Open(privateRecipeTestPath(t, "recipes.json"))
 	if err != nil { t.Fatal(err) }
 	imageBytes := smallImage(t, "png")
 	ref, err := source.PutImage(imageBytes, "image/png")
@@ -41,7 +40,7 @@ func TestRecipeBundlePreservesImagesAndHistory(t *testing.T) {
 	if zipFile.File[0].Name != "recipes.json" {
 		t.Fatal("portable document manifest is not first")
 	}
-	dest, err := Open(filepath.Join(t.TempDir(), "recipes.json"))
+	dest, err := Open(privateRecipeTestPath(t, "recipes.json"))
 	if err != nil { t.Fatal(err) }
 	if count, err := dest.ImportBundle(bundle); err != nil || count != 1 {
 		t.Fatalf("bundle import: %d %v", count, err)
@@ -79,7 +78,7 @@ func writeTestBundle(t *testing.T, records map[string][]byte) []byte {
 }
 
 func TestRecipeBundleRejectsMissingAndUnexpectedAssets(t *testing.T) {
-	source, err := Open(filepath.Join(t.TempDir(), "recipes.json"))
+	source, err := Open(privateRecipeTestPath(t, "recipes.json"))
 	if err != nil { t.Fatal(err) }
 	body := smallImage(t, "png")
 	ref, err := source.PutImage(body, "image/png")
@@ -91,7 +90,7 @@ func TestRecipeBundleRejectsMissingAndUnexpectedAssets(t *testing.T) {
 	manifest, err := json.Marshal(source.Export())
 	if err != nil { t.Fatal(err) }
 	name := strings.TrimPrefix(ref, imageURLPrefix)
-	dest, err := Open(filepath.Join(t.TempDir(), "recipes.json"))
+	dest, err := Open(privateRecipeTestPath(t, "recipes.json"))
 	if err != nil { t.Fatal(err) }
 	for _, files := range []map[string][]byte{
 		{"recipes.json": manifest},
@@ -136,7 +135,7 @@ func TestRecipeBundleRejectsAggregateDecompression(t *testing.T) {
 	if compressed.Len() >= MaxPortableBundleBytes {
 		t.Fatal("test fixture is not compressed")
 	}
-	target, err := Open(filepath.Join(t.TempDir(), "recipes.json"))
+	target, err := Open(privateRecipeTestPath(t, "recipes.json"))
 	if err != nil { t.Fatal(err) }
 	if _, err := target.ImportBundle(compressed.Bytes()); !errors.Is(err, ErrBundleTooLarge) {
 		t.Fatalf("aggregate decompression limit not enforced: %v", err)
@@ -155,7 +154,7 @@ func TestRecipeBundleRejectsNonRegularEntries(t *testing.T) {
 	if err != nil { t.Fatal(err) }
 	if _, err := entry.Write([]byte("other.json")); err != nil { t.Fatal(err) }
 	if err := writer.Close(); err != nil { t.Fatal(err) }
-	target, err := Open(filepath.Join(t.TempDir(), "recipes.json"))
+	target, err := Open(privateRecipeTestPath(t, "recipes.json"))
 	if err != nil { t.Fatal(err) }
 	if _, err := target.ImportBundle(compressed.Bytes()); !errors.Is(err, ErrBundleTooLarge) {
 		t.Fatalf("non-regular archive entry accepted: %v", err)

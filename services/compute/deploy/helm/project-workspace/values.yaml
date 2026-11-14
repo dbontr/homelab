@@ -79,6 +79,8 @@ worker:
     image: ""
     registry: ""
     authSecretName: ""
+  verification:
+    image: ""
   resources:
     requests:
       cpu: 250m

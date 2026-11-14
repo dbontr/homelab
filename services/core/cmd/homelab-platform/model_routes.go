@@ -2,6 +2,7 @@ package main
 
 import (
  "bytes"
+ "context"
  "encoding/json"
  "errors"
  "io"
@@ -20,6 +21,36 @@ type modelRouteSpec struct {
  TokenFile string `json:"token_file,omitempty"`
  VaultAlias string `json:"vault_alias,omitempty"`
  LocalOnly bool `json:"local_only"`
+}
+
+// authorizedVaultToken requests an independent owner decision for a single
+// provider operation. The scoped ticket is bound to its canonical arguments,
+// target, and the caller's signed owner assertion.
+func authorizedVaultToken(vault *security.RemoteAuthorizationClient,alias string)(
+ func(context.Context,string,string,json.RawMessage)(string,error),error,
+){
+ if vault==nil{return nil,errors.New("model vault is not configured")}
+ redeem,err:=vault.ScopedTokenSource(alias)
+ if err!=nil{return nil,err}
+ return func(ctx context.Context,operation,target string,args json.RawMessage)(string,error){
+  if security.AccessAssertion(ctx)==""{
+   return "",errors.New("model credential requires a signed owner request")
+  }
+  decision,err:=vault.Authorize(ctx,operation,target,args)
+  if err!=nil{return "",err}
+  if !decision.Allowed||decision.ConfirmationID!=""{
+   return "",errors.New("independent owner authorization required for model access")
+  }
+  var ticket security.CredentialTicket
+  count:=0
+  for _,candidate:=range decision.CredentialTickets{
+   if candidate.Alias==alias{ticket=candidate;count++}
+  }
+  if count!=1{
+   return "",errors.New("owner authorization returned no unique model credential")
+  }
+  return redeem(ctx,ticket,operation,target,args)
+ },nil
 }
 
 // The route file stores model identifiers and protected credential *paths*,
@@ -51,11 +82,10 @@ func configuredCapabilityPlanner(vaultClients ...*security.RemoteAuthorizationCl
    if spec.VaultAlias!=""&&spec.TokenFile!=""{
     return nil,errors.New("model route has conflicting credential authorities")
    }
-   var source func()(string,error)
+   var source func(context.Context,string,string,json.RawMessage)(string,error)
    if spec.VaultAlias!=""{
-    if vault==nil{return nil,errors.New("model route vault unavailable")}
     var err error
-    source,err=vault.TokenSource(spec.VaultAlias)
+    source,err=authorizedVaultToken(vault,spec.VaultAlias)
     if err!=nil{return nil,err}
    }
    token:=""
@@ -70,7 +100,7 @@ func configuredCapabilityPlanner(vaultClients ...*security.RemoteAuthorizationCl
    }
    routes=append(routes,agentflow.ModelRoute{
     Name:spec.Name,Purpose:spec.Purpose,Endpoint:spec.Endpoint,Model:spec.Model,
-    LocalOnly:spec.LocalOnly,Token:token,TokenSource:source,
+    LocalOnly:spec.LocalOnly,Token:token,ScopedTokenSource:source,
    })
   }
   return agentflow.NewModelRouter(routes)
@@ -80,11 +110,10 @@ func configuredCapabilityPlanner(vaultClients ...*security.RemoteAuthorizationCl
   return nil,nil
  }
  if tokenFile!=""&&vaultAlias!=""{return nil,errors.New("model has conflicting credential authorities")}
- var source func()(string,error)
+ var source func(context.Context,string,string,json.RawMessage)(string,error)
  if vaultAlias!=""{
-  if vault==nil{return nil,errors.New("model vault unavailable")}
   var err error
-  source,err=vault.TokenSource(vaultAlias)
+  source,err=authorizedVaultToken(vault,vaultAlias)
   if err!=nil{return nil,err}
  }
  token:=""
@@ -95,6 +124,6 @@ func configuredCapabilityPlanner(vaultClients ...*security.RemoteAuthorizationCl
  }
  author,err:=agentflow.NewModelAuthor(endpoint,name,token)
  if err!=nil{return nil,err}
- author.TokenSource=source
+ author.ScopedTokenSource=source
  return author,nil
 }

@@ -3,6 +3,10 @@
 {{- fail "worker.image must be a verified immutable OCI reference with a SHA-256 digest" }}
 {{- end }}
 {{- $builder := .Values.worker.builder }}
+{{- $verification := .Values.worker.verification }}
+{{- if and $verification.image (not (regexMatch "^[a-z0-9][a-z0-9./:_-]+@sha256:[a-f0-9]{64}$" $verification.image)) }}
+{{- fail "worker.verification.image must use an immutable OCI digest" }}
+{{- end }}
 {{- if or $builder.image $builder.registry $builder.authSecretName }}
 {{- if not (and $builder.image $builder.registry $builder.authSecretName) }}
 {{- fail "worker.builder requires image, registry, and authSecretName together" }}
@@ -76,6 +80,10 @@ rules:
   - apiGroups: ["batch"]
     resources: ["jobs"]
     verbs: ["get", "list", "watch", "create", "delete"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["networkpolicies"]
+    resourceNames: ["pwm-isolate-workloads"]
+    verbs: ["get"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -224,6 +232,10 @@ spec:
               value: {{ $builder.registry | quote }}
             - name: PWM_KUBE_BUILDER_AUTH_SECRET
               value: {{ $builder.authSecretName | quote }}
+            {{- end }}
+            {{- if $verification.image }}
+            - name: PWM_KUBE_VERIFICATION_IMAGE
+              value: {{ $verification.image | quote }}
             {{- end }}
             {{- if .Values.worker.deviceManifestConfigMap }}
             - name: PWM_KUBE_DEVICE_MANIFEST

@@ -36,8 +36,8 @@ pub fn SourcePreviews(run_id: String) -> Element {
                     for entry in results {
                         details {
                             class:"engineering-diff",
-                            summary { "{api::property(&entry,&["path"])}" }
-                            pre { "{api::property(&entry,&["diff"])}" }
+                            summary { {api::property(&entry,&["path"])} }
+                            pre { {api::property(&entry,&["diff"])} }
                         }
                     }
                 }

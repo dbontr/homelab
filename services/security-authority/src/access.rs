@@ -61,7 +61,9 @@ fn valid_rsa_public_key(jwk: &Jwk) -> bool {
     };
     let bits = (modulus.len() - first_nonzero - 1) * 8
         + (8 - modulus[first_nonzero].leading_zeros() as usize);
-    let e = exponent.iter().fold(0u64, |n, byte| (n << 8) | u64::from(*byte));
+    let e = exponent
+        .iter()
+        .fold(0u64, |n, byte| (n << 8) | u64::from(*byte));
     bits >= 2048 && (3..=65537).contains(&e) && e % 2 == 1
 }
 
@@ -147,7 +149,9 @@ impl AccessVerifier {
         if header.alg != Algorithm::RS256 {
             return Err(Error::Unauthorized);
         }
-        let key = self.keys.get(header.kid.as_deref().ok_or(Error::Unauthorized)?)
+        let key = self
+            .keys
+            .get(header.kid.as_deref().ok_or(Error::Unauthorized)?)
             .ok_or(Error::Unauthorized)?;
         let mut validation = Validation::new(Algorithm::RS256);
         validation.set_issuer(&[&self.issuer]);
@@ -157,8 +161,7 @@ impl AccessVerifier {
         validation.validate_exp = false;
         validation.validate_nbf = false;
         validation.required_spec_claims.clear();
-        let data = decode::<Value>(assertion, key, &validation)
-            .map_err(|_| Error::Unauthorized)?;
+        let data = decode::<Value>(assertion, key, &validation).map_err(|_| Error::Unauthorized)?;
         let claims = data.claims;
         let exp = claim_seconds(&claims, "exp").ok_or(Error::Unauthorized)?;
         let iat = claim_seconds(&claims, "iat").ok_or(Error::Unauthorized)?;
@@ -167,9 +170,16 @@ impl AccessVerifier {
         } else {
             iat
         };
-        let subject = claims.get("sub").and_then(Value::as_str).ok_or(Error::Unauthorized)?;
-        let email = claims.get("email").and_then(Value::as_str).ok_or(Error::Unauthorized)?
-            .trim().to_ascii_lowercase();
+        let subject = claims
+            .get("sub")
+            .and_then(Value::as_str)
+            .ok_or(Error::Unauthorized)?;
+        let email = claims
+            .get("email")
+            .and_then(Value::as_str)
+            .ok_or(Error::Unauthorized)?
+            .trim()
+            .to_ascii_lowercase();
         if claims.get("iss").and_then(Value::as_str) != Some(self.issuer.as_str())
             || email != self.owner_email
             || subject.is_empty()
@@ -204,13 +214,14 @@ mod tests {
         token: String,
     }
     fn fixture() -> (AccessVerifier, Fixture) {
-        let fixture: Fixture = serde_json::from_str(include_str!(
-            "../tests/fixtures/access-jwt.json"
-        )).unwrap();
+        let fixture: Fixture =
+            serde_json::from_str(include_str!("../tests/fixtures/access-jwt.json")).unwrap();
         let verifier = AccessVerifier::new(
-            &fixture.issuer, &fixture.email,
+            &fixture.issuer,
+            &fixture.email,
             serde_json::to_string(&fixture.jwks).unwrap().as_bytes(),
-        ).unwrap();
+        )
+        .unwrap();
         (verifier, fixture)
     }
 
@@ -218,7 +229,9 @@ mod tests {
     fn admits_only_signed_owner_with_exact_issuer_audience_and_lifetime() {
         let (verifier, sample) = fixture();
         assert_eq!(
-            verifier.verify_at(&sample.token, &sample.audience, 1_770_000_120).unwrap(),
+            verifier
+                .verify_at(&sample.token, &sample.audience, 1_770_000_120)
+                .unwrap(),
             sample.principal
         );
         assert!(matches!(

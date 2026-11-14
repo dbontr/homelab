@@ -11,7 +11,9 @@ import (
 )
 func testStore(t *testing.T) *Store {
  t.Helper()
- s,err:=Open(filepath.Join(t.TempDir(),"health.db"))
+ directory:=t.TempDir()
+ if err:=os.Chmod(directory,0700);err!=nil{t.Fatal(err)}
+ s,err:=Open(filepath.Join(directory,"health.db"))
  if err!=nil{t.Fatal(err)}
  t.Cleanup(func(){_ =s.Close()})
  return s

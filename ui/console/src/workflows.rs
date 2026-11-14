@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 use reqwest::Method;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::api;
 use crate::components::{Badge, Empty, Heading, Loading, Notice};
@@ -15,9 +15,9 @@ struct PlanPreview {
 
 impl PlanPreview {
     fn matches(&self, draft: &WorkflowDraft) -> bool {
-        self.project == draft.project.trim() &&
-            self.objective == draft.objective.trim() &&
-            self.personal_read == draft.personal_read
+        self.project == draft.project.trim()
+            && self.objective == draft.objective.trim()
+            && self.personal_read == draft.personal_read
     }
 }
 
@@ -61,10 +61,17 @@ impl WorkflowDraft {
     fn validate_scope(&self) -> Result<(), String> {
         let project = self.project.trim();
         let objective = self.objective.trim();
-        if project.is_empty() || project.len() > 80 ||
-            !matches!(project.chars().next(), Some('a'..='z')) ||
-            !project.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-') {
-            return Err("Enter an existing project ID using lowercase letters, digits or hyphens.".to_owned());
+        if project.is_empty()
+            || project.len() > 80
+            || !matches!(project.chars().next(), Some('a'..='z'))
+            || !project
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+        {
+            return Err(
+                "Enter an existing project ID using lowercase letters, digits or hyphens."
+                    .to_owned(),
+            );
         }
         if objective.is_empty() || objective.len() > 2000 {
             return Err("The objective must contain 1–2,000 characters.".to_owned());
@@ -76,14 +83,31 @@ impl WorkflowDraft {
         self.validate_scope()?;
         let project = self.project.trim();
         let objective = self.objective.trim();
-        let needs_query = matches!(self.action.as_str(),
-            "research_search" | "research_semantic_query" | "recipe_search");
-        let personal = matches!(self.action.as_str(),
-            "learning_summary" | "health_goals" | "recipe_search" | "project_tasks" | "weekly_report");
-        let allowed = matches!(self.action.as_str(),
-            "project_context" | "project_tasks" | "engineering_runs" |
-            "research_search" | "research_semantic_query" | "research_claims" |
-            "learning_summary" | "health_goals" | "recipe_search" | "weekly_report");
+        let needs_query = matches!(
+            self.action.as_str(),
+            "research_search" | "research_semantic_query" | "recipe_search"
+        );
+        let personal = matches!(
+            self.action.as_str(),
+            "learning_summary"
+                | "health_goals"
+                | "recipe_search"
+                | "project_tasks"
+                | "weekly_report"
+        );
+        let allowed = matches!(
+            self.action.as_str(),
+            "project_context"
+                | "project_tasks"
+                | "engineering_runs"
+                | "research_search"
+                | "research_semantic_query"
+                | "research_claims"
+                | "learning_summary"
+                | "health_goals"
+                | "recipe_search"
+                | "weekly_report"
+        );
         if !allowed {
             return Err("The selected action is not approved for this workflow.".to_owned());
         }
@@ -91,9 +115,15 @@ impl WorkflowDraft {
             return Err("Personal application reads require explicit consent.".to_owned());
         }
         let query = self.query.trim();
-        if needs_query && query.is_empty() ||
-            query.len() > 120 || query.contains('\n') || query.contains('\r') {
-            return Err("A search requires a query of at most 120 characters without line breaks.".to_owned());
+        if needs_query && query.is_empty()
+            || query.len() > 120
+            || query.contains('\n')
+            || query.contains('\r')
+        {
+            return Err(
+                "A search requires a query of at most 120 characters without line breaks."
+                    .to_owned(),
+            );
         }
         let mut stage = json!({"id":"read","action":self.action});
         if needs_query {
@@ -108,14 +138,24 @@ impl WorkflowDraft {
     }
 
     fn schedule(&self) -> Result<Value, String> {
-        let hours = self.every_hours.trim().parse::<u64>()
+        let hours = self
+            .every_hours
+            .trim()
+            .parse::<u64>()
             .map_err(|_| "The interval must be a whole number of hours.".to_owned())?;
         if !(1..=168).contains(&hours) {
             return Err("The interval must be between 1 hour and 7 days.".to_owned());
         }
-        if self.notify_on_every_run && (self.action!="weekly_report" ||
-            hours!=168 || !self.personal_read || self.notify_on_change) {
-            return Err("Report completion alerts require one weekly personal report and no change alerts.".to_owned());
+        if self.notify_on_every_run
+            && (self.action != "weekly_report"
+                || hours != 168
+                || !self.personal_read
+                || self.notify_on_change)
+        {
+            return Err(
+                "Report completion alerts require one weekly personal report and no change alerts."
+                    .to_owned(),
+            );
         }
         Ok(json!({
             "program":self.program()?,
@@ -150,7 +190,8 @@ fn property(value: &Value, key: &str) -> String {
 pub fn Workflows(csrf: String) -> Element {
     let csrf = use_signal(|| csrf);
     let mut runs = use_resource(|| async { api::get::<Value>("/v1/workflows").await });
-    let mut archives = use_resource(|| async { api::get::<Value>("/v1/workflows?archived=true").await });
+    let mut archives =
+        use_resource(|| async { api::get::<Value>("/v1/workflows?archived=true").await });
     let mut schedules = use_resource(|| async { api::get::<Value>("/v1/automations").await });
     let mut alerts = use_resource(|| async { api::get::<Value>("/v1/automations/alerts").await });
     let mut draft = use_signal(WorkflowDraft::default);
@@ -779,7 +820,7 @@ pub fn Workflows(csrf: String) -> Element {
 
 #[cfg(test)]
 mod tests {
-    use super::{WorkflowDraft, PlanPreview};
+    use super::{PlanPreview, WorkflowDraft};
     use serde_json::json;
 
     #[test]
@@ -860,5 +901,4 @@ mod tests {
         form.notify_on_every_run = false;
         assert!(form.schedule().is_ok());
     }
-
 }

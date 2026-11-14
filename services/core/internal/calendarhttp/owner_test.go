@@ -12,7 +12,7 @@ import (
 )
 
 func TestOwnerCalendarViewsShareFeedAndRespectAvailability(t *testing.T){
- feed,err:=calendar.Parse("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:1\r\nDTSTART:20261109T120000Z\r\nSUMMARY:Seminar\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n")
+ feed,err:=calendar.Parse("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:1\r\nDTSTART:20261109T120000Z\r\nDTEND:20261109T130000Z\r\nSUMMARY:Seminar\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n")
  if err!=nil{t.Fatal(err)}
  var failure error
  calls:=0

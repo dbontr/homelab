@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 use reqwest::Method;
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::api::{self, Task};
 use crate::components::{Badge, Empty, Heading, Loading, Notice};
@@ -61,7 +61,11 @@ struct DecompositionResult {
 }
 
 fn predecessor_labels(steps: &[usize]) -> String {
-    steps.iter().map(|index| (index + 1).to_string()).collect::<Vec<_>>().join(", ")
+    steps
+        .iter()
+        .map(|index| (index + 1).to_string())
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 #[component]
@@ -76,17 +80,23 @@ pub fn Tasks(csrf: String) -> Element {
     let mut busy = use_signal(|| false);
     let mut error = use_signal(String::new);
     let mut message = use_signal(String::new);
-    let mut conflict_preview = use_signal(||None::<Value>);
-    let mut decomposition_parent = use_signal(||None::<Task>);
-    let mut decomposition_preview = use_signal(||None::<DecompositionPreview>);
-    let mut disclosure_consent = use_signal(||false);
+    let mut conflict_preview = use_signal(|| None::<Value>);
+    let mut decomposition_parent = use_signal(|| None::<Task>);
+    let mut decomposition_preview = use_signal(|| None::<DecompositionPreview>);
+    let mut disclosure_consent = use_signal(|| false);
 
     let items = records.cloned().and_then(Result::ok).unwrap_or_default();
     let today = agenda.cloned().and_then(Result::ok).unwrap_or_default();
     let visible: Vec<Task> = match filter().as_str() {
         "today" => today,
-        "completed" => items.into_iter().filter(|task| task.status == "completed").collect(),
-        _ => items.into_iter().filter(|task| task.status == "open").collect(),
+        "completed" => items
+            .into_iter()
+            .filter(|task| task.status == "completed")
+            .collect(),
+        _ => items
+            .into_iter()
+            .filter(|task| task.status == "open")
+            .collect(),
     };
     let editor = draft();
 

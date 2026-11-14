@@ -31,6 +31,7 @@ type Server struct {
  google *googlehealth.Client
  food *fooddata.Client
 	tools  map[string]toolEntry
+ bundle *AppBundle
 }
 
 func New(client *recipesage.Client, stores ...*health.Store) *Server {
@@ -102,23 +103,23 @@ func (s *Server) Dispatch(ctx context.Context, data []byte) *response {
   switch p.URI {
   case healthUIURI:
   return &response{JSONRPC:"2.0",ID:req.ID,Result:map[string]any{"contents":[]any{
-   map[string]string{"uri":healthUIURI,"mimeType":"text/html;profile=mcp-app","text":workoutHTML},
+   s.appResource(healthUIURI,"workout-editor",workoutHTML),
   }}}
   case cognitiveUIURI:
   return &response{JSONRPC:"2.0",ID:req.ID,Result:map[string]any{"contents":[]any{
-   map[string]string{"uri":cognitiveUIURI,"mimeType":"text/html;profile=mcp-app","text":cognitiveHTML},
+   s.appResource(cognitiveUIURI,"cognitive",cognitiveHTML),
   }}}
   case dashboardURI:
   return &response{JSONRPC:"2.0",ID:req.ID,Result:map[string]any{"contents":[]any{
-   map[string]string{"uri":dashboardURI,"mimeType":"text/html;profile=mcp-app","text":dashboardHTML},
+   s.appResource(dashboardURI,"dashboard",dashboardHTML),
   }}}
   case groceryUIURI:
   return &response{JSONRPC:"2.0",ID:req.ID,Result:map[string]any{"contents":[]any{
-   map[string]string{"uri":groceryUIURI,"mimeType":"text/html;profile=mcp-app","text":groceryHTML},
+   s.appResource(groceryUIURI,"groceries",groceryHTML),
   }}}
   case companionUIURI:
   return &response{JSONRPC:"2.0",ID:req.ID,Result:map[string]any{"contents":[]any{
-   map[string]string{"uri":companionUIURI,"mimeType":"text/html;profile=mcp-app","text":companionHTML},
+   s.appResource(companionUIURI,"workout-companion",companionHTML),
   }}}
   default:
     return rpcErr(req.ID,-32602,"unknown resource")
@@ -201,6 +202,9 @@ func (s *Server) HTTPHandler(bearer string, allowedOrigins []string) (http.Handl
 		}
 	}
 	mux := http.NewServeMux()
+	if s.bundle != nil {
+		mux.HandleFunc("/",s.bundle.serve)
+	}
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

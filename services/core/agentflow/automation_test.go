@@ -10,7 +10,7 @@ import (
 )
 
 func TestAutomationSchedulesImmutableReadOnlyWorkflows(t *testing.T){
- root:=t.TempDir()
+ root:=filepath.Join(t.TempDir(),"workflows")
  s,err:=Open(root)
  if err!=nil{t.Fatal(err)}
  clock:=time.Date(2026,11,9,8,0,0,0,time.UTC)
@@ -43,7 +43,7 @@ func TestAutomationSchedulesImmutableReadOnlyWorkflows(t *testing.T){
 }
 
 func TestAutomationRejectsUnsafeRecordsAndConflicts(t *testing.T){
- s,err:=Open(t.TempDir())
+ s,err:=Open(filepath.Join(t.TempDir(),"workflows"))
  if err!=nil{t.Fatal(err)}
  _,err=s.CreateAutomation(Automation{ID:"read",Project:"project",EveryMinutes:5,Program:json.RawMessage("{}")})
  if err==nil{t.Fatal("five-minute polling accepted")}

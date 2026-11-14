@@ -120,6 +120,9 @@ func DeviceDockerArgsAuthorized(claims []DeviceClaim, known []Device, allowUSB b
 			if info.Mode&syscall.S_IFMT != syscall.S_IFCHR {
 				return nil, errors.New("configured path is not a character device")
 			}
+			if err := nativeCharMapping(d.Kind, clean); err != nil {
+				return nil, err
+			}
 			args = append(args, "--device", clean)
 		}
 	}

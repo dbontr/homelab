@@ -1,0 +1,195 @@
+name: Source integration acceptance
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/source-acceptance.yml"
+      - "services/**"
+      - "tests/integration/**"
+      - "scripts/**"
+      - "mcp/**"
+      - "api/**"
+      - "infrastructure/**"
+      - "ui/console/**"
+      - "nixosModules/**"
+      - "packages/**"
+      - "flake.nix"
+      - "flake.lock"
+      - "go.work"
+  push:
+    branches:
+      - feature/rust-native-execution-boundaries
+    paths:
+      - ".github/workflows/source-acceptance.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: source-acceptance-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  go-domains:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        module:
+          - "."
+          - "services/core"
+          - "services/compute"
+          - "services/learning"
+          - "services/health"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27.3"
+      - name: Compile and test Go domain
+        working-directory: ${{ matrix.module }}
+        env:
+          GOWORK: "off"
+        run: |
+          set -o pipefail
+          go test -count=1 ./... 2>&1 | tee "$RUNNER_TEMP/go-tests.log"
+      - name: Preserve domain diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-${{ strategy.job-index }}-diagnostics
+          path: ${{ runner.temp }}/go-tests.log
+          if-no-files-found: warn
+          retention-days: 7
+
+  mcp-bridge-integration:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27.3"
+      - name: Verify complete MCP interface and federated tool path
+        run: go test -tags=integration -count=1 -v ./tests/integration
+
+
+  native-device:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Compile native device helper and isolated tests
+        run: |
+          set -o pipefail
+          rustc --edition=2021 -D warnings --test services/compute/native-hardware/src/main.rs -o /tmp/homelab-native-hardware-tests 2>&1 | tee "$RUNNER_TEMP/native-build.log"
+          /tmp/homelab-native-hardware-tests 2>&1 | tee "$RUNNER_TEMP/native-test.log"
+          rustc --edition=2021 -D warnings -C opt-level=2 services/compute/native-hardware/src/main.rs -o /tmp/homelab-native-hardware
+      - name: Preserve native diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-device-diagnostics
+          path: ${{ runner.temp }}/native-*.log
+          if-no-files-found: warn
+          retention-days: 7
+
+  rust-components:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        manifest:
+          - services/security-authority/Cargo.toml
+          - services/executor/Cargo.toml
+          - services/motivation/Cargo.toml
+          - ui/console/Cargo.toml
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+          targets: wasm32-unknown-unknown
+      - name: Check locked Rust source
+        run: |
+          set -o pipefail
+          manifest="${{ matrix.manifest }}"
+          root="$(dirname "$manifest")"
+          test -s "$root/Cargo.lock"
+          cargo fmt --manifest-path "$manifest" --all -- --check 2>&1 | tee "$RUNNER_TEMP/cargo-format.log"
+          if [ "$root" = "ui/console" ]; then
+            cargo check --locked --manifest-path "$manifest" --target wasm32-unknown-unknown 2>&1 | tee "$RUNNER_TEMP/cargo-check.log"
+          else
+            cargo test --locked --all-targets --manifest-path "$manifest" 2>&1 | tee "$RUNNER_TEMP/cargo-test.log"
+            cargo clippy --locked --all-targets --manifest-path "$manifest" -- -D warnings 2>&1 | tee "$RUNNER_TEMP/cargo-clippy.log"
+          fi
+      - name: Preserve Rust diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-${{ strategy.job-index }}-diagnostics
+          path: ${{ runner.temp }}/cargo-*.log
+          if-no-files-found: warn
+          retention-days: 7
+
+  nix-evaluation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+      - name: Evaluate Nix flake without activation
+        run: |
+          set -o pipefail
+          nix flake show --no-write-lock-file 2>&1 | tee "$RUNNER_TEMP/nix-eval.log"
+          nix eval --raw .#packages.x86_64-linux.homelab-native-hardware.name 2>&1 | tee "$RUNNER_TEMP/nix-package.log"
+      - name: Preserve Nix diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nix-source-diagnostics
+          path: ${{ runner.temp }}/nix-*.log
+          if-no-files-found: warn
+          retention-days: 7
+
+  helm-legacy-values:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.20.2
+      - name: Check chart and legacy optional-hardware values
+        shell: bash
+        run: |
+          set -euo pipefail
+          chart=services/compute/deploy/helm/project-workspace
+          controller="ghcr.io/dbontr/homelab/controller@sha256:$(printf '%064d' 0)"
+          worker="ghcr.io/dbontr/homelab/worker@sha256:$(printf '%064d' 0)"
+          helm lint "$chart" --strict
+          helm template verify "$chart" --set controller.enabled=true \
+            --set-string "controller.image=$controller" --set-json 'hardware=null' \
+            > "$RUNNER_TEMP/controller-without-hardware.yaml"
+          grep -q '^kind: PersistentVolumeClaim$' "$RUNNER_TEMP/controller-without-hardware.yaml"
+          helm template verify "$chart" --set worker.enabled=true \
+            --set-string "worker.image=$worker" \
+            --set-json 'hardware={"nvidia":null,"intelNpu":null}' \
+            > "$RUNNER_TEMP/worker-without-plugins.yaml"
+          grep -q '^kind: Deployment$' "$RUNNER_TEMP/worker-without-plugins.yaml"
+      - name: Verify project-worker rollout admission and rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n services/compute/scripts/rollout-project-worker.sh
+          bash -n services/compute/scripts/rollout-project-fleet.sh
+          bash -n services/compute/scripts/tests/rollout-project-worker-test.sh
+          bash services/compute/scripts/tests/rollout-project-worker-test.sh

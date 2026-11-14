@@ -184,3 +184,38 @@ func TestProjectViewerCanPlanWithoutAllocating(t *testing.T) {
 		t.Fatal("request project ID cannot override authorization")
 	}
 }
+
+func TestResourcePlanIdentifiesExecutorAdapter(t *testing.T) {
+	db, _, server := fixture(t)
+	project(t, server)
+	docker := plannerNode(2, 2048, nil, "debian:bookworm-slim")
+	kubernetes := kubeWorkerCaps("demo")
+	unavailable := plannerNode(2, 2048, nil, "debian:bookworm-slim")
+	delete(unavailable, "docker")
+	for name, capabilities := range map[string]map[string]any{
+		"docker-only": docker,
+		"kubernetes-only": kubernetes,
+		"no-executor": unavailable,
+	} {
+		if _, err := db.RegisterNode(name, capabilities); err != nil {
+			t.Fatal(err)
+		}
+	}
+	plan, err := db.PlanWorkspace(WorkspaceRequest{ProjectID: "demo"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	adapters := map[string]string{}
+	for _, candidate := range plan["candidates"].([]map[string]any) {
+		adapters[asString(candidate["node"])] = asString(candidate["adapter"])
+	}
+	for name, want := range map[string]string{
+		"docker-only": "docker",
+		"kubernetes-only": "kubernetes",
+		"no-executor": "",
+	} {
+		if adapters[name] != want {
+			t.Fatalf("worker %s: adapter %q, want %q", name, adapters[name], want)
+		}
+	}
+}

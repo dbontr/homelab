@@ -12,6 +12,16 @@ in
       default = "go";
       description = "Single authoritative security daemon implementation; Rust requires a locked, verified release.";
     };
+    migration.receiptFile = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = ''
+        Operator-provisioned cutover receipt from an independently validated
+        state snapshot. Required to select Rust and to switch back to Go once
+        a persistent selection marker exists. This is a protected systemd
+        credential, not a file in the Nix store.
+      '';
+    };
     package = lib.mkOption {
       type = lib.types.package;
       default = package;
@@ -86,15 +96,33 @@ in
         default = [];
         description = "Exact certificate DNS identities permitted to request operation authorization.";
       };
+      credentialClientDNS = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = [];
+        description = "Additional certificate DNS identities permitted only to request explicitly granted vault credentials.";
+      };
       serviceCredentialGrants = lib.mkOption {
         default = [];
-        description = "Exact service identity and opaque vault handle bindings for mutually authenticated credential reads. Never put credential values in this configuration.";
+        description = "Exact certificate identity, operation, resource and opaque vault handle bindings for one-use owner-authorized credential tickets. Never put credential values in this configuration.";
         type = lib.types.listOf (lib.types.submodule {
           options = {
             clientDNS = lib.mkOption { type = lib.types.str; };
             alias = lib.mkOption { type = lib.types.str; };
             provider = lib.mkOption { type = lib.types.str; };
             handle = lib.mkOption { type = lib.types.str; };
+            operation = lib.mkOption {
+              type = lib.types.str;
+              description = "Exact independently authorized operation required for this credential.";
+            };
+            target = lib.mkOption {
+              type = lib.types.str;
+              description = "Exact independently authorized resource target for this credential.";
+            };
+            argumentsSHA256 = lib.mkOption {
+              type = lib.types.nullOr lib.types.str;
+              default = null;
+              description = "Optional exact SHA-256 of the canonical operation arguments; all issued tickets bind the actual argument digest.";
+            };
             revision = lib.mkOption {
               type = lib.types.nullOr lib.types.str;
               default = null;
@@ -158,15 +186,32 @@ in
     assertions = [
       { assertion = cfg.implementation != "rust" || builtins.pathExists ../services/security-authority/Cargo.lock;
         message = "Rust security authority requires a checked-in Cargo.lock before it can be selected."; }
+      { assertion = cfg.implementation != "rust" || cfg.migration.receiptFile != null;
+        message = "Selecting the Rust security authority requires a separately approved migration receipt."; }
+      { assertion = cfg.migration.receiptFile == null ||
+          (lib.hasPrefix "/" cfg.migration.receiptFile &&
+           !(lib.hasPrefix "/nix/store/" cfg.migration.receiptFile) &&
+           !(lib.hasInfix "/../" cfg.migration.receiptFile));
+        message = "The migration receipt must be a canonical absolute credential path outside the public Nix store."; }
       { assertion = !cfg.remote.enable ||
           (cfg.remote.listenAddress != null && cfg.remote.certificateFile != null &&
            cfg.remote.keyFile != null && cfg.remote.clientCAFile != null &&
            cfg.remote.allowedClientDNS != [] && cfg.access.gatewayAudience != "");
         message = "Remote authorization needs exact client identities, TLS credentials, a private listener and signed owner verification."; }
+      { assertion = !cfg.remote.enable ||
+          (lib.length cfg.remote.allowedClientDNS + lib.length cfg.remote.credentialClientDNS <= 16 &&
+           lib.intersectLists cfg.remote.allowedClientDNS cfg.remote.credentialClientDNS == []);
+        message = "Remote certificate identities must be disjoint between authorization and credential-only roles and limited to sixteen peers."; }
       { assertion = cfg.remote.serviceCredentialGrants == [] ||
           (cfg.remote.enable && cfg.vaultKeyFile != null &&
-           lib.all (grant: lib.elem grant.clientDNS cfg.remote.allowedClientDNS) cfg.remote.serviceCredentialGrants);
-        message = "Service credentials require independent vault custody, private remote TLS, and an explicitly allowed client certificate identity."; }
+           lib.all (grant:
+             lib.elem grant.clientDNS cfg.remote.allowedClientDNS &&
+             lib.any (policy: policy.operation == grant.operation &&
+               lib.elem grant.target policy.targets) cfg.policies &&
+             (grant.argumentsSHA256 == null ||
+               builtins.match "[0-9a-f]{64}" grant.argumentsSHA256 != null)
+           ) cfg.remote.serviceCredentialGrants);
+        message = "Service credentials require a TLS authorizer identity, exact operation/resource policy, optional canonical digest and independent vault custody."; }
       { assertion = cfg.owner != ""; message = "Security daemon requires an owner identity."; }
       { assertion = cfg.passwordVerifierFile != null && cfg.totpSecretFile != null;
         message = "Security daemon requires separate password and TOTP credential files."; }
@@ -216,6 +261,10 @@ in
       };
     };
     environment.systemPackages = [ cfg.package ] ++ lib.optional (cfg.implementation == "rust") rustPackage;
+    # Browser ingress needs traversal by nginx without exposing the owner socket directory.
+    systemd.tmpfiles.rules = lib.optionals cfg.browser.enable [
+      "d /run/homelab-security-browser 0750 homelab-security homelab-security-browser -"
+    ];
     systemd.services.homelab-securityd = {
       description = "Independent owner authentication and privileged-session policy";
       wantedBy = [ "multi-user.target" ];
@@ -230,12 +279,16 @@ in
         HOMELAB_SECURITY_REMOTE_KEY = "/run/credentials/homelab-securityd.service/remote-key";
         HOMELAB_SECURITY_REMOTE_CLIENT_CA = "/run/credentials/homelab-securityd.service/remote-client-ca";
         HOMELAB_SECURITY_REMOTE_CLIENT_IDENTITIES = builtins.toJSON cfg.remote.allowedClientDNS;
+        HOMELAB_SECURITY_REMOTE_CREDENTIAL_CLIENT_IDENTITIES = builtins.toJSON cfg.remote.credentialClientDNS;
         HOMELAB_SECURITY_SERVICE_CREDENTIAL_GRANTS = if cfg.remote.serviceCredentialGrants == []
           then "" else builtins.toJSON (map (grant: {
             client_dns = grant.clientDNS;
             alias = grant.alias;
             provider = grant.provider;
             handle = grant.handle;
+            operation = grant.operation;
+            target = grant.target;
+            arguments_sha256 = grant.argumentsSHA256;
             revision = grant.revision;
             expires_at = grant.expiresAt;
           }) cfg.remote.serviceCredentialGrants);
@@ -246,6 +299,8 @@ in
         HOMELAB_SECURITY_ACCESS_BROWSER_AUD = cfg.browser.audience;
       } // lib.optionalAttrs (cfg.vaultKeyFile != null) {
         HOMELAB_SECURITY_VAULT_KEY_FILE = "/run/credentials/homelab-securityd.service/vault-key";
+      } // lib.optionalAttrs (cfg.migration.receiptFile != null) {
+        HOMELAB_SECURITY_MIGRATION_RECEIPT_FILE = "/run/credentials/homelab-securityd.service/migration-receipt";
       } // lib.optionalAttrs (cfg.access.gatewayAudience != "") {
         HOMELAB_SECURITY_ACCESS_ISSUER = cfg.access.issuer;
         HOMELAB_SECURITY_ACCESS_GATEWAY_AUD = cfg.access.gatewayAudience;
@@ -257,9 +312,9 @@ in
         User = "homelab-security";
         Group = "homelab-security";
         SupplementaryGroups = [ "homelab-security-client" ] ++ lib.optional cfg.browser.enable "homelab-security-browser";
-        StateDirectory = "homelab-securityd";
+        StateDirectory = [ "homelab-securityd" ];
         StateDirectoryMode = "0700";
-        RuntimeDirectory = [ "homelab-securityd" ] ++ lib.optional cfg.browser.enable "homelab-security-browser";
+        RuntimeDirectory = [ "homelab-securityd" ];
         RuntimeDirectoryMode = "0750";
         LoadCredential = [
           "password:${cfg.passwordVerifierFile}"
@@ -270,6 +325,8 @@ in
           "remote-client-ca:${cfg.remote.clientCAFile}"
         ] ++ lib.optionals (cfg.vaultKeyFile != null) [
           "vault-key:${cfg.vaultKeyFile}"
+        ] ++ lib.optionals (cfg.migration.receiptFile != null) [
+          "migration-receipt:${cfg.migration.receiptFile}"
         ] ++ lib.optionals (cfg.access.gatewayAudience != "") [
           "access-jwks:${cfg.access.jwksFile}"
           "access-owner:${cfg.access.ownerEmailFile}"

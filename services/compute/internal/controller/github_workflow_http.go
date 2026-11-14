@@ -17,7 +17,13 @@ func (s *Server) handleGitHubWorkflow(w http.ResponseWriter, r *http.Request, pa
 		fail(w, 403, "repository is not linked to this project")
 		return true
 	}
-	gh := s.GitHub
+    scoped,finish,scopeErr:=s.forProviderHTTP(r)
+    if scopeErr!=nil{
+        fail(w,400,"invalid provider authorization context")
+        return true
+    }
+    defer finish()
+	gh := scoped.GitHub
 	sendGitHub := func(value any, err error) { send(w, value, err) }
 	method, category := r.Method, parts[4]
 	number := 0

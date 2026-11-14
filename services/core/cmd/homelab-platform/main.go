@@ -18,6 +18,7 @@ import (
     "github.com/dbontr/homelab-new/system/devices"
     "github.com/dbontr/homelab-new/system/media"
     "github.com/dbontr/homelab-new/system/observability"
+    "github.com/dbontr/homelab-new/system/internal/motivationhttp"
     "github.com/dbontr/homelab-new/system/profiles"
     "github.com/dbontr/homelab-new/system/recipes"
     "github.com/dbontr/homelab-new/system/store"
@@ -26,9 +27,14 @@ import (
     "github.com/dbontr/homelab-new/system/privileged"
     "github.com/dbontr/homelab-new/system/release"
     "github.com/dbontr/homelab-new/system/session"
-    "encoding/json"
     "github.com/dbontr/homelab-new/system/transport"
 )
+
+func protectedServiceCredential(path string, mode os.FileMode) bool {
+ if mode.Perm()&0077==0{return true}
+ directory:=os.Getenv("CREDENTIALS_DIRECTORY")
+ return directory!=""&&filepath.Dir(filepath.Clean(path))==filepath.Clean(directory)&&mode.Perm()&0037==0
+}
 
 func secret(path string) (string,error) {
     if path=="" {return "",errors.New("token file path is required")}
@@ -37,25 +43,29 @@ func secret(path string) (string,error) {
     return v,nil
 }
 
-func configuredBackend(name,upper string,vault *security.RemoteAuthorizationClient)(transport.Backend,bool,error){
+func configuredBackend(name,upper string)(transport.Backend,bool,error){
  u:=os.Getenv("HOMELAB_"+upper+"_MCP_URL")
  path:=os.Getenv("HOMELAB_"+upper+"_MCP_TOKEN_FILE")
  alias:=os.Getenv("HOMELAB_"+upper+"_MCP_VAULT_ALIAS")
+ if alias!=""{
+  return transport.Backend{},false,errors.New(
+   "federated MCP discovery requires a dedicated service token; owner-operation tickets cannot be used as ambient backend credentials")
+ }
  if u==""{
-  if path!=""||alias!=""{return transport.Backend{},false,errors.New("backend credential without endpoint")}
+  if path!=""{return transport.Backend{},false,errors.New("backend credential without endpoint")}
   return transport.Backend{},false,nil
  }
- if path!=""&&alias!=""{return transport.Backend{},false,errors.New("backend has conflicting credential authorities")}
- var source func()(string,error)
- var err error
- if alias!=""{
-  if vault==nil{return transport.Backend{},false,errors.New("backend vault is unavailable")}
-  source,err=vault.TokenSource(alias)
+ token:=""
+ if path!=""{
+  var err error
+  token,err=secret(path)
   if err!=nil{return transport.Backend{},false,err}
  }
- token:=""
- if path!=""{token,err=secret(path);if err!=nil{return transport.Backend{},false,err}}
- return transport.Backend{Name:name,URL:u,Token:token,TokenSource:source},true,nil
+ forward:=name=="workspace"&&os.Getenv("HOMELAB_WORKSPACE_MCP_FORWARD_OWNER_ASSERTION")=="1"
+ return transport.Backend{
+  Name:name,URL:u,Token:token,
+  ForwardOwnerAssertion:forward,
+ },true,nil
 }
 
 func main(){
@@ -74,7 +84,7 @@ func main(){
     if err!=nil{log.Fatal("service credential trust: ",err)}
     backends:=[]transport.Backend{}
     for _,b:=range []struct{name,upper string}{{"workspace","WORKSPACE"},{"learning","LEARNING"},{"health","HEALTH"}}{
-        v,enabled,e:=configuredBackend(b.name,b.upper,vault);if e!=nil{log.Fatal(e)};if enabled{backends=append(backends,v)}
+        v,enabled,e:=configuredBackend(b.name,b.upper);if e!=nil{log.Fatal(e)};if enabled{backends=append(backends,v)}
     }
     server,e:=transport.New(db,token,backends);if e!=nil{log.Fatal(e)}
     mcpInterfaceToken,apiInterfaceToken:="",""
@@ -93,6 +103,20 @@ func main(){
     if e:=server.SetInterfaceTokens(mcpInterfaceToken,apiInterfaceToken,apiWritePaths);e!=nil{
         log.Fatal("interface service policy: ",e)
     }
+    motivationURL:=os.Getenv("HOMELAB_MOTIVATION_SERVICE_URL")
+    motivationTokenPath:=os.Getenv("HOMELAB_MOTIVATION_SERVICE_TOKEN_FILE")
+    if motivationURL!=""{
+        if motivationTokenPath==""{log.Fatal("motivation service requires dedicated token file")}
+        info,err:=os.Lstat(motivationTokenPath)
+        if err!=nil||!info.Mode().IsRegular()||!protectedServiceCredential(motivationTokenPath,info.Mode()){
+            log.Fatal("motivation service token must be a private regular file")
+        }
+        identity,err:=secret(motivationTokenPath)
+        if err!=nil{log.Fatal("motivation service token: ",err)}
+        client,err:=motivationhttp.New(motivationURL,identity)
+        if err!=nil{log.Fatal("motivation service: ",err)}
+        server.SetMotivation(client)
+    }else if motivationTokenPath!=""{log.Fatal("motivation service token requires endpoint")}
     workflows,err:=agentflow.Open(workflowDir)
     if err!=nil{log.Fatal(err)}
     server.SetWorkflows(workflows)
@@ -122,12 +146,22 @@ func main(){
     server.SetProfiles(registry)
     recipeStore,e:=recipes.Open(recipeFile);if e!=nil{log.Fatal(e)}
     server.SetRecipes(recipeStore)
-    if file:=os.Getenv("HOMELAB_CONSOLE_PASSPHRASE_FILE");file!=""{
-        b,e:=os.ReadFile(file);if e!=nil{log.Fatal(e)}
-        var record security.PassphraseRecord
-        if e:=json.Unmarshal(b,&record);e!=nil{log.Fatal(e)}
-        manager,e:=session.New(record);if e!=nil{log.Fatal(e)}
+    if audience:=os.Getenv("HOMELAB_CONSOLE_ACCESS_AUDIENCE");audience!="" {
+        issuer:=os.Getenv("HOMELAB_CONSOLE_ACCESS_ISSUER")
+        ownerFile:=os.Getenv("HOMELAB_CONSOLE_ACCESS_OWNER_FILE")
+        jwksFile:=os.Getenv("HOMELAB_CONSOLE_ACCESS_JWKS_FILE")
+        if issuer==""||ownerFile==""||jwksFile=="" {log.Fatal("incomplete console Access configuration")}
+        owner,e:=os.ReadFile(ownerFile);if e!=nil{log.Fatal("console owner identity unavailable: ",e)}
+        jwks,e:=os.ReadFile(jwksFile);if e!=nil{log.Fatal("console signing keys unavailable: ",e)}
+        verifier,e:=security.NewAccessVerifier(issuer,strings.TrimSpace(string(owner)),jwks)
+        if e!=nil{log.Fatal("console Access verification: ",e)}
+        manager,e:=session.New(verifier,audience,token)
+        if e!=nil{log.Fatal("console Access session: ",e)}
         server.SetSessions(manager)
+    }else if os.Getenv("HOMELAB_CONSOLE_ACCESS_ISSUER")!="" ||
+        os.Getenv("HOMELAB_CONSOLE_ACCESS_OWNER_FILE")!="" ||
+        os.Getenv("HOMELAB_CONSOLE_ACCESS_JWKS_FILE")!="" {
+        log.Fatal("incomplete console Access configuration")
     }
     if file:=os.Getenv("HOMELAB_DEVICES_FILE");file!=""{
         catalog,e:=devices.Load(file);if e!=nil{log.Fatal(e)}
@@ -147,10 +181,9 @@ func main(){
         if (path=="")==(alias==""){log.Fatal("Seerr requires exactly one credential authority")}
         var client *media.Client
         if alias!=""{
-            if vault==nil{log.Fatal("Seerr vault is unavailable")}
-            source,err:=vault.TokenSource(alias)
+            source,err:=authorizedVaultToken(vault,alias)
             if err!=nil{log.Fatal(err)}
-            client,err=media.NewSeerrWithSource(url,source)
+            client,err=media.NewSeerrWithScopedSource(url,source)
             if err!=nil{log.Fatal(err)}
         }else{
             raw,e:=os.ReadFile(path);if e!=nil{log.Fatal(e)}

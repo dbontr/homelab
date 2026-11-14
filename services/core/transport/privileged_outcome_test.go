@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"path/filepath"
+    "strings"
 	"sync/atomic"
 	"testing"
 
@@ -26,8 +27,16 @@ func TestPrivilegedToolResponsesPreserveExecutionState(t *testing.T) {
 			http.NotFound(w, r)
 			return
 		}
+        var request struct{ RequestID string `json:"request_id"` }
+        if err:=json.NewDecoder(r.Body).Decode(&request);err!=nil||
+          !privileged.ValidExecutionRequestID(request.RequestID){
+          t.Error("gateway sent an invalid request identity",err)
+        }
+        receipt:=outcome.Load().(string)
+        receipt=strings.ReplaceAll(receipt,strings.Repeat("a",32),request.RequestID)
+        receipt=strings.ReplaceAll(receipt,strings.Repeat("b",32),request.RequestID)
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(outcome.Load().(string)))
+		_, _ = w.Write([]byte(receipt))
 	})}
 	defer srv.Close()
 	go func() { _ = srv.Serve(listener) }()
@@ -39,7 +48,7 @@ func TestPrivilegedToolResponsesPreserveExecutionState(t *testing.T) {
 	call := func() map[string]any {
 		t.Helper()
 		return server.invoke(context.Background(), "infrastructure__service_restart",
-			json.RawMessage(`{"host":"saturn","service":"homelab-platform.service"}`), json.RawMessage("1"))
+			json.RawMessage(`{"host":"saturn","service":"homelab-platform.service","request_id":"`+strings.Repeat("c",32)+`"}`), json.RawMessage("1"))
 	}
 	decode := func(response map[string]any) map[string]any {
 		t.Helper()
@@ -77,4 +86,36 @@ func TestPrivilegedToolResponsesPreserveExecutionState(t *testing.T) {
 	if failed, _ := response["isError"].(bool); !failed {
 		t.Fatalf("invalid executor response was trusted: %+v", response)
 	}
+    outcome.Store(`{"allowed":false,"reason":"execution request outcome requires independent reconciliation"}`)
+    got=decode(call())
+    if got["reconciliation_required"]!=true||got["authorization_required"]!=nil||
+        got["accepted"]!=false{
+        t.Fatalf("uncertain outcome was treated as a fresh confirmation request: %+v",got)
+    }
+    outcome.Store(`{"allowed":false,"reason":"execution request identity was reconciled and cannot be executed again"}`)
+    got=decode(call())
+    if got["reconciliation_required"]!=nil||got["authorization_required"]!=nil||
+        got["accepted"]!=false{
+        t.Fatalf("reconciled identity was treated as repeatable: %+v",got)
+    }
+}
+
+func TestPrivilegedToolSchemasRequireStableRequestIdentity(t *testing.T){
+ schema:=tool("infrastructure__service_restart","Restart service",
+  map[string]any{"host":prop("string"),"service":prop("string")},
+  "host","service")["inputSchema"].(map[string]any)
+ properties:=schema["properties"].(map[string]any)
+ identity,ok:=properties["request_id"].(map[string]any)
+ if !ok||identity["pattern"]!="^[0-9a-f]{32}$"{
+  t.Fatal("executor tool has no bounded request identity schema")
+ }
+ required:=schema["required"].([]string)
+ found:=false
+ for _,item:=range required{if item=="request_id"{found=true}}
+ if !found{t.Fatal("privileged tool did not require request_id")}
+ ordinary:=tool("recipe_list","List recipes",map[string]any{"query":prop("string")})
+ schema=ordinary["inputSchema"].(map[string]any)
+ if _,ok:=schema["properties"].(map[string]any)["request_id"];ok{
+  t.Fatal("read-only tools acquired an unrelated executor identity")
+ }
 }

@@ -28,21 +28,57 @@ func (s *Server) sessionOwnerWriteAllowed(r *http.Request) bool {
             len(parts)==7 && parts[4]=="alerts" && parts[5]!="" && parts[6]=="ack")
     case r.Method == http.MethodPost && (path=="/v1/research/learning/preview" || path=="/v1/research/learning/import"):
         allowed=true
+    case r.Method == http.MethodPut && path == "/v1/motivation/profile":
+        allowed=true
+    case r.Method == http.MethodPost && (path == "/v1/motivation/pause" ||
+        path == "/v1/motivation/interventions" || path == "/v1/motivation/feedback" ||
+        path == "/v1/motivation/dismiss" || path == "/v1/motivation/checkins" ||
+        path == "/v1/motivation/focus" || path == "/v1/motivation/focus/end"):
+        allowed=true
     case r.Method == http.MethodPut && path == "/v1/pantry":
         allowed=true
     case r.Method == http.MethodDelete && strings.HasPrefix(path,"/v1/pantry/items/"):
         allowed=len(strings.Split(path,"/"))==5
     case r.Method == http.MethodPost && path == "/v1/recipes/recommend":
         allowed=true
+    case r.Method == http.MethodPost &&
+        (path=="/v1/compute/workspaces/plan" || path=="/v1/compute/workspaces"):
+        allowed=true
+    case r.Method == http.MethodPost && strings.HasPrefix(path,"/v1/compute/workspaces/"):
+        parts:=strings.Split(path,"/")
+        allowed=len(parts)==6 && parts[5]=="stop" && learningID.MatchString(parts[4])
+    case r.Method == http.MethodPost && strings.HasPrefix(path,"/v1/compute/catalog/"):
+        parts:=strings.Split(path,"/")
+        if len(parts)==5{
+            switch parts[4]{
+            case "register-image","register-software","propose-program",
+                "review-program","update-entry":
+                allowed=true
+            }
+        }
     case r.Method == http.MethodPost && path == "/v1/learning/sessions":
+        allowed = true
+    case r.Method == http.MethodPost && path == "/v1/learning/attachments":
+        allowed = true
+    case r.Method == http.MethodPost && ownerLearningSessionWritePath(path):
         allowed = true
     case r.Method == http.MethodPost && strings.HasPrefix(path, "/v1/learning/questions/"):
         allowed = len(strings.Split(path, "/"))==6 && strings.HasSuffix(path, "/answer")
+    case r.Method == http.MethodPost && strings.HasPrefix(path, "/v1/learning/sources/"):
+        parts := strings.Split(path, "/")
+        allowed = len(parts)==7 && learningID.MatchString(parts[4]) &&
+            parts[5]=="curriculum" && (parts[6]=="preview" || parts[6]=="import")
     case r.Method == http.MethodPut && strings.HasPrefix(path, "/v1/books/requests/"):
         allowed = len(strings.Split(path, "/")) == 5
     case r.Method == http.MethodPost && path == "/v1/health/training-sets":
         allowed = true
     case r.Method == http.MethodPost && path == "/v1/health/records":
+        allowed = true
+    case r.Method == http.MethodPost && path == "/v1/health/reaction-test":
+        allowed = true
+    case r.Method == http.MethodPost && ownerHealthAppToolPathAllowed(path):
+        allowed = true
+    case r.Method == http.MethodPost && ownerLearningReadPathAllowed(path):
         allowed = true
     case r.Method == http.MethodPost && strings.HasPrefix(path, "/v1/health/food-proposals/"):
         allowed = len(strings.Split(path, "/")) == 6 && strings.HasSuffix(path, "/confirm")
@@ -65,13 +101,15 @@ func (s *Server) sessionOwnerWriteAllowed(r *http.Request) bool {
 	if r.Method != http.MethodDelete {
 		mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 		if err != nil { return false }
-		if path == "/v1/recipes/images" {
+		if path == "/v1/learning/attachments" {
+            if !learningAttachmentMIME[mediaType] { return false }
+        } else if path == "/v1/recipes/images" {
 			if mediaType != "image/png" && mediaType != "image/jpeg" { return false }
 		} else if path == "/v1/recipes/bundle" {
 			if mediaType != "application/zip" { return false }
 		} else if mediaType != "application/json" { return false }
 	}
-	csrf, _, valid := s.sessions.Check(s.sessionCookie(r))
+	csrf, valid := s.sessions.Check(r.Header.Get("Cf-Access-Jwt-Assertion"))
 	supplied := r.Header.Get("X-CSRF-Token")
 	return valid && len(csrf) == len(supplied) &&
 		subtle.ConstantTimeCompare([]byte(csrf), []byte(supplied)) == 1

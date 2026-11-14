@@ -16,6 +16,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -57,6 +58,7 @@ type Kubernetes struct {
 	StorageClass    string
 	ImagePullSecret string
 	BuilderImage string
+	VerificationImage string
 	BuilderRegistry string
 	BuilderAuthSecret string
 	GPURuntimeClass string
@@ -65,6 +67,16 @@ type Kubernetes struct {
 	CPU             float64
 	MemoryMB        int
 	MaxJobs         int
+
+	verificationMu          sync.RWMutex
+	verificationQuarantined bool
+	verificationEpoch       uint64
+}
+
+func (k *Kubernetes) verificationReady() bool {
+	k.verificationMu.RLock()
+	defer k.verificationMu.RUnlock()
+	return !k.verificationQuarantined
 }
 
 func NewKubernetes(namespace, project string, cpu float64, memory, jobs int) (*Kubernetes, error) {
@@ -101,6 +113,10 @@ func NewKubernetes(namespace, project string, cpu float64, memory, jobs int) (*K
 			!kubernetesName.MatchString(builderAuth)) {
 		return nil, errors.New("Kubernetes builder requires an approved image, HTTPS registry and credential Secret")
 	}
+	verificationImage := os.Getenv("PWM_KUBE_VERIFICATION_IMAGE")
+	if verificationImage != "" && !validBuilderImage(verificationImage) {
+		return nil, errors.New("native verifier image requires a pinned OCI digest")
+	}
 	workloadNode := os.Getenv("PWM_KUBE_WORKLOAD_NODE")
 	if workloadNode != "" && !kubernetesName.MatchString(workloadNode) {
 		return nil, errors.New("invalid Kubernetes workload node")
@@ -111,7 +127,7 @@ func NewKubernetes(namespace, project string, cpu float64, memory, jobs int) (*K
 	}
 	k := &Kubernetes{Namespace: namespace, Project: project, Binary: binary,
 		Storage: storage, StorageClass: class, ImagePullSecret: pullSecret,
-		BuilderImage: builderImage, BuilderRegistry: builderRegistry,
+		BuilderImage: builderImage, VerificationImage: verificationImage, BuilderRegistry: builderRegistry,
 		BuilderAuthSecret: builderAuth,
 		WorkloadNode: workloadNode, CPU: cpu, MemoryMB: memory, MaxJobs: jobs}
 	k.GPURuntimeClass = runtimeClass
@@ -690,6 +706,9 @@ func (k *Kubernetes) jobManifestWithDevices(job Job, worker string) (map[string]
 }
 
 func (k *Kubernetes) ExecuteJob(ctx context.Context, r *Runner, job Job) (string, string) {
+	if !k.verificationReady() {
+		return "failed", "worker quarantined pending verification Job cleanup"
+	}
 	if !workspaceID.MatchString(job.ID) || !k.approvedRuntimeImage(r, job.Image) || job.CPU < 0.1 ||
 		job.CPU > 32 || job.CPU > k.CPU || math.IsNaN(job.CPU) || math.IsInf(job.CPU, 0) ||
 		job.MemoryMB < 64 || job.MemoryMB > 131072 || job.MemoryMB > k.MemoryMB {
@@ -748,6 +767,9 @@ func (k *Kubernetes) ReconcileStaleJobs(ctx context.Context) error {
 	if !kubernetesName.MatchString(k.Worker) {
 		return errors.New("invalid worker name")
 	}
+	k.verificationMu.RLock()
+	startEpoch := k.verificationEpoch
+	k.verificationMu.RUnlock()
 	raw, err := k.checked(ctx, nil, "get", "jobs", "-l",
 		"app.kubernetes.io/managed-by=project-workspace,pwm.dev/kind=job,pwm.dev/worker="+k.Worker, "-o", "json")
 	if err != nil {
@@ -776,5 +798,15 @@ func (k *Kubernetes) ReconcileStaleJobs(ctx context.Context) error {
 			return err
 		}
 	}
+	if err := k.reconcileVerificationJobs(ctx); err != nil {
+		return err
+	}
+	// Reconciliation is the only operation that clears cleanup quarantine.
+	k.verificationMu.Lock()
+	defer k.verificationMu.Unlock()
+	if k.verificationEpoch != startEpoch {
+		return errors.New("verification cleanup became uncertain during reconciliation")
+	}
+	k.verificationQuarantined = false
 	return nil
 }

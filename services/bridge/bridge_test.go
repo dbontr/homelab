@@ -2,6 +2,8 @@ package bridge
 
 import (
  "io"
+ "os"
+ "path/filepath"
  "net/http"
  "net/http/httptest"
  "strings"
@@ -141,4 +143,20 @@ func TestInterfacesRequireIsolatedCredentialsAndPrivateBackend(t *testing.T){
  }{
   if _,err:=New(c);err==nil{t.Fatalf("untrusted interface configuration admitted: %+v",c)}
  }
+}
+
+func TestPrivateSystemdCredentialAllowsOnlyProtectedGroupRead(t *testing.T) {
+ dir:=t.TempDir()
+ credential:=filepath.Join(dir,"service-token")
+ if err:=os.WriteFile(credential,[]byte(internalSecret),0440);err!=nil{t.Fatal(err)}
+ // Release staging sets umask 077; exercise systemd's intended 0440 mode.
+ if err:=os.Chmod(credential,0440);err!=nil{t.Fatal(err)}
+ t.Setenv("CREDENTIALS_DIRECTORY","")
+ if _,err:=protectedToken(credential);err==nil{t.Fatal("group-readable file outside systemd credentials admitted")}
+ t.Setenv("CREDENTIALS_DIRECTORY",dir)
+ if _,err:=protectedToken(credential);err!=nil{t.Fatalf("systemd credential rejected: %v",err)}
+ if err:=os.Chmod(credential,0460);err!=nil{t.Fatal(err)}
+ if _,err:=protectedToken(credential);err==nil{t.Fatal("group-writable credential admitted")}
+ if err:=os.Chmod(credential,0444);err!=nil{t.Fatal(err)}
+ if _,err:=protectedToken(credential);err==nil{t.Fatal("world-readable credential admitted")}
 }

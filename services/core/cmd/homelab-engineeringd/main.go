@@ -11,7 +11,6 @@ import (
  "time"
 
  "github.com/dbontr/homelab-new/system/agentflow"
- "github.com/dbontr/homelab-new/system/security"
 )
 
 func required(name string) string {
@@ -35,20 +34,16 @@ func main(){
   if project!=""{projects[project]=true}
  }
  if len(projects)==0||len(projects)>32{log.Fatal("invalid engineering project scope")}
- vault,err:=security.NewVaultClientFromEnv("HOMELAB_ENGINEERING")
- if err!=nil{log.Fatal("engineering vault trust: ",err)}
- computeAlias:=os.Getenv("HOMELAB_ENGINEERING_COMPUTE_VAULT_ALIAS")
- computeFile:=os.Getenv("HOMELAB_COMPUTE_TOKEN_FILE")
- if (computeAlias=="")==(computeFile==""){log.Fatal("engineering compute requires exactly one credential authority")}
- var compute *agentflow.ComputeClient
- if computeAlias!=""{
-  if vault==nil{log.Fatal("engineering compute vault is unavailable")}
-  source,sourceErr:=vault.TokenSource(computeAlias)
-  if sourceErr!=nil{log.Fatal(sourceErr)}
-  compute,err=agentflow.NewComputeClientFromSource(required("HOMELAB_COMPUTE_URL"),source)
- }else{
-  compute,err=agentflow.NewComputeClientFromFile(required("HOMELAB_COMPUTE_URL"),computeFile)
+ // Autonomous engineering work executes after the initiating request has
+ // finished. A short-lived human owner ticket cannot authorize unattended
+ // compute or model calls. These use separately scoped service credentials.
+ if os.Getenv("HOMELAB_ENGINEERING_COMPUTE_VAULT_ALIAS")!=""||
+  os.Getenv("HOMELAB_ENGINEERING_MODEL_VAULT_ALIAS")!=""||
+  os.Getenv("HOMELAB_ENGINEERING_VAULT_URL")!=""{
+  log.Fatal("unattended engineering requires a protected service credential, not an owner-operation vault alias")
  }
+ computeFile:=required("HOMELAB_COMPUTE_TOKEN_FILE")
+ compute,err:=agentflow.NewComputeClientFromFile(required("HOMELAB_COMPUTE_URL"),computeFile)
  if err!=nil{log.Fatal(err)}
  probeCtx,stopProbe:=context.WithTimeout(context.Background(),10*time.Second)
  err=compute.VerifyProjectCredential(probeCtx)
@@ -64,27 +59,20 @@ func main(){
  var author agentflow.Author
  if endpoint:=os.Getenv("HOMELAB_ENGINEERING_MODEL_URL");endpoint!=""{
   key:=""
-  modelAlias:=os.Getenv("HOMELAB_ENGINEERING_MODEL_VAULT_ALIAS")
   modelFile:=os.Getenv("HOMELAB_ENGINEERING_MODEL_TOKEN_FILE")
-  if modelAlias!=""&&modelFile!=""{log.Fatal("conflicting engineering model credential authorities")}
-  var source func()(string,error)
-  if modelAlias!=""{
-   if vault==nil{log.Fatal("engineering model vault unavailable")}
-   source,err=vault.TokenSource(modelAlias)
-   if err!=nil{log.Fatal(err)}
-  }else if modelFile!=""{
+  if modelFile!=""{
    key,err=credential(modelFile)
    if err!=nil{log.Fatal(err)}
   }
   model,modelErr:=agentflow.NewModelAuthor(endpoint,required("HOMELAB_ENGINEERING_MODEL_NAME"),key)
   if modelErr!=nil{log.Fatal(modelErr)}
-  model.TokenSource=source
   author=model
- }else if os.Getenv("HOMELAB_ENGINEERING_MODEL_VAULT_ALIAS")!=""||
-  os.Getenv("HOMELAB_ENGINEERING_MODEL_TOKEN_FILE")!=""{
+ }else if os.Getenv("HOMELAB_ENGINEERING_MODEL_TOKEN_FILE")!=""{
   log.Fatal("engineering model credential requires model endpoint")
  }
- engine:=&agentflow.Engine{Store:store,Compute:compute,Author:author,AllowedProjects:projects}
+ nativeMode:=os.Getenv("HOMELAB_ENGINEERING_NATIVE_VERIFICATION")
+ if nativeMode!=""&&nativeMode!="0"&&nativeMode!="1"{log.Fatal("invalid engineering verification selection")}
+ engine:=&agentflow.Engine{Store:store,Compute:compute,Author:author,AllowedProjects:projects,NativeVerification:nativeMode=="1"}
  ctx,stop:=signal.NotifyContext(context.Background(),syscall.SIGINT,syscall.SIGTERM)
  defer stop()
  go engine.Serve(ctx)

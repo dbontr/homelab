@@ -80,6 +80,15 @@ func (s *Server) handleResearch(w http.ResponseWriter, r *http.Request, p []stri
 		fail(w, 405, "research search is read-only for project clients")
 		return true
 	}
+    if (p[4]=="hybrid"||p[4]=="semantic")&&s.VaultEmbeddingsAlias!=""{
+        scoped,finish,scopeErr:=s.forProviderHTTP(r)
+        if scopeErr!=nil{
+            fail(w,400,"invalid research credential authorization context")
+            return true
+        }
+        defer finish()
+        s=scoped
+    }
 	switch p[4] {
 	case "text-policy":
 		if len(p)==6 && r.Method==http.MethodGet {

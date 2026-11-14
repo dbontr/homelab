@@ -20,7 +20,7 @@ Do not send passwords, recovery codes, API keys, product license credentials, or
 
 The independent security service offers a protected OAuth authorization-code + PKCE enrollment path for allowlisted public clients. It does not proxy provider passwords through ChatGPT or the primary MCP. Where a provider has no supported public-client OAuth flow, the owner may enroll a vendor-provided credential through the separately authenticated owner-only vault interface; the target executor must still enforce its resource-specific scope. Provider-specific login protocols cannot be inferred from the existence of this broker.
 
-Existing Cloudflare Access protects external ingress. It is not exposed as a general-purpose Cloudflare management tool in the primary MCP. Native Seerr and calendar credentials are read from systemd LoadCredential files. Private ICS sharing links are credentials and must never be committed to Git.
+Cloudflare Access authenticates external browser ingress. The Dioxus console verifies Access identity again in the Go platform using pinned signing keys, an exact audience and a protected owner email; browser mutations require Origin and CSRF checks. The independent Rust authority still requires password and TOTP for privileged administration, with separate destructive confirmation. Cloudflare identity alone never grants executor privileges. Cloudflare management is not exposed as a general-purpose tool in the primary MCP. Native Seerr and calendar credentials are read from systemd LoadCredential files. Private ICS sharing links are credentials and must never be committed to Git.
 
 ## Privileged execution evidence
 

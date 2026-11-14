@@ -164,7 +164,7 @@ func (db *Database) createWorkspaceLocked(req WorkspaceRequest) (map[string]any,
 				arch = target
 			}
 		}
-		nodes, e := db.queryLocked("SELECT id,capabilities FROM nodes WHERE last_seen>? ORDER BY id", stamp()-90)
+		nodes, e := db.queryLocked("SELECT n.id,n.capabilities FROM nodes n LEFT JOIN node_maintenance m ON m.node=n.id WHERE n.last_seen>? AND COALESCE(m.paused,0)=0 ORDER BY n.id", stamp()-90)
 		if e != nil {
 			return e
 		}

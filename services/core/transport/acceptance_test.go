@@ -24,7 +24,7 @@ func TestNativeAndMCPShareIntegrationDispatch(t *testing.T) {
       _,_=w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"lesson_list","description":"List lessons","inputSchema":{"type":"object"}}]}}`))
    case "tools/call":
       calls.Add(1)
-      _,_=w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"mock-learning"}],"isError":false}}`))
+      _,_=w.Write([]byte(`{"jsonrpc":"2.0","id":`+string(rpc.ID)+`,"result":{"content":[{"type":"text","text":"mock-learning"}],"isError":false}}`))
    default: http.Error(w,"unsupported",400)
    }
  }))

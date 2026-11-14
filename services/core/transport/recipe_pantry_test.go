@@ -15,7 +15,7 @@ func TestPantryHTTPRequiresAuthorizationAndRevision(t *testing.T){
 	if err!=nil{t.Fatal(err)}
 	s,err:=New(db,strings.Repeat("p",40),nil)
 	if err!=nil{t.Fatal(err)}
-	r,err:=recipes.Open(filepath.Join(t.TempDir(),"recipes.json"))
+	r,err:=recipes.Open(filepath.Join(t.TempDir(),"recipes","recipes.json"))
 	if err!=nil{t.Fatal(err)}
 	if _,err:=r.Save(recipes.Recipe{
 		Title:"Rice",Servings:2,
@@ -60,7 +60,7 @@ func TestGroceryNeedsHTTPIsPrivateAndReadOnly(t *testing.T) {
 	if err!=nil{t.Fatal(err)}
 	s,err:=New(db,strings.Repeat("n",40),nil)
 	if err!=nil{t.Fatal(err)}
-	r,err:=recipes.Open(filepath.Join(t.TempDir(),"recipes.json"))
+	r,err:=recipes.Open(filepath.Join(t.TempDir(),"recipes","recipes.json"))
 	if err!=nil{t.Fatal(err)}
 	recipe,err:=r.Save(recipes.Recipe{
 		Title:"Rice",Servings:2,

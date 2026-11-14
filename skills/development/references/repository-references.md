@@ -51,4 +51,4 @@ For each code task:
 3. Update source versions, URLs, and `Used for:` descriptions when their present role changes.
 4. Remove entries that no longer describe the current implementation unless retention is legally or operationally required.
 5. Keep license and attribution obligations in their required files even when the same upstream source also appears in `REFERENCES.md`.
-6. Run `scripts/references_page_check.py <repo-root>` against the final working tree.
+6. Run `go run scripts/references_page_check.go <repo-root>` against the final working tree.

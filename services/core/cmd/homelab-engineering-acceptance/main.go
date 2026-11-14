@@ -42,7 +42,7 @@ type acceptanceConfig struct {
 func readConfig() acceptanceConfig {
 	var c acceptanceConfig
 	flag.StringVar(&c.Project, "project", "homelab-platform", "Approved project ID")
-	flag.StringVar(&c.Repository, "repository", "dbontr/homelab-new", "Project-linked repository")
+	flag.StringVar(&c.Repository, "repository", "dbontr/homelab", "Project-linked repository")
 	flag.StringVar(&c.BaseBranch, "base", "main", "Draft pull-request base branch")
 	flag.StringVar(&c.Revision, "revision", os.Getenv("HOMELAB_ACCEPTANCE_REVISION"), "Pinned 40-character Git commit")
 	flag.StringVar(&c.ComputeURL, "compute-url", os.Getenv("HOMELAB_COMPUTE_URL"), "Compute MCP HTTPS endpoint")
@@ -197,49 +197,6 @@ func verifyLinkedRepository(ctx context.Context, compute agentflow.ToolCaller, p
 
 // stopWorkspace requests deletion and verifies the resulting terminal state.
 // A queued stop request is not evidence that the worker has stopped.
-func stopWorkspace(ctx context.Context, compute agentflow.ToolCaller, project, id string) error {
-	if _, err := compute.Call(ctx, "workspace_destroy", map[string]any{"project_id": project, "workspace_id": id}); err != nil {
-		return fmt.Errorf("workspace stop request rejected: %w", err)
-	}
-	for {
-		response, err := compute.Call(ctx, "workspace_list", map[string]any{"project_id": project})
-		if err != nil {
-			return fmt.Errorf("workspace status unavailable: %w", err)
-		}
-		records, ok := response["result"].([]any)
-		if !ok {
-			return errors.New("invalid workspace status listing")
-		}
-		present := false
-		for _, raw := range records {
-			entry, ok := raw.(map[string]any)
-			if !ok {
-				return errors.New("invalid workspace status entry")
-			}
-			if entry["id"] != id {
-				continue
-			}
-			present = true
-			switch entry["status"] {
-			case "stopped", "destroyed":
-				return nil
-			case "starting", "ready", "stopping":
-			default:
-				return fmt.Errorf("workspace stop returned unexpected state %q", entry["status"])
-			}
-			break
-		}
-		if !present {
-			return nil
-		}
-		select {
-		case <-ctx.Done():
-			return fmt.Errorf("workspace stop not confirmed: %w", ctx.Err())
-		case <-time.After(2 * time.Second):
-		}
-	}
-}
-
 func run(ctx context.Context, c acceptanceConfig) (runErr error) {
 	if err := c.validate(); err != nil {
 		return err
@@ -373,7 +330,7 @@ func run(ctx context.Context, c acceptanceConfig) (runErr error) {
 		ws := provisionedWorkspace(final)
 		if ws != "" {
 			cleanupCtx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
-			if err := stopWorkspace(cleanupCtx, compute, c.Project, ws); err != nil {
+			if err := agentflow.StopWorkspace(cleanupCtx, compute, c.Project, ws); err != nil {
 				runErr = errors.Join(runErr, fmt.Errorf("workspace %s cleanup failed: %w", ws, err))
 			} else {
 				log.Printf("workspace %s stopped", ws)

@@ -1,0 +1,132 @@
+name: Build Rust console
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/console-release.yml"
+      - "ui/console/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: console-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bundle:
+    runs-on: ubuntu-24.04
+    outputs:
+      revision: ${{ steps.source.outputs.revision }}
+    timeout-minutes: 45
+    steps:
+      - name: Check out exact source commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Record source commit
+        id: source
+        run: echo "revision=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Install Rust and WebAssembly target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - name: Install pinned Dioxus build tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="$RUNNER_TEMP/homelab-tools/bin:$PATH"
+          install -d -m 0755 "$RUNNER_TEMP/homelab-tools/bin"
+          fetch_asset() {
+            local repo="$1" tag="$2" name="$3" output="$4" json record url digest
+            json="$(curl --fail --silent --show-error --location --retry 3 \
+              -H 'Accept: application/vnd.github+json' \
+              "https://api.github.com/repos/$repo/releases/tags/$tag")"
+            record="$(jq -r --arg name "$name" \
+              '.assets[] | select(.name == $name) | [.browser_download_url, .digest] | @tsv' <<<"$json")"
+            [[ -n "$record" ]] || { echo "Required release asset missing: $name" >&2; return 1; }
+            IFS=$'\t' read -r url digest <<<"$record"
+            [[ "$url" == https://github.com/* ]] || return 1
+            [[ "$digest" =~ ^sha256:[[:xdigit:]]{64}$ ]] || return 1
+            curl --fail --silent --show-error --location --retry 3 "$url" -o "$output"
+            printf '%s  %s\n' "${digest#sha256:}" "$output" | sha256sum --check --status
+          }
+          fetch_asset "DioxusLabs/dioxus" "v0.7.10" \
+            "dx-x86_64-unknown-linux-gnu.tar.gz" "$RUNNER_TEMP/dx.tar.gz"
+          fetch_asset "wasm-bindgen/wasm-bindgen" "0.2.130" \
+            "wasm-bindgen-0.2.130-x86_64-unknown-linux-musl.tar.gz" \
+            "$RUNNER_TEMP/wasm-bindgen.tar.gz"
+          tar -xzf "$RUNNER_TEMP/dx.tar.gz" -C "$RUNNER_TEMP/homelab-tools/bin" dx
+          tar -xzf "$RUNNER_TEMP/wasm-bindgen.tar.gz" -C "$RUNNER_TEMP/homelab-tools"
+          wasm_bindgen="$(find "$RUNNER_TEMP/homelab-tools" -type f -name wasm-bindgen -print -quit)"
+          test -n "$wasm_bindgen"
+          install -m 0755 "$wasm_bindgen" "$RUNNER_TEMP/homelab-tools/bin/wasm-bindgen"
+          "$RUNNER_TEMP/homelab-tools/bin/dx" --version
+          "$RUNNER_TEMP/homelab-tools/bin/wasm-bindgen" --version
+      - name: Build web bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="$RUNNER_TEMP/homelab-tools/bin:$PATH"
+          cd ui/console
+          cargo check --locked --target wasm32-unknown-unknown
+          dx bundle --web --release --out-dir "$RUNNER_TEMP/console-bundle"
+          test -s "$RUNNER_TEMP/console-bundle/public/index.html"
+          find "$RUNNER_TEMP/console-bundle/public" -type f -name '*.wasm' -size +0c -print | grep -q .
+          git rev-parse HEAD > "$RUNNER_TEMP/console-bundle/public/SOURCE_REVISION"
+      - name: Upload source-bound console artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: homelab-console-${{ steps.source.outputs.revision }}
+          path: ${{ runner.temp }}/console-bundle/public/
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: bundle
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'feature/rust-native-execution-boundaries'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Check out publishing repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: true
+      - name: Receive the verified static bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: homelab-console-${{ needs.bundle.outputs.revision }}
+          path: ${{ runner.temp }}/static-console
+      - name: Publish static assets to the release branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          source="$RUNNER_TEMP/static-console"
+          test -s "$source/index.html"
+          test -s "$source/SOURCE_REVISION"
+          test "$(cat "$source/SOURCE_REVISION")" = "${{ needs.bundle.outputs.revision }}"
+          if git fetch origin refs/heads/artifacts/console:refs/remotes/origin/artifacts/console; then
+            git switch --detach refs/remotes/origin/artifacts/console
+          else
+            git switch --orphan console-artifacts
+          fi
+          git rm -rf --ignore-unmatch .
+          git clean -fdx
+          cp -a "$source/." .
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Static assets match the published source revision."
+            exit 0
+          fi
+          git -c user.name=homelab-build \
+              -c user.email=build@users.noreply.github.com \
+              commit -m "Publish source-bound console assets"
+          git push origin HEAD:refs/heads/artifacts/console

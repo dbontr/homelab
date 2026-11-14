@@ -85,6 +85,34 @@ func TestExecutorSocketRequiresOwnerAssertion(t *testing.T){
 }
 
 
+func TestExecutorHTTPRequiresCallerRequestIdentity(t *testing.T){
+ auth:=&fakeAuth{decision:security.Authorization{Allowed:true}}
+ calls:=0
+ executor,err:=New(Config{
+  Host:"jupiter",Systemctl:"/usr/bin/systemctl",
+  AllowedServices:[]string{"homelab-platform.service"},
+  Auth:auth,Releases:&fakeRelease{},Audit:testExecutorAudit(t),
+  Run:func(context.Context,string,...string)error{calls++;return nil},
+ })
+ if err!=nil{t.Fatal(err)}
+ for _,requestID:=range []string{"",strings.Repeat("F",32),"not-an-id"}{
+  body:=`{"operation":"infrastructure__service_restart","target":"jupiter",
+   "arguments":{"host":"jupiter","service":"homelab-platform.service"}`
+  if requestID!=""{body+=`,"request_id":"`+requestID+`"`}
+  body+="}"
+  req:=httptest.NewRequest("POST","/v1/execute",strings.NewReader(body))
+  req.Header.Set("Cf-Access-Jwt-Assertion","signed-owner")
+  output:=httptest.NewRecorder()
+  executor.Handler().ServeHTTP(output,req)
+  if output.Code!=http.StatusOK{t.Fatalf("unexpected status %d",output.Code)}
+  var decision ExecutionResult
+  if err:=json.Unmarshal(output.Body.Bytes(),&decision);err!=nil||decision.Allowed{
+   t.Fatal("missing or malformed request identity was admitted",decision,err)
+  }
+ }
+ if auth.calls!=0||calls!=0{t.Fatal("invalid request identity reached authorization or actuator")}
+}
+
 func TestPrivilegedExecutionRequiresJournalEvenWithOwnerApproval(t *testing.T){
  auth:=&fakeAuth{decision:security.Authorization{Allowed:true}}
  runner:=0

@@ -34,7 +34,9 @@ func TestEngineeringDraftPublicationRequiresProjectEditorAndLinkedRepository(t *
   t.Fatal("engineering service must not make generic GitHub API mutations")
  }
  _, err := service.callToolFor(member,"github_publish_artifacts",map[string]any{
-  "project_id":"demo","repository":"sample/unlinked","changes":map[string]any{},
+  "project_id":"demo","repository":"sample/unlinked","base_branch":"main",
+  "expected_head":strings.Repeat("a",40),"changes":map[string]any{"README.md":"# Draft\n"},
+  "title":"Review project artifacts",
  })
  if err==nil||!strings.Contains(err.Error(),"linked") {
   t.Fatalf("unlinked repository was not denied before using GitHub credentials: %v",err)

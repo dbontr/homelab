@@ -1,12 +1,17 @@
 { config, lib, pkgs, ... }:
 let
   cfg = config.homelab.personalHealth;
-  executable = if cfg.binaryPath == null then "/bin/false" else cfg.binaryPath;
+  executable = if cfg.package != null then "${cfg.package}/bin/personal-health-mcp" else if cfg.binaryPath != null then cfg.binaryPath else "/bin/false";
   checksum = pkgs.writeText "personal-health-mcp-release.sha256"
     "${cfg.binarySHA256}  ${executable}\n";
 in {
   options.homelab.personalHealth = {
     enable = lib.mkEnableOption "Personal Health MCP";
+    package = lib.mkOption {
+      type = lib.types.nullOr lib.types.package;
+      default = null;
+      description = "Immutable Nix package providing bin/personal-health-mcp.";
+    };
     binaryPath = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
       default = null;
@@ -33,14 +38,14 @@ in {
   config = lib.mkIf cfg.enable {
     assertions = [
       {
-        assertion = cfg.binaryPath != null &&
-          (lib.hasPrefix "/srv/releases/personal-health-mcp/" cfg.binaryPath ||
+        assertion = (cfg.package != null) != (cfg.binaryPath != null) &&
+          (cfg.binaryPath == null || lib.hasPrefix "/srv/releases/personal-health-mcp/" cfg.binaryPath ||
            (lib.hasPrefix "/srv/releases/homelab/" cfg.binaryPath &&
             lib.hasSuffix "/bin/homelab-health" cfg.binaryPath));
         message = "Personal Health MCP requires an immutable release executable.";
       }
       {
-        assertion = builtins.match "[0-9a-f]{64}" cfg.binarySHA256 != null;
+        assertion = cfg.binaryPath == null || builtins.match "[0-9a-f]{64}" cfg.binarySHA256 != null;
         message = "Personal Health MCP requires a SHA-256 release checksum.";
       }
     ];
@@ -69,7 +74,7 @@ in {
         StateDirectoryMode = "0700";
         EnvironmentFile = "-${cfg.environmentFile}";
         LoadCredential = [ "access_owner:${cfg.access.ownerCredentialFile}" ];
-        ExecStartPre = "${pkgs.coreutils}/bin/sha256sum --check ${checksum}";
+        ExecStartPre = lib.optional (cfg.binaryPath != null) "${pkgs.coreutils}/bin/sha256sum --check ${checksum}";
         ExecStart = executable;
         Restart = "on-failure";
         RestartSec = "5s";

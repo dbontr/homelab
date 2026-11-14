@@ -531,7 +531,7 @@ func (e *Engine) executeAgentAction(ctx context.Context, w Workflow, brief Agent
 	case "check":
 		// A pending check must not be replayed after a crash: an approved command
 		// can have effects that are not reversible or externally observable.
-		result, err := e.workspaceAction(ctx, w, "command", map[string]any{"command": "cd " + shellQuote(root) + " && " + action.Command})
+		result, err := e.verificationCommand(ctx, w, scope.Repository, action.Command)
 		if err != nil {
 			return "", err
 		}

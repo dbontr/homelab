@@ -1,16 +1,19 @@
 package worker
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
-	"errors"
-	"fmt"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"regexp"
-	"strings"
-	"syscall"
+    "context"
+    "crypto/sha256"
+    "encoding/hex"
+    "errors"
+    "fmt"
+    "os"
+    "os/exec"
+    "path/filepath"
+    "regexp"
+    "strconv"
+    "strings"
+    "syscall"
+    "time"
 )
 
 // USB disk access is disabled unless the worker operator and workspace request
@@ -52,7 +55,44 @@ func usbSysfsPath(devicePath string, info os.FileInfo) (string, error) {
 
 // usbDockerMapping validates live identity at the moment a lease starts.
 // The returned group is the mapped device's host group, not a blanket root user.
+// A configured Rust native boundary replaces Go host-device inspection.
+// The Go implementation is retained for the deployed compatibility path until
+// the native helper is present and selected by the host operator.
 func usbDockerMapping(configured string) (string, uint32, error) {
+    native := os.Getenv("PWM_NATIVE_HARDWARE_HELPER")
+    if native == "" {
+        return usbDockerMappingGo(configured)
+    }
+    if !filepath.IsAbs(native) || filepath.Clean(native) != native {
+        return "", 0, errors.New("native USB helper must be an absolute fixed executable")
+    }
+    ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+    defer cancel()
+    command := exec.CommandContext(ctx, native, "map-usb", configured)
+    command.Env = []string{"LC_ALL=C"}
+    if lsblk := os.Getenv("PWM_NATIVE_USB_LSBLK"); lsblk != "" {
+        if !filepath.IsAbs(lsblk) {
+            return "", 0, errors.New("native USB disk inspector must be absolute")
+        }
+        command.Env = append(command.Env, "HOMELAB_NATIVE_LSBLK="+lsblk)
+    }
+    output, err := command.Output()
+    if err != nil || len(output) > 512 {
+        return "", 0, errors.New("native USB identity validation failed")
+    }
+    lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+    if len(lines) != 2 || !strings.HasPrefix(lines[0], "/dev/") ||
+        strings.ContainsAny(lines[0], "\r\n\t ") {
+        return "", 0, errors.New("malformed native USB identity")
+    }
+    group, err := strconv.ParseUint(lines[1], 10, 32)
+    if err != nil {
+        return "", 0, errors.New("malformed native USB group")
+    }
+    return lines[0], uint32(group), nil
+}
+
+func usbDockerMappingGo(configured string) (string, uint32, error) {
 	if !usbPathAllowed(configured) {
 		return "", 0, errors.New("USB path must be a stable by-id alias or bus device")
 	}

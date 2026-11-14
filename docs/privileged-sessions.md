@@ -2,7 +2,7 @@
 
 Security and executor daemons use separate process-lifetime state ownership leases. The trusted local release CLI acquires the executor's release-state lease before stage, activate, revert or recover operations; it refuses writes while the executor owns the state. Read-only status inspection remains available, and manual recovery requires stopping the executor from a trusted out-of-band terminal. Each daemon must obtain the lock in its protected state directory before reading durable state or accepting privileged requests. No backup, recovery, or replacement daemon may write these directories while an owner holds the lease.
 
-The independent `homelab-securityd` process owns password verification, the TOTP secret, session state, and confirmation decisions. Its password verifier, TOTP secret, vault encryption key, and verified owner-identity file must be owner-only regular files; group or other read access is rejected on the opened file descriptor. Public signing-key and policy material may remain read-only and accessible without secret-file permissions. Its default configuration binds no TCP listener. The optional remote authorization listener uses mutual TLS and exposes only authorization decisions to allowlisted executor certificate identities. Security-daemon and executor TLS identities load private keys only from owner-only regular files; final-path symbolic links and oversized PEM material are rejected. Public certificate chains and pinned CA roots are read under bounded, read-only configuration rules. Executor clients reject authorization replies with more than 8 KiB of JSON or 16 KiB of response headers, even if an otherwise valid decision appears at the beginning. TLS and response-header waits have independent time limits; failed or malformed replies never grant privileges. Its owner socket is mode 0600. Its gateway socket is mode 0660 with membership restricted to `homelab-security-client`. A separate systemd service account holds the credential files, and the platform gateway must not receive them.
+The independent `homelab-securityd` process owns password verification, the TOTP secret, session state, and confirmation decisions. Its source password verifier, TOTP secret, vault encryption key, and verified owner-identity file must be owner-only regular files. The daemon accepts systemd's group-readable credential copy only inside its exact `CREDENTIALS_DIRECTORY`, with root or service-UID ownership and no group-write or other permissions. The opened file descriptor is checked before reading. Public signing-key and policy material may remain read-only and accessible without secret-file permissions. Its default configuration binds no TCP listener. The optional remote authorization listener uses mutual TLS and exposes only authorization decisions to allowlisted executor certificate identities. Security-daemon and executor TLS identities load private keys only from owner-only regular files; final-path symbolic links and oversized PEM material are rejected. Public certificate chains and pinned CA roots are read under bounded, read-only configuration rules. Executor clients reject authorization replies with more than 8 KiB of JSON or 16 KiB of response headers, even if an otherwise valid decision appears at the beginning. TLS and response-header waits have independent time limits; failed or malformed replies never grant privileges. Its owner socket is mode 0600. Its gateway socket is mode 0660 with membership restricted to `homelab-security-client`. A separate systemd service account holds the credential files, and the platform gateway must not receive them.
 
 ## Authority state compatibility
 
@@ -10,27 +10,91 @@ The Rust authority kernel uses the same owner-only `.securityd.lock`, `authentic
 
 ## Rust authority admission
 
-The Rust authority kernel must validate a private copy of the authentication state and encrypted vault before it can become an operational service. Its offline security-preflight binary acquires the same .securityd.lock used by the Go daemon, reads the stored replay and vault records, verifies each AES-GCM authentication tag, checks the finite operation policy, and validates any configured signing keys and service credential grants. It refuses the default live state path and requires an independent owner-only copy. Run it through Cargo with the same security configuration variables and --state-dir pointing at the copied directory. Do not run two state owners against one directory.
+The Rust authority kernel must validate a private copy of the authentication state and encrypted vault before it can become an operational service. Its offline security-preflight binary inspects an independent state copy without acquiring any writer lock or creating files, reads the stored replay and vault records, verifies each AES-GCM authentication tag, checks the finite operation policy, and validates any configured signing keys and service credential grants. It refuses the default live state path and requires an independent owner-only copy. Run it through Cargo with the same security configuration variables and --state-dir pointing at the copied directory. Do not run two state owners against one directory.
 
 `services.homelabSecurity.implementation` defaults to `"go"`. The alternative `"rust"` selects the Rust binary inside the same `homelab-securityd.service`; its Nix package requires a committed, resolved `Cargo.lock` and enforces the crate test suite during its build. Do not select it until Go/Rust compatibility, full Rust compilation, adversarial authorization, and isolated rollback acceptance have passed. A source-level kernel and a successful state preflight alone do not establish deployed security correctness. The Go daemon remains active while those checks are incomplete.
 
 ## Scoped service credentials
 
-The security authority's optional mTLS credential route binds each grant to
-an exact certificate DNS identity, alias, provider, and opaque vault handle.
-At registration, it pins the encrypted credential's SHA-256 revision. An
-operator can supply that revision explicitly in
-`services.homelabSecurity.remote.serviceCredentialGrants` to reject stale
-configuration. If omitted, the daemon snapshots the existing revision at
-startup. A rotation or deletion invalidates the active grant, even if the
-opaque handle is unchanged. Grant reauthorization requires an operator-owned
-policy update or restart; a gateway request cannot grant itself a new version.
+The independent owner authority binds each vault grant to a single verified
+TLS client DNS identity, credential alias and handle, independently approved
+operation, and exact resource target. The operator can additionally restrict
+a grant to one SHA-256 digest of canonical JSON arguments. Every credential
+ticket is bound to the complete actual canonical arguments, even when the
+operator does not configure an argument digest.
 
-A grant can also specify `expiresAt` as an RFC 3339 timestamp. Expired grants
-are rejected at registration and on each credential read, independently of
-the owner's administrative-session lifetime. Grant policies never contain
-the plaintext credential. The service's mTLS certificate and private vault
-remain outside MCP and application process custody.
+The authority snapshots the encrypted record revision at configuration time.
+The trusted executor must first consume a signed, current, owner-bound
+operation authorization. Only the mutually authenticated authorization
+response can include a credential ticket. The ticket binds the owner principal
+and session ID, TLS client identity, operation, target, argument digest,
+credential alias and revision. Tickets expire after at most 60 seconds, are
+not persisted across restart, and are invalidated by logout, session expiry
+or credential rotation. A ticket can be redeemed exactly once.
+
+The executor redeems a ticket through
+`POST /v1/service-credentials/{alias}` on the mTLS listener. Its JSON body
+contains `ticket`, `operation`, `target` and `arguments`. The authority
+consumes the ticket before comparing its scope and checks the current encrypted
+record revision before returning a bounded credential. An alias, certificate,
+owner assertion or previously successful operation alone never grants a
+credential read. The route is unavailable over the owner, browser and local
+gateway sockets. Credential tickets are never returned by the executor's
+gateway-facing API.
+
+NixOS declares these restrictions through
+`services.homelabSecurity.remote.serviceCredentialGrants` using
+`clientDNS`, `alias`, `provider`, `handle`, `operation`, `target`,
+optional `argumentsSHA256`, optional `revision`, and optional `expiresAt`.
+Only remote identities authorized to request owner operation decisions can
+receive tickets in the current executor contract. Credential-only mTLS peers
+cannot mint their own approval or obtain secrets from an alias alone.
+
+The Compute controller binds vault-backed GitHub, GitLab and research
+embedding credentials to individual authenticated MCP or HTTP operations. A
+request-local provider scope obtains an independent owner authorization on
+first credential use through the same mTLS identity that will redeem the
+one-use ticket. The authorization context contains the exact tool name and
+arguments (target `controller`), or the HTTP method, path, query and bounded
+JSON body (operation `controller__http_get`, `controller__http_post`,
+and the corresponding supported methods; target `controller`). The
+independent owner policy must explicitly permit the operation and target,
+and its service credential grants must name the Compute controller's
+certificate DNS identity as an **authorizing** peer.
+
+The signed owner assertion is supplied by the authenticated ingress and is
+verified by the security authority, not inferred from a controller bearer
+token or generated by an MCP tool. A unified Workspace backend may receive
+this assertion only when the platform's
+`integrations.workspace.forwardOwnerAssertion` option is explicitly
+enabled for the trusted backend. Other integrations never receive it.
+Without a valid assertion, remote operation approval or a matching credential
+grant, vault-backed provider operations fail closed; unrelated local tools
+remain available. The controller caches a redeemed provider credential only
+within the initiating request, never in the persistent server or worker state.
+Background jobs and scheduled callbacks cannot borrow that credential or
+mint their own owner approval.
+
+The platform's model-planning and Seerr clients use the same one-operation
+contract. A model request binds `model__completion` to the exact selected
+model and a SHA-256 digest of the encoded prompt. Seerr binds
+`media__seerr_request` to the configured service and the actual method,
+path, and request-body digest. The independently verified owner identity
+must be present on the caller context at the time of use. Every outbound
+request receives a newly approved one-use ticket; neither model input nor a
+provider token enters MCP tool arguments. An automatic model continuation
+cannot claim this authority merely because a preceding interactive step
+had it.
+
+The same constraint applies to other applications and service credentials:
+an ambient `TokenSource(alias)` without an authenticated operation cannot
+read the vault. Fixed service-to-service credentials required for health
+checks, federated MCP discovery, or autonomous engineering jobs use separately
+restricted service identities and protected file custody, not a fabricated
+human authorization ticket. NixOS rejects owner-vault aliases for these
+unattended service identities. A future delegated service-capability
+mechanism must independently authenticate and bound each unattended job
+before such aliases can be supported.
 
 ## Restricted Rust executor
 
@@ -129,6 +193,38 @@ The executor accepts four typed operations: stop an allowlisted project workspac
 
 The existing Workspace controller remains the sole owner of device leases, software inventories, worker identities and workspace lifecycle. The privileged bridge does not create shadow hardware or software stores. Environment builds may be asynchronous and should be checked through the owning Workspace operation-status API; an accepted request does not prove that software has finished installing. The privileged executor returns an audit correlation ID and an explicit `state`: `accepted` for Workspace, systemd and Kubernetes submissions, or `completed` for release activation and reversion after host-local release checks. The unified MCP response reports `accepted: true` for submissions and reserves `executed: true` for verified release transitions. An audit ID is not a downstream Workspace operation ID, and accepted submissions must be checked through their owning service before treating the work as finished. Delegated tool responses must contain a matching JSON-RPC identifier and the required MCP content array. An omitted `isError` is treated as `false`, as defined by MCP; explicit failures and malformed responses are rejected. This delegation is disabled by default and requires trusted controller configuration and deployment validation.
 
+## Durable privileged request identities
+
+The private executor's `POST /v1/execute` JSON body contains
+`request_id`, `operation`, `target` and `arguments`. The request ID is
+exactly 32 lowercase hexadecimal characters. A caller must generate a unique
+ID before the first attempt and retain it across timeouts or lost responses.
+All privileged MCP and native tool calls require `request_id`. The gateway
+does not include that field in the owner's canonical argument digest.
+
+The protected append-only audit journal records the request ID as the audit
+event ID before any side effect. Authorization, operation admission and
+exact operation/target/argument binding are verified independently. A
+concurrent request with the same ID cannot start another mutation. Once
+recorded, the ID remains reserved permanently, even after a recovery
+operator has reconciled an uncertain outcome.
+
+Retries with a matching ID must still provide the signed owner assertion
+and an active authorized owner session. The security authority's private
+`POST /v1/replay` operation performs a read-only policy check without
+issuing a new destructive confirmation or credential ticket. A matching
+`accepted` or `succeeded` journal record is returned as the original
+`accepted` or `completed` result with the same `audit_id` and
+`replayed: true`. A `started`, `failed`, `indeterminate` or
+`reconciled` record never initiates another effect under that identity.
+Investigate uncertain operations through the trusted audit recovery workflow
+before initiating a separately approved action under a different request ID.
+
+Durable fleet releases use a transaction-derived request ID for every host
+activation or rollback, preserving the same host-execution identity across
+coordinator restarts. Hosts without an identity-preserving interface are not
+eligible for durable fleet activation.
+
 ## Credential custody and rotation
 
 The owner-only socket can list opaque credential handles, store provider credentials, revoke entries, and atomically rotate an existing entry. Each add, delete, or rotate operation requires a fresh administrative password and an unreplayed TOTP submitted directly to the trusted owner channel. The gateway does not expose any credential-inventory or plaintext-credential operation.
@@ -189,9 +285,9 @@ Central authorization and central **storage** do not mean that every secret can 
 
 Provider tokens remain encrypted at the independent owner vault. Each consuming service has its own verified TLS client certificate and an exact `clientDNS`, `alias`, `provider`, and `handle` binding in the security daemon's `remote.serviceCredentialGrants`. Those grants control which service may read which record; they do not create broad permission to enumerate vault entries. The secrets are obtained at the instant a provider request is made. A revoked vault handle or unavailable vault fails closed.
 
-The platform uses `services.homelabPlatform.vault` and the specific `vaultAlias` for Seerr, the purpose-specific model route, or an explicitly configured Workspace, Learning, or Health MCP backend. The model route configuration contains only the alias and endpoint. The platform cannot use a vault alias and protected token file for the same provider. The main platform never receives the Compute administrator token, the owner password, or the privileged executor credentials.
+The platform uses `services.homelabPlatform.vault` and the specific `vaultAlias` for Seerr and purpose-specific model completions. Each token requires an independently authorized owner operation and an exact request-digest or media-API scope. The selected route stores only the alias and endpoint; secrets never become model arguments. Federated Workspace, Learning and Health MCP discovery use separately restricted service credentials loaded from protected files, since discovery and health checks cannot mint human owner tickets. The main platform never receives the Compute administrator token, the owner password, or the privileged executor credentials.
 
-Engineering uses `services.homelabEngineering.vault`, `computeVaultAlias`, and `model.vaultAlias`. Its compute credential still must be a non-administrator, project-scoped editor identity; the compute client verifies the controller's current principal and project grants. Owner vault custody cannot widen those roles. The Engineering daemon remains separate from the platform gateway.
+Engineering runs are autonomous and outlive the initiating request. The daemon therefore uses independent, protected service-token files for its project-scoped Compute editor and optional authoring model, not an expired or fabricated human owner ticket. Its Compute identity remains non-administrator, and the controller verifies the current principal and exact project grants. The engineering process remains separate from the platform gateway.
 
 Compute uses `services.workspaceMcp.vault` for GitHub, GitLab, or consented embeddings, with `githubAlias`, `gitlabAlias`, and `embeddingsAlias` independently granted. Its NixOS release renders only alias and certificate Secret names into the controller chart. The embedding client requests a credential only on an explicitly permitted text-embedding request. A credential failure never reroutes the text to a different provider.
 

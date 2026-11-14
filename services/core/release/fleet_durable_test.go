@@ -35,6 +35,54 @@ func(f *durableFake) Revert(_ context.Context,id string)error{
  return nil
 }
 func(f *durableFake) Observe(context.Context)(ReleaseObservation,error){return f.observation,f.observeErr}
+func(f *durableFake) ActivateWithID(ctx context.Context,requestID,releaseID string)error{
+ if !validRemoteExecutionID(requestID){return errors.New("invalid activation execution ID")}
+ return f.Activate(ctx,releaseID)
+}
+func(f *durableFake) RevertWithID(ctx context.Context,requestID,releaseID string)error{
+ if !validRemoteExecutionID(requestID){return errors.New("invalid rollback execution ID")}
+ return f.Revert(ctx,releaseID)
+}
+
+
+
+func TestFleetHostRequestIDRemainsStableAcrossRecovery(t *testing.T){
+ transaction:=strings.Repeat("a",48)
+ releaseID:=strings.Repeat("b",48)
+ first:=fleetExecutionRequestID(transaction,"infrastructure__release_activate","jupiter",releaseID)
+ second:=fleetExecutionRequestID(transaction,"infrastructure__release_activate","jupiter",releaseID)
+ if first!=second||!validRemoteExecutionID(first){
+  t.Fatal("host request identity is unstable")
+ }
+ for _,other:=range []string{
+  fleetExecutionRequestID(strings.Repeat("c",48),"infrastructure__release_activate","jupiter",releaseID),
+  fleetExecutionRequestID(transaction,"infrastructure__release_revert","jupiter",releaseID),
+  fleetExecutionRequestID(transaction,"infrastructure__release_activate","venus",releaseID),
+  fleetExecutionRequestID(transaction,"infrastructure__release_activate","jupiter",strings.Repeat("d",48)),
+ }{
+  if other==first{t.Fatal("unrelated fleet operation reused a request ID")}
+ }
+}
+
+type legacyReleaseAgent struct{}
+func(legacyReleaseAgent)Activate(context.Context,string)error{return nil}
+func(legacyReleaseAgent)Revert(context.Context,string)error{return nil}
+
+func TestDurableFleetRejectsHostWithoutRequestIdentitySupport(t *testing.T){
+ directory:=t.TempDir()
+ if err:=os.Chmod(directory,0700);err!=nil{t.Fatal(err)}
+ path:=filepath.Join(directory,"fleet.json")
+ d:=&DurableFleet{StateFile:path,Agents:map[string]HostReleaseAgent{
+  "jupiter":legacyReleaseAgent{},
+ }}
+ _,err:=d.Start(context.Background(),[]FleetTarget{{
+  Host:"jupiter",Role:"compute",ReleaseID:strings.Repeat("e",48),
+ }})
+ if err==nil{t.Fatal("fleet attempted an unidentifiable host mutation")}
+ if _,err:=os.Stat(path);!errors.Is(err,os.ErrNotExist){
+  t.Fatal("unsafe fleet transaction state was persisted",err)
+ }
+}
 
 func TestDurableFleetPersistsIntentAndRequiresResolution(t *testing.T){
  file:=filepath.Join(t.TempDir(),"private","journal.json")

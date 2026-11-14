@@ -2,12 +2,11 @@ package recipes
 
 import (
 	"errors"
-	"path/filepath"
-	"testing"
+		"testing"
 )
 
 func TestPantryInventoryRevisionDurabilityAndImport(t *testing.T){
-	path:=filepath.Join(t.TempDir(),"recipes.json")
+	path:=privateRecipeTestPath(t,"recipes.json")
 	s,err:=Open(path)
 	if err!=nil{t.Fatal(err)}
 	item:=PantryItem{Name:"Tomato",Unit:"count",Amount:3}
@@ -22,7 +21,7 @@ func TestPantryInventoryRevisionDurabilityAndImport(t *testing.T){
 		t.Fatalf("pantry did not survive restart: %+v",got)
 	}
 	archive:=reopened.Export()
-	target,err:=Open(filepath.Join(t.TempDir(),"copy.json"))
+	target,err:=Open(privateRecipeTestPath(t,"copy.json"))
 	if err!=nil{t.Fatal(err)}
 	if _,err:=target.Import(archive);err!=nil{t.Fatal(err)}
 	if got:=target.Pantry();len(got.Items)!=1||got.Items[0].Unit!="count"{
@@ -40,7 +39,7 @@ func TestPantryInventoryRevisionDurabilityAndImport(t *testing.T){
 }
 
 func TestPantryRecommendationPreservesUnitsAndNutritionProvenance(t *testing.T){
-	s,err:=Open(filepath.Join(t.TempDir(),"recipes.json"))
+	s,err:=Open(privateRecipeTestPath(t,"recipes.json"))
 	if err!=nil{t.Fatal(err)}
 	r,err:=s.Save(sample("Tomato salad"))
 	if err!=nil{t.Fatal(err)}
@@ -70,7 +69,7 @@ func TestPantryRecommendationPreservesUnitsAndNutritionProvenance(t *testing.T){
 }
 
 func TestPantryExpiryIsNotAssumedAvailable(t *testing.T){
-	s,err:=Open(filepath.Join(t.TempDir(),"recipes.json"))
+	s,err:=Open(privateRecipeTestPath(t,"recipes.json"))
 	if err!=nil{t.Fatal(err)}
 	if _,err:=s.Save(sample("Tomato salad"));err!=nil{t.Fatal(err)}
 	if _,err:=s.SetPantry(PantryItem{Name:"Tomato",Unit:"count",Amount:100,Expires:"2020-01-01"},0);err!=nil{t.Fatal(err)}

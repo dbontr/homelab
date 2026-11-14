@@ -20,6 +20,7 @@ import (
  "github.com/dbontr/homelab-new/system/devices"
  "github.com/dbontr/homelab-new/system/media"
  "github.com/dbontr/homelab-new/system/internal/personal"
+ "github.com/dbontr/homelab-new/system/internal/motivationhttp"
  "github.com/dbontr/homelab-new/system/internal/monitoring"
  "github.com/dbontr/homelab-new/system/internal/mediahttp"
  "github.com/dbontr/homelab-new/system/internal/httpjson"
@@ -34,8 +35,14 @@ import (
  "github.com/dbontr/homelab-new/system/release"
  "github.com/dbontr/homelab-new/system/store"
 )
-type Backend struct { Name string; URL string; Token string; TokenSource func()(string,error) }
-type Server struct { db *store.Store; token string; mcpInterfaceToken string; apiInterfaceToken string; apiInterfaceWritePaths map[string]bool; backend []Backend; client *http.Client; calendarSource func(context.Context)(calendar.Feed,error); privilegeClient *security.AdminClient; executorClient *privileged.Client; fleetClient *release.FleetClient; securityLoginURL string; allowedOrigins map[string]struct{}; media *media.Client; deviceCatalog *devices.Catalog; nodeCatalog *devices.NodeCatalog; profiles *profiles.Registry; recipes *recipes.Store; sessions *session.Manager; observability *observability.Client; bookCatalog *books.Catalog; engineering agentflow.Manager; workflows *agentflow.Store; capabilityPlanner agentflow.CapabilityPlanner; inflight chan struct{} }
+type Backend struct {
+ Name string
+ URL string
+ Token string
+ TokenSource func()(string,error)
+ ForwardOwnerAssertion bool
+}
+type Server struct { db *store.Store; token string; mcpInterfaceToken string; apiInterfaceToken string; apiInterfaceWritePaths map[string]bool; backend []Backend; client *http.Client; calendarSource func(context.Context)(calendar.Feed,error); privilegeClient *security.AdminClient; executorClient *privileged.Client; fleetClient *release.FleetClient; securityLoginURL string; allowedOrigins map[string]struct{}; media *media.Client; deviceCatalog *devices.Catalog; nodeCatalog *devices.NodeCatalog; profiles *profiles.Registry; recipes *recipes.Store; sessions *session.Manager; observability *observability.Client; bookCatalog *books.Catalog; motivation *motivationhttp.Client; engineering agentflow.Manager; workflows *agentflow.Store; capabilityPlanner agentflow.CapabilityPlanner; inflight chan struct{} }
 
 func New(db *store.Store,token string,backends []Backend)(*Server,error){
  if db==nil||len(token)<32||strings.ContainsAny(token,"\r\n\t"){return nil,errors.New("store and a strong access token are required")}
@@ -43,6 +50,9 @@ func New(db *store.Store,token string,backends []Backend)(*Server,error){
  for _,b:=range backends{
   if !validIntegrationName(b.Name)||used[b.Name]{return nil,errors.New("invalid backend name")}
   if b.Token!=""&&b.TokenSource!=nil{return nil,errors.New("backend has conflicting credential authorities")}
+  if b.ForwardOwnerAssertion&&b.Name!="workspace"{
+   return nil,errors.New("owner assertion forwarding is limited to the trusted Workspace backend")
+  }
   used[b.Name]=true
   u,e:=url.Parse(b.URL);if e!=nil{return nil,errors.New("invalid backend URL")}
   if u.Hostname()==""||u.Opaque!=""{return nil,errors.New("backend URL requires a host")}
@@ -56,6 +66,7 @@ func(s *Server) SetNodeCatalog(catalog *devices.NodeCatalog) { s.nodeCatalog = c
 func(s *Server) SetProfiles(registry *profiles.Registry) { s.profiles = registry }
 func(s *Server) SetBookCatalog(catalog *books.Catalog) { s.bookCatalog = catalog }
 func(s *Server) SetSessions(manager *session.Manager) { s.sessions = manager }
+func(s *Server) SetMotivation(client *motivationhttp.Client) { s.motivation = client }
 func(s *Server) SetPrivilegeClient(client *security.AdminClient) { s.privilegeClient = client }
 func(s *Server) SetExecutorClient(client *privileged.Client) {s.executorClient=client}
 func(s *Server) SetFleetClient(client *release.FleetClient) {s.fleetClient=client}
@@ -93,18 +104,22 @@ func(s *Server) fetchCalendar(ctx context.Context)(calendar.Feed,error){
 func(s *Server) Handler()http.Handler{
  mux:=http.NewServeMux()
  personal.Register(mux,s.db)
+ motivationhttp.Register(mux,s.motivation)
  mux.HandleFunc("GET /healthz",func(w http.ResponseWriter,_ *http.Request){writeJSON(w,200,map[string]string{"status":"ok"})})
  mux.HandleFunc("GET /ui/session",s.uiSession)
- mux.HandleFunc("POST /ui/session",s.uiSession)
- mux.HandleFunc("DELETE /ui/session",s.uiSession)
  mux.HandleFunc("GET /v1/engineering/projects",s.uiProjects)
  mux.HandleFunc("GET /v1/engineering/projects/{project}/jobs",s.uiWorkspaceProjectView)
  mux.HandleFunc("GET /v1/engineering/projects/{project}/workspaces",s.uiWorkspaceProjectView)
+ mux.HandleFunc("GET /v1/engineering/projects/{project}/artifacts",s.uiWorkspaceProjectView)
  mux.HandleFunc("GET /v1/engineering/projects/{project}/context",s.uiWorkspaceProjectView)
  mux.HandleFunc("GET /v1/engineering/projects/{project}/repositories",s.uiWorkspaceProjectView)
  mux.HandleFunc("GET /v1/engineering/projects/{project}/research-sources",s.uiWorkspaceProjectView)
  mux.HandleFunc("GET /v1/engineering/projects/{project}/research",s.uiWorkspaceProjectView)
  mux.HandleFunc("GET /v1/engineering/nodes",s.uiComputeNodes)
+ mux.HandleFunc("POST /v1/compute/workspaces/plan",s.uiComputeResourcePlan)
+ mux.HandleFunc("POST /v1/compute/workspaces",s.uiComputeWorkspace)
+ mux.HandleFunc("POST /v1/compute/workspaces/{workspace}/stop",s.uiComputeWorkspaceStop)
+ mux.HandleFunc("POST /v1/compute/catalog/{operation}",s.uiComputeCatalog)
  mux.HandleFunc("GET /v1/engineering/runs",s.engineeringCollection)
  mux.HandleFunc("POST /v1/engineering/runs",s.engineeringCollection)
  mux.HandleFunc("GET /v1/engineering/runs/{id}",s.engineeringRun)
@@ -139,14 +154,24 @@ func(s *Server) Handler()http.Handler{
  mux.HandleFunc("POST /v1/learning/sessions",s.uiLearningStart)
  mux.HandleFunc("GET /v1/learning/sessions/{id}",s.uiLearningSession)
  mux.HandleFunc("GET /v1/learning/sessions/{id}/pending",s.uiLearningPending)
+ mux.HandleFunc("GET /v1/learning/sessions/{id}/next",s.uiLearningNext)
+ mux.HandleFunc("GET /v1/learning/sessions/{id}/probe",s.uiLearningProbe)
+ mux.HandleFunc("POST /v1/learning/sessions/{id}/plan",s.uiLearningPlan)
+ mux.HandleFunc("POST /v1/learning/sessions/{id}/phase",s.uiLearningPhase)
  mux.HandleFunc("POST /v1/learning/questions/{id}/answer",s.uiLearningAnswer)
+ mux.HandleFunc("POST /v1/learning/sources/{id}/curriculum/preview",s.uiLearningSourceCurriculumPreview)
+ mux.HandleFunc("POST /v1/learning/sources/{id}/curriculum/import",s.uiLearningSourceCurriculumImport)
  mux.HandleFunc("GET /v1/learning/reviews",s.uiLearningReviews)
+ mux.HandleFunc("GET /v1/learning/attachments/{kind}/{id}",s.uiLearningAttachmentList)
+ mux.HandleFunc("GET /v1/learning/attachment-originals/{id}",s.uiLearningAttachmentOriginal)
+ mux.HandleFunc("POST /v1/learning/attachments",s.uiLearningAttachmentUpload)
  mux.HandleFunc("GET /v1/health/plans",s.uiHealthPlans)
  mux.HandleFunc("GET /v1/health/records",s.uiHealthRecords)
  mux.HandleFunc("GET /v1/health/training-sets",s.uiHealthTrainingList)
  mux.HandleFunc("POST /v1/health/training-sets",s.uiHealthTrainingLog)
  mux.HandleFunc("GET /v1/health/training-progress",s.uiHealthTrainingProgress)
  mux.HandleFunc("POST /v1/health/records",s.uiHealthObservation)
+ mux.HandleFunc("POST /v1/health/reaction-test",s.uiReactionTest)
  mux.HandleFunc("GET /v1/health/goals",s.uiHealthGoals)
  mux.HandleFunc("GET /v1/health/food-proposals",s.uiFoodProposals)
  mux.HandleFunc("POST /v1/health/food-proposals/{id}/confirm",s.uiFoodConfirm)
@@ -166,15 +191,23 @@ func(s *Server) Handler()http.Handler{
  mux.HandleFunc("POST /v1/recipes/recipesage/preview",s.recipeSagePreview)
  mux.HandleFunc("POST /v1/recipes/recipesage/import",s.recipeSageImport)
  mux.HandleFunc("POST /v1/recipes/images",s.recipeImageUpload)
- mux.HandleFunc("GET /v1/recipes/images/{name}",s.recipeImage)
+ mux.HandleFunc("GET /v1/recipes/{id}/{name}",func(w http.ResponseWriter,r *http.Request){
+  if r.PathValue("id")=="images"{
+   s.recipeImage(w,r)
+   return
+  }
+  switch r.PathValue("name"){
+  case "nutrition": s.recipeNutrition(w,r)
+  case "history": s.recipeHistory(w,r)
+  default: http.NotFound(w,r)
+  }
+ })
  mux.HandleFunc("POST /v1/recipes/import",s.recipeArchive)
  mux.HandleFunc("GET /v1/recipes/{id}",s.recipeItem)
  mux.HandleFunc("PUT /v1/recipes/{id}",s.recipeItem)
  mux.HandleFunc("DELETE /v1/recipes/{id}",s.recipeItem)
  mux.HandleFunc("POST /v1/recipes/{id}/usda-preview",s.recipeUSDAHTTP)
  mux.HandleFunc("POST /v1/recipes/{id}/usda-apply",s.recipeUSDAHTTP)
- mux.HandleFunc("GET /v1/recipes/{id}/nutrition",s.recipeNutrition)
- mux.HandleFunc("GET /v1/recipes/{id}/history",s.recipeHistory)
  mux.HandleFunc("POST /v1/recipes/{id}/restore",s.recipeRestore)
  mux.HandleFunc("GET /v1/meals",s.mealCollection)
  mux.HandleFunc("POST /v1/meals",s.mealCollection)
@@ -194,6 +227,8 @@ func(s *Server) Handler()http.Handler{
   writeJSON(w,200,map[string]any{"tools":s.toolList(r)})
  })
  mux.HandleFunc("POST /v1/tools/{name}/call",s.nativeToolCall)
+ mux.HandleFunc("POST /v1/health/app-tools/{name}/call",s.uiHealthAppToolCall)
+ mux.HandleFunc("POST /v1/learning/app-tools/{name}/call",s.uiLearningReadTool)
  mux.HandleFunc("GET /v1/tasks/delegations",s.uiTaskDelegations)
  mux.HandleFunc("POST /v1/tasks/{id}/decomposition-preview",s.uiTaskDecompositionPreview)
  mux.HandleFunc("GET /v1/tasks/conflicts",s.taskConflicts)
@@ -322,7 +357,8 @@ func(s *Server)mcp(w http.ResponseWriter,r *http.Request){
  case "initialize":
   caps:=map[string]any{"tools":map[string]any{"listChanged":false}}
   if s.privilegeClient!=nil&&s.securityLoginURL!="" {caps["resources"]=map[string]any{"listChanged":false}}
-  s.rpc(w,req.ID,map[string]any{"protocolVersion":"2025-06-18","capabilities":caps,"serverInfo":map[string]string{"name":"homelab","version":"0.1.0"}},nil)
+  s.rpc(w,req.ID,map[string]any{"protocolVersion":"2025-06-18","capabilities":caps,"serverInfo":map[string]string{"name":"homelab","version":"0.1.0"},
+   "instructions":"For long-running project work, persist factual progress with continuity_checkpoint before context loss or a substantial handoff. Use continuity_status to inspect caller-reported context pressure and continuity_handoff for a portable continuation. An MCP server cannot measure ChatGPT's hidden context or open another chat automatically."},nil)
  case "ping":s.rpc(w,req.ID,map[string]any{},nil)
  case "tools/list":s.rpc(w,req.ID,map[string]any{"tools":s.toolList(r)},nil)
  case "resources/list":
@@ -356,11 +392,33 @@ func(s *Server)mcp(w http.ResponseWriter,r *http.Request){
 }
 func tool(name,description string,properties map[string]any,required ...string)map[string]any{
  if required==nil{required=[]string{}}
+ if privilegedExecutorTool(name){
+  properties["request_id"]=map[string]any{
+   "type":"string","pattern":"^[0-9a-f]{32}$",
+   "minLength":32,"maxLength":32,
+   "description":"Caller-generated unique execution identity. Reuse exactly this ID for retries or reconciliation.",
+  }
+  required=append(required,"request_id")
+ }
  return map[string]any{"name":name,"description":description,"inputSchema":map[string]any{"type":"object","properties":properties,"required":required}}
 }
 func prop(kind string)map[string]any{return map[string]any{"type":kind}}
 func(s *Server)localTools()[]map[string]any{
  tools:=[]map[string]any{
+  tool("continuity_checkpoint","Store a version-fenced work checkpoint. Token measurements, when supplied, are caller-reported and not the hidden ChatGPT context.",map[string]any{
+   "key":prop("string"),"project_id":prop("string"),"objective":prop("string"),"summary":prop("string"),
+   "next_steps":map[string]any{"type":"array","items":prop("string")},
+   "evidence":map[string]any{"type":"array","items":prop("string")},
+   "expected_revision":prop("integer"),
+   "reported_input_tokens":prop("integer"),"context_window_tokens":prop("integer"),
+   "reserved_output_tokens":prop("integer"),
+  },"key","objective","summary","expected_revision"),
+  tool("continuity_status","Inspect the latest durable checkpoint and qualified context-pressure estimate; exact ChatGPT context usage is not observable.",map[string]any{
+   "key":prop("string"),
+  },"key"),
+  tool("continuity_handoff","Return a portable, evidence-linked project handoff for starting a new chat. Does not create or switch conversations.",map[string]any{
+   "key":prop("string"),
+  },"key"),
   tool("task_add","Create a personal task",map[string]any{"links":map[string]any{"type":"array","items":prop("string")},"parent_id":prop("string"),"depends_on":map[string]any{"type":"array","items":prop("string")},"title":prop("string"),"notes":prop("string"),"goal_id":prop("string"),"due":prop("string"),"minutes":prop("integer"),"energy":prop("string"),"location":prop("string"),"priority":prop("integer")},"title"),
   tool("task_complete","Mark a task complete",map[string]any{"id":prop("string")},"id"),
   tool("task_decompose","Atomically split an open parent task into actionable subtasks, with prerequisites referencing earlier step indices",map[string]any{
@@ -406,6 +464,16 @@ func(s *Server)localTools()[]map[string]any{
   tool("resource_get","Resolve a canonical local resource identity from its owning store",map[string]any{"kind":prop("string"),"id":prop("string")},"kind","id"),
   tool("resource_resolve","Resolve a homelab:kind:id reference without copying the owning service's data",map[string]any{"ref":prop("string")},"ref"),
   tool("system_status","List configured integrations",map[string]any{}),
+ }
+ if s.motivation!=nil{
+  tools=append(tools,
+   tool("motivation_status","Read the owner-defined identity, opt-in status and self-reported intervention history",map[string]any{}),
+   tool("motivation_metrics","Summarize recent self-reported voluntary intellectual work and well-being",map[string]any{}),
+   tool("motivation_suggest","Request one context-aware, consented motivational intervention; no external notifications are sent",map[string]any{
+    "trigger":map[string]any{"type":"string","enum":[]string{"session_start","resistance","distraction","uncertainty","milestone"}},
+    "question":map[string]any{"type":"string","maxLength":320},
+   }),
+   tool("motivation_pause","Immediately pause the opt-in motivation service",map[string]any{}))
  }
  if s.deviceCatalog!=nil{
   tools=append(tools,tool("device_inventory","List declared hardware access and constraints; this is not an online device probe",map[string]any{}))
@@ -605,6 +673,15 @@ func(s *Server)toolList(r *http.Request)[]map[string]any{
  return out
 }
 func(s *Server)localTool(ctx context.Context,name string,raw json.RawMessage)(any,error){
+ if strings.HasPrefix(name,"continuity_"){return s.continuityTool(name,raw)}
+ if s.motivation!=nil{
+  switch name{
+  case "motivation_status":return s.motivation.Call(ctx,http.MethodGet,"/v1/motivation/state",nil)
+  case "motivation_metrics":return s.motivation.Call(ctx,http.MethodGet,"/v1/motivation/metrics",nil)
+  case "motivation_suggest":return s.motivation.Call(ctx,http.MethodPost,"/v1/motivation/interventions",raw)
+  case "motivation_pause":return s.motivation.Call(ctx,http.MethodPost,"/v1/motivation/pause",nil)
+  }
+ }
  if name=="task_decomposition_preview"{
   var request struct{
    ParentID string `json:"parent_id"`

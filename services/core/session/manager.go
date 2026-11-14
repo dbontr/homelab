@@ -1,106 +1,45 @@
 package session
 
 import (
-	"crypto/rand"
+	"crypto/hmac"
 	"crypto/sha256"
-	"crypto/subtle"
 	"encoding/base64"
 	"errors"
-	"sync"
-	"time"
 
 	"github.com/dbontr/homelab-new/system/security"
 )
 
-const (
-	Duration = 6 * time.Hour
-	maxSessions = 32
-)
-
-type entry struct {
-	csrf string
-	expires time.Time
-}
-
-// Manager owns short-lived browser sessions. No provider or MCP token is exposed.
+// Manager grants bounded browser access only to identities whose Cloudflare
+// Access assertions pass signature, issuer, audience, lifetime and owner checks.
+// It stores no passwords, browser cookies, or independently renewable sessions.
 type Manager struct {
-	mu sync.Mutex
-	unlock *security.OwnerUnlock
-	entries map[[32]byte]entry
-	now func() time.Time
+	verifier *security.AccessVerifier
+	audience string
+	csrfKey  [32]byte
 }
 
-func New(record security.PassphraseRecord) (*Manager, error) {
-	unlock, err := security.NewOwnerUnlock(record)
-	if err != nil { return nil, err }
-	return &Manager{unlock: unlock, entries: make(map[[32]byte]entry), now: time.Now}, nil
-}
-
-func randomToken() (string, error) {
-	var value [32]byte
-	if _, err := rand.Read(value[:]); err != nil { return "", err }
-	return base64.RawURLEncoding.EncodeToString(value[:]), nil
-}
-
-func tokenHash(token string) ([32]byte, bool) {
-	var empty [32]byte
-	b, err := base64.RawURLEncoding.DecodeString(token)
-	if err != nil || len(b) != 32 { return empty, false }
-	return sha256.Sum256(b), true
-}
-
-func (m *Manager) Login(passphrase []byte) (string, string, time.Time, error) {
-	if m == nil { return "", "", time.Time{}, errors.New("sessions are not configured") }
-	if err := m.unlock.Verify(passphrase); err != nil {
-		return "", "", time.Time{}, errors.New("authentication failed")
+func New(verifier *security.AccessVerifier, audience, platformSecret string) (*Manager, error) {
+	if verifier == nil || audience == "" || len(platformSecret) < 32 {
+		return nil, errors.New("signed console identity and private CSRF key are required")
 	}
-	cookie, err := randomToken()
-	if err != nil { return "", "", time.Time{}, err }
-	csrf, err := randomToken()
-	if err != nil { return "", "", time.Time{}, err }
-	key, valid := tokenHash(cookie)
-	if !valid { return "", "", time.Time{}, errors.New("invalid session token") }
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	now := m.now()
-	for id, session := range m.entries {
-		if !now.Before(session.expires) { delete(m.entries, id) }
-	}
-	if len(m.entries) >= maxSessions {
-		return "", "", time.Time{}, errors.New("session limit reached")
-	}
-	expiry := now.Add(Duration)
-	m.entries[key] = entry{csrf: csrf, expires: expiry}
-	return cookie, csrf, expiry, nil
+	return &Manager{
+		verifier: verifier,
+		audience: audience,
+		csrfKey: sha256.Sum256([]byte(platformSecret)),
+	}, nil
 }
 
-func (m *Manager) Check(cookie string) (string, time.Time, bool) {
-	if m == nil { return "", time.Time{}, false }
-	hash, valid := tokenHash(cookie)
-	if !valid { return "", time.Time{}, false }
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	session, exists := m.entries[hash]
-	if !exists { return "", time.Time{}, false }
-	if !m.now().Before(session.expires) {
-		delete(m.entries, hash)
-		return "", time.Time{}, false
+// Check re-verifies the Access JWT on every call. CSRF is bound to the
+// assertion, so an expired or replaced Access token cannot reuse its token.
+func (m *Manager) Check(assertion string) (csrf string, ok bool) {
+	if m == nil {
+		return "", false
 	}
-	return session.csrf, session.expires, true
-}
-
-func (m *Manager) Logout(cookie, csrf string) bool {
-	if m == nil { return false }
-	hash, valid := tokenHash(cookie)
-	if !valid { return false }
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	session, exists := m.entries[hash]
-	if !exists || !m.now().Before(session.expires) { return false }
-	if len(csrf) != len(session.csrf) ||
-		subtle.ConstantTimeCompare([]byte(csrf), []byte(session.csrf)) != 1 {
-		return false
+	if _, err := m.verifier.Verify(assertion, m.audience); err != nil {
+		return "", false
 	}
-	delete(m.entries, hash)
-	return true
+	mac := hmac.New(sha256.New, m.csrfKey[:])
+	_, _ = mac.Write([]byte("homelab-console-csrf/v1\x00"))
+	_, _ = mac.Write([]byte(assertion))
+	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil)), true
 }

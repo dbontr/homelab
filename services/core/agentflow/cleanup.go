@@ -76,66 +76,53 @@ func (s *Store) confirmCleanup(claim CleanupClaim, state string, lastError strin
 	return s.save(workflow)
 }
 
-func (e *Engine) cleanupWorkspace(ctx context.Context, claim CleanupClaim) error {
-	list, err := e.Compute.Call(ctx, "workspace_list", map[string]any{"project_id": claim.Project})
-	if err != nil {
-		return err
-	}
-	entries, ok := list["result"].([]any)
-	if !ok {
-		return errors.New("invalid workspace listing")
-	}
-	visible := false
-	for _, item := range entries {
-		record := obj(item)
-		if str(record["id"]) != claim.WorkspaceID {
-			continue
-		}
-		visible = true
-		switch str(record["status"]) {
-		case "stopped", "destroyed":
-			return nil
-		case "ready", "starting", "stopping":
-		default:
-			return errors.New("unexpected workspace state during cleanup")
-		}
-	}
-	if !visible {
-		return nil
-	}
-	if _, err := e.Compute.Call(ctx, "workspace_destroy", map[string]any{
-		"project_id": claim.Project, "workspace_id": claim.WorkspaceID,
-	}); err != nil {
-		return err
-	}
+// StopWorkspace checks controller state before sending a destructive request.
+// A resumed cleanup does not repeat a stop that is already in progress.
+func StopWorkspace(ctx context.Context, compute ToolCaller, project, id string) error {
+	requested := false
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 	for {
-		list, err := e.Compute.Call(ctx, "workspace_list", map[string]any{"project_id": claim.Project})
+		response, err := compute.Call(ctx, "workspace_list", map[string]any{"project_id": project})
 		if err != nil {
 			return err
 		}
-		entries, ok := list["result"].([]any)
+		records, ok := response["result"].([]any)
 		if !ok {
 			return errors.New("invalid workspace listing")
 		}
-		visible := false
-		for _, item := range entries {
-			record := obj(item)
-			if str(record["id"]) != claim.WorkspaceID {
+		status := ""
+		for _, raw := range records {
+			entry, ok := raw.(map[string]any)
+			if !ok {
+				return errors.New("invalid workspace status entry")
+			}
+			if entry["id"] != id {
 				continue
 			}
-			visible = true
-			switch str(record["status"]) {
-			case "stopped", "destroyed":
-				return nil
-			case "stopping", "ready", "starting":
-			default:
-				return errors.New("unexpected workspace state")
+			value, ok := entry["status"].(string)
+			if !ok || value == "" {
+				return errors.New("invalid workspace status")
 			}
+			status = value
+			break
 		}
-		if !visible {
+		switch status {
+		case "", "stopped", "destroyed":
 			return nil
+		case "ready", "starting":
+			if !requested {
+				if _, err := compute.Call(ctx, "workspace_destroy", map[string]any{
+					"project_id": project, "workspace_id": id,
+				}); err != nil {
+					return err
+				}
+				requested = true
+			}
+		case "stopping":
+			// The controller has already accepted a teardown request.
+		default:
+			return errors.New("unexpected workspace state during cleanup")
 		}
 		select {
 		case <-ctx.Done():
@@ -143,6 +130,10 @@ func (e *Engine) cleanupWorkspace(ctx context.Context, claim CleanupClaim) error
 		case <-ticker.C:
 		}
 	}
+}
+
+func (e *Engine) cleanupWorkspace(ctx context.Context, claim CleanupClaim) error {
+	return StopWorkspace(ctx, e.Compute, claim.Project, claim.WorkspaceID)
 }
 
 // ReconcileWorkspaces attempts one terminal-run cleanup per pass. Pending

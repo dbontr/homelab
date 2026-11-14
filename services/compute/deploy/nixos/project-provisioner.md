@@ -13,14 +13,14 @@ Import `deploy/nixos/project-provisioner.nix` into the control-plane machine's N
 ```nix
 services.workspaceMcpProjectProvisioner = {
   enable = true;
-  workerImage = "registry.example.org/workspace-worker:verified";
+  workerImage = "ghcr.io/dbontr/homelab/worker@sha256:c7ab035296db9aec360611c52737ca4e94143fb959c7ad56ca536cc20fd6ee4f";
   computeNodes = [ "jupiter" "venus" "mercury" "janus" ];
   excludeProjects = [ "acceptance" ];
   interval = "2min";
 };
 ```
 
-The worker image must already exist on each approved host or be retrievable from its configured registry. The operator must have a working K3s administrator kubeconfig, the controller's own TLS CA Secret, and its administrator credential Secret in `pwm-system`. The service runs as root with a read-only system filesystem and an isolated temporary directory; it does not expose a host SSH listener or grant cluster administration to worker Pods.
+The worker image must be content-addressed and retrievable from an approved OCI registry by each compute node. A successful pull on the operator host is not sufficient: qualify fresh pulls on the worker hosts before activation. The operator must have a working K3s administrator kubeconfig, the controller's own TLS CA Secret, and its administrator credential Secret in `pwm-system`. The service runs as root with a read-only system filesystem and an isolated temporary directory; it does not expose a host SSH listener or grant cluster administration to worker Pods.
 
 The timer checks projects after boot and at the specified interval. An existing worker with the same project and physical host is retained, not silently replaced. Incomplete enrollment or a missing Secret requires operator review; revoked worker identities are not resurrected. Repository publication and Project Knowledge remain governed separately by each project's Git configuration.
 
@@ -30,7 +30,7 @@ The timer checks projects after boot and at the specified interval. An existing 
 export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 export PWM_HELM_CHART=/path/to/workspace-mcp/deploy/helm/project-workspace
 export PWM_HELM_BINARY=/path/to/helm
-export PWM_WORKER_IMAGE=registry.example.org/workspace-worker:verified
+export PWM_WORKER_IMAGE=ghcr.io/dbontr/homelab/worker@sha256:c7ab035296db9aec360611c52737ca4e94143fb959c7ad56ca536cc20fd6ee4f
 export PWM_COMPUTE_NODES="jupiter venus mercury janus"
 export PWM_EXCLUDE_PROJECTS="acceptance"
 bash scripts/reconcile-kubernetes-projects.sh
@@ -39,3 +39,121 @@ bash scripts/reconcile-kubernetes-projects.sh
 Do not store controller or worker credentials in shell histories, Git, Helm values or environment files. The script obtains the controller administrator credential directly from the protected Kubernetes Secret and transfers one-use worker credentials into separate Kubernetes Secrets without printing their contents.
 
 Projects must use Kubernetes-compatible identifiers of at most 52 characters. The operator can exclude historical, archived or resource-restricted projects explicitly. Each project-host pair consumes a small worker Pod; capacity and project-count budgets must be set appropriately for the cluster.
+
+
+## Fleet image reconciliation
+
+Inspect the deployed project-worker releases as a set before upgrading any
+individual worker:
+
+```sh
+export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+export PWM_HELM_CHART=services/compute/deploy/helm/project-workspace
+image=ghcr.io/dbontr/homelab/worker@sha256:c7ab035296db9aec360611c52737ca4e94143fb959c7ad56ca536cc20fd6ee4f
+
+bash services/compute/scripts/rollout-project-fleet.sh plan "$image"
+```
+
+The fleet utility compares Helm's deployed project releases with the
+Kubernetes worker Deployments and refuses missing, duplicate, or mismatched
+ownership. It selects only project workers whose deployed image differs from
+the approved digest. Every selected worker must pass the individual release
+preflight before any upgrade is permitted.
+
+For an operator-approved maintenance window with project submissions
+temporarily suspended, apply the exact planned set by confirming its current
+size. For example, if the plan discovers twelve releases:
+
+```sh
+bash services/compute/scripts/rollout-project-fleet.sh apply "$image" --confirm-count 12
+```
+
+The fleet inventory is checked again before application. Upgrades proceed
+strictly one release at a time. Each release revalidates its own admission,
+revision and image before mutation, and has a separate Helm rollback boundary.
+A failed release stops the fleet; earlier accepted releases are not rolled
+back merely because a later release failed. Preserve those Helm histories
+for independently authorized reversion.
+
+A fleet apply requires a controller version that supports worker maintenance
+and a verified image release receipt. Qualify the controller's maintenance API,
+persistence, authorization and migration against a consistent SQLite snapshot
+before any worker image changes. Do not roll back to a controller binary that
+ignores the maintenance table while any worker remains paused: that binary
+would admit new work despite the recorded pause. Reconcile every paused
+worker and establish a compatible controller rollback target first. For each worker, the upgrade script
+sets a durable, revision-fenced scheduling pause through the controller.
+The controller refuses new job leases and workspace allocations to that
+worker while the pause is active. The script checks an authoritative drain
+count under the same database lock used by the scheduler. This does not
+prevent project work from being submitted to *other* workers; coordinate
+project maintenance to avoid an accumulating queue.
+
+## Existing worker image rollout
+
+The provisioner enrolls missing project/host pairs. It intentionally does not
+replace a registered worker's release or overwrite an existing worker token.
+Use the source-owned, single-release rollout utility for that operation:
+
+```sh
+export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+export PWM_HELM_CHART=services/compute/deploy/helm/project-workspace
+image=ghcr.io/dbontr/homelab/worker@sha256:c7ab035296db9aec360611c52737ca4e94143fb959c7ad56ca536cc20fd6ee4f
+release=pwm-project-046910e8ae58-janus
+
+bash services/compute/scripts/rollout-project-worker.sh plan "$release" "$image"
+
+# During an operator-approved project maintenance window:
+bash services/compute/scripts/rollout-project-worker.sh apply "$release" "$image" \
+  --confirm "$release"
+```
+
+The utility operates on exactly one `pwm-project-<hash>-<host>` release.
+It reads the effective Helm values and requires the live Deployment to match
+the same worker, project, namespace, Secret, and node placement. It rejects
+unhealthy nodes, unavailable controller identity, active jobs, workspaces,
+unfinished operations, unreleased hardware leases assigned to this worker,
+and any Kubernetes Pods or Jobs in its workload namespace. The maintenance
+endpoint counts all worker-owned state and does not rely on the controller's
+bounded project history. The proposed Helm manifest must differ from the
+current release only in the worker OCI image. The cluster API validates the
+proposed upgrade in server-side dry-run mode before any live change.
+
+The `plan` command does not modify Kubernetes resources or controller
+maintenance state. The `apply` command requires an exact release confirmation.
+It reads the worker's maintenance revision, atomically pauses scheduling,
+rechecks drain state, and verifies the revision again before the Helm upgrade.
+On success, it requires Deployment readiness, a controller heartbeat newer
+than the upgrade start, and a revision-fenced scheduler resume.
+
+If Helm fails, a concurrent administrator changes the maintenance revision,
+or post-upgrade acceptance cannot be confirmed, the tool fails closed. A
+post-upgrade failure attempts revision-checked Helm rollback; **the durable
+maintenance pause remains until an authorized operator verifies the worker's
+running image, readiness, controller records and hardware cleanup, then
+explicitly resumes scheduling.** A successful NixOS reboot does not clear it.
+
+The controller exposes an owner-only recovery interface at
+`GET /api/nodes/{worker_id}/maintenance` and
+`POST /api/nodes/{worker_id}/maintenance`. Read the current
+`paused`, `revision`, `drained`, active counts and timestamps before
+attempting recovery. A resume requires the exact current revision and body
+`{"paused":false,"expected_revision":N}`. The controller requires a drained
+worker and an authenticated worker heartbeat within the preceding 90 seconds.
+An offline worker must be recovered before scheduling can resume. A stale
+revision returns a conflict instead of unpausing a different operator's
+maintenance session.
+Keep the controller bearer credential in a protected header file; do not
+place it in command-line arguments, logs or Git.
+
+The tool refuses chart drift rather than silently changing namespaced
+policies, mounts, or RBAC. A rejected release must be reviewed individually
+and, when necessary, migrated through a separately approved, reversible
+chart upgrade. The maintenance pause controls controller scheduling for one
+worker, not Kubernetes administration or other independent schedulers.
+
+Each upgrade remains subject to a later end-to-end workspace command,
+image-repull and node-restart qualification. Project workspaces and private
+artifacts must not be deleted to accelerate worker rollout. The release
+utility does not configure K3s registries or change compute-host NixOS
+generations; each host requires its independent registry/rollback procedure.

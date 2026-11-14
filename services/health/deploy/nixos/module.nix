@@ -19,6 +19,18 @@ in {
       default = "";
       description = "Exact SHA-256 of the release executable.";
     };
+    appBundle = {
+      directory = lib.mkOption {
+        type = lib.types.nullOr lib.types.path;
+        default = null;
+        description = "Optional immutable Rust/WASM MCP Apps bundle directory, with a source-owned SHA-256 manifest.";
+      };
+      origin = lib.mkOption {
+        type = lib.types.str;
+        default = "";
+        description = "Exact HTTPS origin used for public immutable browser assets; no credentials or user records.";
+      };
+    };
     environmentFile = lib.mkOption {
       type = lib.types.str;
       default = "/etc/personal-health-mcp.env";
@@ -34,6 +46,10 @@ in {
 
   config = lib.mkIf cfg.enable {
     assertions = [
+      {
+        assertion = (cfg.appBundle.directory == null) == (cfg.appBundle.origin == "");
+        message = "Health WASM MCP Apps require both an immutable bundle and one HTTPS asset origin.";
+      }
       {
         assertion = cfg.binaryPath != null &&
           lib.hasPrefix "/" cfg.binaryPath;
@@ -52,6 +68,8 @@ in {
       wants = [ "network-online.target" "recipesage.service" ];
       environment = {
         MCP_TRANSPORT = "http";
+        PERSONAL_HEALTH_APP_BUNDLE = if cfg.appBundle.directory == null then "" else toString cfg.appBundle.directory;
+        PERSONAL_HEALTH_APP_ORIGIN = cfg.appBundle.origin;
         MCP_LISTEN = "127.0.0.1:8201";
         MCP_ALLOWED_ORIGINS = "https://chatgpt.com,https://chat.openai.com";
         PERSONAL_HEALTH_DB_PATH = "/var/lib/personal-health/health.db";

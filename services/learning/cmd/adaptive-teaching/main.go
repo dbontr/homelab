@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/dbontr/homelab-new/system/learning/internal/mcpsvc"
+    "github.com/dbontr/homelab-new/system/learning/internal/teacheval"
 	"github.com/dbontr/homelab-new/system/learning/internal/store"
 	"log"
 	"net"
@@ -44,6 +45,64 @@ func readBearerCredential() (string, error) {
 		return "", errors.New("bearer token must contain at least 32 characters on one line")
 	}
 	return token, nil
+}
+
+func configureLearningApp(svc *mcpsvc.Service) error {
+    directory:=os.Getenv("ADAPTIVE_TEACHING_APP_BUNDLE_DIRECTORY")
+    origin:=os.Getenv("ADAPTIVE_TEACHING_APP_BUNDLE_ORIGIN")
+    if directory==""&&origin==""{return nil}
+    if directory==""||origin==""{
+        return errors.New("Learning App requires both verified assets and their public HTTPS origin")
+    }
+    bundle,err:=mcpsvc.LoadLearningAppBundle(directory,origin)
+    if err!=nil{return err}
+    return svc.SetLearningAppBundle(bundle)
+}
+
+// configureLearningModel permits disclosure only to a host-authorized endpoint.
+// The provider is disabled unless both endpoint and model are configured.
+func configureLearningModel(svc *mcpsvc.Service) error {
+    endpoint := os.Getenv("ADAPTIVE_TEACHING_MODEL_ENDPOINT")
+    modelName := os.Getenv("ADAPTIVE_TEACHING_MODEL_NAME")
+    tokenFile := os.Getenv("ADAPTIVE_TEACHING_MODEL_TOKEN_FILE")
+    consentPolicy := os.Getenv("ADAPTIVE_TEACHING_MODEL_DISCLOSURE_ENABLED")
+    if consentPolicy != "" && consentPolicy != "0" && consentPolicy != "1" {
+        return errors.New("invalid Learning model disclosure policy")
+    }
+    if endpoint == "" && modelName == "" && tokenFile == "" {
+        if consentPolicy == "1" {
+            return errors.New("Learning model disclosure requires a configured provider")
+        }
+        return nil
+    }
+    if endpoint == "" || modelName == "" {
+        return errors.New("Learning model requires both a configured endpoint and name")
+    }
+    if err := teacheval.ValidateEndpoint(endpoint); err != nil { return err }
+    var key string
+    if tokenFile != "" {
+        info, err := os.Stat(tokenFile)
+        if err != nil { return fmt.Errorf("Learning model credential unavailable: %w",err) }
+        if !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 {
+            return errors.New("Learning model credential must be an owner-only regular file")
+        }
+        raw, err := os.ReadFile(tokenFile)
+        if err != nil { return fmt.Errorf("Learning model credential read failed: %w",err) }
+        key = strings.TrimSpace(string(raw))
+        if len(key) < 20 || len(key) > 4096 || strings.ContainsAny(key,"\r\n\x00") {
+            return errors.New("Learning model credential is invalid")
+        }
+    }
+    client := teacheval.HTTPClient{
+        Endpoint:endpoint, APIKey:key,
+        Client:&http.Client{Timeout:35*time.Second,
+            CheckRedirect:func(*http.Request,[]*http.Request)error {
+                return errors.New("Learning model redirects disabled")
+            }},
+    }
+    if err := svc.SetModelProvider(client,modelName); err != nil { return err }
+    if consentPolicy == "1" { return svc.EnableModelDisclosure() }
+    return nil
 }
 
 func loopbackListener(address string) bool {
@@ -85,6 +144,12 @@ func main() {
 	}
 	defer db.Close()
 	svc := mcpsvc.NewService(db)
+    if err := configureLearningModel(svc); err != nil {
+        log.Fatal("model configuration: ",err)
+    }
+    if err := configureLearningApp(svc); err != nil {
+        log.Fatal("Learning App configuration: ",err)
+    }
 	addr := getenv("ADAPTIVE_TEACHING_LISTEN_ADDR", "127.0.0.1:8000")
 	token, err := readBearerCredential()
 	if err != nil {

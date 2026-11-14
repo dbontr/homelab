@@ -1,16 +1,17 @@
 package security
 
 import (
+ "bytes"
  "context"
- "crypto/tls"
- "crypto/x509"
+ "encoding/json"
  "errors"
  "io"
  "net/http"
  "os"
  "regexp"
  "strings"
- "time"
+
+ "github.com/dbontr/homelab-new/system/canonicaljson"
 )
 
 // Service credentials are retrieved only through the independent private
@@ -23,27 +24,40 @@ func NewVaultClientFromFiles(endpoint,serverName,caFile,certFile,keyFile string)
  if endpoint==""||serverName==""||caFile==""||certFile==""||keyFile==""{
   return nil,errors.New("incomplete trusted vault client configuration")
  }
- rootPEM,err:=os.ReadFile(caFile)
- if err!=nil||len(rootPEM)>128<<10{return nil,errors.New("vault trust roots unavailable")}
- roots:=x509.NewCertPool()
- if !roots.AppendCertsFromPEM(rootPEM){return nil,errors.New("invalid vault trust roots")}
- certificate,err:=tls.LoadX509KeyPair(certFile,keyFile)
+ roots,err:=LoadTLSRoots(caFile)
+ if err!=nil{return nil,errors.New("vault trust roots unavailable")}
+ certificate,err:=LoadTLSIdentity(certFile,keyFile)
  if err!=nil{return nil,errors.New("vault client identity unavailable")}
  return NewRemoteAuthorizationClient(RemoteAuthorizationConfig{
   Endpoint:endpoint,ServerName:serverName,TrustRoots:roots,Certificate:certificate,
  })
 }
 
-// ServiceCredential fetches only the alias granted to the service's unique
-// client certificate. Revoked and rotated vault records are checked afresh.
-func(c *RemoteAuthorizationClient)ServiceCredential(ctx context.Context,alias string)(string,error){
- if c==nil||!serviceAlias.MatchString(alias){
-  return "",errors.New("invalid service credential alias")
+// ServiceCredential redeems one non-exportable executor decision with the
+// exact original operation, resource and canonical argument object. A bare
+// alias cannot retrieve a protected credential.
+func(c *RemoteAuthorizationClient)ServiceCredential(
+ ctx context.Context,alias string,capability CredentialTicket,
+ operation,target string,arguments json.RawMessage,
+)(string,error){
+ if c==nil||!serviceAlias.MatchString(alias)||capability.Alias!=alias||
+  !serviceCredentialTicket.MatchString(capability.Ticket){
+  return "",errors.New("invalid service credential capability")
  }
- request,err:=http.NewRequestWithContext(ctx,http.MethodGet,
-  c.endpoint+"/v1/service-credentials/"+alias,nil)
+ canonical,_,err:=canonicaljson.Object(arguments)
+ if err!=nil{return "",errors.New("invalid credential authorization arguments")}
+ payload,err:=json.Marshal(struct{
+  Ticket string `json:"ticket"`
+  Operation string `json:"operation"`
+  Target string `json:"target"`
+  Arguments json.RawMessage `json:"arguments"`
+ }{capability.Ticket,operation,target,canonical})
+ if err!=nil{return "",errors.New("invalid credential request")}
+ request,err:=http.NewRequestWithContext(ctx,http.MethodPost,
+  c.endpoint+"/v1/service-credentials/"+alias,bytes.NewReader(payload))
  if err!=nil{return "",errors.New("invalid service credential request")}
  request.Header.Set("Accept","application/octet-stream")
+ request.Header.Set("Content-Type","application/json")
  response,err:=c.client.Do(request)
  if err!=nil{return "",errors.New("owner vault unavailable")}
  defer response.Body.Close()
@@ -51,8 +65,9 @@ func(c *RemoteAuthorizationClient)ServiceCredential(ctx context.Context,alias st
   response.Header.Get("Content-Type")!="application/octet-stream"{
   return "",errors.New("owner vault refused credential")
  }
- raw,err:=io.ReadAll(io.LimitReader(response.Body,4097))
- if err!=nil||len(raw)<20||len(raw)>4096{
+ raw,err:=io.ReadAll(io.LimitReader(response.Body,8193))
+ defer func(){for i:=range raw{raw[i]=0}}()
+ if err!=nil||len(raw)==0||len(raw)>8192{
   return "",errors.New("invalid service credential payload")
  }
  secret:=strings.TrimSuffix(string(raw),"\n")
@@ -62,17 +77,24 @@ func(c *RemoteAuthorizationClient)ServiceCredential(ctx context.Context,alias st
  return secret,nil
 }
 
-// TokenSource is a single-alias callback for trusted credential consumers.
-// It never falls back to a second authority after a vault failure.
-func(c *RemoteAuthorizationClient)TokenSource(alias string)(func()(string,error),error){
+// ScopedTokenSource is constructed only by a trusted executor. It never
+// manufactures approval or queries the vault without a one-use ticket.
+func(c *RemoteAuthorizationClient)ScopedTokenSource(alias string)(
+ func(context.Context,CredentialTicket,string,string,json.RawMessage)(string,error),error,
+){
  if c==nil||!serviceAlias.MatchString(alias){
   return nil,errors.New("vault client and valid alias required")
  }
- return func()(string,error){
-  ctx,cancel:=context.WithTimeout(context.Background(),8*time.Second)
-  defer cancel()
-  return c.ServiceCredential(ctx,alias)
+ return func(ctx context.Context,capability CredentialTicket,operation,target string,args json.RawMessage)(string,error){
+  return c.ServiceCredential(ctx,alias,capability,operation,target,args)
  },nil
+}
+
+// TokenSource is retained as an API compatibility boundary but refuses
+// ambient credential reads. Callers must use ScopedTokenSource with the
+// independently authorized operation ticket.
+func(c *RemoteAuthorizationClient)TokenSource(alias string)(func()(string,error),error){
+ return nil,errors.New("ambient vault credential access is not authorized")
 }
 
 // NewVaultClientFromEnv reads only trusted process configuration. The caller

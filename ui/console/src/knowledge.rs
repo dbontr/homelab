@@ -8,7 +8,9 @@ fn encode_query(value: &str) -> String {
     let mut result = String::new();
     for byte in value.as_bytes() {
         match *byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => result.push(*byte as char),
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                result.push(*byte as char)
+            }
             _ => result.push_str(&format!("%{byte:02X}")),
         }
     }
@@ -18,7 +20,8 @@ fn project_path(project: &str, section: &str) -> String {
     format!("/v1/engineering/projects/{project}/{section}")
 }
 fn document_body(context: &Value, key: &str) -> Option<String> {
-    context.get(key)
+    context
+        .get(key)
         .and_then(|record| record.get("body"))
         .and_then(Value::as_str)
         .map(|text| text.chars().take(1800).collect())
@@ -32,31 +35,41 @@ pub fn ProjectKnowledge() -> Element {
     let mut context = use_resource(move || {
         let id = selected();
         async move {
-            if id.is_empty() { Ok(Value::Null) }
-            else { api::get::<Value>(&project_path(&id, "context")).await }
+            if id.is_empty() {
+                Ok(Value::Null)
+            } else {
+                api::get::<Value>(&project_path(&id, "context")).await
+            }
         }
     });
     let mut overview = use_resource(move || {
         let id = selected();
         async move {
-            if id.is_empty() { Ok(Value::Null) }
-            else { api::get::<Value>(&format!("/v1/projects/{id}/overview")).await }
+            if id.is_empty() {
+                Ok(Value::Null)
+            } else {
+                api::get::<Value>(&format!("/v1/projects/{id}/overview")).await
+            }
         }
     });
     let mut workflows = use_resource(|| async { api::get::<Value>("/v1/workflows").await });
     let mut repositories = use_resource(move || {
         let id = selected();
         async move {
-            if id.is_empty() { Ok(Value::Null) }
-            else { api::get::<Value>(&project_path(&id, "repositories")).await }
+            if id.is_empty() {
+                Ok(Value::Null)
+            } else {
+                api::get::<Value>(&project_path(&id, "repositories")).await
+            }
         }
     });
     let mut research = use_resource(move || {
         let id = selected();
         let q = submitted();
         async move {
-            if id.is_empty() || q.is_empty() { Ok(Value::Null) }
-            else {
+            if id.is_empty() || q.is_empty() {
+                Ok(Value::Null)
+            } else {
                 let endpoint = format!("{}?q={}", project_path(&id, "research"), encode_query(&q));
                 api::get::<Value>(&endpoint).await
             }
@@ -90,8 +103,8 @@ pub fn ProjectKnowledge() -> Element {
                             option { value: "", "Choose a project" }
                             for item in items {
                                 option {
-                                    value: "{api::property(&item, &["id"])}",
-                                    "{api::property(&item, &["title", "name", "id"])}"
+                                    value: {api::property(&item, &["id"])},
+                                    {api::property(&item, &["title", "name", "id"])}
                                 }
                             }
                         }
@@ -126,8 +139,8 @@ pub fn ProjectKnowledge() -> Element {
                         h3 { "Linked libraries" }
                         for library in api::list(&value, &["libraries"]) {
                             div { class: "inline-row",
-                                span { "{api::property(&library, &["title", "id", "library"])}" }
-                                span { class: "muted", "{api::property(&library, &["kind", "library_kind"])}" }
+                                span { {api::property(&library, &["title", "id", "library"])} }
+                                span { class: "muted", {api::property(&library, &["kind", "library_kind"])} }
                             }
                         }
                     }
@@ -143,20 +156,20 @@ pub fn ProjectKnowledge() -> Element {
                         h3 { "Linked tasks" }
                         for task in api::list(&value, &["tasks"]) {
                             div { class: "inline-row",
-                                span { "{api::property(&task, &["title"])}" }
+                                span { {api::property(&task, &["title"])} }
                                 Badge { text: api::property(&task, &["status"]) }
                             }
                         }
                         h3 { "Associated goals" }
                         for goal in api::list(&value, &["goals"]) {
                             div { class: "inline-row",
-                                span { "{api::property(&goal, &["title"])}" }
+                                span { {api::property(&goal, &["title"])} }
                             }
                         }
                         h3 { "Engineering runs" }
                         for run in api::list(&value, &["engineering_runs"]) {
                             div { class: "inline-row",
-                                span { class: "mono", "{api::property(&run, &["id"])}" }
+                                span { class: "mono", {api::property(&run, &["id"])} }
                                 Badge { text: api::property(&run, &["status"]) }
                             }
                         }
@@ -187,7 +200,7 @@ pub fn ProjectKnowledge() -> Element {
                             }
                             for flow in matching {
                                 div { class: "inline-row",
-                                    span { "{api::property(&flow, &["objective"])}" }
+                                    span { {api::property(&flow, &["objective"])} }
                                     Badge { text: api::property(&flow, &["status"]) }
                                 }
                             }
@@ -204,9 +217,9 @@ pub fn ProjectKnowledge() -> Element {
                     Some(Ok(value)) => rsx! {
                         for item in api::list(&value, &["result", "repositories"]) {
                             div { class: "inline-row",
-                                span { class: "mono", "{api::property(&item, &["repository"])}" }
+                                span { class: "mono", {api::property(&item, &["repository"])} }
                                 Badge { text: api::property(&item, &["role"]) }
-                                span { class: "muted", "{api::property(&item, &["default_ref"])}" }
+                                span { class: "muted", {api::property(&item, &["default_ref"])} }
                             }
                         }
                     }
@@ -243,12 +256,12 @@ pub fn ProjectKnowledge() -> Element {
                                 } else {
                                     for passage in matches {
                                         details {
-                                            summary { "{api::property(&passage, &["title", "source", "id"])}" }
+                                            summary { {api::property(&passage, &["title", "source", "id"])} }
                                             p { class: "muted",
-                                                "{api::property(&passage, &["text", "excerpt"])}"
+                                                {api::property(&passage, &["text", "excerpt"])}
                                             }
                                             span { class: "mono",
-                                                "{api::property(&passage, &["citation_ref", "origin_revision", "revision"])}"
+                                                {api::property(&passage, &["citation_ref", "origin_revision", "revision"])}
                                             }
                                         }
                                     }

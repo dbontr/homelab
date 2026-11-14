@@ -1,12 +1,11 @@
 package recipes
 
 import (
-	"path/filepath"
-	"testing"
+		"testing"
 )
 
 func TestGroceryNeedsUseExactUnitAndDoNotConsumeInventory(t *testing.T) {
-	s,err:=Open(filepath.Join(t.TempDir(),"recipes.json"))
+	s,err:=Open(privateRecipeTestPath(t,"recipes.json"))
 	if err!=nil{t.Fatal(err)}
 	recipe,err:=s.Save(sample("Tomato supper"))
 	if err!=nil{t.Fatal(err)}
@@ -46,7 +45,7 @@ func TestGroceryNeedsUseExactUnitAndDoNotConsumeInventory(t *testing.T) {
 }
 
 func TestGroceryNeedsExcludeExpiredStockAndFlagUnrecorded(t *testing.T) {
-	s,err:=Open(filepath.Join(t.TempDir(),"recipes.json"))
+	s,err:=Open(privateRecipeTestPath(t,"recipes.json"))
 	if err!=nil{t.Fatal(err)}
 	recipe,err:=s.Save(sample("Tomato salad"))
 	if err!=nil{t.Fatal(err)}

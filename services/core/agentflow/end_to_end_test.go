@@ -19,13 +19,20 @@ import (
 func TestAutonomousEngineeringHTTPAndUnixEndToEnd(t *testing.T) {
 	worker := &fakeCompute{files: map[string]string{"repos/example__repo/README.md": "package sample"}}
 	serviceToken := strings.Repeat("s", 40)
+	identityChecks, grantChecks, rpcCalls := 0, 0, 0
 	compute := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer "+serviceToken {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
 		if r.URL.Path == "/api/whoami" {
+			identityChecks++
 			_ = json.NewEncoder(w).Encode(map[string]any{"principal": "oidc:acceptance#project-editor", "administrator": false})
+			return
+		}
+		if r.URL.Path == "/api/projects/research/role" {
+			grantChecks++
+			_ = json.NewEncoder(w).Encode(map[string]any{"project_id": "research", "role": "editor"})
 			return
 		}
 		if r.URL.Path != "/mcp" || r.Method != http.MethodPost {
@@ -44,6 +51,7 @@ func TestAutonomousEngineeringHTTPAndUnixEndToEnd(t *testing.T) {
 			http.Error(w, "invalid RPC request", http.StatusBadRequest)
 			return
 		}
+		rpcCalls++
 		result, err := worker.Call(r.Context(), req.Params.Name, req.Params.Arguments)
 		if err != nil {
 			_ = json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": 1, "error": map[string]any{"code": -32000, "message": "rejected"}})
@@ -70,11 +78,18 @@ func TestAutonomousEngineeringHTTPAndUnixEndToEnd(t *testing.T) {
 	}))
 	defer model.Close()
 
-	computeClient, err := NewComputeClient(compute.URL+"/mcp", serviceToken)
+	tokenFile := filepath.Join(t.TempDir(), "compute-editor-token")
+	if err := os.WriteFile(tokenFile, []byte(serviceToken+"\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	computeClient, err := NewComputeClientFromFile(compute.URL+"/mcp", tokenFile)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := computeClient.VerifyProjectCredential(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if err := computeClient.VerifyProjectEditor(context.Background(), "research"); err != nil {
 		t.Fatal(err)
 	}
 	author, err := NewModelAuthor(model.URL+"/v1/chat/completions", "acceptance-model", "")
@@ -135,6 +150,9 @@ func TestAutonomousEngineeringHTTPAndUnixEndToEnd(t *testing.T) {
 	}
 	if final.Status != Succeeded || worker.drafts != 1 || modelCalls != len(decisions) {
 		t.Fatalf("autonomous RPC integration failed: status=%s drafts=%d model_calls=%d", final.Status, worker.drafts, modelCalls)
+	}
+	if rpcCalls < 5 || identityChecks < rpcCalls || grantChecks < rpcCalls {
+		t.Fatalf("project-scoped credential gate was bypassed: rpc=%d identity=%d grant=%d", rpcCalls, identityChecks, grantChecks)
 	}
 	if worker.exported["artifact1"] != "chapter sample" {
 		t.Fatalf("verified source was not exported: %q", worker.exported["artifact1"])

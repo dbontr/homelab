@@ -40,6 +40,7 @@ in {
     environment.etc."rancher/k3s/registries.yaml".text = ''
       mirrors:
         "images.dbontr.internal":
+        "ghcr.io":
     '';
     services.prometheus.exporters.node = {
       enable = true;

@@ -72,7 +72,7 @@ func (db *Database) PlanWorkspace(req WorkspaceRequest) (map[string]any, error) 
 			preferred = asString(env["node"])
 		}
 		chosenImage = image
-		nodes, err := db.queryLocked("SELECT id,last_seen,capabilities FROM nodes ORDER BY id")
+		nodes, err := db.queryLocked("SELECT n.id,n.last_seen,n.capabilities,COALESCE(m.paused,0) maintenance_paused FROM nodes n LEFT JOIN node_maintenance m ON m.node=n.id ORDER BY n.id")
 		if err != nil {
 			return err
 		}
@@ -118,6 +118,9 @@ func (db *Database) PlanWorkspace(req WorkspaceRequest) (map[string]any, error) 
 				freeHardware[kind]++
 			}
 			reasons := append([]string(nil), blockers...)
+			if asInt(node["maintenance_paused"]) != 0 {
+				reasons = append(reasons, "worker is in maintenance")
+			}
 			if now-asFloat(node["last_seen"]) >= 90 {
 				reasons = append(reasons, "worker heartbeat expired")
 			}
@@ -165,8 +168,15 @@ func (db *Database) PlanWorkspace(req WorkspaceRequest) (map[string]any, error) 
 				score += float64(allHardware["fpga"]) * 2000
 			}
 			score += math.Max(0, cpuFree-req.CPU)*50 + math.Max(0, memoryFree-float64(req.MemoryMB))/1024
+			adapter := ""
+			switch {
+			case asBool(caps["kubernetes"]):
+				adapter = "kubernetes"
+			case asBool(caps["docker"]):
+				adapter = "docker"
+			}
 			candidates = append(candidates, candidate{score: score, values: map[string]any{
-				"node": id, "adapter": "docker", "online": now-asFloat(node["last_seen"]) < 90,
+				"node": id, "adapter": adapter, "online": now-asFloat(node["last_seen"]) < 90,
 				"eligible": eligible, "reasons": reasons, "architecture": normalizeArchitecture(asString(caps["arch"])),
 				"cpu_total": cpuTotal, "memory_mb_total": memoryTotal, "cpu_unreserved": cpuFree,
 				"memory_mb_unreserved": memoryFree, "hardware_total": allHardware,

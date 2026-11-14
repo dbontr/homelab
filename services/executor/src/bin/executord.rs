@@ -1,7 +1,7 @@
 //! Privileged host executor; neither the MCP gateway nor an agent owns these credentials.
-use std::path::Path;
 use homelab_executor_authority::executor::Executor;
 use homelab_executor_authority::transport::{self, Remote};
+use std::path::Path;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -14,14 +14,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut listeners = tokio::task::JoinSet::new();
     let local_executor = executor.clone();
     listeners.spawn(async move {
-        transport::serve_unix(local_executor,
-            Path::new("/run/homelab-executord/execute.sock"), client_group).await
+        transport::serve_unix(
+            local_executor,
+            Path::new("/run/homelab-executord/execute.sock"),
+            client_group,
+        )
+        .await
     });
     if let Some(remote) = remote {
         listeners.spawn(async move { remote.serve(executor).await });
     }
-    let mut termination = tokio::signal::unix::signal(
-        tokio::signal::unix::SignalKind::terminate())?;
+    let mut termination =
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
     tokio::select! {
         next = listeners.join_next() => {
             listeners.abort_all();

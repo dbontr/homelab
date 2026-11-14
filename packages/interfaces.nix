@@ -3,6 +3,7 @@ pkgs.buildGoModule {
   pname = "homelab-interfaces";
   version = "0.1.0";
   src = ../.;
+  GOWORK = "off";
   vendorHash = null;
   subPackages = [ "mcp" "api" ];
   postInstall = ''
