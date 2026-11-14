@@ -234,21 +234,87 @@ in
     ];
     users.groups.homelab-executor-client = {};
     environment.systemPackages = [ cfg.package (pkgs.writeShellScriptBin "homelab-releasectl" ''
+      set -euo pipefail
+      umask 077
       export HOMELAB_RELEASE_HOST=${lib.escapeShellArg config.networking.hostName}
       export HOMELAB_RELEASE_SOURCE=${lib.escapeShellArg cfg.sourceDirectory}
+      # A root operator may select an isolated, clean checkout. The release
+      # controller still verifies root ownership and the exact Git commit.
+      if [[ -n "''${HOMELAB_RELEASE_SOURCE_OVERRIDE:-}" ]]; then
+        export HOMELAB_RELEASE_SOURCE="$HOMELAB_RELEASE_SOURCE_OVERRIDE"
+      fi
       export HOMELAB_RELEASE_STATE=${lib.escapeShellArg cfg.stateDirectory}
       export HOMELAB_RELEASE_NIX=${lib.escapeShellArg ("${pkgs.nix}/bin/nix")}
       export HOMELAB_RELEASE_NIX_ENV=${lib.escapeShellArg ("${pkgs.nix}/bin/nix-env")}
       export HOMELAB_RELEASE_GIT=${lib.escapeShellArg ("${pkgs.git}/bin/git")}
       export HOMELAB_RELEASE_SYSTEMCTL=${lib.escapeShellArg ("${pkgs.systemd}/bin/systemctl")}
       export HOMELAB_RELEASE_HEALTH_FILE=${lib.escapeShellArg (pkgs.writeText "homelab-release-health.json" (builtins.toJSON cfg.healthServices))}
-      exec ${cfg.package}/bin/homelab-release "$@"
+      release_binary=${cfg.package}/bin/homelab-release
+      case "''${1:-}" in
+        status) exec "$release_binary" "$@" ;;
+        stage|activate|revert|recover) ;;
+        *) exec "$release_binary" "$@" ;;
+      esac
+      if [[ "$EUID" -ne 0 ]]; then
+        echo "NixOS release operations require root" >&2
+        exit 1
+      fi
+      state_dir=${lib.escapeShellArg cfg.stateDirectory}
+      if [[ -L "$state_dir" ]]; then
+        echo "release state directory must not be a symlink" >&2
+        exit 1
+      fi
+      ${pkgs.coreutils}/bin/install -d -m 0700 "$state_dir"
+      if [[ "$(${pkgs.coreutils}/bin/stat -c %u:%a "$state_dir")" != "0:700" ]]; then
+        echo "release state directory must be private and root-owned" >&2
+        exit 1
+      fi
+      exec 9>"$state_dir/.operator-release.lock"
+      if ! ${pkgs.util-linux}/bin/flock -n 9; then
+        echo "another local release operation is in progress" >&2
+        exit 1
+      fi
+      marker=/run/homelab-release-in-progress
+      dropin_dir=/run/systemd/system/homelab-executord.service.d
+      dropin="$dropin_dir/50-release-window.conf"
+      if [[ -e "$marker" || -e "$dropin" ]]; then
+        echo "interrupted release guard requires administrator recovery" >&2
+        exit 1
+      fi
+      was_active=0
+      if ${pkgs.systemd}/bin/systemctl is-active --quiet homelab-executord.service; then
+        was_active=1
+      fi
+      stopped=0
+      cleanup() {
+        exit_code=$?
+        trap - EXIT
+        ${pkgs.coreutils}/bin/rm -f -- "$marker" "$dropin"
+        ${pkgs.systemd}/bin/systemctl daemon-reload || exit_code=1
+        if [[ "$was_active" == 1 && "$stopped" == 1 ]]; then
+          ${pkgs.systemd}/bin/systemctl start homelab-executord.service || exit_code=1
+        fi
+        exit "$exit_code"
+      }
+      trap cleanup EXIT
+      ${pkgs.coreutils}/bin/mkdir -p "$dropin_dir"
+      printf "[Unit]\\nConditionPathExists=!/run/homelab-release-in-progress\\n" > "$dropin"
+      ${pkgs.coreutils}/bin/chmod 0600 "$dropin"
+      ${pkgs.coreutils}/bin/touch "$marker"
+      ${pkgs.coreutils}/bin/chmod 0600 "$marker"
+      ${pkgs.systemd}/bin/systemctl daemon-reload
+      stopped=1
+      ${pkgs.systemd}/bin/systemctl stop homelab-executord.service
+      "$release_binary" "$@"
     '') (pkgs.writeShellScriptBin "homelab-audit-inspect" ''
       export HOMELAB_EXECUTOR_RELEASE_STATE=${lib.escapeShellArg cfg.stateDirectory}
       exec ${if cfg.implementation == "rust" then "${rustPackage}/bin/audit-inspect" else "${cfg.package}/bin/homelab-audit-recovery"} "$@"
     '') ] ++ lib.optional (cfg.implementation == "rust") rustPackage;
     systemd.services.homelab-executord = {
       description = "Restricted local infrastructure executor";
+      # The release controller holds the exclusive state lease during a switch.
+      # Treat an executor start during that window as a successful skip.
+      unitConfig.ConditionPathExists = "!/run/homelab-release-in-progress";
       wantedBy = [ "multi-user.target" ];
       requires = lib.optionals (!cfg.authorization.remote.enable) [ "homelab-securityd.service" ];
       after = lib.optionals (!cfg.authorization.remote.enable) [ "homelab-securityd.service" ];
