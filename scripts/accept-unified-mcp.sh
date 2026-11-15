@@ -117,9 +117,7 @@ if [[ "$status" != 202 || -s "$scratch/notification.json" ]]; then
   exit 1
 fi
 status=$(rpc_custom '{"jsonrpc":"2.0","id":4,"method":"ping","params":{}}' stream 'text/event-stream' '2025-06-18' '')
-if [[ "$status" != 200 || "$(grep -c '^event: message\n'
-printf 'Discovered tools: %s\n' "$(jq -r '.result.tools | length' "$scratch/discovered.json")"
- "$scratch/stream.json")" != 1 || "$(grep -c '^data: ' "$scratch/stream.json")" != 1 ]]; then
+if [[ "$status" != 200 || "$(grep -c '^event: message$' "$scratch/stream.json")" != 1 || "$(grep -c '^data: ' "$scratch/stream.json")" != 1 ]]; then
   echo "FAIL: SSE ping did not return exactly one message (HTTP $status)" >&2
   exit 1
 fi
