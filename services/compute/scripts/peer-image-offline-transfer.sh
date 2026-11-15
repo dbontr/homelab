@@ -36,11 +36,13 @@ esac
 [[ "$reference" =~ ^images\.dbontr\.internal/([a-z0-9][a-z0-9._-]*(/[a-z0-9][a-z0-9._-]*)+):([A-Za-z0-9_][A-Za-z0-9._-]*)$ ]] || usage
 
 fail() { printf 'OCI transfer refused: %s\n' "$*" >&2; exit 1; }
-[[ ${EUID:-$(id -u)} == 0 ]] || fail 'root is required for enrolled worker SSH'
+if [[ "$mode" == --apply ]]; then
+  (( EUID == 0 )) || fail 'root is required for an image transfer'
+fi
 for binary in ssh kubectl jq awk flock timeout; do
   command -v "$binary" >/dev/null 2>&1 || fail "missing required command: $binary"
 done
-key=/root/.ssh/saturn-homelab-ed25519
+key=${PEER_SSH_IDENTITY:-/root/.ssh/saturn-homelab-ed25519}
 [[ -r "$key" ]] || fail 'dedicated worker SSH identity is unavailable'
 helper=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/label-image-content.sh
 [[ -r "$helper" ]] || fail 'the exact source-owned content verifier is unavailable'
