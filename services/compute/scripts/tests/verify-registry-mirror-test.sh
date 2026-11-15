@@ -24,7 +24,7 @@ case "$*" in
     fi
     printf 'spegel_advertised_image_digests{registry="ghcr.io"} 10\n'
     if [[ ${MOCK_HITLESS:-0} != 1 && "$node" == jupiter ]]; then
-      printf 'spegel_mirror_requests_total{cache="hit",registry="images.dbontr.internal"} 2\n'
+      printf 'spegel_mirror_requests_total{cache="hit",registry="images.dbontr.internal"} %s\n' "${MOCK_HITS:-2}"
     fi
     printf 'spegel_mirror_requests_total{registry="images.dbontr.internal",cache="miss"} 1\n'
     ;;
@@ -48,6 +48,29 @@ if MOCK_HITLESS=1 bash "$script" --require-hit jupiter venus > /dev/null 2>&1; t
 fi
 MOCK_HITLESS=1 bash "$script" jupiter venus > "$tmp/no-hits"
 [[ $(jq -s 'length' "$tmp/no-hits") == 2 ]]
+
+MOCK_HITS=1 bash "$script" jupiter venus > "$tmp/baseline"
+bash "$script" --require-hit-since "$tmp/baseline" jupiter venus > "$tmp/delta"
+jq -e -s '
+  length == 2 and ([.[].new_mirror_cache_hits] | add) == 1
+  and (.[0].mirror_cache_hits == 2)
+' "$tmp/delta" >/dev/null
+for hits in 0 1; do
+  if MOCK_HITS=$hits bash "$script" --require-hit-since "$tmp/baseline" jupiter venus > /dev/null 2>&1; then
+    printf 'Historical or reset hit counter was accepted: %s\n' "$hits" >&2; exit 1
+  fi
+done
+cat "$tmp/baseline" "$tmp/baseline" > "$tmp/duplicate"
+if bash "$script" --require-hit-since "$tmp/duplicate" jupiter >/dev/null 2>&1; then
+  echo 'Duplicate baseline node was accepted' >&2; exit 1
+fi
+printf 'invalid json\n' > "$tmp/invalid"
+if bash "$script" --require-hit-since "$tmp/invalid" jupiter >/dev/null 2>&1; then
+  echo 'Malformed baseline was accepted' >&2; exit 1
+fi
+if bash "$script" --require-hit-since "$tmp/missing" jupiter >/dev/null 2>&1; then
+  echo 'Missing baseline was accepted' >&2; exit 1
+fi
 
 if MOCK_UNADVERTISED=janus bash "$script" janus >/dev/null 2>&1; then
   echo 'Node without image advertisements was accepted' >&2; exit 1
