@@ -53,9 +53,13 @@ bash scripts/worker-detached-activation.sh --maintenance-approved \
 The script checks the host identity, current boot profile, candidate store
 closure, intended registry mirrors, and initial K3s/SSH service status.
 It launches an independent `systemd-run` trial with a host-local lock.
-The trial does not change the boot generation. On failure, the runner
-attempts to restore the previous closure and checks that K3s and SSH have
-recovered. The journal is the authoritative trial receipt:
+The trial changes the running NixOS configuration and explicitly restarts
+the selected node's K3s agent so it loads the mirror list. This can interrupt
+workloads; complete controller scheduling pauses and independent-workload
+clearance before invocation. The trial does not change the selected boot
+generation. On failure, the runner restores the previous closure, restarts
+K3s again to restore its prior registry configuration, and checks that K3s
+and SSH have recovered. The journal is the authoritative trial receipt:
 
 ```sh
 journalctl -u 'homelab-worker-trial-*' --no-pager
