@@ -54,6 +54,16 @@ qualification and any required reboot. Independently check host-native
 programs such as EDA hardware servers and virtual machines: controller
 drain status covers only controller-owned work.
 
+Retired controller identities require separate reconciliation. A revoked
+identity has `last_seen=0` in the controller record. The host maintenance
+tool excludes such an identity only after proving its permanent controller
+maintenance pause is active, every resource/lease count is zero and there
+is no matching Kubernetes Deployment or Pod. It never automatically unpauses
+the retired identity. If an old identity is offline but not paused, the host
+preflight **must fail** until an authorized operator investigates and
+durably fences it through the controller. A stale heartbeat by itself is
+not proof of revocation; do not erase its history or bypass the gate.
+
 After the tested candidate has booted and the node, Deployments, worker
 registrations and workload execution are healthy, release the maintenance
 state from Saturn:
