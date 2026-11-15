@@ -43,14 +43,14 @@ unset token
 
 controller_get() {
   local endpoint=$1 output=$2
-  curl --fail-with-body -fsS --noproxy '*' --max-time 20 \
+  curl --fail-with-body -sS --noproxy '*' --max-time 20 \
     --cacert "$scratch/ca" --resolve "$service:8443:$address" \
     --header "@$scratch/auth" --output "$output" \
     "https://$service:8443$endpoint"
 }
 controller_post() {
   local endpoint=$1 payload=$2 output=$3
-  curl --fail-with-body -fsS --noproxy '*' --max-time 20 \
+  curl --fail-with-body -sS --noproxy '*' --max-time 20 \
     --cacert "$scratch/ca" --resolve "$service:8443:$address" \
     --header "@$scratch/auth" --header 'Content-Type: application/json' \
     --data-binary "@$payload" --output "$output" \
