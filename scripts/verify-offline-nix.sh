@@ -16,7 +16,10 @@ command -v nix >/dev/null 2>&1 || {
 export HOMELAB_SOURCE_ROOT="$root"
 packages='(builtins.getFlake (builtins.getEnv "HOMELAB_SOURCE_ROOT")).inputs.nixpkgs.legacyPackages.x86_64-linux'
 pinned_output() {
-  nix build --offline --impure --no-link --print-out-paths --expr "${packages}.${1}"
+  local store_path
+  store_path=$(nix eval --offline --impure --raw --expr "${packages}.${1}.outPath")
+  nix build --offline --impure --no-link --expr "${packages}.${1}" >/dev/null
+  printf '%s\n' "$store_path"
 }
 
 cc=$(pinned_output stdenv.cc)
