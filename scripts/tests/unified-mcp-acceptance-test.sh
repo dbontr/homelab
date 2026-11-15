@@ -74,7 +74,8 @@ case "$request" in
     printf 200 ;;
   *) printf 'Unexpected authenticated MCP request\n' >&2; exit 92 ;;
 esac
-MOCKchmod 700 "$scratch/bin/curl"
+MOCK
+chmod 700 "$scratch/bin/curl"
 
 PATH="$scratch/bin:$PATH" bash "$root/scripts/accept-unified-mcp.sh" \
   'http://127.0.0.1:8401/mcp' "$scratch/token" task_add > "$scratch/accepted"
