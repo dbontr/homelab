@@ -17,9 +17,13 @@ bash scripts/accept-unified-mcp.sh \
   http://127.0.0.1:8401/mcp /path/to/private/mcp-client-token task_add
 ```
 
-The probe verifies that an anonymous initialize request receives HTTP 401,
-then checks authenticated initialization, a unique tool catalog containing the
-expected tool, and MCP ping. It does not execute domain tools or change
+The probe verifies that anonymous initialization receives HTTP 401, then
+checks authenticated initialization, a unique tool catalog containing the
+expected tool, and MCP ping. It also verifies an initialized notification is
+acknowledged without a response body, one correctly framed Streamable HTTP
+SSE ping with matching JSON-RPC request ID, rejection of unsupported MCP
+protocol versions, an untrusted browser Origin, and an anonymous mutating
+tool invocation. It never executes an authenticated domain mutation or changes
 application data. Credentials are read from a local file and placed in a
 restricted temporary curl header file, not process arguments; neither their
 values nor raw MCP response bodies are printed.
