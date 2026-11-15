@@ -1,5 +1,7 @@
 # References
 
+- [Spegel imported-content advertisement issue](https://github.com/spegel-org/spegel/issues/1096) — Spegel project. Used for: diagnosing missing per-blob registry source metadata after direct containerd image import, and requiring guarded index refresh before cold-layer acceptance.
+- [Containerd content flow](https://containerd.io/docs/2.4/content-flow/) — containerd project. Used for: content-addressed OCI descriptors, SHA-256 integrity and registry-source labels when qualifying an imported image.
 - [SQLite Transaction Isolation](https://www.sqlite.org/isolation.html) — SQLite project. Used for: serializing worker maintenance state changes with workspace allocation and job leasing under one write transaction.
 - [Kubernetes Pod Lifecycle](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/) — Kubernetes project. Used for: distinguishing live workload Pods from completed controller records before worker disruption.
 - [Kubernetes Deployments](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/) — Kubernetes project. Used for: asserting worker replicas, rollout readiness, and protected Deployment identity during serial release changes.
