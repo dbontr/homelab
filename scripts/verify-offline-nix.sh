@@ -25,6 +25,7 @@ pinned_output() {
 cc=$(pinned_output stdenv.cc)
 rustc=$(pinned_output rustc)
 cargo=$(pinned_output cargo)
+rustfmt=$(pinned_output rustfmt)
 clippy=$(pinned_output clippy)
 go=$(pinned_output go_1_27)
 helm=$(pinned_output kubernetes-helm)
@@ -34,7 +35,7 @@ sqlite_lib=$(pinned_output sqlite.out)
 unset HOMELAB_SOURCE_ROOT
 
 for path in "$cc/bin/cc" "$rustc/bin/rustc" "$cargo/bin/cargo" \
-            "$clippy/bin/cargo-clippy" "$go/bin/go" "$helm/bin/helm" \
+            "$clippy/bin/cargo-clippy" "$rustfmt/bin/cargo-fmt" "$rustfmt/bin/rustfmt" "$go/bin/go" "$helm/bin/helm" \
             "$pkgconfig/bin/pkg-config" "$sqlite_dev/include/sqlite3.h" \
             "$sqlite_lib/lib/libsqlite3.so"; do
   [[ -e "$path" ]] || {
@@ -43,7 +44,7 @@ for path in "$cc/bin/cc" "$rustc/bin/rustc" "$cargo/bin/cargo" \
   }
 done
 
-export PATH="$helm/bin:$go/bin:$cargo/bin:$rustc/bin:$clippy/bin:$pkgconfig/bin:$cc/bin:$PATH"
+export PATH="$helm/bin:$go/bin:$cargo/bin:$rustc/bin:$rustfmt/bin:$clippy/bin:$pkgconfig/bin:$cc/bin:$PATH"
 export CC="$cc/bin/cc"
 export CGO_CFLAGS="-I$sqlite_dev/include${CGO_CFLAGS:+ $CGO_CFLAGS}"
 export CGO_LDFLAGS="-L$sqlite_lib/lib -lsqlite3${CGO_LDFLAGS:+ $CGO_LDFLAGS}"
