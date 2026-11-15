@@ -56,14 +56,56 @@ controller_post() {
     --data-binary "@$payload" --output "$output" \
     "https://$service:8443$endpoint"
 }
-list_ids() {
-  controller_get /api/nodes "$scratch/nodes"
-  jq -r --arg host "$host" \
-    '.[] | select(.capabilities.workload_node == $host) | .id' "$scratch/nodes" | sort -u
-}
 status() {
   local id=$1
   controller_get "/api/nodes/$id/maintenance" "$scratch/maintenance"
+}
+list_ids() {
+  local id
+  controller_get /api/nodes "$scratch/nodes"
+  jq -e --arg host "$host" '
+    type == "array" and
+    all(.[] | select(.capabilities.workload_node == $host);
+        (.last_seen | type) == "number" and .last_seen >= 0)
+  ' "$scratch/nodes" >/dev/null || fail 'Worker heartbeat inventory is malformed.'
+  # Revoked identities have last_seen=0. They may be omitted only if an
+  # administrator has already frozen them and the controller reports no
+  # unfinished work. Their durable pause is intentionally never resumed.
+  jq -r --arg host "$host" '
+    .[] | select(.capabilities.workload_node == $host and .last_seen == 0) | .id
+  ' "$scratch/nodes" | sort -u > "$scratch/retired-ids"
+  if [[ -s "$scratch/retired-ids" ]]; then
+    kubectl -n "$namespace" get deployments -o json > "$scratch/deployments"
+    kubectl get pods -A -o json > "$scratch/pods"
+  fi
+  while IFS= read -r id; do
+    [[ "$id" =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ && ${#id} -le 63 ]] ||
+      fail 'Invalid retired controller worker identity.'
+    status "$id" || fail "Cannot inspect retired worker $id."
+    jq -e --arg id "$id" '
+      .worker_id == $id and .online == false and
+      .paused == true and .drained == true and .revision >= 1 and
+      .active_jobs == 0 and .active_workspaces == 0 and
+      .unfinished_operations == 0 and .hardware_leases == 0 and
+      .job_device_leases == 0
+    ' "$scratch/maintenance" >/dev/null ||
+      fail "Retired worker $id lacks a durable pause or is not drained."
+    jq -e --arg id "$id" '
+      all(.items[]; (.metadata.name | contains($id) | not) and
+          ([.spec.template.spec.containers[]?.args[]? |
+            select(contains($id))] | length == 0))
+    ' "$scratch/deployments" >/dev/null ||
+      fail "Retired worker $id still has a live Deployment."
+    jq -e --arg id "$id" '
+      all(.items[]; (.metadata.name | contains($id) | not) and
+          ([.spec.containers[]?.args[]? |
+            select(contains($id))] | length == 0))
+    ' "$scratch/pods" >/dev/null ||
+      fail "Retired worker $id still has a live Pod."
+  done < "$scratch/retired-ids"
+  jq -r --arg host "$host" '
+    .[] | select(.capabilities.workload_node == $host and .last_seen > 0) | .id
+  ' "$scratch/nodes" | sort -u
 }
 check_drained() {
   local id=$1
