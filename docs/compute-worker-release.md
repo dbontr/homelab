@@ -79,9 +79,10 @@ can be retried with the original receipt. Do not remove that receipt
 manually or bypass a failed safety check.
 
 Never activate multiple workers concurrently. Keep Saturn, its router
-services, the K3s control plane and persistent media online. Jupiter may run
-independent GPU/EDA workloads; confirm those separately. Hold Mercury until
-its broader NixOS configuration drift has been reconciled.
+services, the K3s control plane and persistent media online. Do not
+interrupt host-native virtual machines, EDA hardware servers or peripheral
+sessions. Defer disruptive host actions until these workloads are idle or
+their continuity is independently assured.
 
 ## Reversible host trial
 
@@ -117,6 +118,36 @@ digest-qualified image pulls still work. Use the existing
 `verify-cluster-image-pulls.sh` contracts. Verify an actual Project
 Workspace execution and lease release on the node. Confirm failure-recovery
 behavior before making the boot selection persistent.
+
+## Peer image-content acceptance
+
+Registry advertisement is not proof that a complete image can be fetched.
+K3s Spegel hit counters are cumulative, so `--require-hit` may pass because of an
+unrelated earlier request. To verify a fresh peer hit, capture the selected
+node's baseline before making the test request:
+
+```sh
+bash services/compute/scripts/verify-registry-mirror.sh NODE > /run/peer-baseline.jsonl
+# Perform one bounded, approved image pull on NODE.
+bash services/compute/scripts/verify-registry-mirror.sh \
+  --require-hit-since /run/peer-baseline.jsonl NODE
+```
+
+Treat an increased counter as evidence of a new peer cache request, not
+proof that a particular layer was transferred. To qualify a cold image,
+first verify the publisher's OCI index and target-platform manifest are
+complete. Before the pull, confirm the consumer has neither the test image
+reference nor at least one specified manifest layer digest in its
+containerd content store. Record those digests and the baseline metrics.
+Then pull the approved image through the configured K3s registry, confirm
+the missing layer is present, validate its SHA-256 content and inspect the
+consumer's positive hit-counter delta. An imported archive or an image
+that already has all its layers cannot establish cold-layer retrieval.
+
+Do not prime the consumer through a one-time manual image transfer before
+this acceptance test. Remove only uniquely named test references after
+checking that no workload uses them. Keep genuine image references,
+working layers, media and rollback generations intact.
 
 ## Persistent selection and rollback
 
