@@ -101,5 +101,47 @@ if [[ "$status" != 200 ]] ||
   exit 1
 fi
 
-printf 'PASS: anonymous requests denied; authenticated initialization, discovery and ping accepted.\n'
+
+# Read-only and negative tests against the running Streamable HTTP listener.
+rpc_custom() {
+  local payload=$1 name=$2 accept=$3 version=$4 origin=$5
+  if [[ -n "$origin" ]]; then
+    printf '%s' "$payload" | curl -sS --max-time 25 -H 'Content-Type: application/json' -H "Accept: $accept" -H "MCP-Protocol-Version: $version" -H "@$scratch/auth.header" -H "Origin: $origin" --data-binary @- -o "$scratch/$name.json" -w '%{http_code}' "$endpoint"
+  else
+    printf '%s' "$payload" | curl -sS --max-time 25 -H 'Content-Type: application/json' -H "Accept: $accept" -H "MCP-Protocol-Version: $version" -H "@$scratch/auth.header" --data-binary @- -o "$scratch/$name.json" -w '%{http_code}' "$endpoint"
+  fi
+}
+status=$(rpc '{"jsonrpc":"2.0","method":"notifications/initialized"}' notification yes)
+if [[ "$status" != 202 || -s "$scratch/notification.json" ]]; then
+  echo "FAIL: notification was not acknowledged without a body (HTTP $status)" >&2
+  exit 1
+fi
+status=$(rpc_custom '{"jsonrpc":"2.0","id":4,"method":"ping","params":{}}' stream 'text/event-stream' '2025-06-18' '')
+if [[ "$status" != 200 || "$(grep -c '^event: message$' "$scratch/stream.json")" != 1 || "$(grep -c '^data: ' "$scratch/stream.json")" != 1 ]]; then
+  echo "FAIL: SSE ping did not return exactly one message (HTTP $status)" >&2
+  exit 1
+fi
+data=$(sed -n 's/^data: //p' "$scratch/stream.json")
+if ! jq -e '.jsonrpc == "2.0" and .id == 4 and .result == {}' <<< "$data" >/dev/null; then
+  echo 'FAIL: SSE ping lost its JSON-RPC identity or result' >&2
+  exit 1
+fi
+unset data
+status=$(rpc_custom '{"jsonrpc":"2.0","id":5,"method":"ping"}' unsupported 'application/json' '2030-01-01' '')
+if [[ "$status" != 400 ]]; then
+  echo "FAIL: unsupported MCP version accepted (HTTP $status)" >&2
+  exit 1
+fi
+status=$(rpc_custom '{"jsonrpc":"2.0","id":6,"method":"ping"}' origin 'application/json' '2025-06-18' 'https://untrusted.invalid')
+if [[ "$status" != 403 ]]; then
+  echo "FAIL: cross-origin request accepted (HTTP $status)" >&2
+  exit 1
+fi
+status=$(rpc '{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"task_add","arguments":{"title":"must never persist"}}}' anonymous_mutation no)
+if [[ "$status" != 401 ]]; then
+  echo "FAIL: anonymous tool invocation was accepted (HTTP $status)" >&2
+  exit 1
+fi
+
+printf 'PASS: anonymous requests denied; authenticated initialization, discovery, notifications, SSE and transport denials accepted.\n'
 printf 'Discovered tools: %s\n' "$(jq -r '.result.tools | length' "$scratch/discovered.json")"
