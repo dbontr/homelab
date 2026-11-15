@@ -121,6 +121,46 @@ behavior before making the boot selection persistent.
 
 ## Peer image-content acceptance
 
+OCI images loaded directly through `k3s ctr images import` may contain all layer
+bytes but lack the `containerd.io/distribution.source.images.dbontr.internal`
+content labels that Spegel uses to advertise **individual blobs**. As a
+result, a manifest can be fetched from a peer while an uncached compressed
+layer fails with `NotFound`. A successful mirror hit alone is insufficient.
+
+The approved host-local helper operates on an **exact, present** image tag
+from `images.dbontr.internal`. It walks the amd64 OCI index, manifest,
+config and compressed layers. The default verification is read-only:
+
+```sh
+bash services/compute/scripts/label-image-content.sh --check \
+  images.dbontr.internal/dbontr/compute-gateway:0.1.11
+```
+
+For an image deliberately imported through `ctr`, a root operator can
+repair missing registry-source metadata from the image's exact repository,
+after reviewing the printed missing descriptors:
+
+```sh
+bash services/compute/scripts/label-image-content.sh --apply \
+  images.dbontr.internal/dbontr/compute-gateway:0.1.11 \
+  --confirm images.dbontr.internal/dbontr/compute-gateway:0.1.11
+```
+
+The helper fails closed on malformed references, absent descriptors, label
+ownership conflicts, concurrent invocations or content SHA-256 mismatches.
+It verifies all content **before** modifying any labels. It does not import
+an archive, alter image bytes, restart K3s or delete references. Never
+overwrite a conflicting label: investigate shared blobs first.
+
+**A label repair alone does not refresh the running Spegel advertisement
+index.** Confirm the publisher is workload-idle, pause its controller
+workers with `worker-host-maintenance.sh` on Saturn, cordon it, restart
+only that publisher's K3s agent, verify readiness, and resume/un-cordon the
+workers using the retained maintenance receipt. Do not restart an occupied
+compute host or bypass a failed maintenance gate. Then perform the
+unprimed cold-layer test below. Favor normal K3s/CRI pulls or source-owned
+image publication over future raw `ctr` imports.
+
 Registry advertisement is not proof that a complete image can be fetched.
 K3s Spegel hit counters are cumulative, so `--require-hit` may pass because of an
 unrelated earlier request. To verify a fresh peer hit, capture the selected
