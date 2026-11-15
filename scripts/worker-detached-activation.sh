@@ -55,18 +55,29 @@ if [[ "$#" -eq 4 && "$1" == --run ]]; then
   status=0
   timeout 420 "$candidate/bin/switch-to-configuration" test || status=1
   if [[ "$status" -eq 0 ]]; then
-    require_active k3s.service || status=1
-    require_active sshd.service || status=1
     contains_mirrors /etc/rancher/k3s/registries.yaml || {
       printf 'Installed registry mirrors do not match the candidate\n' >&2
       status=1
     }
+  fi
+  if [[ "$status" -eq 0 ]]; then
+    # An etc-file-only NixOS switch does not restart K3s. The mirror list
+    # takes effect only when this worker's agent reloads its registry config.
+    timeout 240 systemctl restart k3s.service || status=1
+  fi
+  if [[ "$status" -eq 0 ]]; then
+    require_active k3s.service || status=1
+    require_active sshd.service || status=1
   fi
 
   if [[ "$status" -ne 0 ]]; then
     printf 'ROLLBACK %s\n' "$previous" >&2
     timeout 420 "$previous/bin/switch-to-configuration" test ||
       fail 'automatic rollback failed; recover through independent console access'
+    # Restore the K3s in-memory mirror configuration as well as the NixOS
+    # closure; switching the file alone is insufficient after a failed trial.
+    timeout 240 systemctl restart k3s.service ||
+      fail 'K3s restart after rollback failed; use independent console access'
     require_active k3s.service || fail 'K3s did not recover after rollback'
     require_active sshd.service || fail 'SSH did not recover after rollback'
     fail 'trial failed; previous configuration restored'
