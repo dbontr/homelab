@@ -189,6 +189,50 @@ this acceptance test. Remove only uniquely named test references after
 checking that no workload uses them. Keep genuine image references,
 working layers, media and rollback generations intact.
 
+## Authenticated offline image recovery
+
+If the K3s peer registry fails to transfer a genuinely uncached compressed OCI
+layer, use the **source-owned bounded fallback** on Saturn. This is not a
+substitute for the cold-layer acceptance above: it is a recoverable way to
+restore an unavailable image from a peer with a known-complete copy.
+
+```sh
+bash services/compute/scripts/peer-image-offline-transfer.sh --plan \
+  venus janus images.dbontr.internal/dbontr/compute-gateway:0.1.11
+```
+
+The plan verifies both enrolled workers are Ready, K3s is active, the
+publisher's exact image index is complete, and no Pod references the target
+tag. It refuses a destination tag that resolves to any different SHA-256
+index. Neither node's image or K3s state changes during planning.
+
+After checking the plan, the operator may explicitly confirm that exact
+image for a single approved 600-second transfer:
+
+```sh
+bash services/compute/scripts/peer-image-offline-transfer.sh --apply \
+  venus janus images.dbontr.internal/dbontr/compute-gateway:0.1.11 \
+  --confirm images.dbontr.internal/dbontr/compute-gateway:0.1.11
+```
+
+The transfer streams the publisher's OCI export through two strict-host-key,
+batch-authenticated worker SSH connections; **no persistent intermediate
+archive** is written. The destination may lack the tag or already have the
+**identical** image index with missing content, but it may not have a different
+index under that tag. On import, the helper verifies that the exact image
+index matches, the full image is complete, every descriptor's bytes hash to
+their SHA-256 digest, and containerd's repository-source metadata is present.
+It preserves shared source aliases. An error never triggers automatic image
+deletion or overwriting of an unrelated tag. Partial content after a failed
+stream is preserved for inspection and must pass a fresh plan before retry.
+
+The fallback never restarts K3s or bypasses the Compute scheduling authority.
+It does not independently establish a fresh Spegel cache hit; an updated
+publisher or consumer advertisement still requires the guarded maintenance
+and cold-pull verification procedure above. Do not transfer an image currently
+used by a running Pod. The dedicated Saturn worker SSH identity is required;
+credentials are never placed in scripts, arguments or artifact output.
+
 ## Persistent selection and rollback
 
 Only after the independent post-trial checks pass should the operator
