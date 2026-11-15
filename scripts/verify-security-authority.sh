@@ -19,6 +19,26 @@ if ! command -v go >/dev/null 2>&1; then
   exit 1
 fi
 
+# A minimal NixOS shell may have Cargo without a C linker or Clippy.
+# Resolve missing tools from the repository-pinned Nixpkgs input.
+if ! command -v cc >/dev/null 2>&1 || ! command -v cargo-clippy >/dev/null 2>&1; then
+  command -v nix >/dev/null 2>&1 || {
+    printf 'Nix is required for the pinned offline verification toolchain.\n' >&2
+    exit 1
+  }
+  export HOMELAB_SOURCE_ROOT="$root"
+  host_system=$(nix eval --offline --impure --raw --expr builtins.currentSystem)
+  packages='(builtins.getFlake (builtins.getEnv "HOMELAB_SOURCE_ROOT")).inputs.nixpkgs.legacyPackages.'"$host_system"
+  cc_dir=$(nix build --offline --impure --no-link --print-out-paths --expr "${packages}.stdenv.cc.out")
+  clippy_dir=$(nix build --offline --impure --no-link --print-out-paths --expr "${packages}.clippy")
+  unset HOMELAB_SOURCE_ROOT
+  [[ -x "$cc_dir/bin/cc" && -x "$clippy_dir/bin/cargo-clippy" ]] || {
+    printf 'The pinned offline verification toolchain is incomplete.\n' >&2
+    exit 1
+  }
+  export PATH="${cc_dir}/bin:${clippy_dir}/bin:$PATH"
+fi
+
 (
   cd "$crate"
   cargo fmt --all -- --check
