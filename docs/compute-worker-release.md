@@ -34,6 +34,40 @@ placement and Jobs, independently verify SSH access and the boot generation,
 and retain console recovery access. Do not proceed when controller lease
 state is inaccessible or maintenance clearance is ambiguous.
 
+For registered Kubernetes workers, use the source-owned controller maintenance
+tool on Saturn before running the host activation script. It verifies that all
+five nodes are Ready and that every controller worker assigned to the target
+host is online, drained, unpaused and free of active jobs, workspaces,
+unfinished operations and device leases. The `plan` command makes no changes:
+
+```sh
+bash services/compute/scripts/worker-host-maintenance.sh plan HOST
+bash services/compute/scripts/worker-host-maintenance.sh pause HOST --confirm HOST
+```
+
+The `pause` command writes a root-only maintenance receipt, cordons the
+physical Kubernetes node, then sets revision-fenced persistent maintenance
+state for **every** worker assigned to it. If any step fails, leave the node
+cordoned and use the receipt to reconcile controller state; do not run the
+host activation script. Keep the receipt through activation, cluster
+qualification and any required reboot. Independently check host-native
+programs such as EDA hardware servers and virtual machines: controller
+drain status covers only controller-owned work.
+
+After the tested candidate has booted and the node, Deployments, worker
+registrations and workload execution are healthy, release the maintenance
+state from Saturn:
+
+```sh
+bash services/compute/scripts/worker-host-maintenance.sh resume HOST --confirm HOST
+```
+
+The resume command checks the receipt, exact worker membership and
+maintenance revisions, requires the node and Deployments to be healthy,
+resumes every worker and only then uncordons the node. An interrupted resume
+can be retried with the original receipt. Do not remove that receipt
+manually or bypass a failed safety check.
+
 Never activate multiple workers concurrently. Keep Saturn, its router
 services, the K3s control plane and persistent media online. Jupiter may run
 independent GPU/EDA workloads; confirm those separately. Hold Mercury until
