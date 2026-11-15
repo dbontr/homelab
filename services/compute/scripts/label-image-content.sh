@@ -56,15 +56,36 @@ mapfile -t digests < "$scratch/sorted"
 (( ${#digests[@]} >= 3 )) || fail 'too few OCI content descriptors'
 ctr content ls > "$scratch/content"
 missing=()
+declare -A desired=()
 for digest in "${digests[@]}"; do
   [[ $digest =~ ^sha256:[a-f0-9]{64}$ ]] || fail 'invalid content digest'
   mapfile -t rows < <(awk -v digest="$digest" '$1 == digest {print}' "$scratch/content")
   (( ${#rows[@]} == 1 )) || fail "content descriptor is not uniquely present: $digest"
   row=${rows[0]}
-  if [[ $row =~ (^|[,[:space:]])${label}=([^,[:space:]]+) ]]; then
-    [[ ${BASH_REMATCH[2]} == "$repository" ]] || fail "content has a conflicting registry source: $digest"
-  else
+  sources=()
+  if [[ $row == *"$label="* ]]; then
+    raw=${row#*"$label="}
+    raw=${raw%%[[:space:]]*}
+    IFS=',' read -r -a tokens <<< "$raw"
+    for token in "${tokens[@]}"; do
+      [[ $token == *=* ]] && break  # Next containerd label, not a repository.
+      [[ $token =~ ^[a-z0-9][a-z0-9._-]*(/[a-z0-9][a-z0-9._-]*)+$ ]] || fail "invalid existing source repository: $digest"
+      sources+=("$token")
+    done
+    (( ${#sources[@]} > 0 )) || fail "empty source label: $digest"
+  fi
+  found=0
+  for source in "${sources[@]}"; do
+    if [[ $source == "$repository" ]]; then found=1; fi
+  done
+  if (( found == 0 )); then
     missing+=("$digest")
+    if (( ${#sources[@]} > 0 )); then
+      desired[$digest]="$(IFS=,; echo "${sources[*]}")",$repository
+    else
+      desired[$digest]=$repository
+    fi
+    (( ${#desired[$digest]} <= 4096 )) || fail "source label too long: $digest"
     printf 'MISSING_SOURCE %s\n' "$digest"
   fi
 done
@@ -81,7 +102,7 @@ for digest in "${digests[@]}"; do
   [[ "sha256:$actual" == "$digest" ]] || fail "content SHA-256 mismatch: $digest"
 done
 for digest in "${missing[@]}"; do
-  ctr content label "$digest" "$label=$repository" >/dev/null || fail "cannot label content: $digest"
+  ctr content label "$digest" "$label=${desired[$digest]}" >/dev/null || fail "cannot label content: $digest"
   printf 'LABELLED %s\n' "$digest"
 done
 printf 'SOURCE_COMPLETE %s (%d descriptors, %d repaired)\n' "$reference" "${#digests[@]}" "${#missing[@]}"
