@@ -64,12 +64,12 @@ for args in '--apply other/reference --confirm other/reference' '--apply images.
   fi
 done
 
-printf 'containerd.io/distribution.source.images.dbontr.internal=other/repository\n' > "$tmp/labels/$config"
+printf 'containerd.io/distribution.source.images.dbontr.internal=../../invalid\n' > "$tmp/labels/$config"
 if bash "$script" --apply "$reference" --confirm "$reference" >/dev/null 2>&1; then
-  echo 'Conflicting source was overwritten' >&2; exit 1
+  echo 'Malformed shared source was accepted' >&2; exit 1
 fi
-[[ ! -e "$tmp/writes" ]] || { echo 'Conflict had partial writes' >&2; exit 1; }
-rm -f "$tmp/labels/$config"
+[[ ! -e "$tmp/writes" ]] || { echo 'Invalid label had partial writes' >&2; exit 1; }
+printf 'containerd.io/distribution.source.images.dbontr.internal=other/repository\n' > "$tmp/labels/$config"
 printf %s 'CORRUPTED' >> "$tmp/blobs/$layer"
 if bash "$script" --apply "$reference" --confirm "$reference" >/dev/null 2>&1; then
   echo 'Corrupt blob was accepted' >&2; exit 1
@@ -78,6 +78,9 @@ fi
 printf %s 'test compressed layer' > "$tmp/blobs/$layer"
 bash "$script" --apply "$reference" --confirm "$reference" > "$tmp/applied"
 [[ $(wc -l < "$tmp/writes") == 4 ]] || { echo 'Not all content descriptors were labeled' >&2; exit 1; }
+[[ $(cat "$tmp/labels/$config") == 'containerd.io/distribution.source.images.dbontr.internal=other/repository,dbontr/acceptance' ]] || {
+  echo 'Shared OCI digest lost the original repository source' >&2; exit 1;
+}
 bash "$script" --check "$reference" > "$tmp/checked"
 bash "$script" --apply "$reference" --confirm "$reference" >/dev/null
 [[ $(wc -l < "$tmp/writes") == 4 ]] || { echo 'Idempotent repair wrote additional metadata' >&2; exit 1; }
