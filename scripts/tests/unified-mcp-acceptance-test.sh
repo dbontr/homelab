@@ -14,6 +14,9 @@ cat > "$scratch/bin/curl" <<'MOCK'
 set -euo pipefail
 output=''
 header_file=''
+accept=''
+version=''
+origin=''
 previous=''
 for arg in "$@"; do
   if [[ "$arg" == *"$MOCK_TOKEN"* ]]; then
@@ -21,31 +24,56 @@ for arg in "$@"; do
     exit 90
   fi
   case "$previous" in
-    --header)
-      if [[ "$arg" == @* ]]; then header_file=${arg#@}; fi ;;
-    --output) output="$arg" ;;
+    --header|-H)
+      case "$arg" in
+        @*) header_file=${arg#@} ;;
+        'Accept: '*) accept=${arg#Accept: } ;;
+        'MCP-Protocol-Version: '*) version=${arg#MCP-Protocol-Version: } ;;
+        'Origin: '*) origin=${arg#Origin: } ;;
+      esac ;;
+    --output|-o) output=$arg ;;
   esac
-  previous="$arg"
+  previous=$arg
 done
 [[ -n "$output" ]] || exit 91
 request=$(cat)
-if [[ -z "$header_file" ||
+if [[ -z "$header_file" || ! -f "$header_file" ||
       "$(<"$header_file")" != "Authorization: Bearer $MOCK_TOKEN" ]]; then
   printf '{}\n' > "$output"
   printf 401
   exit 0
 fi
 
+if [[ "$version" != 2025-06-18 ]]; then
+  printf '{"jsonrpc":"2.0","id":5,"error":{"code":-32600}}\n' > "$output"
+  printf 400
+  exit 0
+fi
+if [[ -n "$origin" && "$origin" != https://dbontr.me ]]; then
+  printf '{"jsonrpc":"2.0","id":6,"error":{"code":-32000}}\n' > "$output"
+  printf 403
+  exit 0
+fi
+
 case "$request" in
   *'"method":"initialize"'*)
-    printf '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18","serverInfo":{"name":"homelab"}}}\n' > "$output" ;;
+    printf '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18","serverInfo":{"name":"homelab"}}}\n' > "$output"
+    printf 200 ;;
   *'"method":"tools/list"'*)
-    printf '{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"task_add","inputSchema":{}},{"name":"resource_resolve","inputSchema":{}}]}}\n' > "$output" ;;
+    printf '{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"task_add","inputSchema":{}},{"name":"resource_resolve","inputSchema":{}}]}}\n' > "$output"
+    printf 200 ;;
+  *'"method":"notifications/initialized"'*)
+    : > "$output"
+    printf 202 ;;
   *'"method":"ping"'*)
-    printf '{"jsonrpc":"2.0","id":3,"result":{}}\n' > "$output" ;;
-  *) printf 'Unexpected MCP request\n' >&2; exit 92 ;;
+    if [[ "$accept" == text/event-stream ]]; then
+      printf 'event: message\ndata: {"jsonrpc":"2.0","id":4,"result":{}}\n\n' > "$output"
+    else
+      printf '{"jsonrpc":"2.0","id":3,"result":{}}\n' > "$output"
+    fi
+    printf 200 ;;
+  *) printf 'Unexpected authenticated MCP request\n' >&2; exit 92 ;;
 esac
-printf 200
 MOCK
 chmod 700 "$scratch/bin/curl"
 
