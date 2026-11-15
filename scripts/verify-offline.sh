@@ -34,6 +34,7 @@ bash "$root/scripts/tests/unified-mcp-acceptance-test.sh"
 bash "$root/services/compute/scripts/tests/rollout-project-worker-test.sh"
 bash "$root/services/compute/scripts/tests/verify-cluster-image-pulls-test.sh"
 bash "$root/services/compute/scripts/tests/verify-registry-mirror-test.sh"
+bash "$root/scripts/tests/worker-detached-activation-test.sh"
 bash "$root/scripts/tests/stage-component-test.sh"
 bash -n "$root/scripts/saturn-detached-activation.sh"
 
