@@ -345,6 +345,30 @@ func (c *AdminClient) Authorize(ctx context.Context, operation, target string, a
 	err := c.request(ctx, http.MethodPost, "/v1/authorize", map[string]any{"operation": operation, "target": target, "arguments": args}, &result)
 	return result, err
 }
+// OwnerRequest is a short-lived, request-scoped browser approval reference.
+// Neither the request identifier nor its display code is an administrator token.
+type OwnerRequest struct {
+ RequestID string `json:"request_id"`
+ ReferenceCode string `json:"reference_code"`
+ ExpiresInSeconds int `json:"expires_in_seconds"`
+}
+func (c *AdminClient) OpenOwnerRequest(ctx context.Context) (OwnerRequest, error) {
+ var request OwnerRequest
+ err := c.request(ctx,http.MethodPost,"/v1/login-requests",map[string]any{},&request)
+ if err != nil {return OwnerRequest{},err}
+ if len(request.RequestID)!=48 || len(request.ReferenceCode)!=12 ||
+    request.ReferenceCode!=request.RequestID[:12] || request.ExpiresInSeconds<1 ||
+    request.ExpiresInSeconds>300 {
+  return OwnerRequest{},errors.New("security service returned an invalid owner request")
+ }
+ for _,b := range request.RequestID {
+  if !(b>='0'&&b<='9')&&!(b>='a'&&b<='f'){
+   return OwnerRequest{},errors.New("security service returned an invalid owner request")
+  }
+ }
+ return request,nil
+}
+
 func (c *AdminClient) Status(ctx context.Context) (SessionStatus, error) {
 	var status SessionStatus
 	err := c.request(ctx, http.MethodGet, "/v1/session", nil, &status)
