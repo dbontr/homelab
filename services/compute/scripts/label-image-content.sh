@@ -13,7 +13,7 @@ case "$mode" in
   --apply) (( $# == 4 )) && [[ $3 == --confirm && $4 == "$reference" ]] || usage ;;
   *) usage ;;
 esac
-if [[ ! $reference =~ ^images\.dbontr\.internal/([a-z0-9][a-z0-9._-]*(/[a-z0-9][a-z0-9._-]*)+):([A-Za-z0-9_][A-Za-z0-9._-]*)$ ]]; then
+if [[ ! $reference =~ ^images\.dbontr\.internal/([a-z0-9][a-z0-9._-]*(/[a-z0-9][a-z0-9._-]*)+)(:[A-Za-z0-9_][A-Za-z0-9._-]*|@sha256:[a-f0-9]{64})$ ]]; then
   usage
 fi
 repository=${BASH_REMATCH[1]}
@@ -37,6 +37,9 @@ mapfile -t indices < <(awk -v image="$reference" '$1 == image {print $3}' "$scra
 (( ${#indices[@]} == 1 )) || fail 'image reference must resolve to exactly one index'
 index=${indices[0]}
 [[ $index =~ ^sha256:[a-f0-9]{64}$ ]] || fail 'image index has an invalid digest'
+if [[ $reference == *@sha256:* && $index != "${reference##*@}" ]]; then
+  fail 'digest-qualified image reference does not match its content index'
+fi
 ctr content get "$index" > "$scratch/index.json" || fail 'image index content is missing'
 
 if jq -e '(.manifests // []) | type == "array" and length > 0' "$scratch/index.json" >/dev/null; then
