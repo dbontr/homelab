@@ -765,8 +765,12 @@ impl Authority {
         self.preview(&principal, &client, operation, target, args)
     }
 
+    pub(crate) fn gateway_principal(&self, assertion: &str) -> Result<String, Error> {
+        self.verified_principal(assertion, &self.gateway_audience)
+    }
+
     pub fn status_gateway(&mut self, assertion: &str) -> Result<SessionStatus, Error> {
-        let principal = self.verified_principal(assertion, &self.gateway_audience)?;
+        let principal = self.gateway_principal(assertion)?;
         self.status(&principal)
     }
 
