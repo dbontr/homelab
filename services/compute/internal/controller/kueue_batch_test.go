@@ -195,7 +195,11 @@ func TestKueueRejectsMutatedJob(t *testing.T){
 	create:=func()map[string]any{
 		obj:=batchKubernetesJob(row)
 		decodeAnyObject(obj["metadata"])["uid"]="batch-uid"
-		return obj
+		raw,err:=json.Marshal(obj)
+		if err!=nil{t.Fatal(err)}
+		var decoded map[string]any
+		if err:=json.Unmarshal(raw,&decoded);err!=nil{t.Fatal(err)}
+		return decoded
 	}
 	if _,err:=matchBatchJob(create(),row);err!=nil{t.Fatalf("valid Job rejected: %v",err)}
 	for _,tamper:=range []struct{name string;change func(map[string]any)}{
