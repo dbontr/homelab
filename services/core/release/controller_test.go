@@ -4,10 +4,24 @@ import (
  "context"
  "errors"
  "os"
+ "os/exec"
  "path/filepath"
  "strings"
  "testing"
 )
+
+func TestExecUsesPrivateWritableCache(t *testing.T){
+ shell,err:=exec.LookPath("sh")
+ if err!=nil{t.Skip("shell is unavailable")}
+ output,err:=Exec(context.Background(),shell,"-c",
+  `test "$HOME" = /var/empty && test -d "$XDG_CACHE_HOME" && printf probe > "$XDG_CACHE_HOME/probe" && printf %s "$XDG_CACHE_HOME"`)
+ if err!=nil{t.Fatalf("release command could not use its private cache: %v",err)}
+ cache:=strings.TrimSpace(output)
+ if !filepath.IsAbs(cache){t.Fatalf("cache path is not absolute: %q",cache)}
+ if _,err:=os.Stat(cache);!errors.Is(err,os.ErrNotExist){
+  t.Fatalf("private cache was not removed: %q, %v",cache,err)
+ }
+}
 
 const (
  testRevision="1111111111111111111111111111111111111111"
