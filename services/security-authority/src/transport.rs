@@ -29,7 +29,16 @@ use crate::Error;
 const MAX_JSON_BYTES: usize = 1 << 20;
 const MAX_CSRF: usize = 256;
 const CSRF_LIFETIME: Duration = Duration::from_secs(600);
+const OWNER_REQUEST_LIFETIME: Duration = Duration::from_secs(300);
+const MAX_OWNER_REQUESTS: usize = 64;
 const LOCAL_OWNER: &str = "local-operator";
+
+struct OwnerRequest {
+    principal: String,
+    expires: Instant,
+    completed: bool,
+}
+
 
 // Keep a remote credential protected until its HTTP body releases the buffer.
 struct ProtectedBody(Zeroizing<Vec<u8>>);
@@ -45,6 +54,7 @@ pub struct Shared {
     pub(crate) oauth: Option<crate::oauth::SharedBroker>,
     authority: Arc<Mutex<Authority>>,
     csrf: Arc<Mutex<BTreeMap<String, (String, Instant)>>>,
+    owner_requests: Arc<Mutex<BTreeMap<String, OwnerRequest>>>,
     browser_origin: Option<String>,
 }
 
@@ -64,6 +74,7 @@ impl Shared {
             oauth,
             authority: Arc::new(Mutex::new(authority)),
             csrf: Arc::new(Mutex::new(BTreeMap::new())),
+            owner_requests: Arc::new(Mutex::new(BTreeMap::new())),
             browser_origin,
         })
     }
@@ -101,7 +112,66 @@ impl Shared {
             .remove(token)
             .is_some_and(|(owner, expiry)| owner == principal && expiry > Instant::now())
     }
+
+    fn issue_owner_request(&self, principal: &str) -> Option<String> {
+        if self.browser_origin.is_none() || principal.is_empty() {
+            return None;
+        }
+        let mut requests = self.owner_requests.lock().ok()?;
+        let now = Instant::now();
+        requests.retain(|_, request| request.expires > now);
+        if requests.len() >= MAX_OWNER_REQUESTS {
+            return None;
+        }
+        let mut bytes = [0u8; 24];
+        getrandom::fill(&mut bytes).ok()?;
+        let id = hex::encode(bytes);
+        requests.insert(
+            id.clone(),
+            OwnerRequest {
+                principal: principal.to_owned(),
+                expires: now + OWNER_REQUEST_LIFETIME,
+                completed: false,
+            },
+        );
+        Some(id)
+    }
+
+    fn owner_request_status(&self, principal: &str, id: &str) -> Option<bool> {
+        if !valid_owner_request_id(id) {
+            return None;
+        }
+        let mut requests = self.owner_requests.lock().ok()?;
+        let now = Instant::now();
+        requests.retain(|_, request| request.expires > now);
+        let request = requests.get(id)?;
+        (request.principal == principal).then_some(request.completed)
+    }
+
+    fn approve_owner_request(&self, principal: &str, id: &str) -> bool {
+        if !valid_owner_request_id(id) {
+            return false;
+        }
+        let Ok(mut requests) = self.owner_requests.lock() else {
+            return false;
+        };
+        let now = Instant::now();
+        requests.retain(|_, request| request.expires > now);
+        let Some(request) = requests.get_mut(id) else {
+            return false;
+        };
+        if request.completed || request.principal != principal {
+            return false;
+        }
+        request.completed = true;
+        true
+    }
 }
+
+fn valid_owner_request_id(id: &str) -> bool {
+    id.len() == 48 && id.bytes().all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+}
+
 
 fn valid_origin(origin: &str) -> bool {
     let Some(host) = origin.strip_prefix("https://") else {
