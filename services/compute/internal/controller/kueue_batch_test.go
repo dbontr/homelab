@@ -113,6 +113,50 @@ func TestBatchSubmissionIdempotenceAndWorkerIsolation(t *testing.T){
 	if srv.Kueue==nil{t.Fatal("batch backend not configured")}
 }
 
+func TestKueueRequestIdentityResolvesExactOwnedJob(t *testing.T) {
+	db, _, endpoint, _ := batchFixture(t)
+	const key = "reconcile-batch-001"
+	submitted, err := db.QueueKueueJob("research", key, "printf receipt", testBatchImage, 0.25, 128)
+	if err != nil {
+		t.Fatal(err)
+	}
+	receipt, err := db.KueueJobByRequest("research", key)
+	if err != nil || receipt["id"] != submitted["id"] || receipt["request_id"] != key ||
+		receipt["status"] != "queued" || receipt["backend"] != "kueue" {
+		t.Fatalf("request identity did not resolve its durable job: %v %v", receipt, err)
+	}
+	if _, err := db.KueueJobByRequest("other", key); err == nil {
+		t.Fatal("cross-project request resolved a job")
+	}
+	for _, invalid := range []string{"missing-request-001", "../../request", "short", ""} {
+		if _, err := db.KueueJobByRequest("research", invalid); err == nil {
+			t.Fatalf("unrecognized request accepted: %q", invalid)
+		}
+	}
+	code, response := call(t, endpoint, "POST", "/mcp", testOwner, map[string]any{
+		"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+		"params": map[string]any{
+			"name": "compute_job_by_request",
+			"arguments": map[string]any{"project_id": "research", "request_id": key},
+		},
+	})
+	wantOK(t, code, response)
+	result := gitObj(gitObj(response["result"])["structuredContent"])
+	if result["id"] != submitted["id"] || result["request_id"] != key {
+		t.Fatalf("MCP request lookup did not return exact job: %v", response)
+	}
+	code, _ = call(t, endpoint, "POST", "/mcp", "", map[string]any{
+		"jsonrpc": "2.0", "id": 2, "method": "tools/call",
+		"params": map[string]any{
+			"name": "compute_job_by_request",
+			"arguments": map[string]any{"project_id": "research", "request_id": key},
+		},
+	})
+	if code != http.StatusUnauthorized {
+		t.Fatalf("anonymous job-receipt lookup accepted: HTTP %d", code)
+	}
+}
+
 func TestKueueLifecycleMCPAndCancellation(t *testing.T){
 	db,srv,httpServer,fake:=batchFixture(t)
 	args:=map[string]any{
