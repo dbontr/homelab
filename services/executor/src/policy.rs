@@ -569,6 +569,93 @@ impl WorkspaceAllocation {
 }
 
 impl WorkspacePolicy {
+    fn batch_operation(
+        &self,
+        operation: &str,
+        fields: &Map<String, Value>,
+    ) -> Result<(String, Value), Error> {
+        let project = fields
+            .get("project_id")
+            .and_then(Value::as_str)
+            .ok_or(Error::Denied("batch project identity required"))?;
+        if !valid_workspace_resource_id(project)
+            || !self.projects.iter().any(|allowed| allowed == project)
+        {
+            return Err(Error::Denied("batch project outside owner policy"));
+        }
+        match operation {
+            "compute__submit_batch_job" => {
+                if fields.len() != 7 {
+                    return Err(Error::Denied("unexpected batch submission fields"));
+                }
+                let key = fields
+                    .get("job_request_id")
+                    .and_then(Value::as_str)
+                    .ok_or(Error::Denied("batch execution identity required"))?;
+                if !valid_hex(key, 32) {
+                    return Err(Error::Denied("invalid batch execution identity"));
+                }
+                let command = fields
+                    .get("command")
+                    .and_then(Value::as_str)
+                    .ok_or(Error::Denied("batch command required"))?;
+                if command.trim().is_empty()
+                    || command.len() > 4096
+                    || command.bytes().any(|c| c == 0 || c == b'\r')
+                {
+                    return Err(Error::Denied("batch command outside resource policy"));
+                }
+                let image = fields
+                    .get("image")
+                    .and_then(Value::as_str)
+                    .ok_or(Error::Denied("batch image required"))?;
+                if !valid_workspace_image_reference(image)
+                    || !self.image_references.iter().any(|allowed| allowed == image)
+                {
+                    return Err(Error::Denied("batch image digest outside owner policy"));
+                }
+                let cpu = fields
+                    .get("cpu")
+                    .and_then(Value::as_f64)
+                    .ok_or(Error::Denied("batch CPU limit required"))?;
+                let memory = fields
+                    .get("memory_mb")
+                    .and_then(Value::as_u64)
+                    .ok_or(Error::Denied("batch memory limit required"))?;
+                if !cpu.is_finite() || !(0.1..=2.0).contains(&cpu)
+                    || !(64..=4096).contains(&memory)
+                {
+                    return Err(Error::Denied("batch resource limits exceeded"));
+                }
+                Ok((
+                    "submit_compute_job".into(),
+                    serde_json::json!({
+                        "project_id":project,"command":command,"image":image,
+                        "cpu":cpu,"memory_mb":memory,"backend":"kueue",
+                        "request_id":key
+                    }),
+                ))
+            }
+            "compute__cancel_batch_job" => {
+                if fields.len() != 3 {
+                    return Err(Error::Denied("unexpected batch cancellation fields"));
+                }
+                let job_id = fields
+                    .get("job_id")
+                    .and_then(Value::as_str)
+                    .ok_or(Error::Denied("batch job identity required"))?;
+                if !valid_hex(job_id, 32) {
+                    return Err(Error::Denied("invalid batch job identity"));
+                }
+                Ok((
+                    "compute_job_cancel".into(),
+                    serde_json::json!({"project_id":project,"job_id":job_id}),
+                ))
+            }
+            _ => Err(Error::Denied("unregistered batch operation")),
+        }
+    }
+
     fn validate(&self) -> Result<(), Error> {
         let url = Url::parse(&self.endpoint)
             .map_err(|_| Error::Configuration("invalid Workspace endpoint"))?;
@@ -972,6 +1059,17 @@ impl Policy {
                 args.push(version.into());
             }
             return Ok(Action::Actuator(args));
+        }
+        if matches!(
+            operation,
+            "compute__submit_batch_job" | "compute__cancel_batch_job"
+        ) {
+            let policy = self
+                .workspace
+                .as_ref()
+                .ok_or(Error::Denied("Compute batch execution disabled"))?;
+            let (tool, arguments) = policy.batch_operation(operation, fields)?;
+            return Ok(Action::Workspace { tool, arguments });
         }
         if operation.starts_with("infrastructure__workspace_") {
             let policy = self
