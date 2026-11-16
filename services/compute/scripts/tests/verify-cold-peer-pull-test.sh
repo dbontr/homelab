@@ -43,7 +43,11 @@ case "$cmd" in
     fi ;;
   "k3s ctr -n k8s.io content get '$MOCK_DIGEST'")
     [[ $host == venus ]] || exit 2
-    printf '{"manifests":[{"platform":{"os":"linux","architecture":"amd64"},"digest":"%s"}]}\n' "$MOCK_MANIFEST" ;;
+    if [[ ${MOCK_DUPLICATE_MANIFEST:-0} == 1 ]]; then
+      printf '{"manifests":[{"platform":{"os":"linux","architecture":"amd64"},"digest":"%s"},{"platform":{"os":"linux","architecture":"amd64"},"digest":"%s"}]}\n' "$MOCK_MANIFEST" "$MOCK_MANIFEST"
+    else
+      printf '{"manifests":[{"platform":{"os":"linux","architecture":"amd64"},"digest":"%s"}]}\n' "$MOCK_MANIFEST"
+    fi ;;
   "k3s ctr -n k8s.io content get '$MOCK_MANIFEST'")
     [[ $host == venus ]] || exit 2
     printf '{"layers":[{"digest":"%s"},{"digest":"%s"}]}\n' "$MOCK_LAYER1" "$MOCK_LAYER2" ;;
@@ -70,7 +74,10 @@ elif [[ $1 == get && $2 == --raw ]]; then
   [[ $node == /api/v1/nodes/venus/proxy/metrics ||
      $node == /api/v1/nodes/janus/proxy/metrics ]] || exit 2
   hit=0
-  if [[ $node == *janus* && -f "$MOCK_STATE/pulled" ]]; then hit=1; fi
+  if [[ -f "$MOCK_STATE/pulled" ]]; then
+    if [[ $node == *janus* && ${MOCK_ONLY_DONOR_HIT:-0} != 1 ]]; then hit=1; fi
+    if [[ $node == *venus* && ${MOCK_ONLY_DONOR_HIT:-0} == 1 ]]; then hit=1; fi
+  fi
   echo 'spegel_advertised_image_digests{registry="images.dbontr.internal"} 2'
   printf 'spegel_mirror_requests_total{registry="images.dbontr.internal",cache="hit"} %s\n' "$hit"
   echo 'spegel_mirror_requests_total{registry="images.dbontr.internal",cache="miss"} 0'
@@ -97,6 +104,19 @@ fi
 [[ ! -f "$tmp/pulled" ]] || {
   echo 'Failed peer pull changed receiver state' >&2; exit 1;
 }
+if MOCK_DUPLICATE_MANIFEST=1 bash "$script" venus janus "$MOCK_REF" "$MOCK_DIGEST" > "$tmp/ambiguous" 2>&1; then
+  echo 'Multiple Linux amd64 manifests were accepted' >&2; exit 1
+fi
+[[ ! -f "$tmp/pulled" ]] || {
+  echo 'Ambiguous image index caused a remote pull' >&2; exit 1;
+}
+if MOCK_ONLY_DONOR_HIT=1 bash "$script" venus janus "$MOCK_REF" "$MOCK_DIGEST" > "$tmp/donor_only" 2>&1; then
+  echo 'Donor-only peer cache hit was misattributed to the receiver' >&2; exit 1
+fi
+if grep -q '^PASS:' "$tmp/donor_only"; then
+  echo 'Donor-only cache hit emitted a successful receipt' >&2; exit 1
+fi
+rm -f "$tmp/pulled"
 bash "$script" venus janus "$MOCK_REF" "$MOCK_DIGEST" > "$tmp/accepted"
 grep -q '^PASS: cold OCI layer pull, digest, CRI availability and new peer-cache hit verified$' "$tmp/accepted"
 grep -Fxq "PREVIOUSLY_MISSING_LAYER=$MOCK_LAYER2" "$tmp/accepted"
