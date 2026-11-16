@@ -5,6 +5,13 @@
     enable = true;
     tokenFile = "/srv/homelab/secrets/homelab-platform.token";
     securityClientSocket = "/run/homelab-securityd/client.sock";
+    # Compute discovery and execution forward only independently signed,
+    # owner-verified Cloudflare Access assertions; the platform never holds
+    # the controller's administrator bearer credential.
+    integrations.workspace = {
+      url = "http://127.0.0.1:8104/workspace";
+      forwardOwnerAssertion = true;
+    };
     executorSocket = "/run/homelab-executord/execute.sock";
     consoleAccess = {
       issuer = config.services.homelabSecurity.access.issuer;
