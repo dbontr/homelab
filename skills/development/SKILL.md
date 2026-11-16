@@ -408,6 +408,27 @@ private files, or administrator unlock material in a checkpoint. An operation
 request ID may be retained for reconciliation, but it is not authorization to
 repeat an uncertain side effect.
 
+## Privileged owner approval
+
+For sensitive Homelab operations, obtain a fresh, five-minute
+`security_session_open` link through the signed owner MCP identity.
+Present the exact HTTPS link and its nonsecret reference code, and
+direct the owner to authenticate or approve on the independent portal.
+The code is a request identifier, never a bearer token or permission
+to execute a command. Do not solicit administrator passwords, OTPs,
+controller credentials, signed Access assertions or secret file contents.
+
+When a conversation is resumed, recover its nonsecret operation IDs
+through `continuity_handoff` and check the independent session with
+`security_session_status` before further action. Approval is bound to
+the verified owner identity, not an unverified ChatGPT conversation ID.
+A still-valid session may be shared by the same authenticated owner
+across chats; it does not circumvent exact operation/resource policy,
+signed-identity checks, expiring destructive confirmations, or the
+independent Rust executor. Reconcile uncertain outcomes before retrying,
+and preserve the executor's audit identity. NanoKVM is an out-of-band
+recovery interface, not a substitute for these authorization checks.
+
 ## Skill utility implementation
 
 Use Go (standard library by default) for repository scanners, text checks,
