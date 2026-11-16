@@ -753,7 +753,7 @@ pub async fn serve_unix(
     let metadata = fs::symlink_metadata(parent)?;
     if !metadata.is_dir()
         || metadata.file_type().is_symlink()
-        || metadata.permissions().mode() & 0o007 != 0
+        || metadata.permissions().mode() & 0o006 != 0
     {
         return Err("security runtime directory is accessible by other users".into());
     }
