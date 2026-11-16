@@ -608,7 +608,8 @@ func(s *Server)toolList(r *http.Request)[]map[string]any{
   index int
   tools []map[string]any
  }
- ctx,cancel:=context.WithTimeout(r.Context(),4*time.Second)
+ discoveryContext:=security.WithAccessAssertion(r.Context(),r.Header.Get("Cf-Access-Jwt-Assertion"))
+ ctx,cancel:=context.WithTimeout(discoveryContext,4*time.Second)
  defer cancel()
  results:=make(chan discovery,len(s.backend))
  for index,backend:=range s.backend{
