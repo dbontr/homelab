@@ -58,8 +58,13 @@ type Journal struct {
 type Controller struct{Config Config}
 
 func Exec(ctx context.Context,name string,args ...string)(string,error){
+ // Nix needs a writable XDG cache even when HOME is deliberately read-only.
+ // Give each command a private cache and remove it when the command finishes.
+ cacheDir,err:=os.MkdirTemp("","homelab-release-cache-")
+ if err!=nil{return "",fmt.Errorf("create private release cache: %w",err)}
+ defer os.RemoveAll(cacheDir)
  cmd:=exec.CommandContext(ctx,name,args...)
- cmd.Env=[]string{"PATH=/run/current-system/sw/bin:/usr/bin:/bin","LANG=C","HOME=/var/empty"}
+ cmd.Env=[]string{"PATH=/run/current-system/sw/bin:/usr/bin:/bin","LANG=C","HOME=/var/empty","XDG_CACHE_HOME="+cacheDir}
  data,err:=cmd.CombinedOutput()
  if len(data)>8192{data=data[:8192]}
  if err!=nil{return "",fmt.Errorf("release command %s failed: %w (%s)",filepath.Base(name),err,strings.TrimSpace(string(data)))}
