@@ -4,7 +4,7 @@ pkgs.buildGoModule {
   version = "0.1.0";
   src = ../.;
   GOWORK = "off";
-  vendorHash = null;
+  vendorHash = pkgs.lib.fakeHash;
   subPackages = [ "mcp" "api" ];
   postInstall = ''
     mv "$out/bin/mcp" "$out/bin/homelab-mcp"
