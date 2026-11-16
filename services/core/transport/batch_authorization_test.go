@@ -44,8 +44,13 @@ func TestBatchSubmissionUsesIndependentExecutorAndBoundRequestIdentity(t *testin
  if err!=nil{t.Fatal(err)}
  ctx:=security.WithAccessAssertion(context.Background(),"signed-owner")
  result:=gateway.invoke(ctx,"compute__submit_batch_job",encoded,json.RawMessage("1"))
- receipt,ok:=result["structuredContent"].(map[string]any)
- if !ok||receipt["authorization_required"]!=true||receipt["request_id"]!=key{
+ blocks,ok:=result["content"].([]any)
+ if !ok||len(blocks)!=1{t.Fatalf("invalid gateway response: %v",result)}
+ block,ok:=blocks[0].(map[string]string)
+ if !ok{t.Fatalf("invalid gateway content block: %v",result)}
+ var receipt map[string]any
+ if err:=json.Unmarshal([]byte(block["text"]),&receipt);err!=nil{t.Fatal(err)}
+ if receipt["authorization_required"]!=true||receipt["request_id"]!=key{
   t.Fatalf("independent authorization request lost: %v",result)
  }
  select{
