@@ -1,6 +1,8 @@
 # References
 
 - [nftables rule management](https://wiki.nftables.org/wiki-nftables/index.php/Simple_rule_management) — nftables project. Used for: evaluating conjunctions within single rules and preserving explicit forward-chain verdicts for private VLAN isolation.
+- [Prometheus node_exporter Textfile Collector](https://github.com/prometheus/node_exporter#textfile-collector) — Prometheus project. Used for: machine-local GPU metric publication through atomic `.prom` replacement and the exporter textfile directory.
+- [NixOS Prometheus exporters](https://wiki.nixos.org/wiki/Prometheus) — NixOS project. Used for: `services.prometheus.exporters.node.extraFlags` and systemd-managed exporter collector configuration.
 - [Kubernetes Jobs](https://kubernetes.io/docs/concepts/workloads/controllers/job/) — Kubernetes project. Used for: durable batch Job reconciliation, immutable execution configuration, terminal status and deletion propagation.
 - [Kubernetes RBAC](https://kubernetes.io/docs/reference/access-authn-authz/rbac/) — Kubernetes project. Used for: tightly scoped namespace access to Jobs, Pods and Kueue Workloads.
 - [Kubernetes Secrets](https://kubernetes.io/docs/concepts/configuration/secret/) — Kubernetes project. Used for: protected, host-local transfer of the active Compute controller credential from its namespaced Kubernetes Secret.
