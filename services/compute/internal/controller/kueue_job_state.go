@@ -74,6 +74,22 @@ func (db *Database) KueueJob(project,id string) (map[string]any,error) {
 	return result,nil
 }
 
+// KueueJobByRequest resolves the controller's durable job ID from the exact
+// project-scoped idempotency identity. An executor retry must not guess a job ID.
+func (db *Database) KueueJobByRequest(project, requestID string) (map[string]any, error) {
+	if !validID.MatchString(project) || !batchRequestID.MatchString(requestID) {
+		return nil, errors.New("invalid project or batch request identity")
+	}
+	row, err := db.queryOne("SELECT job FROM kueue_jobs WHERE project=? AND request_id=?", project, requestID)
+	if err != nil {
+		return nil, err
+	}
+	if row == nil {
+		return nil, errors.New("batch request not found")
+	}
+	return db.KueueJob(project, asString(row["job"]))
+}
+
 func (db *Database) CancelKueueJob(project,id string)(map[string]any,error){
 	if !validID.MatchString(project)||!batchJobID.MatchString(id){return nil,errors.New("invalid project or job ID")}
 	var out map[string]any
