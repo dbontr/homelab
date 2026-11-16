@@ -29,7 +29,16 @@ use crate::Error;
 const MAX_JSON_BYTES: usize = 1 << 20;
 const MAX_CSRF: usize = 256;
 const CSRF_LIFETIME: Duration = Duration::from_secs(600);
+const OWNER_REQUEST_LIFETIME: Duration = Duration::from_secs(300);
+const MAX_OWNER_REQUESTS: usize = 64;
 const LOCAL_OWNER: &str = "local-operator";
+
+struct OwnerRequest {
+    principal: String,
+    expires: Instant,
+    completed: bool,
+}
+
 
 // Keep a remote credential protected until its HTTP body releases the buffer.
 struct ProtectedBody(Zeroizing<Vec<u8>>);
@@ -45,6 +54,7 @@ pub struct Shared {
     pub(crate) oauth: Option<crate::oauth::SharedBroker>,
     authority: Arc<Mutex<Authority>>,
     csrf: Arc<Mutex<BTreeMap<String, (String, Instant)>>>,
+    owner_requests: Arc<Mutex<BTreeMap<String, OwnerRequest>>>,
     browser_origin: Option<String>,
 }
 
@@ -64,6 +74,7 @@ impl Shared {
             oauth,
             authority: Arc::new(Mutex::new(authority)),
             csrf: Arc::new(Mutex::new(BTreeMap::new())),
+            owner_requests: Arc::new(Mutex::new(BTreeMap::new())),
             browser_origin,
         })
     }
@@ -101,7 +112,66 @@ impl Shared {
             .remove(token)
             .is_some_and(|(owner, expiry)| owner == principal && expiry > Instant::now())
     }
+
+    fn issue_owner_request(&self, principal: &str) -> Option<String> {
+        if self.browser_origin.is_none() || principal.is_empty() {
+            return None;
+        }
+        let mut requests = self.owner_requests.lock().ok()?;
+        let now = Instant::now();
+        requests.retain(|_, request| request.expires > now);
+        if requests.len() >= MAX_OWNER_REQUESTS {
+            return None;
+        }
+        let mut bytes = [0u8; 24];
+        getrandom::fill(&mut bytes).ok()?;
+        let id = hex::encode(bytes);
+        requests.insert(
+            id.clone(),
+            OwnerRequest {
+                principal: principal.to_owned(),
+                expires: now + OWNER_REQUEST_LIFETIME,
+                completed: false,
+            },
+        );
+        Some(id)
+    }
+
+    fn owner_request_status(&self, principal: &str, id: &str) -> Option<bool> {
+        if !valid_owner_request_id(id) {
+            return None;
+        }
+        let mut requests = self.owner_requests.lock().ok()?;
+        let now = Instant::now();
+        requests.retain(|_, request| request.expires > now);
+        let request = requests.get(id)?;
+        (request.principal == principal).then_some(request.completed)
+    }
+
+    fn approve_owner_request(&self, principal: &str, id: &str) -> bool {
+        if !valid_owner_request_id(id) {
+            return false;
+        }
+        let Ok(mut requests) = self.owner_requests.lock() else {
+            return false;
+        };
+        let now = Instant::now();
+        requests.retain(|_, request| request.expires > now);
+        let Some(request) = requests.get_mut(id) else {
+            return false;
+        };
+        if request.completed || request.principal != principal {
+            return false;
+        }
+        request.completed = true;
+        true
+    }
 }
+
+fn valid_owner_request_id(id: &str) -> bool {
+    id.len() == 48 && id.bytes().all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+}
+
 
 fn valid_origin(origin: &str) -> bool {
     let Some(host) = origin.strip_prefix("https://") else {
@@ -387,6 +457,37 @@ async fn session_client_get(State(shared): State<Shared>, headers: HeaderMap) ->
     }
 }
 
+async fn login_request_client_create(
+    State(shared): State<Shared>,
+    headers: HeaderMap,
+    raw: Bytes,
+) -> Response {
+    let Ok(assertion) = owner_assertion(&headers) else {
+        return protected_status("verified owner identity required", StatusCode::FORBIDDEN);
+    };
+    let Ok(payload) = json_input::<BTreeMap<String, serde_json::Value>>(&headers, &raw) else {
+        return protected_status("invalid request", StatusCode::BAD_REQUEST);
+    };
+    if !payload.is_empty() {
+        return protected_status("unexpected request fields", StatusCode::BAD_REQUEST);
+    }
+    let Ok(principal) = shared.with_authority(|auth| auth.gateway_principal(assertion)) else {
+        return protected_status("verified owner identity required", StatusCode::FORBIDDEN);
+    };
+    let Some(id) = shared.issue_owner_request(&principal) else {
+        return protected_status("owner request unavailable", StatusCode::SERVICE_UNAVAILABLE);
+    };
+    let reference_code = id[..12].to_owned();
+    json_reply(
+        StatusCode::OK,
+        json!({
+            "request_id":id,
+            "reference_code":reference_code,
+            "expires_in_seconds":OWNER_REQUEST_LIFETIME.as_secs()
+        }),
+    )
+}
+
 async fn session_client_delete(State(shared): State<Shared>, headers: HeaderMap) -> Response {
     let Ok(assertion) = owner_assertion(&headers) else {
         return protected_status("verified owner identity required", StatusCode::FORBIDDEN);
@@ -602,6 +703,7 @@ pub fn client_router(shared: Shared) -> Router {
             "/v1/session",
             get(session_client_get).delete(session_client_delete),
         )
+        .route("/v1/login-requests", post(login_request_client_create))
         .route("/v1/preview", post(operation_client_preview))
         .route("/v1/replay", post(operation_client_replay))
         .route("/v1/authorize", post(operation_client_authorize))
@@ -652,7 +754,7 @@ pub async fn serve_unix(
     let metadata = fs::symlink_metadata(parent)?;
     if !metadata.is_dir()
         || metadata.file_type().is_symlink()
-        || metadata.permissions().mode() & 0o007 != 0
+        || metadata.permissions().mode() & 0o006 != 0
     {
         return Err("security runtime directory is accessible by other users".into());
     }
@@ -718,7 +820,7 @@ fn checked_browser_assertion<'a>(
     owner_assertion(headers)
 }
 
-fn browser_page(shared: &Shared, assertion: &str, message: &str) -> Response {
+fn browser_page(shared: &Shared, assertion: &str, message: &str, request_id: Option<&str>) -> Response {
     let (principal, session, pending) = shared.with_authority(|auth| {
         (
             auth.browser_principal(assertion),
@@ -740,7 +842,22 @@ fn browser_page(shared: &Shared, assertion: &str, message: &str) -> Response {
     if !message.is_empty() {
         html.push_str(&format!("<p role=\"status\">{}</p>", escape_html(message)));
     }
-    if session.active {
+    if let Some(request_id) = request_id {
+        let Some(completed) = shared.owner_request_status(&principal, request_id) else {
+            return protected_status("owner request unavailable", StatusCode::NOT_FOUND);
+        };
+        let reference_code = &request_id[..12];
+        html.push_str("<section><h2>Request-scoped administration</h2>");
+        html.push_str(&format!("<p>Reference code: <code>{}</code></p><p>This code identifies the request. It is not an access token and cannot grant administrator permissions.</p>", reference_code));
+        if completed && session.active {
+            html.push_str("<p role=\"status\">Owner request approved. Return to ChatGPT to continue; authorization is checked again for each operation.</p>");
+        } else if session.active && !completed {
+            html.push_str(&format!("<form method=\"post\" action=\"/request/{}/approve\"><input type=\"hidden\" name=\"csrf\" value=\"{}\"><button type=\"submit\">Approve this request</button></form>", request_id, csrf));
+        } else {
+            html.push_str(&format!("<form method=\"post\" action=\"/request/{}/login\"><input type=\"hidden\" name=\"csrf\" value=\"{}\"><label>Password<input name=\"password\" type=\"password\" required></label><label>Authenticator code<input name=\"totp\" pattern=\"[0-9]{{6}}\" inputmode=\"numeric\" required></label><button type=\"submit\">Authenticate and approve request</button></form>", request_id, csrf));
+        }
+        html.push_str("</section>");
+    } else if session.active {
         html.push_str("<section><h2>Administrative session active</h2>");
         html.push_str(&format!("<form method=\"post\" action=\"/close\"><input type=\"hidden\" name=\"csrf\" value=\"{}\"><button type=\"submit\">Close session</button></form></section>", csrf));
         html.push_str("<section><h2>Pending destructive operations</h2>");
@@ -778,7 +895,7 @@ async fn browser_get(State(shared): State<Shared>, headers: HeaderMap) -> Respon
     if shared.with_authority(|auth| auth.browser_principal(assertion).is_err()) {
         return protected_status("verified owner identity required", StatusCode::FORBIDDEN);
     }
-    browser_page(&shared, assertion, "")
+    browser_page(&shared, assertion, "", None)
 }
 
 async fn browser_form(
@@ -787,6 +904,7 @@ async fn browser_form(
     raw: Bytes,
     action: &str,
     confirmation_id: Option<&str>,
+    request_id: Option<&str>,
 ) -> Response {
     let Ok(assertion) = checked_browser_assertion(&shared, &headers) else {
         return protected_status("verified owner identity required", StatusCode::FORBIDDEN);
@@ -817,10 +935,18 @@ async fn browser_form(
     if !shared.take_csrf(&principal, csrf) {
         return protected_status("invalid owner form", StatusCode::FORBIDDEN);
     }
+    if let Some(id) = request_id {
+        if shared.owner_request_status(&principal, id) != Some(false) {
+            return protected_status("owner request unavailable", StatusCode::NOT_FOUND);
+        }
+    }
     let password = Zeroizing::new(form.get("password").cloned().unwrap_or_default());
     let otp = form.get("totp").map(String::as_str).unwrap_or("");
     let result = shared.with_authority(|auth| match action {
-        "login" => auth.login_browser(assertion, &password, otp).map(|_| ()),
+        "login" | "request_login" => auth.login_browser(assertion, &password, otp).map(|_| ()),
+        "request_approve" => auth.browser_status(assertion).and_then(|status| {
+            if status.active { Ok(()) } else { Err(Error::Unauthorized) }
+        }),
         "close" => auth.browser_revoke(assertion).and_then(|closed| {
             if closed {
                 Ok(())
@@ -836,16 +962,23 @@ async fn browser_form(
             &shared,
             assertion,
             "Owner authentication or confirmation denied",
+            request_id,
         );
+    }
+    if let Some(id) = request_id {
+        if !shared.approve_owner_request(&principal, id) {
+            return protected_status("owner request unavailable", StatusCode::NOT_FOUND);
+        }
+        return Redirect::to(&format!("/request/{id}")).into_response();
     }
     Redirect::to("/").into_response()
 }
 
 async fn browser_login(State(shared): State<Shared>, headers: HeaderMap, raw: Bytes) -> Response {
-    browser_form(shared, headers, raw, "login", None).await
+    browser_form(shared, headers, raw, "login", None, None).await
 }
 async fn browser_close(State(shared): State<Shared>, headers: HeaderMap, raw: Bytes) -> Response {
-    browser_form(shared, headers, raw, "close", None).await
+    browser_form(shared, headers, raw, "close", None, None).await
 }
 async fn browser_confirm(
     State(shared): State<Shared>,
@@ -856,13 +989,45 @@ async fn browser_confirm(
     if id.len() != 48 || !id.bytes().all(|b| b.is_ascii_hexdigit()) {
         return protected_status("invalid confirmation", StatusCode::NOT_FOUND);
     }
-    browser_form(shared, headers, raw, "confirm", Some(&id)).await
+    browser_form(shared, headers, raw, "confirm", Some(&id), None).await
+}
+
+async fn browser_request(
+    State(shared): State<Shared>,
+    RoutePath(id): RoutePath<String>,
+    headers: HeaderMap,
+) -> Response {
+    let Ok(assertion) = checked_browser_assertion(&shared, &headers) else {
+        return protected_status("verified owner identity required", StatusCode::FORBIDDEN);
+    };
+    browser_page(&shared, assertion, "", Some(&id))
+}
+
+async fn browser_request_login(
+    State(shared): State<Shared>,
+    RoutePath(id): RoutePath<String>,
+    headers: HeaderMap,
+    raw: Bytes,
+) -> Response {
+    browser_form(shared, headers, raw, "request_login", None, Some(&id)).await
+}
+
+async fn browser_request_approve(
+    State(shared): State<Shared>,
+    RoutePath(id): RoutePath<String>,
+    headers: HeaderMap,
+    raw: Bytes,
+) -> Response {
+    browser_form(shared, headers, raw, "request_approve", None, Some(&id)).await
 }
 
 pub fn browser_router(shared: Shared) -> Router {
     Router::new()
         .route("/", get(browser_get))
         .route("/login", post(browser_login))
+        .route("/request/{id}", get(browser_request))
+        .route("/request/{id}/login", post(browser_request_login))
+        .route("/request/{id}/approve", post(browser_request_approve))
         .route("/close", post(browser_close))
         .route("/confirm/{id}", post(browser_confirm))
         .layer(DefaultBodyLimit::max(4096))
@@ -1049,6 +1214,62 @@ mod tests {
         );
 
         fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn owner_request_is_short_lived_principal_scoped_and_one_use() {
+        use crate::credentials::PassphraseRecord;
+        use crate::sessions::OperationPolicy;
+        let mut id = [0u8; 16];
+        getrandom::fill(&mut id).unwrap();
+        let dir = std::env::temp_dir().join(format!("owner-request-{}", hex::encode(id)));
+        fs::create_dir(&dir).unwrap();
+        fs::set_permissions(&dir, fs::Permissions::from_mode(0o700)).unwrap();
+        let authority = Authority::open(
+            &dir,
+            "operator".into(),
+            "platform-gateway".into(),
+            PassphraseRecord {
+                version: 1,
+                iterations: 310_000,
+                salt: "YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4".into(),
+                digest: "l9m+PJ5k/gZlE6OL9Ek9YfJ7L5ajP+9F+d5Z1mp4TXg".into(),
+            },
+            "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
+            vec![OperationPolicy {
+                operation: "workspace__status".into(),
+                targets: vec!["jupiter".into()],
+                destructive: false,
+            }],
+        ).unwrap();
+        let shared = Shared::new(authority, Some("https://auth.example.invalid".into()), None).unwrap();
+        let request = shared.issue_owner_request("verified-owner").unwrap();
+        assert!(valid_owner_request_id(&request));
+        assert_eq!(shared.owner_request_status("verified-owner", &request), Some(false));
+        assert_eq!(shared.owner_request_status("other-owner", &request), None);
+        assert_eq!(shared.owner_request_status("verified-owner", &request.to_uppercase()), None);
+        assert!(!shared.approve_owner_request("other-owner", &request));
+        assert!(shared.approve_owner_request("verified-owner", &request));
+        assert_eq!(shared.owner_request_status("verified-owner", &request), Some(true));
+        assert!(!shared.approve_owner_request("verified-owner", &request));
+        let stale = shared.issue_owner_request("verified-owner").unwrap();
+        {
+            let mut requests = shared.owner_requests.lock().unwrap();
+            requests.get_mut(&stale).unwrap().expires = Instant::now() - Duration::from_secs(1);
+        }
+        assert_eq!(shared.owner_request_status("verified-owner", &stale), None);
+        assert!(!shared.approve_owner_request("verified-owner", &stale));
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn parent_socket_permissions_allow_traversal_but_not_public_read() {
+        for mode in [0o700, 0o750, 0o751] {
+            assert_eq!(mode & 0o006, 0, "{mode:o}");
+        }
+        for mode in [0o705, 0o754, 0o755, 0o757] {
+            assert_ne!(mode & 0o006, 0, "{mode:o}");
+        }
     }
 
     #[test]

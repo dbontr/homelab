@@ -535,7 +535,7 @@ func(s *Server)localTools()[]map[string]any{
   tools=append(tools,tool("security_session_status","Inspect the independent owner administrative session without revealing credentials",map[string]any{}),
     tool("security_session_close","Immediately revoke the active owner administrative session",map[string]any{}))
   if s.securityLoginURL!="" {
-   tools=append(tools,tool("security_session_open","Open the independent HTTPS authentication page to enter password and TOTP directly, outside ChatGPT. No credentials are returned to the model.",map[string]any{}))
+   tools=append(tools,tool("security_session_open","Create a five-minute request-specific link to the independent owner portal. The reference code identifies the request but does not grant privileges.",map[string]any{}))
   }
  }
  if s.hasBackend("workspace") {tools=append(tools,tool("software_catalog","List approved images, software collections, and program requests",map[string]any{}))}
@@ -761,12 +761,16 @@ func(s *Server)localTool(ctx context.Context,name string,raw json.RawMessage)(an
   return s.privilegeClient.Status(ctx)
  case "security_session_open":
   if s.privilegeClient==nil||s.securityLoginURL==""{return nil,errors.New("browser authentication not configured")}
+  request,err:=s.privilegeClient.OpenOwnerRequest(ctx)
+  if err!=nil{return nil,err}
   status,err:=s.privilegeClient.Status(ctx)
   if err!=nil{return nil,err}
   return map[string]any{
-   "sign_in_url":s.securityLoginURL,
+   "sign_in_url":s.securityLoginURL+"/request/"+request.RequestID,
+   "reference_code":request.ReferenceCode,
+   "expires_in_seconds":request.ExpiresInSeconds,
    "session":status,
-   "instructions":"Open the protected HTTPS link in your browser to authenticate. Password and TOTP are entered directly into the independent service, never into a ChatGPT message or MCP tool. After authentication, retry the operation.",
+   "instructions":"Open the request-specific protected HTTPS link. Authenticate with password and TOTP on that page, or approve using an existing owner session. Return to ChatGPT and retry the unchanged authorized operation. The reference code is not a credential: every privileged action still requires signed owner identity, an active session, and exact resource authorization. The same verified owner session can be checked from another chat.",
   },nil
  case "security_session_close":
   if s.privilegeClient==nil{return nil,errors.New("independent security service not configured")}

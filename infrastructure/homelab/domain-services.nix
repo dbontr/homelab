@@ -5,6 +5,7 @@
     enable = true;
     tokenFile = "/srv/homelab/secrets/homelab-platform.token";
     securityClientSocket = "/run/homelab-securityd/client.sock";
+    securityLoginURL = "https://auth.dbontr.me";
     # Compute discovery and execution forward only independently signed,
     # owner-verified Cloudflare Access assertions; the platform never holds
     # the controller's administrator bearer credential.
