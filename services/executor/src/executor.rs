@@ -234,6 +234,17 @@ impl Executor {
                 "invalid execution request identity",
             ));
         }
+        if request.operation == "compute__submit_batch_job"
+            && request
+                .arguments
+                .get("job_request_id")
+                .and_then(Value::as_str)
+                != Some(request.request_id.as_str())
+        {
+            return Ok(ExecutionResult::denied(
+                "batch identity must match the durable execution request",
+            ));
+        }
         let raw = serde_json::to_vec(&request.arguments)
             .map_err(|_| Error::Denied("invalid operation arguments"))?;
         let canonical = canonical_arguments(&raw)?;
