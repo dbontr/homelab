@@ -315,7 +315,9 @@ in
         StateDirectory = [ "homelab-securityd" ];
         StateDirectoryMode = "0700";
         RuntimeDirectory = [ "homelab-securityd" ];
-        RuntimeDirectoryMode = "0750";
+        # Clients need path traversal; the owner socket remains mode 0600.
+        # The public directory entry grants no read or write access.
+        RuntimeDirectoryMode = "0751";
         LoadCredential = [
           "password:${cfg.passwordVerifierFile}"
           "totp:${cfg.totpSecretFile}"
