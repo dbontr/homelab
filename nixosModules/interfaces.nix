@@ -19,6 +19,11 @@ let
         lib.concatStringsSep "," settings.allowedOrigins;
     } // lib.optionalAttrs (kind == "api") {
       HOMELAB_API_WRITE_PATHS = lib.concatStringsSep "," settings.writePaths;
+    } // lib.optionalAttrs (kind == "mcp" && settings.access.audience != "") {
+      HOMELAB_MCP_ACCESS_ISSUER = settings.access.issuer;
+      HOMELAB_MCP_ACCESS_AUDIENCE = settings.access.audience;
+      HOMELAB_MCP_ACCESS_OWNER_FILE = "/run/credentials/homelab-mcp.service/access-owner";
+      HOMELAB_MCP_ACCESS_JWKS_FILE = "/run/credentials/homelab-mcp.service/access-jwks";
     };
     serviceConfig = {
       Type = "simple";
@@ -27,6 +32,9 @@ let
       LoadCredential = [
         "client-token:${settings.clientTokenFile}"
         "service-token:${settings.serviceTokenFile}"
+      ] ++ lib.optionals (kind == "mcp" && settings.access.audience != "") [
+        "access-owner:${settings.access.ownerEmailFile}"
+        "access-jwks:${settings.access.jwksFile}"
       ];
       Restart = "on-failure";
       RestartSec = "5s";
@@ -70,6 +78,12 @@ let
       type = lib.types.listOf lib.types.str;
       default = [];
       description = "Explicit native resource prefixes permitted for non-read-only API methods.";
+    };
+    access = {
+      issuer = lib.mkOption { type = lib.types.str; default = ""; };
+      audience = lib.mkOption { type = lib.types.str; default = ""; };
+      ownerEmailFile = lib.mkOption { type = lib.types.nullOr lib.types.str; default = null; };
+      jwksFile = lib.mkOption { type = lib.types.nullOr lib.types.str; default = null; };
     };
   };
   secure = settings:
@@ -120,6 +134,18 @@ in {
       {
         assertion = !cfg.mcp.enable || cfg.mcp.writePaths == [];
         message = "The unified MCP has no native API write-path configuration.";
+      }
+      {
+        assertion = !cfg.mcp.enable || cfg.mcp.access.audience == "" ||
+          (lib.hasPrefix "https://" cfg.mcp.access.issuer &&
+           cfg.mcp.access.ownerEmailFile != null && cfg.mcp.access.jwksFile != null &&
+           cfg.mcp.access.audience == config.services.homelabSecurity.access.gatewayAudience);
+        message = "Managed OAuth requires a pinned owner identity and the exact Cloudflare MCP audience.";
+      }
+      {
+        assertion = cfg.api.access.issuer == "" && cfg.api.access.audience == "" &&
+          cfg.api.access.ownerEmailFile == null && cfg.api.access.jwksFile == null;
+        message = "Managed OAuth owner credentials are not available to the native API interface.";
       }
     ];
     services.homelabPlatform = lib.mkMerge [

@@ -45,6 +45,8 @@
 - [Rust Standard Library: PermissionsExt](https://doc.rust-lang.org/std/os/unix/fs/trait.PermissionsExt.html) — Rust project. Used for: rejecting writable Nix policy files in the Rust actuator.
 - [Go archive/zip Package](https://pkg.go.dev/archive/zip) — Go project. Used for: portable recipe bundle generation and bounded ZIP entry reading.
 - [Model Context Protocol Specification](https://modelcontextprotocol.io/specification/2025-06-18) — MCP project; 2025-06-18. Used for: stateless JSON-RPC transport, tool discovery, and tool calls.
+- [Cloudflare Access Managed OAuth](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/managed-oauth/) — Cloudflare. Used for: protected MCP OAuth client enrollment, token issuance, and signed owner identity at the origin.
+- [OpenAI Plugin Authentication](https://developers.openai.com/plugins/build/auth) — OpenAI. Used for: OAuth-based authentication and tool discovery for ChatGPT remote MCP connections.
 - [OpenAI Responses API compaction](https://developers.openai.com/api/docs/guides/compaction) — OpenAI. Used for: model-host-controlled context compaction and separation from human-readable durable handoffs.
 - [OpenAI Responses conversation state](https://developers.openai.com/api/docs/guides/conversation-state) — OpenAI. Used for: context-window accounting and preserving API conversation state.
 - [OpenAI Responses input token counting](https://developers.openai.com/api/reference/resources/responses/subresources/input_tokens/methods/count) — OpenAI. Used for: optional host-supplied token measurements rather than MCP-only guesses.
