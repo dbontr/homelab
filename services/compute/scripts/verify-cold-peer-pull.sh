@@ -36,7 +36,7 @@ complete() {
 [[ $(get_digest "$donor") == "$digest" ]] && complete "$donor" || {
   echo 'Donor image digest or OCI content is incomplete' >&2; exit 1;
 }
-if remote "$receiver" 'k3s ctr -n k8s.io images ls -q' | grep -Fxq -- "$image"; then
+if remote "$receiver" 'k3s ctr -n k8s.io images ls -q' | grep -Fx -- "$image" >/dev/null; then
   echo 'Receiver already contains this image: not a cold-pull acceptance' >&2
   exit 1
 fi
@@ -89,7 +89,7 @@ timeout 240 ssh -o BatchMode=yes -o StrictHostKeyChecking=yes \
 [[ $(get_digest "$receiver") == "$digest" ]] && complete "$receiver" || {
   echo 'Receiver image did not match complete donor content' >&2; exit 1;
 }
-if ! remote "$receiver" 'k3s ctr -n k8s.io content ls -q' | grep -Fxq -- "$missing"; then
+if ! remote "$receiver" 'k3s ctr -n k8s.io content ls -q' | grep -Fx -- "$missing" >/dev/null; then
   echo 'Previously missing OCI layer remains absent' >&2; exit 1;
 fi
 remote "$receiver" "k3s crictl inspecti '$image' >/dev/null" || {
