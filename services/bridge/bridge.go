@@ -16,6 +16,8 @@ import (
  "strings"
  "syscall"
  "time"
+
+ "github.com/dbontr/homelab-new/system/security"
 )
 
 type Surface string
@@ -34,6 +36,8 @@ type Config struct {
  ServiceToken string
  Origins []string
  WritePaths []string
+ AccessVerifier *security.AccessVerifier
+ AccessAudience string
 }
 
 // New creates an adapter with one fixed private service origin. An interface
@@ -67,6 +71,10 @@ func New(cfg Config)(http.Handler,error){
   }
   origins[parsed.Scheme+"://"+parsed.Host]=true
  }
+ if (cfg.AccessVerifier==nil)!=(cfg.AccessAudience=="")||
+  (cfg.Surface!=MCP&&(cfg.AccessVerifier!=nil||cfg.AccessAudience!="")){
+  return nil,errors.New("signed owner identity is only valid on the MCP interface")
+ }
  if len(cfg.WritePaths)>32{return nil,errors.New("API write allowlist exceeds limit")}
  writePaths:=map[string]bool{}
  for _,p:=range cfg.WritePaths{
@@ -91,6 +99,11 @@ func New(cfg Config)(http.Handler,error){
    out.Del("Origin")
    out.Del("Proxy-Authorization")
    out.Del("Forwarded")
+   out.Del("Cf-Access-Jwt-Assertion")
+   // Only a gateway-verified owner assertion may cross into the domain service.
+   if assertion:=security.AccessAssertion(pr.In.Context());assertion!=""{
+    out.Set("Cf-Access-Jwt-Assertion",assertion)
+   }
    for name:=range out{
     if strings.HasPrefix(strings.ToLower(name),"x-forwarded-")||
      strings.EqualFold(name,"X-Original-URL")||
@@ -141,9 +154,19 @@ func New(cfg Config)(http.Handler,error){
    http.Error(w,"unapproved origin",http.StatusForbidden)
    return
   }
-  if !strings.HasPrefix(r.Header.Get("Authorization"),"Bearer ")||
+  tokenAuthorized:=strings.HasPrefix(r.Header.Get("Authorization"),"Bearer ")&&
    subtle.ConstantTimeCompare([]byte(r.Header.Get("Authorization")),
-    []byte("Bearer "+cfg.ClientToken))!=1{
+    []byte("Bearer "+cfg.ClientToken))==1
+  verifiedOwner:=""
+  if cfg.Surface==MCP&&cfg.AccessVerifier!=nil{
+   candidate:=r.Header.Get("Cf-Access-Jwt-Assertion")
+   if candidate!=""{
+    if _,err:=cfg.AccessVerifier.Verify(candidate,cfg.AccessAudience);err==nil{
+     verifiedOwner=candidate
+    }
+   }
+  }
+  if !tokenAuthorized&&verifiedOwner==""{
    w.Header().Set("WWW-Authenticate",`Bearer realm="homelab"`)
    http.Error(w,"interface authorization required",http.StatusUnauthorized)
    return
@@ -167,6 +190,11 @@ func New(cfg Config)(http.Handler,error){
      return
     }
    }
+  }
+  // Do not forward unverified client-supplied identity, even when the
+  // caller separately holds the internal compatibility credential.
+  if verifiedOwner!=""{
+   r=r.WithContext(security.WithAccessAssertion(r.Context(),verifiedOwner))
   }
   r.Body=http.MaxBytesReader(w,r.Body,maxRequestBytes)
   proxy.ServeHTTP(w,r)
@@ -266,6 +294,26 @@ func Serve(surface Surface,getenv func(string)string)error{
  serviceToken,err:=protectedToken(getenv(prefix+"SERVICE_TOKEN_FILE"))
  if err!=nil{return err}
  var origins,writePaths []string
+ var accessVerifier *security.AccessVerifier
+ accessAudience:=""
+ if surface==MCP{
+  issuer:=getenv(prefix+"ACCESS_ISSUER")
+  audience:=getenv(prefix+"ACCESS_AUDIENCE")
+  ownerPath:=getenv(prefix+"ACCESS_OWNER_FILE")
+  jwksPath:=getenv(prefix+"ACCESS_JWKS_FILE")
+  if issuer!=""||audience!=""||ownerPath!=""||jwksPath!=""{
+   if issuer==""||audience==""||ownerPath==""||jwksPath==""{
+    return errors.New("incomplete MCP owner identity configuration")
+   }
+   owner,err:=os.ReadFile(ownerPath)
+   if err!=nil{return errors.New("MCP owner identity unavailable")}
+   jwks,err:=os.ReadFile(jwksPath)
+   if err!=nil{return errors.New("MCP signing keys unavailable")}
+   accessVerifier,err=security.NewAccessVerifier(issuer,strings.TrimSpace(string(owner)),jwks)
+   if err!=nil{return fmt.Errorf("MCP owner identity verification: %w",err)}
+   accessAudience=audience
+  }
+ }
  if raw:=getenv(prefix+"ALLOWED_ORIGINS");raw!=""{
   origins=strings.Split(raw,",")
  }
@@ -275,7 +323,8 @@ func Serve(surface Surface,getenv func(string)string)error{
   }
  }
  handler,err:=New(Config{Surface:surface,BackendURL:getenv(prefix+"BACKEND_URL"),
-  ClientToken:clientToken,ServiceToken:serviceToken,Origins:origins,WritePaths:writePaths})
+  ClientToken:clientToken,ServiceToken:serviceToken,Origins:origins,WritePaths:writePaths,
+  AccessVerifier:accessVerifier,AccessAudience:accessAudience})
  if err!=nil{return err}
  server:=&http.Server{Addr:listen,Handler:handler,ReadHeaderTimeout:10*time.Second,
   ReadTimeout:90*time.Second,WriteTimeout:180*time.Second,IdleTimeout:120*time.Second,
