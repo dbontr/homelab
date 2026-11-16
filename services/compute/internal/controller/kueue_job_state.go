@@ -48,11 +48,13 @@ func (db *Database) QueueKueueJob(project, requestID, command, image string, cpu
 				asFloat(existing["cpu"]) != cpu || asInt(existing["memory_mb"]) != memory {
 				return errors.New("request_id already identifies a different batch job")
 			}
-			out=map[string]any{"id":existing["id"],"status":existing["status"],"backend":"kueue","request_id":requestID}
+			status:=asString(existing["status"])
+			if status=="kueue_queued"{status="queued"}
+			out=map[string]any{"id":existing["id"],"status":status,"backend":"kueue","request_id":requestID}
 			return nil
 		}
 		id, now := randomHex(16), stamp()
-		if err:=db.execLocked("INSERT INTO jobs(id,project,command,image,cpu,memory_mb,status,created,updated) VALUES(?,?,?,?,?,?,'queued',?,?)",
+		if err:=db.execLocked("INSERT INTO jobs(id,project,command,image,cpu,memory_mb,status,created,updated) VALUES(?,?,?,?,?,?,'kueue_queued',?,?)",
 			id,project,command,image,cpu,memory,now,now);err!=nil{return err}
 		if err:=db.execLocked("INSERT INTO kueue_jobs(job,project,request_id,remote_name,created,updated) VALUES(?,?,?,?,?,?)",
 			id,project,requestID,"pwm-"+id,now,now);err!=nil{return err}
@@ -67,6 +69,7 @@ func (db *Database) KueueJob(project,id string) (map[string]any,error) {
 	result,err:=db.queryOne("SELECT j.id,j.project,j.status,j.node,j.image,j.cpu,j.memory_mb,j.created,j.updated,j.result,k.request_id,k.remote_name,k.remote_uid,k.last_error FROM jobs j JOIN kueue_jobs k ON j.id=k.job WHERE j.project=? AND j.id=?",project,id)
 	if err!=nil{return nil,err}
 	if result==nil{return nil,errors.New("batch job not found")}
+	if result["status"]=="kueue_queued"{result["status"]="queued"}
 	result["backend"]="kueue"
 	return result,nil
 }
@@ -79,7 +82,7 @@ func (db *Database) CancelKueueJob(project,id string)(map[string]any,error){
 		if err!=nil{return err}
 		if row==nil{return errors.New("batch job not found")}
 		status:=asString(row["status"])
-		if status=="queued"||status=="admitted"||status=="running"{
+		if status=="kueue_queued"||status=="admitted"||status=="running"{
 			status="cancel_requested"
 			if err:=db.execLocked("UPDATE jobs SET status=?,updated=? WHERE id=? AND project=?",status,stamp(),id,project);err!=nil{return err}
 		}
@@ -90,7 +93,7 @@ func (db *Database) CancelKueueJob(project,id string)(map[string]any,error){
 }
 
 func (db *Database) pendingKueueJobs()([]map[string]any,error){
-	return db.query("SELECT j.id,j.project,j.status,j.command,j.image,j.cpu,j.memory_mb,k.request_id,k.remote_name,k.remote_uid FROM jobs j JOIN kueue_jobs k ON j.id=k.job WHERE j.status IN ('queued','admitted','running','cancel_requested') ORDER BY j.created,j.id LIMIT 100")
+	return db.query("SELECT j.id,j.project,j.status,j.command,j.image,j.cpu,j.memory_mb,k.request_id,k.remote_name,k.remote_uid FROM jobs j JOIN kueue_jobs k ON j.id=k.job WHERE j.status IN ('kueue_queued','admitted','running','cancel_requested') ORDER BY j.created,j.id LIMIT 100")
 }
 
 func (db *Database) updateKueueJob(id,uid,status,result string)error{
@@ -107,6 +110,7 @@ func (db *Database) updateKueueJob(id,uid,status,result string)error{
 		if prior=="succeeded"||prior=="failed"||prior=="cancelled"{return nil}
 		if prior=="cancel_requested"&&status!="cancelled"{return nil}
 		if status=="cancelled"&&prior!="cancel_requested"{return errors.New("cancelled job without request")}
+		if status=="queued"{status="kueue_queued"}
 		return db.execLocked("UPDATE jobs SET status=?,result=CASE WHEN ?='' THEN result ELSE ? END,updated=? WHERE id=?",status,result,result,stamp(),id)
 	})
 }

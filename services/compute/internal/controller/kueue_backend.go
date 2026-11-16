@@ -200,7 +200,7 @@ func (k *KueueBackend) ensureJob(ctx context.Context,row map[string]any)(map[str
 	name:=asString(row["remote_name"])
 	obj,err:=k.object(ctx,"GET",batchKubernetesJobPath(name),nil)
 	if errors.Is(err,errKubernetesNotFound){
-		if asString(row["status"])!="queued"||asString(row["remote_uid"])!=""{
+		if asString(row["status"])!="kueue_queued"||asString(row["remote_uid"])!=""{
 			return nil,errors.New("previous Kubernetes Job disappeared")
 		}
 		obj,err=k.object(ctx,"POST","/apis/batch/v1/namespaces/"+batchNamespace+"/jobs",batchKubernetesJob(row))

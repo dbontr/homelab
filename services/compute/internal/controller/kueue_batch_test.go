@@ -89,6 +89,12 @@ func TestBatchSubmissionIdempotenceAndWorkerIsolation(t *testing.T){
 	const key="repeatable-001"
 	first,err:=db.QueueKueueJob("research",key,"echo ok",testBatchImage,0.25,128)
 	if err!=nil{t.Fatal(err)}
+	// Earlier controllers claim status='queued' without recognizing Kueue.
+	// A Kueue job must remain outside that claim path during rollback.
+	stored,err:=db.queryOne("SELECT status FROM jobs WHERE id=?",first["id"])
+	if err!=nil||stored["status"]!="kueue_queued"{
+		t.Fatalf("rollback-unsafe job status: %v %v",stored,err)
+	}
 	again,err:=db.QueueKueueJob("research",key,"echo ok",testBatchImage,0.25,128)
 	if err!=nil||first["id"]!=again["id"]{t.Fatalf("idempotent submission: %v %v",again,err)}
 	if _,err:=db.QueueKueueJob("research",key,"echo changed",testBatchImage,0.25,128);err==nil{
