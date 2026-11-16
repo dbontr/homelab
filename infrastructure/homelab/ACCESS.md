@@ -28,40 +28,47 @@ their own account or role boundaries.
 
 ## MCP client endpoints
 
-The Cloudflare Access-protected `mcp.dbontr.me` origin hosts independent
-services under stable, exact paths. The gateway applies the same owner-only
-Access policy to every path. Individual MCP servers enforce their own
-credentials or verified caller identity; gateway authentication is not a
-universal authorization grant.
+The owner-only Cloudflare Access application on `mcp.dbontr.me` provides
+Managed OAuth to registered MCP clients. The authenticated origin forwards its
+signed Access assertion to the unified MCP bridge. The bridge validates the
+issuer, pinned signing key, exact gateway audience, owner email, issuance time
+and expiry before forwarding the owner's assertion to the domain service.
+The opaque OAuth access token is not a platform administrator credential.
 
-| Service | Endpoint | Origin |
+| Service | Endpoint | Purpose |
 | --- | --- | --- |
-| Workspace MCP | `https://mcp.dbontr.me/workspace` | Kubernetes controller over verified TLS |
-| Learning MCP | `https://mcp.dbontr.me/adaptive-teaching` | Local service on 127.0.0.1:8200 |
-| Personal Health MCP | `https://mcp.dbontr.me/personal-health` | Local service on 127.0.0.1:8201 |
+| Homelab | `https://mcp.dbontr.me/mcp` | Primary unified MCP interface for supported domain services |
+| Compute | `https://mcp.dbontr.me/compute` | Direct controller integration, when separately authorized |
+| Learning | `https://mcp.dbontr.me/learning` | Independent learning MCP |
+| Personal Health | `https://mcp.dbontr.me/personal-health` | Independent health and recipe MCP |
 
-Personal Health provides health and recipe tools from one authenticated MCP service.
-The service's `/healthz` probe is private to localhost. Unmatched and obsolete MCP paths return 404.
+The primary Homelab MCP retains a separate, protected bearer credential for
+existing private clients. That credential does not grant an owner identity or
+privileged execution authority. The gateway validates the OAuth-originated
+signed identity independently; unverified or missing assertions cannot grant
+MCP access. Privileged operations continue through the independent owner
+security authority and executor, with their existing confirmation policy.
 
-The gateway validates the Cloudflare Access audience before forwarding
-requests. Workspace MCP uses the gateway's audience for its own Access JWT
-verification. The controller's Kubernetes Secret retains a separate
-administrator token. The origin's TLS certificate must be verified against
-`/srv/mcp-trust/pwm-controller-ca.pem`.
+Cloudflare Managed OAuth dynamic client registration permits only the approved
+ChatGPT callback URI patterns. The Access application maintains its owner-only
+policy, and the tunnel verifies the expected application audience before
+forwarding requests to the loopback Nginx listener. The Nginx ingress retains
+the exact `/mcp` route and forwards the signed assertion unchanged. The MCP
+interface accepts only the expected Cloudflare audience and owner identity;
+the native API does not inherit this authorization.
 
-On a recovered Saturn host, restore the public controller trust certificate
-before enabling the ingress. Recreate `/srv/mcp-trust/pwm-controller-ca.pem`
-from the Kubernetes `pwm-controller-ca` Secret in `pwm-system`, grant Nginx
-read-only access to the PEM and traversal of its parent, and verify the
-certificate fingerprint against the running controller. Do not loosen the
-permissions of `/srv/homelab` or its secrets.
+A ChatGPT connection uses the primary Homelab URL and the OAuth connection
+flow. After server deployment, reconnect or refresh the existing Homelab
+plugin so ChatGPT discovers the current tools. Validate authenticated
+initialization and tool discovery, deny forged or expired assertions,
+and verify that anonymous requests still fail. Do not treat OAuth login
+alone as proof of successful tool discovery or privileged authorization.
 
-Personal Health verifies the Cloudflare Access assertion at its own origin. The
-private RecipeSage application is managed by `saturn-recipesage` inside the
-Personal Health domain. RecipeSage API integration uses optional, protected
-service credentials in `/srv/homelab/secrets/personal-health-mcp.env`.
-The standalone RecipeSage MCP service and endpoint are not part of the
-infrastructure. Never commit credentials or include their values in Nix configuration.
+The controller's Kubernetes Secret retains its own administrator token.
+The Compute TLS certificate remains verified against
+`/srv/mcp-trust/pwm-controller-ca.pem`; do not loosen the permissions of
+`/srv/homelab` or its secrets. The protected controller, learning, and health
+services remain individually authorized behind their exact ingress paths.
 
 ## Client URLs
 
