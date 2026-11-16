@@ -8,6 +8,26 @@ metadata:
     pod-security.kubernetes.io/audit: restricted
     pod-security.kubernetes.io/warn: restricted
 ---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: pwm-batch-runner
+  namespace: pwm-batch
+automountServiceAccountToken: false
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: batch-no-ingress
+  namespace: pwm-batch
+spec:
+  podSelector:
+    matchExpressions:
+      - key: homelab.dbontr.me/job-id
+        operator: Exists
+  policyTypes:
+    - Ingress
+---
 apiVersion: kueue.x-k8s.io/v1beta2
 kind: ResourceFlavor
 metadata:

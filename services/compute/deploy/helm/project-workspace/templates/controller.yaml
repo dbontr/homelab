@@ -217,6 +217,14 @@ spec:
               value: /tmp
             - name: PWM_DB
               value: /data/state.db
+            {{- if .Values.controller.kueue.enabled }}
+            - name: PWM_KUEUE_ENABLED
+              value: "1"
+            - name: PWM_KUEUE_TOKEN_FILE
+              value: /run/kueue/token
+            - name: PWM_KUEUE_CA_FILE
+              value: /run/kueue/ca.crt
+            {{- end }}
             - name: PWM_ALLOW_REMOTE_LISTEN
               value: "1"
             - name: PWM_TLS_CERT_FILE
@@ -320,6 +328,11 @@ spec:
                 name: {{ .Values.controller.offsite.backendSecretName }}
           {{- end }}
           volumeMounts:
+            {{- if .Values.controller.kueue.enabled }}
+            - name: kueue-kubernetes-identity
+              mountPath: /run/kueue
+              readOnly: true
+            {{- end }}
             {{- if .Values.controller.vault.enabled }}
             - name: vault-ca
               mountPath: /run/vault/ca
@@ -382,6 +395,20 @@ spec:
             initialDelaySeconds: 10
             periodSeconds: 20
       volumes:
+        {{- if .Values.controller.kueue.enabled }}
+        - name: kueue-kubernetes-identity
+          projected:
+            defaultMode: 292
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  expirationSeconds: 3600
+              - configMap:
+                  name: kube-root-ca.crt
+                  items:
+                    - key: ca.crt
+                      path: ca.crt
+        {{- end }}
         {{- if .Values.controller.vault.enabled }}
         - name: vault-ca
           secret:
