@@ -1216,6 +1216,62 @@ mod tests {
     }
 
     #[test]
+    fn owner_request_is_short_lived_principal_scoped_and_one_use() {
+        use crate::credentials::PassphraseRecord;
+        use crate::sessions::OperationPolicy;
+        let mut id = [0u8; 16];
+        getrandom::fill(&mut id).unwrap();
+        let dir = std::env::temp_dir().join(format!("owner-request-{}", hex::encode(id)));
+        fs::create_dir(&dir).unwrap();
+        fs::set_permissions(&dir, fs::Permissions::from_mode(0o700)).unwrap();
+        let authority = Authority::open(
+            &dir,
+            "operator".into(),
+            "platform-gateway".into(),
+            PassphraseRecord {
+                version: 1,
+                iterations: 310_000,
+                salt: "YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4".into(),
+                digest: "l9m+PJ5k/gZlE6OL9Ek9YfJ7L5ajP+9F+d5Z1mp4TXg".into(),
+            },
+            "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
+            vec![OperationPolicy {
+                operation: "workspace__status".into(),
+                targets: vec!["jupiter".into()],
+                destructive: false,
+            }],
+        ).unwrap();
+        let shared = Shared::new(authority, Some("https://auth.example.invalid".into()), None).unwrap();
+        let request = shared.issue_owner_request("verified-owner").unwrap();
+        assert!(valid_owner_request_id(&request));
+        assert_eq!(shared.owner_request_status("verified-owner", &request), Some(false));
+        assert_eq!(shared.owner_request_status("other-owner", &request), None);
+        assert_eq!(shared.owner_request_status("verified-owner", &request.to_uppercase()), None);
+        assert!(!shared.approve_owner_request("other-owner", &request));
+        assert!(shared.approve_owner_request("verified-owner", &request));
+        assert_eq!(shared.owner_request_status("verified-owner", &request), Some(true));
+        assert!(!shared.approve_owner_request("verified-owner", &request));
+        let stale = shared.issue_owner_request("verified-owner").unwrap();
+        {
+            let mut requests = shared.owner_requests.lock().unwrap();
+            requests.get_mut(&stale).unwrap().expires = Instant::now() - Duration::from_secs(1);
+        }
+        assert_eq!(shared.owner_request_status("verified-owner", &stale), None);
+        assert!(!shared.approve_owner_request("verified-owner", &stale));
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn parent_socket_permissions_allow_traversal_but_not_public_read() {
+        for mode in [0o700, 0o750, 0o751] {
+            assert_eq!(mode & 0o006, 0, "{mode:o}");
+        }
+        for mode in [0o705, 0o754, 0o755, 0o757] {
+            assert_ne!(mode & 0o006, 0, "{mode:o}");
+        }
+    }
+
+    #[test]
     fn escaping_prevents_untrusted_confirmation_html() {
         assert_eq!(escape_html("<script>\"&"), "&lt;script&gt;&quot;&amp;");
     }
