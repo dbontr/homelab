@@ -205,7 +205,7 @@ func devicesIn(cap map[string]any) []map[string]any {
 	return out
 }
 func (db *Database) Jobs(project string) ([]map[string]any, error) {
-	return db.query("SELECT id,project,node,status,created,updated,result FROM jobs WHERE project=? ORDER BY created DESC LIMIT 100", project)
+	return db.query("SELECT id,project,node,CASE WHEN status='kueue_queued' THEN 'queued' ELSE status END AS status,created,updated,result FROM jobs WHERE project=? ORDER BY created DESC LIMIT 100", project)
 }
 func (db *Database) SubmitJob(project, command, image string, cpu float64, memory int) (map[string]any, error) {
 	if strings.TrimSpace(command) == "" || len(command) > 16000 || !validImage.MatchString(image) || math.IsNaN(cpu) || math.IsInf(cpu, 0) || cpu < 0.1 || cpu > 32 || memory < 64 || memory > 131072 {
@@ -259,7 +259,7 @@ func (db *Database) ClaimJob(node string) (map[string]any, error) {
 		}
 		availableCPU := asFloat(caps["cpu"]) - asFloat(occupied["c"]) - asFloat(reserved["c"])
 		availableMem := asFloat(caps["memory_mb"]) - asFloat(occupied["m"]) - asFloat(reserved["m"])
-		query := "SELECT * FROM jobs WHERE status='queued' AND cpu<=? AND memory_mb<=?"
+		query := "SELECT * FROM jobs WHERE status='queued' AND NOT EXISTS (SELECT 1 FROM kueue_jobs k WHERE k.job=jobs.id) AND cpu<=? AND memory_mb<=?"
 		arguments := []any{availableCPU, availableMem}
 		if asBool(caps["kubernetes"]) {
 			project := asString(caps["project_id"])

@@ -1,0 +1,31 @@
+{{- if and .Values.controller.enabled .Values.controller.kueue.enabled }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: pwm-kueue-batch-controller
+  namespace: pwm-batch
+rules:
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list", "create", "delete"]
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list"]
+  - apiGroups: ["kueue.x-k8s.io"]
+    resources: ["workloads"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: pwm-kueue-batch-controller
+  namespace: pwm-batch
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: pwm-kueue-batch-controller
+subjects:
+  - kind: ServiceAccount
+    name: pwm-controller
+    namespace: {{ .Values.systemNamespace }}
+{{- end }}

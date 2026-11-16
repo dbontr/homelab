@@ -38,7 +38,9 @@ var tools = []toolDefinition{
 	{"worker_revoke", "Revoke a worker credential while retaining its active leases and recovery records; administrator only", []string{"node_id"}, nil},
 	{"task_worker_authorize", "Grant or revoke a worker's access to independent personal task execution", []string{"node_id", "allowed", "confirm"}, nil},
 	{"task_worker_access", "List controller-approved worker access to standalone personal tasks", nil, nil},
-	{"submit_compute_job", "Queue a one-shot command", []string{"project_id", "command"}, []string{"image", "cpu", "memory_mb"}},
+	{"submit_compute_job", "Queue a one-shot command with Worker or Kueue admission", []string{"project_id", "command"}, []string{"image", "cpu", "memory_mb", "backend", "request_id"}},
+	{"compute_job_status", "Read a queued batch job and its durable execution result", []string{"project_id", "job_id"}, nil},
+	{"compute_job_cancel", "Cancel a batch job and confirm removal of its Kubernetes workload", []string{"project_id", "job_id"}, nil},
 	{"list_project_jobs", "List compute jobs", []string{"project_id"}, nil},
 	{"link_github_repository", "Link a repository to a project", []string{"project_id", "repository"}, []string{"role", "default_ref"}},
 	{"git_provider_capabilities", "Discover supported storage and optional provider features", []string{"provider"}, nil},
@@ -535,7 +537,17 @@ func (s *Server) callToolFor(who caller, name string, a map[string]any) (any, er
 		if mem == 0 {
 			mem = 512
 		}
+		if get("backend") == "kueue" {
+			if s.Kueue == nil { return nil, errors.New("Kueue batch execution is disabled") }
+			return db.QueueKueueJob(project, get("request_id"), get("command"), image, cpu, mem)
+		}
+		if get("backend") != "" && get("backend") != "worker" { return nil, errors.New("invalid compute backend") }
 		return db.SubmitJob(project, get("command"), image, cpu, mem)
+	case "compute_job_status":
+		return db.KueueJob(project,get("job_id"))
+	case "compute_job_cancel":
+		if s.Kueue==nil{return nil,errors.New("Kueue batch execution is disabled")}
+		return db.CancelKueueJob(project,get("job_id"))
 	case "list_project_jobs":
 		return db.Jobs(project)
 	case "link_github_repository":

@@ -37,6 +37,7 @@ type Server struct {
 	AllowedHosts     map[string]bool
 	AllowedOrigins   map[string]bool
 	MaxArtifactBytes int64
+	Kueue *KueueBackend
 }
 
 func configured(what, defaults string) map[string]bool {
@@ -165,7 +166,9 @@ func NewServer(db *Database, token string) (*Server, error) {
 			AuthorEmail: strings.TrimSpace(os.Getenv("PWM_GIT_AUTHOR_EMAIL")),
 		}
 	}
-	return &Server{DB: db, AdminToken: token, OIDC: verifier, AccessVerifier: access, AccessOwnerEmail: accessOwner, PublicURL: publicURL,
+	batch, batchErr := NewKueueBackendFromEnv()
+	if batchErr != nil { return nil, batchErr }
+	return &Server{DB: db, Kueue: batch, AdminToken: token, OIDC: verifier, AccessVerifier: access, AccessOwnerEmail: accessOwner, PublicURL: publicURL,
 		GitHub: github, GitLab: gitlab, LocalGit: localGit,
   EmbeddingTokenSource: embeddingsTokenSource,
   VaultBroker: scopedVault,

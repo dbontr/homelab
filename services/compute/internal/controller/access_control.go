@@ -59,7 +59,7 @@ var readableTools = map[string]bool{
 	"knowledge_policy":    true,
 	"knowledge_git_read":  true,
 	"git_repository_head": true, "git_read_file": true,
-	"list_project_jobs": true, "list_github_repositories": true,
+	"list_project_jobs": true, "compute_job_status": true, "list_github_repositories": true,
 	"task_claim_list": true, "task_claim_status": true, "resource_plan": true, "resource_plan_batch": true,
 	"workspace_list": true, "workspace_operation": true,
 	"environment_list": true, "workspace_snapshot_list": true, "workspace_checkpoint_stop_status": true,

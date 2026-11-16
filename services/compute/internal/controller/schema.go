@@ -22,6 +22,8 @@ CREATE TABLE IF NOT EXISTS nodes(id TEXT PRIMARY KEY,token_hash TEXT NOT NULL,ca
 CREATE TABLE IF NOT EXISTS node_maintenance(node TEXT PRIMARY KEY,paused INTEGER NOT NULL CHECK(paused IN (0,1)),revision INTEGER NOT NULL,updated REAL NOT NULL,FOREIGN KEY(node) REFERENCES nodes(id));
 CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY,project TEXT NOT NULL,node TEXT,command TEXT NOT NULL,image TEXT NOT NULL,cpu REAL NOT NULL,memory_mb INTEGER NOT NULL,status TEXT NOT NULL,lease_until REAL,token_hash TEXT,created REAL NOT NULL,updated REAL NOT NULL,result TEXT);
 CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status,created);
+CREATE TABLE IF NOT EXISTS kueue_jobs(job TEXT PRIMARY KEY,project TEXT NOT NULL,request_id TEXT NOT NULL,remote_name TEXT NOT NULL UNIQUE,remote_uid TEXT NOT NULL DEFAULT '',last_error TEXT NOT NULL DEFAULT '',created REAL NOT NULL,updated REAL NOT NULL,UNIQUE(project,request_id),FOREIGN KEY(job) REFERENCES jobs(id),FOREIGN KEY(project) REFERENCES projects(id));
+CREATE INDEX IF NOT EXISTS idx_kueue_jobs_project ON kueue_jobs(project,created);
 CREATE TABLE IF NOT EXISTS pairings(code_hash TEXT PRIMARY KEY,expires REAL NOT NULL);
 CREATE TABLE IF NOT EXISTS workspaces(id TEXT PRIMARY KEY,project TEXT NOT NULL,node TEXT NOT NULL,image TEXT NOT NULL,cpu REAL NOT NULL,memory_mb INTEGER NOT NULL,status TEXT NOT NULL,expires REAL NOT NULL,created REAL NOT NULL,updated REAL NOT NULL,FOREIGN KEY(project) REFERENCES projects(id));
 CREATE TABLE IF NOT EXISTS workspace_batch_requests(id TEXT PRIMARY KEY,project TEXT NOT NULL,fingerprint TEXT NOT NULL,result TEXT NOT NULL,created REAL NOT NULL,FOREIGN KEY(project) REFERENCES projects(id));

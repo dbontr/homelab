@@ -12,6 +12,8 @@ controller:
   allowedOrigins: "https://pwm-controller.pwm-system.svc.cluster.local"
   environmentRegistry: ""
   databaseSize: 50Gi
+  kueue:
+    enabled: false
   storageClass: ""
   nodeSelector: {}
   githubPATSecretName: ""

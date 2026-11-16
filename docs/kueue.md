@@ -17,3 +17,13 @@ New batch Jobs in `pwm-batch` must label their Job metadata with `kueue.x-k8s.io
 Keep the HelmChart manifest and the queue manifest in the homelab repository as the source of truth. Kueue's CRDs and admission webhooks are cluster-scoped; review chart upgrades, keep rollback receipts, and test existing workload creation before promoting new versions.
 
 Do not uninstall the controller while Kueue resources remain. First finish or remove Kueue-managed Jobs, then Workloads, LocalQueues, ClusterQueues, ResourceFlavors and other Kueue resources, according to the official Kueue uninstall procedure. Removing the HelmChart does not justify deleting any Project Workspace PVCs or media.
+
+## Project Workspace batch execution
+
+The controller may enable `controller.kueue.enabled: true` in its Helm release after the Kueue queues and `pwm-batch-runner` service account exist. The controller receives a projected, audience-bound Kubernetes identity and namespace-scoped permissions for batch Jobs, Pod logs and Kueue Workloads. Interactive Workspace Pods and hardware leases remain under their original controller/worker paths. Kueue does not schedule hardware leases.
+
+Submit through `submit_compute_job` with `backend: kueue`, an immutable `image` reference ending in `@sha256:<64-hex>`, `request_id` (8–64 safe characters), `command`, `cpu` (0.1–2), and `memory_mb` (64–4096). Reusing a request ID with the same parameters returns the same persistent job. Inspect with `compute_job_status` or `list_project_jobs`; request cancellation with `compute_job_cancel`. Completion is recorded only after observing the Kubernetes Job terminal condition; cancellation is recorded only after confirming the Job is absent. Output includes up to 16 KiB of Pod logs, if available.
+
+The controller stores pending Kueue jobs as `kueue_queued` internally, while presenting them as `queued` through MCP and REST. This prevents earlier Workspace controllers from claiming them during rollback, even if they lack the Kueue exclusion query. The controller's reconciler resumes pending submissions, observation, and cancellation after process restart. Jobs use restricted Pod Security, immutable images, no service account token, read-only root filesystems, CPU-only quotas, and a one-hour execution deadline. Project authorization is enforced before job submission and status access. Existing worker Jobs remain unchanged.
+
+Deployment requires publishing an immutable controller image built from the accepted source and enabling `controller.kueue.enabled` in the controller Helm release. The live Kueue installation alone does not activate this Workspace feature.
