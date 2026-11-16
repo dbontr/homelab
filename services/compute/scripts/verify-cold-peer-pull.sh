@@ -43,7 +43,7 @@ fi
 source_index=$(remote "$donor" "k3s ctr -n k8s.io content get '$digest'")
 manifest_digest=$(jq -r '
   [.manifests[]? | select(.platform.os=="linux" and .platform.architecture=="amd64")]
-  | if length==0 then "" else .[0].digest end
+  | if length==0 then "" elif length==1 then .[0].digest else error("ambiguous Linux amd64 manifest") end
 ' <<< "$source_index")
 if [[ -n "$manifest_digest" ]]; then
   [[ "$manifest_digest" =~ ^sha256:[a-f0-9]{64}$ ]] || {
@@ -96,7 +96,7 @@ remote "$receiver" "k3s crictl inspecti '$image' >/dev/null" || {
   echo 'Image is not available through CRI' >&2; exit 1;
 }
 bash "$dir/verify-registry-mirror.sh" --require-hit-since "$baseline" \
-  "$donor" "$receiver"
+  "$receiver"
 printf 'PASS: cold OCI layer pull, digest, CRI availability and new peer-cache hit verified\n'
 printf 'IMAGE=%s\nINDEX=%s\nPREVIOUSLY_MISSING_LAYER=%s\nDONOR=%s\nRECEIVER=%s\n' \
   "$image" "$digest" "$missing" "$donor" "$receiver"
