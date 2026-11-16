@@ -116,10 +116,9 @@ in {
           type filter hook forward priority -10; policy accept;
           ct state established,related accept
           iifname "management10" oifname { "services20", "compute30" } accept
-          iifname { "management10", "services20", "compute30" }
-            oifname { "management10", "services20", "compute30" } drop
-          iifname "${cfg.wanInterface}"
-            oifname { "management10", "services20", "compute30" } drop
+          # Keep predicates on one line: each newline ends an nftables rule.
+          iifname { "management10", "services20", "compute30" } oifname { "management10", "services20", "compute30" } drop
+          iifname "${cfg.wanInterface}" oifname { "management10", "services20", "compute30" } drop
         }
       }
     '';

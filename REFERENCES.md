@@ -1,5 +1,6 @@
 # References
 
+- [nftables rule management](https://wiki.nftables.org/wiki-nftables/index.php/Simple_rule_management) — nftables project. Used for: evaluating conjunctions within single rules and preserving explicit forward-chain verdicts for private VLAN isolation.
 - [Kubernetes Jobs](https://kubernetes.io/docs/concepts/workloads/controllers/job/) — Kubernetes project. Used for: durable batch Job reconciliation, immutable execution configuration, terminal status and deletion propagation.
 - [Kubernetes RBAC](https://kubernetes.io/docs/reference/access-authn-authz/rbac/) — Kubernetes project. Used for: tightly scoped namespace access to Jobs, Pods and Kueue Workloads.
 
