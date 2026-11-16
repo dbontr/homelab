@@ -42,6 +42,9 @@ bash "$root/scripts/tests/worker-detached-activation-test.sh"
 bash "$root/services/compute/scripts/tests/worker-host-maintenance-test.sh"
 bash "$root/scripts/tests/stage-component-test.sh"
 bash -n "$root/scripts/saturn-detached-activation.sh"
+if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
+  bash "$root/scripts/tests/saturn-credential-readiness-test.sh"
+fi
 
 if ! command -v go >/dev/null 2>&1; then
   printf "%s\n" "Go is required for the selected verification mode." >&2
