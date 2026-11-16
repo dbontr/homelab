@@ -61,7 +61,7 @@ func TestToolDiscoveryForwardsOwnerAssertionOnlyWhenEnabled(t *testing.T) {
    return
   }
   w.Header().Set("Content-Type", "application/json")
-  _, _ = fmt.Fprint(w, `{"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"list_projects","description":"List authorized projects","inputSchema":{"type":"object"}},{"name":"submit_compute_job","description":"Queue a compute job","inputSchema":{"type":"object"}}]}}`)
+  _, _ = fmt.Fprint(w, `{"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"list_projects","description":"List authorized projects","inputSchema":{"type":"object"}},{"name":"submit_compute_job","description":"Queue a compute job","inputSchema":{"type":"object"}},{"name":"compute_job_status","description":"Inspect a batch job","inputSchema":{"type":"object"}}]}}`)
  }))
  defer upstream.Close()
 
@@ -86,13 +86,17 @@ func TestToolDiscoveryForwardsOwnerAssertionOnlyWhenEnabled(t *testing.T) {
     req.Header.Set("Cf-Access-Jwt-Assertion", tc.ownerAssertion)
    }
    found := false
+   foundStatus := false
    for _, tool := range gateway.toolList(req) {
     if tool["name"] == "compute__list_projects" {
      found = true
     }
+    if tool["name"] == "compute__compute_job_status" {
+     foundStatus = true
+    }
    }
-   if found != tc.wantComputeTool {
-    t.Fatalf("Compute read-only discovery = %t, want %t", found, tc.wantComputeTool)
+   if found != tc.wantComputeTool || foundStatus != tc.wantComputeTool {
+    t.Fatalf("Compute read-only discovery: projects=%t status=%t, want %t", found, foundStatus, tc.wantComputeTool)
    }
    for _, tool := range gateway.toolList(req) {
     if tool["name"] == "compute__submit_compute_job" {

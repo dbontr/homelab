@@ -16,7 +16,8 @@ import (
 // authorized operation arguments. Identity is durable executor metadata.
 func privilegedExecutorTool(name string)bool{
  switch name{
- case "infrastructure__workspace_register_image","infrastructure__workspace_propose_program",
+ case "compute__submit_batch_job","compute__cancel_batch_job",
+  "infrastructure__workspace_register_image","infrastructure__workspace_propose_program",
   "infrastructure__workspace_review_program","infrastructure__workspace_update_entry",
   "infrastructure__workspace_create","infrastructure__workspace_stop",
   "infrastructure__workspace_build_environment","infrastructure__workspace_register_software",
@@ -30,7 +31,7 @@ func privilegedExecutorTool(name string)bool{
 }
 
 func (s *Server) invoke(ctx context.Context,name string,args json.RawMessage,id json.RawMessage) map[string]any {
- if strings.HasPrefix(name,"compute__"){
+ if strings.HasPrefix(name,"compute__") && !privilegedExecutorTool(name){
   name="workspace__"+strings.TrimPrefix(name,"compute__")
  }
  if name=="workspace__github_merge_pull_request"||name=="workspace__github_mark_pull_request_ready"||
@@ -60,6 +61,13 @@ func (s *Server) invoke(ctx context.Context,name string,args json.RawMessage,id 
    return toolError("privileged execution requires a caller-generated 32-character lowercase hexadecimal request_id")
   }
   delete(fields,"request_id")
+  if name=="compute__submit_batch_job" {
+   if _,exists:=fields["job_request_id"];exists{
+    return toolError("job_request_id is reserved for the trusted gateway")
+   }
+   encoded,_:=json.Marshal(requestID)
+   fields["job_request_id"]=encoded
+  }
   scopedArgs,err:=json.Marshal(fields)
   if err!=nil{return toolError("invalid privileged execution arguments")}
   canonicalArgs,_,err:=canonicaljson.Object(scopedArgs)

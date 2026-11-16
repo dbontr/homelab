@@ -506,6 +506,8 @@ func(s *Server)localTools()[]map[string]any{
  }
  if s.executorClient!=nil {
   tools=append(tools,
+   tool("compute__submit_batch_job","Submit an owner-authorized CPU batch Job to the restricted Kueue queue",map[string]any{"host":prop("string"),"project_id":prop("string"),"command":prop("string"),"image":prop("string"),"cpu":prop("number"),"memory_mb":prop("integer")},"host","project_id","command","image","cpu","memory_mb"),
+   tool("compute__cancel_batch_job","Cancel an owned Kueue batch Job through the independent executor",map[string]any{"host":prop("string"),"project_id":prop("string"),"job_id":prop("string")},"host","project_id","job_id"),
    tool("infrastructure__workspace_stop","Stop an allowlisted Workspace project instance via the privileged Workspace bridge",map[string]any{"host":prop("string"),"project_id":prop("string"),"workspace_id":prop("string")},"host","project_id","workspace_id"),
    tool("infrastructure__workspace_build_environment","Queue an approved project environment build in Workspace",map[string]any{"host":prop("string"),"project_id":prop("string"),"workspace_id":prop("string"),"name":prop("string")},"host","project_id","workspace_id","name"),
    tool("infrastructure__workspace_register_software","Register an operator-approved immutable Workspace package collection",map[string]any{"host":prop("string"),"image_id":prop("string"),"software_id":prop("string"),"packages":map[string]any{"type":"array","items":prop("string")},"description":prop("string")},"host","image_id","software_id","packages"),

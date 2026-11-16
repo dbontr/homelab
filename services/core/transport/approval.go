@@ -21,7 +21,7 @@ func privilegeTarget(name string, args json.RawMessage) string {
 		priority = []string{"repository", "project_id", "target"}
 	} else if strings.HasPrefix(name, "workspace__") {
 		priority = []string{"project_id", "node_id", "device_id", "repository", "target"}
-	} else if strings.HasPrefix(name, "cluster__") || strings.HasPrefix(name, "infrastructure__") {
+	} else if privilegedExecutorTool(name) || strings.HasPrefix(name, "cluster__") || strings.HasPrefix(name, "infrastructure__") {
 		priority = []string{"host", "node_id", "target", "device_id"}
 	}
 	for _, key := range priority {

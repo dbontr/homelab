@@ -24,7 +24,7 @@ func ScopeFor(name string) string {
         "search_project_knowledge", "knowledge_policy", "knowledge_git_read",
         "knowledge_context", "knowledge_contributions", "knowledge_contribution",
         "knowledge_search_contributions", "list_compute_nodes",
-        "task_worker_access", "list_project_jobs", "git_provider_capabilities",
+        "task_worker_access", "list_project_jobs", "compute_job_status", "git_provider_capabilities",
         "git_repository_head", "git_read_file", "list_github_repositories",
         "task_list", "task_details", "task_files", "task_file_info",
         "task_read_base64", "task_compute_jobs", "personal_task_claim_list",

@@ -40,11 +40,18 @@ in
       hostname = "auth.dbontr.me";
       audience = "51fb5fbe71e4a1e0a110630c3f1325c5e3567927538ee697ff91c4e3165972dd";
     };
-    policies = map (operation: {
+    policies = (map (operation: {
       inherit operation;
       targets = [ host ];
       destructive = true;
-    }) privilegedOperations;
+    }) privilegedOperations) ++ (map (operation: {
+      inherit operation;
+      targets = [ host ];
+      destructive = false;
+    }) [
+      "compute__submit_batch_job"
+      "compute__cancel_batch_job"
+    ]);
   };
 
   services.homelabExecutor = {
@@ -52,6 +59,23 @@ in
     implementation = "rust";
     useRustActuator = true;
     allowReleaseActivation = false;
+    workspace = {
+      enable = true;
+      endpoint = "http://127.0.0.1:8104/workspace";
+      rootTokenFile = "/srv/homelab/secrets/compute-controller-admin.token";
+      projects = [
+        "acceptance"
+        "aup-zu3-pynq"
+        "health-stack"
+        "homelab-platform"
+        "minecraft-rust"
+        "web-game-console-emulator"
+        "workspace-mcp"
+      ];
+      imageReferences = [
+        "docker.io/library/debian@sha256:99c0b25c46d0214d5a2091092e7908907dcaecd6a962cde0ac700acee222b6f3"
+      ];
+    };
     allowedServices = [ "homelab-motivation.service" ];
     healthServices = [
       "homelab-platform.service"
