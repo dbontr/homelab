@@ -40,6 +40,7 @@ var tools = []toolDefinition{
 	{"task_worker_access", "List controller-approved worker access to standalone personal tasks", nil, nil},
 	{"submit_compute_job", "Queue a one-shot command with Worker or Kueue admission", []string{"project_id", "command"}, []string{"image", "cpu", "memory_mb", "backend", "request_id"}},
 	{"compute_job_status", "Read a queued batch job and its durable execution result", []string{"project_id", "job_id"}, nil},
+	{"compute_job_by_request", "Resolve a durable CPU batch job from its project-scoped execution request identity", []string{"project_id", "request_id"}, nil},
 	{"compute_job_cancel", "Cancel a batch job and confirm removal of its Kubernetes workload", []string{"project_id", "job_id"}, nil},
 	{"list_project_jobs", "List compute jobs", []string{"project_id"}, nil},
 	{"link_github_repository", "Link a repository to a project", []string{"project_id", "repository"}, []string{"role", "default_ref"}},
@@ -545,6 +546,8 @@ func (s *Server) callToolFor(who caller, name string, a map[string]any) (any, er
 		return db.SubmitJob(project, get("command"), image, cpu, mem)
 	case "compute_job_status":
 		return db.KueueJob(project,get("job_id"))
+	case "compute_job_by_request":
+		return db.KueueJobByRequest(project,get("request_id"))
 	case "compute_job_cancel":
 		if s.Kueue==nil{return nil,errors.New("Kueue batch execution is disabled")}
 		return db.CancelKueueJob(project,get("job_id"))

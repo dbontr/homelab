@@ -15,6 +15,7 @@ func TestBackendOperationScopes(t *testing.T){
   "workspace__submit_compute_job":"compute.execute",
   "workspace__compute_job_cancel":"workspace.modify",
   "workspace__compute_job_status":"",
+  "workspace__compute_job_by_request":"",
   "workspace__unrecognized_advanced_action":"workspace.modify",
   "health__delete_all":"personal.data.manage",
   "learning__reset_progress":"personal.data.manage",

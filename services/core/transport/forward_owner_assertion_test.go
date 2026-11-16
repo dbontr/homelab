@@ -61,7 +61,7 @@ func TestToolDiscoveryForwardsOwnerAssertionOnlyWhenEnabled(t *testing.T) {
    return
   }
   w.Header().Set("Content-Type", "application/json")
-  _, _ = fmt.Fprint(w, `{"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"list_projects","description":"List authorized projects","inputSchema":{"type":"object"}},{"name":"submit_compute_job","description":"Queue a compute job","inputSchema":{"type":"object"}},{"name":"compute_job_status","description":"Inspect a batch job","inputSchema":{"type":"object"}}]}}`)
+  _, _ = fmt.Fprint(w, `{"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"list_projects","description":"List authorized projects","inputSchema":{"type":"object"}},{"name":"submit_compute_job","description":"Queue a compute job","inputSchema":{"type":"object"}},{"name":"compute_job_status","description":"Inspect a batch job","inputSchema":{"type":"object"}},{"name":"compute_job_by_request","description":"Resolve an owned batch request","inputSchema":{"type":"object"}}]}}`)
  }))
  defer upstream.Close()
 
@@ -87,6 +87,7 @@ func TestToolDiscoveryForwardsOwnerAssertionOnlyWhenEnabled(t *testing.T) {
    }
    found := false
    foundStatus := false
+   foundReconciliation := false
    for _, tool := range gateway.toolList(req) {
     if tool["name"] == "compute__list_projects" {
      found = true
@@ -94,9 +95,12 @@ func TestToolDiscoveryForwardsOwnerAssertionOnlyWhenEnabled(t *testing.T) {
     if tool["name"] == "compute__compute_job_status" {
      foundStatus = true
     }
+    if tool["name"] == "compute__compute_job_by_request" {
+     foundReconciliation = true
+    }
    }
-   if found != tc.wantComputeTool || foundStatus != tc.wantComputeTool {
-    t.Fatalf("Compute read-only discovery: projects=%t status=%t, want %t", found, foundStatus, tc.wantComputeTool)
+   if found != tc.wantComputeTool || foundStatus != tc.wantComputeTool || foundReconciliation != tc.wantComputeTool {
+    t.Fatalf("Compute read-only discovery: projects=%t status=%t receipt=%t, want %t", found, foundStatus, foundReconciliation, tc.wantComputeTool)
    }
    for _, tool := range gateway.toolList(req) {
     if tool["name"] == "compute__submit_compute_job" {
