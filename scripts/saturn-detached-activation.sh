@@ -18,6 +18,48 @@ valid_system() {
      -x "$path/bin/switch-to-configuration" ]]
 }
 
+# A systemd LoadCredential source must exist before trial activation changes units.
+# Check metadata only; credential bytes never enter the release log.
+check_credential_unit() {
+  local unit="$1" line entry source metadata owner mode perms
+  [[ -f "$unit" && -r "$unit" ]] ||
+    fail "candidate service unit is unavailable: ${unit##*/}"
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    [[ "$line" == LoadCredential=* ]] || continue
+    entry=${line#LoadCredential=}
+    [[ -n "$entry" ]] || fail "empty LoadCredential directive: ${unit##*/}"
+    for binding in $entry; do
+      [[ "$binding" =~ ^[A-Za-z0-9_.-]+:/[^[:space:]]+$ ]] ||
+        fail "unsupported LoadCredential source: ${unit##*/}"
+      source=${binding#*:}
+      [[ ! -L "$source" && -f "$source" && -s "$source" && -r "$source" ]] ||
+        fail "required private credential is unavailable: ${unit##*/} (${binding%%:*})"
+      metadata=$(stat -c '%u %a' -- "$source") ||
+        fail "cannot inspect credential metadata: ${unit##*/}"
+      read -r owner mode <<< "$metadata"
+      [[ "$owner" == 0 && "$mode" =~ ^[0-7]{3,4}$ ]] ||
+        fail "credential owner or file mode is invalid: ${unit##*/}"
+      perms=$((8#$mode))
+      (( (perms & 8#037) == 0 )) ||
+        fail "credential file permits untrusted read or write: ${unit##*/}"
+    done
+  done < "$unit"
+  printf 'CREDENTIAL_READY %s\n' "${unit##*/}"
+}
+
+check_candidate_credentials() {
+  local candidate="$1" unit
+  for unit in homelab-securityd homelab-executord; do
+    check_credential_unit "$candidate/etc/systemd/system/$unit.service"
+  done
+}
+
+if [[ "$#" -ge 2 && "$1" == "--check-unit-credentials" ]]; then
+  shift
+  for unit in "$@"; do check_credential_unit "$unit"; done
+  exit 0
+fi
+
 require_active() {
   local unit="$1" attempt
   for attempt in $(seq 1 15); do
@@ -36,6 +78,7 @@ if [[ "$#" -eq 3 && "$1" == "--run" ]]; then
   previous="$3"
   valid_system "$candidate" || fail "invalid candidate NixOS store path"
   valid_system "$previous" || fail "invalid previous NixOS store path"
+  check_candidate_credentials "$candidate"
   exec 9>/run/lock/homelab-cutover.lock
   flock -n 9 || fail "another Saturn cutover is already running"
 
@@ -166,6 +209,7 @@ candidate=$(readlink -f -- "$1")
 previous=$(readlink -f -- /run/current-system)
 valid_system "$candidate" || fail "candidate must be an immutable Saturn NixOS system closure"
 valid_system "$previous" || fail "current NixOS system is not a valid rollback target"
+check_candidate_credentials "$candidate"
 [[ "$candidate" != "$previous" ]] || fail "candidate is already the current system"
 
 unit="homelab-cutover-$(date +%s)"
