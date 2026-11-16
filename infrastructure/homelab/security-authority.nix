@@ -18,6 +18,9 @@ let
     "infrastructure__workspace_revoke_worker"
     "cluster__deployment_restart"
     "cluster__deployment_scale"
+    "infrastructure__release_stage"
+    "infrastructure__release_activate"
+    "infrastructure__release_revert"
   ];
 in
 {
@@ -51,6 +54,7 @@ in
     }) [
       "compute__submit_batch_job"
       "compute__cancel_batch_job"
+      "infrastructure__release_status"
     ]);
   };
 
@@ -58,7 +62,8 @@ in
     enable = true;
     implementation = "rust";
     useRustActuator = true;
-    allowReleaseActivation = false;
+    allowReleaseActivation = true;
+    sourceDirectory = "/srv/homelab-main-build";
     workspace = {
       enable = true;
       endpoint = "http://127.0.0.1:8104/workspace";
