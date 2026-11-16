@@ -4,7 +4,7 @@ pkgs.buildGoModule {
   version = "0.1.0";
   src = ../.;
   env.GOWORK = "off";
-  vendorHash = "sha256-zyZc+MxpsRrcbIa03yYQfWtihnF1Ja2Kb6LEObEtcGo=";
+  vendorHash = "sha256-zyZC+MXpsRrcbIa03yYQfWtihmF1Ja2kb6LEObEtcGo=";
   subPackages = [ "mcp" "api" ];
   postInstall = ''
     mv "$out/bin/mcp" "$out/bin/homelab-mcp"
