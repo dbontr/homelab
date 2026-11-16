@@ -61,6 +61,67 @@ fn store_path(path: &str) -> bool {
         })
 }
 
+// Check the generated, immutable NixOS unit files before recording any release
+// transaction. Never open or serialize credential contents; only inspect source
+// existence, ownership and permissions.
+fn verify_candidate_credentials(system: &Path, expected_uid: u32) -> Result<(), Error> {
+    for service in ["homelab-securityd", "homelab-executord"] {
+        let unit = system
+            .join("etc/systemd/system")
+            .join(format!("{service}.service"));
+        let metadata = fs::metadata(&unit)
+            .map_err(|_| Error::Denied("candidate protected unit is unavailable"))?;
+        if !metadata.is_file() || metadata.len() > 64 << 10 {
+            return Err(Error::Denied("candidate protected unit is invalid"));
+        }
+        let unit_text = fs::read_to_string(&unit)
+            .map_err(|_| Error::Denied("cannot inspect candidate unit"))?;
+        for line in unit_text.lines() {
+            let Some(entries) = line.strip_prefix("LoadCredential=") else {
+                continue;
+            };
+            if entries.is_empty() {
+                return Err(Error::Denied("empty candidate credential mapping"));
+            }
+            for entry in entries.split_ascii_whitespace() {
+                let (name, source) = entry
+                    .split_once(':')
+                    .ok_or(Error::Denied("invalid candidate credential mapping"))?;
+                if name.is_empty()
+                    || !name.bytes().all(|b| {
+                        b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.')
+                    })
+                    || source.len() > 4096
+                {
+                    return Err(Error::Denied("invalid candidate credential mapping"));
+                }
+                let path = Path::new(source);
+                if !path.is_absolute()
+                    || path.components().any(|part| {
+                        matches!(
+                            part,
+                            std::path::Component::ParentDir | std::path::Component::CurDir
+                        )
+                    })
+                {
+                    return Err(Error::Denied("candidate credential source is not absolute"));
+                }
+                let file = fs::symlink_metadata(path)
+                    .map_err(|_| Error::Denied("candidate protected credential missing"))?;
+                if !file.is_file()
+                    || file.uid() != expected_uid
+                    || file.len() == 0
+                    || file.mode() & 0o037 != 0
+                    || file.mode() & 0o400 == 0
+                {
+                    return Err(Error::Denied("candidate protected credential is unsafe"));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 // Select the committed Git tree, not the live filesystem checkout. Escaping
 // the file URL prevents path characters from changing the Nix flake reference.
 fn pinned_flake(source: &Path, revision: &str, host: &str) -> Result<String, Error> {
@@ -409,7 +470,8 @@ impl ReleaseController {
     pub async fn verify_stage(&self, id: &str) -> Result<(), Error> {
         let _guard = self.operation.lock().await;
         let _file = self.state_lock()?;
-        self.load_stage(id).map(|_| ())
+        let manifest = self.load_stage(id)?;
+        verify_candidate_credentials(Path::new(&manifest.system), 0)
     }
 
     pub async fn activate(&self, id: &str) -> Result<(), Error> {
@@ -423,6 +485,7 @@ impl ReleaseController {
         if previous == manifest.system {
             return Err(Error::Denied("generation is already active"));
         }
+        verify_candidate_credentials(Path::new(&manifest.system), 0)?;
         let mut txn = Journal {
             phase: "activating".into(),
             id: id.into(),
