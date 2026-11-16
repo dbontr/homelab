@@ -61,7 +61,7 @@ func TestToolDiscoveryForwardsOwnerAssertionOnlyWhenEnabled(t *testing.T) {
    return
   }
   w.Header().Set("Content-Type", "application/json")
-  _, _ = fmt.Fprint(w, `{"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"submit_compute_job","description":"Queue a compute job","inputSchema":{"type":"object"}}]}}`)
+  _, _ = fmt.Fprint(w, `{"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"list_projects","description":"List authorized projects","inputSchema":{"type":"object"}},{"name":"submit_compute_job","description":"Queue a compute job","inputSchema":{"type":"object"}}]}}`)
  }))
  defer upstream.Close()
 
@@ -87,12 +87,17 @@ func TestToolDiscoveryForwardsOwnerAssertionOnlyWhenEnabled(t *testing.T) {
    }
    found := false
    for _, tool := range gateway.toolList(req) {
-    if tool["name"] == "compute__submit_compute_job" {
+    if tool["name"] == "compute__list_projects" {
      found = true
     }
    }
    if found != tc.wantComputeTool {
-    t.Fatalf("Compute discovery = %t, want %t", found, tc.wantComputeTool)
+    t.Fatalf("Compute read-only discovery = %t, want %t", found, tc.wantComputeTool)
+   }
+   for _, tool := range gateway.toolList(req) {
+    if tool["name"] == "compute__submit_compute_job" {
+     t.Fatal("privileged compute execution appeared in federated discovery")
+    }
    }
   })
  }
