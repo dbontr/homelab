@@ -139,21 +139,54 @@ func batchKubernetesJob(row map[string]any)map[string]any{
 	}
 }
 
+func asAnySlice(value any) []any {
+	v, _ := value.([]any)
+	return v
+}
+
 func matchBatchJob(job,row map[string]any)(string,error){
 	meta:=decodeAnyObject(job["metadata"])
 	if asString(meta["name"])!=asString(row["remote_name"])||
 		asString(meta["namespace"])!=batchNamespace||
-		asString(decodeAnyObject(meta["labels"])[batchJobLabel])!=asString(row["id"]){
+		asString(decodeAnyObject(meta["labels"])[batchJobLabel])!=asString(row["id"])||
+		asString(decodeAnyObject(meta["labels"])["kueue.x-k8s.io/queue-name"])!=batchQueue||
+		asString(decodeAnyObject(meta["annotations"])["homelab.dbontr.me/project"])!=asString(row["project"])||
+		asString(decodeAnyObject(meta["annotations"])["homelab.dbontr.me/request-id"])!=asString(row["request_id"]){
 		return "",errors.New("Kubernetes Job identity mismatch")
 	}
-	pod:=decodeAnyObject(decodeAnyObject(decodeAnyObject(job["spec"])["template"])["spec"])
+	template:=decodeAnyObject(decodeAnyObject(job["spec"])["template"])
+	pod:=decodeAnyObject(template["spec"])
 	containers,_:=pod["containers"].([]any)
-	if len(containers)!=1{return "",errors.New("unexpected Job container count")}
+	if len(containers)!=1||len(asAnySlice(pod["initContainers"]))!=0{
+		return "",errors.New("unexpected Job containers")
+	}
 	c:=decodeAnyObject(containers[0])
 	cmd,_:=c["command"].([]any)
 	if len(cmd)!=3||asString(cmd[0])!="/bin/sh"||asString(cmd[1])!="-c"||
 		asString(cmd[2])!=asString(row["command"])||asString(c["image"])!=asString(row["image"]){
 		return "",errors.New("Kubernetes Job execution spec mismatch")
+	}
+	cpu:=strconv.Itoa(int(math.Round(asFloat(row["cpu"])*1000)))+"m"
+	memory:=strconv.Itoa(asInt(row["memory_mb"]))+"Mi"
+	resources:=decodeAnyObject(c["resources"])
+	for _,key:=range []string{"requests","limits"}{
+		values:=decodeAnyObject(resources[key])
+		if asString(values["cpu"])!=cpu||asString(values["memory"])!=memory{
+			return "",errors.New("Kubernetes Job resource quota changed")
+		}
+	}
+	podContext:=decodeAnyObject(pod["securityContext"])
+	containerContext:=decodeAnyObject(c["securityContext"])
+	capabilities:=decodeAnyObject(containerContext["capabilities"])
+	if pod["automountServiceAccountToken"]!=false||
+		asString(pod["serviceAccountName"])!="pwm-batch-runner"||
+		podContext["runAsNonRoot"]!=true||
+		asString(decodeAnyObject(podContext["seccompProfile"])["type"])!="RuntimeDefault"||
+		containerContext["allowPrivilegeEscalation"]!=false||
+		containerContext["readOnlyRootFilesystem"]!=true||
+		len(asAnySlice(capabilities["drop"]))!=1||
+		asString(asAnySlice(capabilities["drop"])[0])!="ALL"{
+		return "",errors.New("Kubernetes Job security policy changed")
 	}
 	uid:=asString(meta["uid"])
 	if uid==""{return "",errors.New("Kubernetes Job UID absent")}
@@ -252,6 +285,9 @@ func (k *KueueBackend) reconcile(ctx context.Context,db *Database,row map[string
 		return err
 	}
 	uid:=asString(decodeAnyObject(job["metadata"])["uid"])
+	// Fence a remote Job before querying Kueue; transient errors must not
+	// cause an already-created job to be submitted again with a new UID.
+	if err:=db.updateKueueJob(id,uid,"queued","");err!=nil{return err}
 	status:=decodeAnyObject(job["status"])
 	conditions,_:=status["conditions"].([]any)
 	complete,failed:=false,false

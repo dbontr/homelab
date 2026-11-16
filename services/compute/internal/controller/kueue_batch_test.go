@@ -20,6 +20,7 @@ type batchAPIFixture struct{
 	created int
 	active bool
 	complete bool
+	admissionError bool
 }
 
 func (f *batchAPIFixture) ServeHTTP(w http.ResponseWriter,r *http.Request){
@@ -54,6 +55,7 @@ func (f *batchAPIFixture) ServeHTTP(w http.ResponseWriter,r *http.Request){
 		}
 		_ = json.NewEncoder(w).Encode(f.job)
 	case r.URL.Path=="/apis/kueue.x-k8s.io/v1beta2/namespaces/pwm-batch/workloads":
+		if f.admissionError {http.Error(w,"temporary failure",503);return}
 		_ = json.NewEncoder(w).Encode(map[string]any{"items":[]any{map[string]any{
 			"metadata":map[string]any{"ownerReferences":[]any{map[string]any{"uid":"batch-uid"}}},
 			"status":map[string]any{"conditions":[]any{map[string]any{"type":"Admitted","status":"True"}}},
@@ -181,4 +183,70 @@ func TestKueueCancelAndRestartRecovery(t *testing.T){
 	if err:=restarted.reconcile(context.Background(),db,pending[0]);err!=nil{t.Fatal(err)}
 	status,_=db.KueueJob("research",asString(second["id"]))
 	if status["status"]!="cancelled"{t.Fatalf("remote cleanup not confirmed: %v",status)}
+}
+
+func TestKueueRejectsMutatedJob(t *testing.T){
+	row:=map[string]any{
+		"id":"123456789abcdef0123456789abcdef0","project":"research",
+		"remote_name":"pwm-123456789abcdef0123456789abcdef0",
+		"request_id":"request-001","command":"echo checked",
+		"image":testBatchImage,"cpu":0.25,"memory_mb":128,
+	}
+	create:=func()map[string]any{
+		obj:=batchKubernetesJob(row)
+		decodeAnyObject(obj["metadata"])["uid"]="batch-uid"
+		return obj
+	}
+	if _,err:=matchBatchJob(create(),row);err!=nil{t.Fatalf("valid Job rejected: %v",err)}
+	for _,tamper:=range []struct{name string;change func(map[string]any)}{
+		{"project",func(o map[string]any){decodeAnyObject(decodeAnyObject(o["metadata"])["annotations"])["homelab.dbontr.me/project"]="other"}},
+		{"queue",func(o map[string]any){decodeAnyObject(decodeAnyObject(o["metadata"])["labels"])["kueue.x-k8s.io/queue-name"]="foreign"}},
+		{"cpu",func(o map[string]any){
+			pod:=decodeAnyObject(decodeAnyObject(decodeAnyObject(o["spec"])["template"])["spec"])
+			container:=decodeAnyObject(asAnySlice(pod["containers"])[0])
+			decodeAnyObject(decodeAnyObject(container["resources"])["limits"])["cpu"]="8000m"
+		}},
+		{"service-account",func(o map[string]any){
+			pod:=decodeAnyObject(decodeAnyObject(decodeAnyObject(o["spec"])["template"])["spec"])
+			pod["automountServiceAccountToken"]=true
+		}},
+		{"init-container",func(o map[string]any){
+			pod:=decodeAnyObject(decodeAnyObject(decodeAnyObject(o["spec"])["template"])["spec"])
+			pod["initContainers"]=[]any{map[string]any{"name":"unexpected"}}
+		}},
+	}{
+		t.Run(tamper.name,func(t *testing.T){
+			obj:=create()
+			tamper.change(obj)
+			if _,err:=matchBatchJob(obj,row);err==nil{t.Fatal("accepted tampered Kubernetes Job")}
+		})
+	}
+}
+
+func TestKueuePinsUIDBeforeAdmissionError(t *testing.T){
+	db,srv,_,fake:=batchFixture(t)
+	created,err:=db.QueueKueueJob("research","outage-001","echo resuming",testBatchImage,0.1,64)
+	if err!=nil{t.Fatal(err)}
+	fake.mu.Lock()
+	fake.admissionError=true
+	fake.mu.Unlock()
+	pending,err:=db.pendingKueueJobs()
+	if err!=nil{t.Fatal(err)}
+	if err:=srv.Kueue.reconcile(context.Background(),db,pending[0]);err==nil{t.Fatal("admission failure ignored")}
+	persisted,err:=db.KueueJob("research",asString(created["id"]))
+	if err!=nil||asString(persisted["remote_uid"])!="batch-uid"{
+		t.Fatalf("remote UID not persisted: %v %v",persisted,err)
+	}
+	fake.mu.Lock()
+	fake.job=nil
+	fake.admissionError=false
+	fake.mu.Unlock()
+	pending,_=db.pendingKueueJobs()
+	if err:=srv.Kueue.reconcile(context.Background(),db,pending[0]);err!=nil{t.Fatal(err)}
+	persisted,_=db.KueueJob("research",asString(created["id"]))
+	if persisted["status"]!="failed"{t.Fatalf("missing Job was recreated: %v",persisted)}
+	fake.mu.Lock()
+	count:=fake.created
+	fake.mu.Unlock()
+	if count!=1{t.Fatalf("duplicate execution: %d",count)}
 }
