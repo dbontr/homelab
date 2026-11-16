@@ -457,6 +457,36 @@ async fn session_client_get(State(shared): State<Shared>, headers: HeaderMap) ->
     }
 }
 
+async fn login_request_client_create(
+    State(shared): State<Shared>,
+    headers: HeaderMap,
+    raw: Bytes,
+) -> Response {
+    let Ok(assertion) = owner_assertion(&headers) else {
+        return protected_status("verified owner identity required", StatusCode::FORBIDDEN);
+    };
+    let Ok(payload) = json_input::<BTreeMap<String, serde_json::Value>>(&headers, &raw) else {
+        return protected_status("invalid request", StatusCode::BAD_REQUEST);
+    };
+    if !payload.is_empty() {
+        return protected_status("unexpected request fields", StatusCode::BAD_REQUEST);
+    }
+    let Ok(principal) = shared.with_authority(|auth| auth.gateway_principal(assertion)) else {
+        return protected_status("verified owner identity required", StatusCode::FORBIDDEN);
+    };
+    let Some(id) = shared.issue_owner_request(&principal) else {
+        return protected_status("owner request unavailable", StatusCode::SERVICE_UNAVAILABLE);
+    };
+    json_reply(
+        StatusCode::OK,
+        json!({
+            "request_id":id,
+            "reference_code":&id[..12],
+            "expires_in_seconds":OWNER_REQUEST_LIFETIME.as_secs()
+        }),
+    )
+}
+
 async fn session_client_delete(State(shared): State<Shared>, headers: HeaderMap) -> Response {
     let Ok(assertion) = owner_assertion(&headers) else {
         return protected_status("verified owner identity required", StatusCode::FORBIDDEN);
@@ -672,6 +702,7 @@ pub fn client_router(shared: Shared) -> Router {
             "/v1/session",
             get(session_client_get).delete(session_client_delete),
         )
+        .route("/v1/login-requests", post(login_request_client_create))
         .route("/v1/preview", post(operation_client_preview))
         .route("/v1/replay", post(operation_client_replay))
         .route("/v1/authorize", post(operation_client_authorize))
