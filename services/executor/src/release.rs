@@ -61,6 +61,67 @@ fn store_path(path: &str) -> bool {
         })
 }
 
+// Check the generated, immutable NixOS unit files before recording any release
+// transaction. Never open or serialize credential contents; only inspect source
+// existence, ownership and permissions.
+fn verify_candidate_credentials(system: &Path, expected_uid: u32) -> Result<(), Error> {
+    for service in ["homelab-securityd", "homelab-executord"] {
+        let unit = system
+            .join("etc/systemd/system")
+            .join(format!("{service}.service"));
+        let metadata = fs::metadata(&unit)
+            .map_err(|_| Error::Denied("candidate protected unit is unavailable"))?;
+        if !metadata.is_file() || metadata.len() > 64 << 10 {
+            return Err(Error::Denied("candidate protected unit is invalid"));
+        }
+        let unit_text = fs::read_to_string(&unit)
+            .map_err(|_| Error::Denied("cannot inspect candidate unit"))?;
+        for line in unit_text.lines() {
+            let Some(entries) = line.strip_prefix("LoadCredential=") else {
+                continue;
+            };
+            if entries.trim().is_empty() {
+                return Err(Error::Denied("empty candidate credential mapping"));
+            }
+            for entry in entries.split_ascii_whitespace() {
+                let (name, source) = entry
+                    .split_once(':')
+                    .ok_or(Error::Denied("invalid candidate credential mapping"))?;
+                if name.is_empty()
+                    || !name.bytes().all(|b| {
+                        b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.')
+                    })
+                    || source.len() > 4096
+                {
+                    return Err(Error::Denied("invalid candidate credential mapping"));
+                }
+                let path = Path::new(source);
+                if !path.is_absolute()
+                    || path.components().any(|part| {
+                        matches!(
+                            part,
+                            std::path::Component::ParentDir | std::path::Component::CurDir
+                        )
+                    })
+                {
+                    return Err(Error::Denied("candidate credential source is not absolute"));
+                }
+                let file = fs::symlink_metadata(path)
+                    .map_err(|_| Error::Denied("candidate protected credential missing"))?;
+                if !file.is_file()
+                    || file.uid() != expected_uid
+                    || file.len() == 0
+                    || file.mode() & 0o037 != 0
+                    || file.mode() & 0o400 == 0
+                {
+                    return Err(Error::Denied("candidate protected credential is unsafe"));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 // Select the committed Git tree, not the live filesystem checkout. Escaping
 // the file URL prevents path characters from changing the Nix flake reference.
 fn pinned_flake(source: &Path, revision: &str, host: &str) -> Result<String, Error> {
@@ -409,7 +470,8 @@ impl ReleaseController {
     pub async fn verify_stage(&self, id: &str) -> Result<(), Error> {
         let _guard = self.operation.lock().await;
         let _file = self.state_lock()?;
-        self.load_stage(id).map(|_| ())
+        let manifest = self.load_stage(id)?;
+        verify_candidate_credentials(Path::new(&manifest.system), 0)
     }
 
     pub async fn activate(&self, id: &str) -> Result<(), Error> {
@@ -423,6 +485,7 @@ impl ReleaseController {
         if previous == manifest.system {
             return Err(Error::Denied("generation is already active"));
         }
+        verify_candidate_credentials(Path::new(&manifest.system), 0)?;
         let mut txn = Journal {
             phase: "activating".into(),
             id: id.into(),
@@ -495,6 +558,70 @@ impl ReleaseController {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::os::unix::fs::{symlink, PermissionsExt};
+
+    #[test]
+    fn candidate_credentials_are_verified_before_release_mutation() {
+        let system = std::env::temp_dir().join(format!(
+            "homelab-release-credential-{}-{}",
+            std::process::id(),
+            random_hex::<8>().unwrap()
+        ));
+        let unit_dir = system.join("etc/systemd/system");
+        fs::create_dir_all(&unit_dir).unwrap();
+        let security = unit_dir.join("homelab-securityd.service");
+        let executor = unit_dir.join("homelab-executord.service");
+        fs::write(&security, b"[Service]\n").unwrap();
+
+        let credential = system.join("owner-only-token");
+        fs::write(&credential, b"fixture-only-not-a-credential").unwrap();
+        let set_mode = |mode| {
+            fs::set_permissions(&credential, fs::Permissions::from_mode(mode)).unwrap();
+        };
+        set_mode(0o600);
+        let mapping = format!(
+            "[Service]\nLoadCredential=workspace-token:{}\n",
+            credential.display()
+        );
+        fs::write(&executor, &mapping).unwrap();
+
+        // Tests may run without root, but actual release entrypoints require UID 0.
+        let owner = unsafe { libc::geteuid() };
+        assert!(verify_candidate_credentials(&system, owner).is_ok());
+        set_mode(0o640);
+        assert!(verify_candidate_credentials(&system, owner).is_ok());
+
+        set_mode(0o644);
+        assert!(verify_candidate_credentials(&system, owner).is_err());
+        set_mode(0o660);
+        assert!(verify_candidate_credentials(&system, owner).is_err());
+        set_mode(0o600);
+        assert!(verify_candidate_credentials(&system, owner + 1).is_err());
+
+        fs::remove_file(&credential).unwrap();
+        assert!(verify_candidate_credentials(&system, owner).is_err());
+        fs::write(&credential, b"fixture-only-not-a-credential").unwrap();
+        set_mode(0o600);
+        let linked = system.join("linked-token");
+        symlink(&credential, &linked).unwrap();
+        fs::write(
+            &executor,
+            format!("[Service]\nLoadCredential=workspace-token:{}\n", linked.display()),
+        )
+        .unwrap();
+        assert!(verify_candidate_credentials(&system, owner).is_err());
+
+        fs::write(&executor, b"[Service]\nLoadCredential=workspace-token:relative\n").unwrap();
+        assert!(verify_candidate_credentials(&system, owner).is_err());
+        fs::write(&executor, b"[Service]\nLoadCredential=workspace-token:\n").unwrap();
+        assert!(verify_candidate_credentials(&system, owner).is_err());
+        fs::write(&executor, b"[Service]\nLoadCredential=   \n").unwrap();
+        assert!(verify_candidate_credentials(&system, owner).is_err());
+        fs::write(&executor, mapping).unwrap();
+        assert!(verify_candidate_credentials(&system, owner).is_ok());
+
+        fs::remove_dir_all(&system).unwrap();
+    }
 
     #[test]
     fn release_flake_selects_an_exact_git_commit() {
