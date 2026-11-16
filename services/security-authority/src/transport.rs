@@ -477,11 +477,12 @@ async fn login_request_client_create(
     let Some(id) = shared.issue_owner_request(&principal) else {
         return protected_status("owner request unavailable", StatusCode::SERVICE_UNAVAILABLE);
     };
+    let reference_code = id[..12].to_owned();
     json_reply(
         StatusCode::OK,
         json!({
             "request_id":id,
-            "reference_code":&id[..12],
+            "reference_code":reference_code,
             "expires_in_seconds":OWNER_REQUEST_LIFETIME.as_secs()
         }),
     )
