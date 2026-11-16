@@ -160,3 +160,11 @@ Monitoring reuses the private Prometheus and Loki services. The platform's monit
 The independent `homelab-engineeringd` package and NixOS module are staged as part of the unified release. The daemon is opt-in. It requires protected project-scoped compute credentials and a finite list of allowed projects. An optional source model has separate credentials. The gateway receives neither secret; it can submit, inspect or cancel an engineering run only through the local Unix lifecycle socket.
 
 An engineering run may execute isolated source tasks and request a revision-guarded draft pull request. It cannot merge, change the NixOS fleet, restart critical services, or bypass the independent privileged executor. See [Engineering execution](engineering.md).
+
+## Offline OCI peer recovery
+
+If the embedded peer registry fails on an uncached manifest or layer, use the operator-controlled `services/compute/scripts/recover-oci-peer.sh` rather than trusting a stale registry advertisement. Supply the donor node, receiver node, exact internal image reference, and separately verified `sha256:` index digest. The command requires existing SSH keys and pinned host identities, refuses incomplete donor content and conflicting destination references, and verifies the complete imported image. It neither changes running Deployments nor removes in-use images. This is an authenticated manual recovery path, not proof that Spegel serves cold layers correctly.
+
+## Saturn-to-worker SSH management
+
+Saturn's owner-controlled worker identity is `/root/.ssh/saturn-homelab-ed25519`, not the default `id_ed25519`. Its public key must match each compute worker's declared `saturn-homelab.pub` before activation. Keep the private key outside Git and Nix store. Configure `/root/.ssh/config` with exact worker IPs, `IdentityFile /root/.ssh/saturn-homelab-ed25519`, `IdentitiesOnly yes`, `BatchMode yes`, and `StrictHostKeyChecking yes`. Check all four `ssh <hostname> hostname` calls before any worker update. Do not re-enable SSH password authentication or disable host-key verification to work around an omitted client identity.

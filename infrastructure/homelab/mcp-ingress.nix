@@ -28,7 +28,12 @@ in
     '';
 
     locations = {
+      "= /compute".extraConfig = workspaceProxy "mcp";
       "= /workspace".extraConfig = workspaceProxy "mcp";
+      "= /learning".extraConfig = streamProxy + ''
+        proxy_pass http://127.0.0.1:8200/mcp;
+        proxy_set_header Host 127.0.0.1:8200;
+      '';
       "= /adaptive-teaching".extraConfig = streamProxy + ''
         proxy_pass http://127.0.0.1:8200/mcp;
         proxy_set_header Host 127.0.0.1:8200;

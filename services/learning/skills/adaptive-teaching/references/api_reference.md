@@ -1,4 +1,4 @@
-# Adaptive Teaching MCP tool reference
+# Learning MCP tool reference
 
 All tools operate on the authenticated server's private SQLite store. ChatGPT provides pedagogy and provisional evaluation; tools do not invoke a model API.
 
@@ -18,7 +18,7 @@ All tools operate on the authenticated server's private SQLite store. ChatGPT pr
 | `show_knowledge_graph` | Open the interactive graph in an MCP Apps host |
 | `show_practice_question` | Open a short conceptual question and return its answer to the host |
 
-## Adaptive teaching sessions
+## Learning sessions
 
 | Tool | Purpose |
 | --- | --- |
@@ -31,7 +31,7 @@ All tools operate on the authenticated server's private SQLite store. ChatGPT pr
 | `record_session_probe` | Persist the genuine learner response and provisional diagnostic assessment; does not award mastery |
 | `build_learning_plan` | Plan prerequisites and selected reasoning route, preserving previously recorded evidence across revisions |
 | `record_learning_step` | Record learner-authored reasoning on an explicit concept or inference step, separately from concept mastery |
-| `show_learning_session` | Render the adaptive learning route and its evidence in compatible MCP Apps clients |
+| `show_learning_session` | Render the learning route and its evidence in compatible MCP Apps clients |
 | `open_learning_question` | Seal a diagnostic, prediction or check question, expected answer and grading rubric before display; one unresolved question per learning session |
 | `get_learning_question`, `get_pending_learning_question` | Resume an unanswered or ungraded question without disclosing its answer key |
 | `answer_learning_question` | Save the learner's original answer, optional explanatory reasoning and optional learner-reported confidence (0–1), exactly once, before grading |

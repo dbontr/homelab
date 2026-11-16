@@ -153,7 +153,7 @@ chart upgrade. The maintenance pause controls controller scheduling for one
 worker, not Kubernetes administration or other independent schedulers.
 
 Each upgrade remains subject to a later end-to-end workspace command,
-image-repull and node-restart qualification. Project workspaces and private
+image-repull and node-restart qualification. Compute workspaces and private
 artifacts must not be deleted to accelerate worker rollout. The release
 utility does not configure K3s registries or change compute-host NixOS
 generations; each host requires its independent registry/rollback procedure.

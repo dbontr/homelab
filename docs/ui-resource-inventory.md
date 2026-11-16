@@ -7,7 +7,7 @@ lifecycle must remain stable until an equivalent Rust/WASM view is available.
 
 | Owner | Resource or route | Host operations | User interaction |
 | --- | --- | --- | --- |
-| Compute | `GET /dashboard` | Direct authenticated Compute HTTP requests | Worker capacity, project workspace creation, image pools, node and device inspection |
+| Compute | `GET /dashboard` | Direct authenticated Compute HTTP requests | Worker capacity, compute workspace creation, image pools, node and device inspection |
 | Learning | `ui://adaptive-teaching/learning-workspace.html` | `ui/initialize`, `tools/call`, tool results and notifications | Knowledge map, assessment problems, teacher conversation, reviews, source attachments and bounded file uploads |
 | Health | `ui://personal-health-mcp/workout-editor.html` | `ui/initialize`, `tools/call` | Versioned workout-plan list and save, session and exercise editing, revision conflict reporting |
 | Health | `ui://personal-health-mcp/workout-companion.html` | `ui/initialize`, `tools/call` | Session selection, exercise set logging, recorded-workout completion |

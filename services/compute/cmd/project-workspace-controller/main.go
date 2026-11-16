@@ -242,7 +242,7 @@ func command(args []string) error {
 			defer done()
 			_ = server.Shutdown(ctx)
 		}()
-		log.Printf("Project Workspace MCP listening at %s", *addr)
+		log.Printf("Compute MCP listening at %s", *addr)
 		certFile, keyFile := os.Getenv("PWM_TLS_CERT_FILE"), os.Getenv("PWM_TLS_KEY_FILE")
 		if (certFile == "") != (keyFile == "") {
 			return errors.New("controller HTTPS requires both certificate and private key")

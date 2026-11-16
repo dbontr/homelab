@@ -1,5 +1,5 @@
 [Unit]
-Description=Project Workspace MCP controller
+Description=Compute MCP controller
 Wants=network-online.target
 After=network-online.target
 

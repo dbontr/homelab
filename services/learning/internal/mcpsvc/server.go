@@ -53,9 +53,9 @@ func withView(view string, result store.Value) store.Value {
 	return result
 }
 func NewService(db *store.Store) *Service {
-	server := mcp.NewServer(&mcp.Implementation{Name: "Adaptive Teaching", Version: "1.0.0"}, nil)
+	server := mcp.NewServer(&mcp.Implementation{Name: "Learning", Version: "1.0.0"}, nil)
     svc := &Service{Store:db,Server:server}
-	server.AddResource(&mcp.Resource{URI: UIURI, Name: "Adaptive Teaching learning workspace", MIMEType: "text/html;profile=mcp-app"},
+	server.AddResource(&mcp.Resource{URI: UIURI, Name: "Learning workspace", MIMEType: "text/html;profile=mcp-app"},
 		func(context.Context, *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
             html:=appHTML
             var meta mcp.Meta
@@ -99,7 +99,7 @@ func NewService(db *store.Store) *Service {
 		m, e := db.GetProblem(in.ProblemID)
 		return withView("problem", m), e
 	}, true)
-	register(server, "show_learning_session", "Inspect an adaptive teaching session and its reasoning route.", func(in struct {
+	register(server, "show_learning_session", "Inspect a learning session and its reasoning route.", func(in struct {
 		SessionID string `json:"session_id"`
 	}) (store.Value, error) {
 		m, e := db.GetLearningSession(in.SessionID)

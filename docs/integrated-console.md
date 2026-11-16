@@ -42,7 +42,7 @@ treat local personal tasks as Workspace compute tasks.
   observations declare whether each measurement was measured, reported or
   estimated. Strength, cardio and mobility entries may be linked to a plan
   and session; evidence-limited progression suggestions never alter plans.
-- **Learning:** Begin a session for a preexisting Adaptive Teaching concept,
+- **Learning:** Begin a session for a preexisting Learning concept,
   view its phase and pending question, and record an ungraded learner response
   with explicit assistance disclosure. Only the education service can evaluate
   the response or award evidence-backed mastery.

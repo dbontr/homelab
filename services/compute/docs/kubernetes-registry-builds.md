@@ -23,7 +23,7 @@ The Helm worker chart retains the namespace's default-deny workload NetworkPolic
 
 The Dockerfile expects official registry access for `golang:1.27.3-bookworm` and `rust:1.99.1-bookworm`, plus the package and Rust registries. The manually dispatched `.github/workflows/go-rust-wasm-image.yml` workflow builds this Dockerfile and publishes `ghcr.io/dbontr/pwm-go-rust-wasm:go1.27.3-rust1.99.1` using GitHub's workflow-scoped package token. It reports the immutable image digest. The workflow must exist on the default branch and requires available GitHub Actions capacity; it does not deploy the image or configure worker credentials. An operator may also build the image in the approved Workspace registry builder once that service is deployed. An environment definition must use the exact approved Go base in its `FROM` instruction.
 
-Validate the completed image in an isolated project workspace:
+Validate the completed image in an isolated compute workspace:
 
 ```sh
 go version

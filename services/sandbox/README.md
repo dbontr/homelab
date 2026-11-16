@@ -23,7 +23,7 @@ only a controller-queued `command` operation containing the exact fields
 a pinned verifier OCI image, a workspace already owned by the project/worker,
 a verified workload node and a project namespace with deny-all network policy.
 
-The Job mounts the existing project workspace volume read-only, has no
+The Job mounts the existing compute workspace volume read-only, has no
 mounted service-account token or privileged device, uses restricted process
 security settings and has a ten-minute action deadline. The worker owns
 Job creation, polling, cleanup and orphan reconciliation.

@@ -16,7 +16,7 @@ The provider supports:
 
 - Exact commit lookup from a branch, tag or commit identifier.
 - Reading a file at a pinned commit with a bounded response and a content SHA-256.
-- Importing a pinned `tar.gz` archive into an approved project workspace.
+- Importing a pinned `tar.gz` archive into an approved compute workspace.
 - Selecting a GitLab repository as a revisioned project-knowledge store.
 - Creating or replacing one project-knowledge file with explicit expected branch revision, per-file `last_commit_id` protection when the file exists, and post-write readback.
 - Source operations through the existing project-scoped `git_*` MCP methods.

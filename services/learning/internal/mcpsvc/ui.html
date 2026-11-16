@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Adaptive Teaching · Learning workspace</title>
+  <title>Learning · Learning workspace</title>
   <style>
     :root { color-scheme: light dark; font: 14px/1.45 var(--font-sans,system-ui,sans-serif);
       --bg: var(--color-background-primary,#fff); --surface:var(--color-background-secondary,#f4f5f6);
@@ -53,7 +53,7 @@
 </head>
 <body>
 <main class="shell">
-  <header><div><h1>Adaptive Teaching</h1><div class="muted">Understanding begins with reasons.</div></div>
+  <header><div><h1>Learning</h1><div class="muted">Understanding begins with reasons.</div></div>
     <div class="toolbar"><label for="target">Target mastery</label><select id="target" aria-label="Target mastery">
         <option value="1">1 · Familiarity</option><option value="2">2 · Exam preparation</option><option value="3">3 · Explanation</option>
         <option value="4">4 · Deep understanding</option><option value="5">5 · Mastery</option></select>
@@ -124,7 +124,7 @@
       <div id="problemEvaluation" class="problem-feedback"></div>
       <details class="problem-history"><summary>Draft and assistance history</summary><div id="problemHistory"></div></details>
   </div></div></section>
-  <section id="sessionView" class="question hidden" aria-label="Adaptive teaching session"><div class="panel"><div class="panel-content">
+  <section id="sessionView" class="question hidden" aria-label="Learning session"><div class="panel"><div class="panel-content">
     <p class="muted" id="sessionMeta"></p><h2 id="sessionGoal"></h2>
     <p class="problem-status" id="sessionProgress"></p>
     <div class="toolbar" style="margin:12px 0">
@@ -507,7 +507,7 @@ async function sendProblemMessage(action){
     const instructions=action==='final'
       ?'Verify each inferential step, then call finish_problem with a supported outcome and only explicitly demonstrated concept credits. Do not grant credit for merely recognizing theorems.'
       :'Identify the earliest unsupported inference without revealing a complete solution. Call review_problem_draft to preserve your feedback.';
-    const text=`${lead} for Adaptive Teaching problem ${p.id}. Latest saved learner draft: ${p.drafts.at(-1).id}. `+
+    const text=`${lead} for Learning problem ${p.id}. Latest saved learner draft: ${p.drafts.at(-1).id}. `+
       `Problem statement: ${p.statement}\nMy solution: ${p.drafts.at(-1).body}\nMy explanation: ${p.drafts.at(-1).learner_reasoning||'Not provided'}\nMy self-reported confidence: ${p.drafts.at(-1).self_confidence==null?'Not provided':Math.round(p.drafts.at(-1).self_confidence*100)+'%'}\nAssess correctness and reasoning independently of my confidence. ${instructions}`;
     await request('ui/message',{role:'user',content:[{type:'text',text}]});
     if(action==='final'){awaitingEvaluation=true;$('finalProblem').disabled=true;}
@@ -628,7 +628,7 @@ $('sourceExtract').onclick=async()=>{
     const stage=await callTool('next_extraction',{source_id:activeSourceID});
     $('sourceInfo').textContent=`Source extraction status: ${stage.action}.`;
     if(stage.action==='complete')return;
-    await request('ui/message',{role:'user',content:[{type:'text',text:`Please continue the Adaptive Teaching extraction for source ${activeSourceID} using next_extraction. Extract auditable propositions from the exact source span, propose_extraction with verbatim quotations, then perform a separate source-faithfulness and identity audit through audit_extraction. Preserve unresolved disputes. Do not infer learner mastery from source material.`}]});
+    await request('ui/message',{role:'user',content:[{type:'text',text:`Please continue the Learning extraction for source ${activeSourceID} using next_extraction. Extract auditable propositions from the exact source span, propose_extraction with verbatim quotations, then perform a separate source-faithfulness and identity audit through audit_extraction. Preserve unresolved disputes. Do not infer learner mastery from source material.`}]});
   }catch(e){showError(e);}
 };
 function renderPractice(data){
@@ -657,7 +657,7 @@ $('practiceNext').onclick=async()=>{
     if(plan.action==='finish_active_problem'){
       renderProblem(await callTool('get_problem',{problem_id:plan.problem_id}));return;
     }
-    await request('ui/message',{role:'user',content:[{type:'text',text:`Create the next Adaptive Teaching practice problem for session ${activePracticeID}. Plan: ${JSON.stringify(plan)}. Solve the proposed problem independently and seek unintended shortcuts before calling create_practice_problem with a sealed solution and rubric. Do not announce the target method in the statement. Wait for me to work and request feedback.`}]});
+    await request('ui/message',{role:'user',content:[{type:'text',text:`Create the next Learning practice problem for session ${activePracticeID}. Plan: ${JSON.stringify(plan)}. Solve the proposed problem independently and seek unintended shortcuts before calling create_practice_problem with a sealed solution and rubric. Do not announce the target method in the statement. Wait for me to work and request feedback.`}]});
     $('practiceInfo').textContent='Practice recommendation sent to ChatGPT.';
   }catch(e){showError(e);}
 };
@@ -714,7 +714,7 @@ $('sessionDiagnostic').onclick=async()=>{
     const candidate=await callTool('recommend_session_probe',{session_id:model.id});
     activeSessionProbe=candidate.action==='probe'?candidate:null;
     $('sessionSelected').textContent=`Diagnostic: ${candidate.reason} ${candidate.title||''}`;
-    const text=`For Adaptive Teaching session ${model.id}, diagnostic recommendation: ${JSON.stringify(candidate)}. `+
+    const text=`For Learning session ${model.id}, diagnostic recommendation: ${JSON.stringify(candidate)}. `+
       `If action is probe, call open_learning_question to commit one solvable diagnostic question, its hidden correct answer and rubric before presenting it, then show_learning_question so I can respond within the app. `+
       `For multiple-choice questions supply distinct option IDs and a matching sealed correct option. `+
       `If action is teach, help repair the specific reasoning gap. `+
@@ -749,7 +749,7 @@ $('sessionSubmit').onclick=async()=>{
       `Do not award durable mastery from the plan step.`:
       `Assess diagnostic topic ${activeSessionProbe.concept_id} and call record_session_probe with the actual answer, `+
       `explicit question, verdict, confidence and assistance status. This is diagnostic, not mastery evidence.`;
-    const text=`Adaptive Teaching learning session ${model.id}. ${instructions}\nMy own response:\n${response}`;
+    const text=`Learning session ${model.id}. ${instructions}\nMy own response:\n${response}`;
     await request('ui/message',{role:'user',content:[{type:'text',text}]});
     $('sessionInfo').textContent='Your reasoning was sent to ChatGPT for provisional assessment. Refresh to see the record.';
   }catch(e){showError(e);}
@@ -773,7 +773,7 @@ $('reviewProblem').onclick=()=>sendProblemMessage('review');
 $('finalProblem').onclick=()=>sendProblemMessage('final');
 $('hintProblem').onclick=async()=>{
   try{
-    const text=`For Adaptive Teaching problem ${model.id}, I request one minimally revealing hint. `+
+    const text=`For Learning problem ${model.id}, I request one minimally revealing hint. `+
       `Consult my saved drafts, and call record_problem_hint with the exact hint and assistance level before giving it. `+
       `Do not reveal the solution. This makes the attempt assisted.`;
     await request('ui/message',{role:'user',content:[{type:'text',text}]});
@@ -819,7 +819,7 @@ $('committedQuestionSubmit').onclick=async()=>{
       self_confidence:readLearnerConfidence('committedQuestionConfidence'),assisted:false
     });
     renderLearningQuestion(stored);
-    const content=`My answer for committed Adaptive Teaching question ${stored.id} is saved. My explanation is: ${stored.learner_reasoning||'Not provided'}. My self-reported confidence is ${stored.self_confidence==null?'not provided':Math.round(stored.self_confidence*100)+'%'}. Evaluate answer correctness against the precommitted key and evaluate the actual reasoning separately. Call grade_learning_question with verdict, evaluation and evaluator confidence. If an explanation was submitted, also provide reasoning_verdict (supported, gap or uncertain) and reasoning_evaluation. If no explanation was provided, do not invent or grade one; for a diagnostic question, a correct choice alone leaves understanding unverified. Learner confidence does not establish correctness or mastery.`;
+    const content=`My answer for committed Learning question ${stored.id} is saved. My explanation is: ${stored.learner_reasoning||'Not provided'}. My self-reported confidence is ${stored.self_confidence==null?'not provided':Math.round(stored.self_confidence*100)+'%'}. Evaluate answer correctness against the precommitted key and evaluate the actual reasoning separately. Call grade_learning_question with verdict, evaluation and evaluator confidence. If an explanation was submitted, also provide reasoning_verdict (supported, gap or uncertain) and reasoning_evaluation. If no explanation was provided, do not invent or grade one; for a diagnostic question, a correct choice alone leaves understanding unverified. Learner confidence does not establish correctness or mastery.`;
     await request('ui/message',{role:'user',content:[{type:'text',text:content}]});
   }catch(e){showError(e);}
 };
@@ -830,8 +830,8 @@ $('target').onchange=async e=>{
 };
 $('submit').onclick=async()=>{
   const answer=$('answer').value.trim();if(!answer){$('feedback').textContent='Enter your explanation before submitting.';return;}
-  const text=`I am answering the Adaptive Teaching practice question for concept ${model.concept.id} (${model.dimension}).\n`+
-    `Question: ${model.question}\nMy answer: ${answer}\nPlease assess my reasoning and, only if supported by the answer, record the evidence with Adaptive Teaching. Explain the missing why if needed.`;
+  const text=`I am answering the Learning practice question for concept ${model.concept.id} (${model.dimension}).\n`+
+    `Question: ${model.question}\nMy answer: ${answer}\nPlease assess my reasoning and, only if supported by the answer, record the evidence with Learning. Explain the missing why if needed.`;
   try{await request('ui/message',{role:'user',content:[{type:'text',text}]});
     $('feedback').textContent='Your answer was sent to ChatGPT for assessment.';
   }catch(e){showError(e);}
@@ -865,7 +865,7 @@ function setDisplay(){const supported=hostContext.availableDisplayModes||[];
  $('expand').classList.toggle('hidden',!supported.includes('fullscreen')||hostContext.displayMode==='fullscreen');}
 (async()=>{
   try{
-    const res=await request('ui/initialize',{appInfo:{name:'Adaptive Teaching',version:'0.1.0'},
+    const res=await request('ui/initialize',{appInfo:{name:'Learning',version:'0.1.0'},
       appCapabilities:{availableDisplayModes:['inline','fullscreen']},protocolVersion:'2026-01-26'});
     hostCapabilities=res.hostCapabilities||{};hostContext=res.hostContext||{};
     initialized=true;notify('ui/notifications/initialized');setDisplay();

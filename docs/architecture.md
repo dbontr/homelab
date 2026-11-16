@@ -12,7 +12,7 @@ Nix provides the root flake, host configuration, deployment definitions, credent
 
 ## Capabilities
 
-The system implements personal planning, recurrence-aware calendar availability, advisory weekly allocation, task reports, compute and Git workspaces, research libraries, adaptive learning, health and nutrition, media requests, and infrastructure observation. Its custom Rust monitoring views consume a bounded Go adapter over Prometheus metrics and Loki journal data; established collectors retain responsibility for telemetry and historical storage. Quantitative finance is not active. Seerr owns movie and television requests; the assistant exposes those capabilities without duplicating Seerr's database.
+The system implements personal planning, recurrence-aware calendar availability, advisory weekly allocation, task reports, compute and Git workspaces, research libraries, learning, health and nutrition, media requests, and infrastructure observation. Its custom Rust monitoring views consume a bounded Go adapter over Prometheus metrics and Loki journal data; established collectors retain responsibility for telemetry and historical storage. Quantitative finance is not active. Seerr owns movie and television requests; the assistant exposes those capabilities without duplicating Seerr's database.
 
 A single capability registry and consistent authorization rules govern tool discovery and execution. Operations belong to domain services. The optional MCP listener and external API listener authenticate separately, forward only admitted operations, and can stop without stopping the service runtime. The platform must distinguish a successful operation from one merely queued, accepted or unobserved.
 

@@ -11,7 +11,7 @@ The console is a single client for the personal computing platform. It does not 
 - shadcn/ui is a visual and interaction reference. Reimplement the necessary components and interaction patterns in Rust rather than translating React hooks or importing a React runtime.
 - Start with established accessible controls. Dialogs, comboboxes, focus traps and navigation must be keyboard-operable, with correct native roles and focus behavior before customization.
 - Keep Rust source components owned by this repository. Experimental third-party Rust component registries are references, not hard dependencies.
-- Apply the same frontend rule to standalone Workspace, Health, and Adaptive Teaching MCP App interfaces. Their existing HTML resources contain embedded JavaScript and are not part of the Dioxus console build. Preserve functional endpoints while moving interactive views into Rust/WASM. Serve the compiled entrypoints and assets through their Go-owned resources; retire inline-script implementations only after their interactions, tool bridge, keyboard access, and security boundaries are preserved.
+- Apply the same frontend rule to standalone Workspace, Health, and Learning MCP App interfaces. Their existing HTML resources contain embedded JavaScript and are not part of the Dioxus console build. Preserve functional endpoints while moving interactive views into Rust/WASM. Serve the compiled entrypoints and assets through their Go-owned resources; retire inline-script implementations only after their interactions, tool bridge, keyboard access, and security boundaries are preserved.
 
 ## User experience
 

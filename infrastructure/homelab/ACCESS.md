@@ -37,7 +37,7 @@ universal authorization grant.
 | Service | Endpoint | Origin |
 | --- | --- | --- |
 | Workspace MCP | `https://mcp.dbontr.me/workspace` | Kubernetes controller over verified TLS |
-| Adaptive Teaching MCP | `https://mcp.dbontr.me/adaptive-teaching` | Local service on 127.0.0.1:8200 |
+| Learning MCP | `https://mcp.dbontr.me/adaptive-teaching` | Local service on 127.0.0.1:8200 |
 | Personal Health MCP | `https://mcp.dbontr.me/personal-health` | Local service on 127.0.0.1:8201 |
 
 Personal Health provides health and recipe tools from one authenticated MCP service.

@@ -34,7 +34,7 @@ volumes, project files, and media outside this repository.
 7. Verify networking, K3s, storage mounts, tunnel authentication,
    application health and ingress policy before admitting workers.
 
-Confirm admission labels, immutable image references, persistent volumes and network-policy enforcement before admitting Project Workspace workers or accepting jobs.
+Confirm admission labels, immutable image references, persistent volumes and network-policy enforcement before admitting Compute workers or accepting jobs.
 
 ## Selected-state recovery
 
@@ -52,6 +52,6 @@ configuration has been verified.
 
 A successfully created local archive does not establish disaster recovery. Confirm
 the encrypted off-host copy can be decrypted and restored independently, including
-K3s identity, PostgreSQL, learning attachments, Project Workspace controller state,
+K3s identity, PostgreSQL, learning attachments, Compute controller state,
 and artifact bytes, before decommissioning existing backups. The selected backup
 module remains disabled until those dependencies and recovery tests are complete.
