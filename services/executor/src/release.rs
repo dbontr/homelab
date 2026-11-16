@@ -80,7 +80,7 @@ fn verify_candidate_credentials(system: &Path, expected_uid: u32) -> Result<(), 
             let Some(entries) = line.strip_prefix("LoadCredential=") else {
                 continue;
             };
-            if entries.is_empty() {
+            if entries.trim().is_empty() {
                 return Err(Error::Denied("empty candidate credential mapping"));
             }
             for entry in entries.split_ascii_whitespace() {
@@ -614,6 +614,8 @@ mod tests {
         fs::write(&executor, b"[Service]\nLoadCredential=workspace-token:relative\n").unwrap();
         assert!(verify_candidate_credentials(&system, owner).is_err());
         fs::write(&executor, b"[Service]\nLoadCredential=workspace-token:\n").unwrap();
+        assert!(verify_candidate_credentials(&system, owner).is_err());
+        fs::write(&executor, b"[Service]\nLoadCredential=   \n").unwrap();
         assert!(verify_candidate_credentials(&system, owner).is_err());
         fs::write(&executor, mapping).unwrap();
         assert!(verify_candidate_credentials(&system, owner).is_ok());
