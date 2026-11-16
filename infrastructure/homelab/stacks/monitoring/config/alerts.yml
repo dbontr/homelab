@@ -22,7 +22,7 @@ groups:
         labels: {severity: warning}
         annotations: {summary: "Service health probe failed: {{ $labels.instance }}"}
       - alert: JupiterGpuTelemetryUnavailable
-        expr: (homelab_gpu_collection_success == 0) or (time() - homelab_gpu_sample_timestamp_seconds > 180) or absent(homelab_gpu_collection_success) or absent(homelab_gpu_sample_timestamp_seconds)
+        expr: (homelab_gpu_collection_success{job="cluster-nodes",node="jupiter"} == 0) or (time() - homelab_gpu_sample_timestamp_seconds{job="cluster-nodes",node="jupiter"} > 180) or absent(homelab_gpu_collection_success{job="cluster-nodes",node="jupiter"}) or absent(homelab_gpu_sample_timestamp_seconds{job="cluster-nodes",node="jupiter"})
         for: 5m
         labels: {severity: warning}
         annotations: {summary: "Jupiter GPU telemetry unavailable"}
