@@ -1321,6 +1321,75 @@ mod tests {
             .is_err());
     }
 
+    #[test]
+    fn batch_admission_is_project_image_and_resource_scoped() {
+        let image = format!("docker.io/library/debian@sha256:{}", "a".repeat(64));
+        let mut policy = policy();
+        policy.workspace = Some(WorkspacePolicy {
+            endpoint: "http://127.0.0.1:8104/workspace".into(),
+            projects: vec!["research".into()],
+            workers: vec![],
+            devices: vec![],
+            images: vec![],
+            image_references: vec![image.clone()],
+            software: vec![],
+            programs: vec![],
+            packages: vec![],
+        });
+        assert!(policy.workspace.as_ref().unwrap().validate().is_ok());
+        let key = "b".repeat(32);
+        let args = json!({
+            "host":"jupiter","project_id":"research","job_request_id":key,
+            "command":"printf batch-ok", "image":image,"cpu":0.5,"memory_mb":256
+        });
+        let accepted = policy.admit(
+            "compute__submit_batch_job",
+            "jupiter",
+            args.as_object().unwrap(),
+        );
+        assert!(matches!(
+            accepted,
+            Ok(Action::Workspace { tool, arguments })
+                if tool == "submit_compute_job"
+                    && arguments["backend"] == "kueue"
+                    && arguments["request_id"] == key
+                    && arguments["project_id"] == "research"
+        ));
+        for (key, value) in [
+            ("project_id", json!("unlisted")),
+            ("image", json!("debian:bookworm-slim")),
+            ("command", json!("")),
+            ("cpu", json!(2.5)),
+            ("cpu", json!(-1)),
+            ("memory_mb", json!(5000)),
+            ("memory_mb", json!(0)),
+            ("job_request_id", json!("other")),
+            ("host", json!("saturn")),
+            ("extra", json!(true)),
+        ] {
+            let mut changed = args.clone();
+            changed[key] = value;
+            assert!(
+                policy
+                    .admit("compute__submit_batch_job", "jupiter", changed.as_object().unwrap())
+                    .is_err(),
+                "invalid batch field accepted: {key}",
+            );
+        }
+        let cancel = json!({
+            "host":"jupiter","project_id":"research","job_id":"c".repeat(32)
+        });
+        assert!(matches!(
+            policy.admit("compute__cancel_batch_job", "jupiter", cancel.as_object().unwrap()),
+            Ok(Action::Workspace { tool, .. }) if tool == "compute_job_cancel"
+        ));
+        let mut wrong = cancel.clone();
+        wrong["job_id"] = json!("../../job");
+        assert!(policy.admit(
+            "compute__cancel_batch_job", "jupiter", wrong.as_object().unwrap()
+        ).is_err());
+    }
+
     fn policy() -> Policy {
         Policy {
             host: "jupiter".into(),
