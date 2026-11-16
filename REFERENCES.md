@@ -1,5 +1,8 @@
 # References
 
+- [Kubernetes Jobs](https://kubernetes.io/docs/concepts/workloads/controllers/job/) — Kubernetes project. Used for: durable batch Job reconciliation, immutable execution configuration, terminal status and deletion propagation.
+- [Kubernetes RBAC](https://kubernetes.io/docs/reference/access-authn-authz/rbac/) — Kubernetes project. Used for: tightly scoped namespace access to Jobs, Pods and Kueue Workloads.
+
 - [Kueue v0.20.6 installation](https://kueue.sigs.k8s.io/docs/getting-started/installation/) — Kubernetes SIG Scheduling. Used for: versioned queue-admission controller installation, safe namespace opt-in, and CRD removal order.
 - [Kueue quick start](https://kueue.sigs.k8s.io/docs/getting-started/quick-start/) — Kubernetes SIG Scheduling. Used for: ResourceFlavor, ClusterQueue, LocalQueue and Job admission contracts.
 - [K3s Helm Controller](https://docs.k3s.io/add-ons/helm) — K3s project. Used for: declarative HelmChart reconciliation and bounded Helm installation failure policies.

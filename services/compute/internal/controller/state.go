@@ -259,7 +259,7 @@ func (db *Database) ClaimJob(node string) (map[string]any, error) {
 		}
 		availableCPU := asFloat(caps["cpu"]) - asFloat(occupied["c"]) - asFloat(reserved["c"])
 		availableMem := asFloat(caps["memory_mb"]) - asFloat(occupied["m"]) - asFloat(reserved["m"])
-		query := "SELECT * FROM jobs WHERE status='queued' AND cpu<=? AND memory_mb<=?"
+		query := "SELECT * FROM jobs WHERE status='queued' AND NOT EXISTS (SELECT 1 FROM kueue_jobs k WHERE k.job=jobs.id) AND cpu<=? AND memory_mb<=?"
 		arguments := []any{availableCPU, availableMem}
 		if asBool(caps["kubernetes"]) {
 			project := asString(caps["project_id"])

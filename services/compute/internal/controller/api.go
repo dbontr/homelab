@@ -156,6 +156,13 @@ func (s *Server) handleAdmin(w http.ResponseWriter, r *http.Request, p []string)
 				send(w, v, e)
 				return
 			}
+			if method == "POST" {
+				var in struct { Command string `json:"command"`; Image string `json:"image"`; RequestID string `json:"request_id"`; Backend string `json:"backend"`; CPU float64 `json:"cpu"`; MemoryMB int `json:"memory_mb"` }
+				if err:=bodyJSON(r,&in);err!=nil{fail(w,400,err.Error());return}
+				if in.Backend!="kueue"||s.Kueue==nil{fail(w,400,"Kueue batch execution is unavailable");return}
+				v,e:=db.QueueKueueJob(project,in.RequestID,in.Command,in.Image,in.CPU,in.MemoryMB)
+				send(w,v,e);return
+			}
 		case "repositories":
 			if method == "GET" {
 				v, e := db.Repositories(project)
@@ -205,6 +212,13 @@ func (s *Server) handleAdmin(w http.ResponseWriter, r *http.Request, p []string)
 				return
 			}
 		}
+	}
+	if len(p)==5&&p[3]=="jobs"&&method=="GET"{
+		v,e:=db.KueueJob(project,p[4]);send(w,v,e);return
+	}
+	if len(p)==6&&p[3]=="jobs"&&p[5]=="cancel"&&method=="POST"{
+		if s.Kueue==nil{fail(w,400,"Kueue batch execution is unavailable");return}
+		v,e:=db.CancelKueueJob(project,p[4]);send(w,v,e);return
 	}
 	if len(p) == 5 {
 		switch p[3] {

@@ -211,6 +211,7 @@ func command(args []string) error {
 		defer stop()
         service.StartResearchTextWorker(ctx)
         service.StartResearchEmbeddingWorker(ctx)
+		service.StartKueueReconciler(ctx)
 		var offsite sync.WaitGroup
 		if intervalText := os.Getenv("PWM_RESTIC_BACKUP_INTERVAL"); args[0] == "controller" && intervalText != "" {
 			interval, err := time.ParseDuration(intervalText)
