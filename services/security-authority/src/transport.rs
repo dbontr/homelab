@@ -903,6 +903,7 @@ async fn browser_form(
     raw: Bytes,
     action: &str,
     confirmation_id: Option<&str>,
+    request_id: Option<&str>,
 ) -> Response {
     let Ok(assertion) = checked_browser_assertion(&shared, &headers) else {
         return protected_status("verified owner identity required", StatusCode::FORBIDDEN);
@@ -933,10 +934,18 @@ async fn browser_form(
     if !shared.take_csrf(&principal, csrf) {
         return protected_status("invalid owner form", StatusCode::FORBIDDEN);
     }
+    if let Some(id) = request_id {
+        if shared.owner_request_status(&principal, id) != Some(false) {
+            return protected_status("owner request unavailable", StatusCode::NOT_FOUND);
+        }
+    }
     let password = Zeroizing::new(form.get("password").cloned().unwrap_or_default());
     let otp = form.get("totp").map(String::as_str).unwrap_or("");
     let result = shared.with_authority(|auth| match action {
-        "login" => auth.login_browser(assertion, &password, otp).map(|_| ()),
+        "login" | "request_login" => auth.login_browser(assertion, &password, otp).map(|_| ()),
+        "request_approve" => auth.browser_status(assertion).and_then(|status| {
+            if status.active { Ok(()) } else { Err(Error::Unauthorized) }
+        }),
         "close" => auth.browser_revoke(assertion).and_then(|closed| {
             if closed {
                 Ok(())
@@ -952,16 +961,23 @@ async fn browser_form(
             &shared,
             assertion,
             "Owner authentication or confirmation denied",
+            request_id,
         );
+    }
+    if let Some(id) = request_id {
+        if !shared.approve_owner_request(&principal, id) {
+            return protected_status("owner request unavailable", StatusCode::NOT_FOUND);
+        }
+        return Redirect::to(&format!("/request/{id}")).into_response();
     }
     Redirect::to("/").into_response()
 }
 
 async fn browser_login(State(shared): State<Shared>, headers: HeaderMap, raw: Bytes) -> Response {
-    browser_form(shared, headers, raw, "login", None).await
+    browser_form(shared, headers, raw, "login", None, None).await
 }
 async fn browser_close(State(shared): State<Shared>, headers: HeaderMap, raw: Bytes) -> Response {
-    browser_form(shared, headers, raw, "close", None).await
+    browser_form(shared, headers, raw, "close", None, None).await
 }
 async fn browser_confirm(
     State(shared): State<Shared>,
@@ -972,7 +988,7 @@ async fn browser_confirm(
     if id.len() != 48 || !id.bytes().all(|b| b.is_ascii_hexdigit()) {
         return protected_status("invalid confirmation", StatusCode::NOT_FOUND);
     }
-    browser_form(shared, headers, raw, "confirm", Some(&id)).await
+    browser_form(shared, headers, raw, "confirm", Some(&id), None).await
 }
 
 pub fn browser_router(shared: Shared) -> Router {
