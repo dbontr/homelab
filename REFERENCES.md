@@ -1,5 +1,9 @@
 # References
 
+- [Kueue v0.20.6 installation](https://kueue.sigs.k8s.io/docs/getting-started/installation/) — Kubernetes SIG Scheduling. Used for: versioned queue-admission controller installation, safe namespace opt-in, and CRD removal order.
+- [Kueue quick start](https://kueue.sigs.k8s.io/docs/getting-started/quick-start/) — Kubernetes SIG Scheduling. Used for: ResourceFlavor, ClusterQueue, LocalQueue and Job admission contracts.
+- [K3s Helm Controller](https://docs.k3s.io/add-ons/helm) — K3s project. Used for: declarative HelmChart reconciliation and bounded Helm installation failure policies.
+
 - [Spegel imported-content advertisement issue](https://github.com/spegel-org/spegel/issues/1096) — Spegel project. Used for: diagnosing missing per-blob registry source metadata after direct containerd image import, and requiring guarded index refresh before cold-layer acceptance.
 - [Containerd content flow](https://containerd.io/docs/2.4/content-flow/) — containerd project. Used for: content-addressed OCI descriptors, SHA-256 integrity and registry-source labels when qualifying an imported image.
 - [SQLite Transaction Isolation](https://www.sqlite.org/isolation.html) — SQLite project. Used for: serializing worker maintenance state changes with workspace allocation and job leasing under one write transaction.
