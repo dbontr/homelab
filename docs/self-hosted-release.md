@@ -16,17 +16,16 @@ The independent **Rust release controller** also inspects the generated security
 
 ### Protected Compute credential provisioning
 
-The executor uses a root-owned copy of the active Kubernetes Compute controller credential. Provision it from a trusted Saturn root console after verifying that the \`pwm-system/pwm-controller-credentials\` Secret belongs to the active controller:
+The executor uses a root-owned copy of the active Kubernetes Compute controller credential. Provision it from a trusted Saturn root console after verifying that the `pwm-system/pwm-controller-credentials` Secret belongs to the active controller:
 
-\`\`\`sh
+```sh
 sudo bash scripts/provision-compute-controller-credential.sh
 sudo stat -c '%U %a %n' /srv/homelab/secrets/compute-controller-admin.token
-\`\`\`
+```
 
 Run the script from an independently verified source revision. It pins Saturn's K3s kubeconfig and the controller Secret name; it does not take tokens or destinations as arguments. It checks the protected directory, rejects an existing destination or invalid token, and installs one root-owned mode-0600 regular file without displaying the credential. A failed attempt removes the temporary file. Never print, paste, copy into Git or pass the credential as a command-line argument. If the credential already exists, inspect its metadata and reconcile it with the controller before any intentional rotation.
 
 Credential installation only satisfies the release preflight dependency. It does not activate a NixOS generation, establish an owner session or prove that an authorized Compute job succeeds.
-
 
 A detached Saturn NixOS trial must validate the candidate's generated `homelab-securityd.service` and `homelab-executord.service` `LoadCredential` sources before changing any units. `scripts/saturn-detached-activation.sh` checks root ownership, nonempty regular files, final-path symlink rejection, and restrictive permissions in both the initiating console and the detached runner. Missing protected Compute credentials therefore block trial activation without touching the existing executor. The check inspects file metadata only and never copies credential bytes or opens a new owner session. It does not substitute for a signed owner authorization or the guarded release-state lease.
 
