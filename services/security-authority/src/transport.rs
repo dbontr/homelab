@@ -819,7 +819,7 @@ fn checked_browser_assertion<'a>(
     owner_assertion(headers)
 }
 
-fn browser_page(shared: &Shared, assertion: &str, message: &str) -> Response {
+fn browser_page(shared: &Shared, assertion: &str, message: &str, request_id: Option<&str>) -> Response {
     let (principal, session, pending) = shared.with_authority(|auth| {
         (
             auth.browser_principal(assertion),
@@ -841,7 +841,22 @@ fn browser_page(shared: &Shared, assertion: &str, message: &str) -> Response {
     if !message.is_empty() {
         html.push_str(&format!("<p role=\"status\">{}</p>", escape_html(message)));
     }
-    if session.active {
+    if let Some(request_id) = request_id {
+        let Some(completed) = shared.owner_request_status(&principal, request_id) else {
+            return protected_status("owner request unavailable", StatusCode::NOT_FOUND);
+        };
+        let reference_code = &request_id[..12];
+        html.push_str("<section><h2>Request-scoped administration</h2>");
+        html.push_str(&format!("<p>Reference code: <code>{}</code></p><p>This code identifies the request. It is not an access token and cannot grant administrator permissions.</p>", reference_code));
+        if completed && session.active {
+            html.push_str("<p role=\"status\">Owner request approved. Return to ChatGPT to continue; authorization is checked again for each operation.</p>");
+        } else if session.active && !completed {
+            html.push_str(&format!("<form method=\"post\" action=\"/request/{}/approve\"><input type=\"hidden\" name=\"csrf\" value=\"{}\"><button type=\"submit\">Approve this request</button></form>", request_id, csrf));
+        } else {
+            html.push_str(&format!("<form method=\"post\" action=\"/request/{}/login\"><input type=\"hidden\" name=\"csrf\" value=\"{}\"><label>Password<input name=\"password\" type=\"password\" required></label><label>Authenticator code<input name=\"totp\" pattern=\"[0-9]{{6}}\" inputmode=\"numeric\" required></label><button type=\"submit\">Authenticate and approve request</button></form>", request_id, csrf));
+        }
+        html.push_str("</section>");
+    } else if session.active {
         html.push_str("<section><h2>Administrative session active</h2>");
         html.push_str(&format!("<form method=\"post\" action=\"/close\"><input type=\"hidden\" name=\"csrf\" value=\"{}\"><button type=\"submit\">Close session</button></form></section>", csrf));
         html.push_str("<section><h2>Pending destructive operations</h2>");
@@ -879,7 +894,7 @@ async fn browser_get(State(shared): State<Shared>, headers: HeaderMap) -> Respon
     if shared.with_authority(|auth| auth.browser_principal(assertion).is_err()) {
         return protected_status("verified owner identity required", StatusCode::FORBIDDEN);
     }
-    browser_page(&shared, assertion, "")
+    browser_page(&shared, assertion, "", None)
 }
 
 async fn browser_form(
