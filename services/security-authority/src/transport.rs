@@ -991,10 +991,42 @@ async fn browser_confirm(
     browser_form(shared, headers, raw, "confirm", Some(&id), None).await
 }
 
+async fn browser_request(
+    State(shared): State<Shared>,
+    RoutePath(id): RoutePath<String>,
+    headers: HeaderMap,
+) -> Response {
+    let Ok(assertion) = checked_browser_assertion(&shared, &headers) else {
+        return protected_status("verified owner identity required", StatusCode::FORBIDDEN);
+    };
+    browser_page(&shared, assertion, "", Some(&id))
+}
+
+async fn browser_request_login(
+    State(shared): State<Shared>,
+    RoutePath(id): RoutePath<String>,
+    headers: HeaderMap,
+    raw: Bytes,
+) -> Response {
+    browser_form(shared, headers, raw, "request_login", None, Some(&id)).await
+}
+
+async fn browser_request_approve(
+    State(shared): State<Shared>,
+    RoutePath(id): RoutePath<String>,
+    headers: HeaderMap,
+    raw: Bytes,
+) -> Response {
+    browser_form(shared, headers, raw, "request_approve", None, Some(&id)).await
+}
+
 pub fn browser_router(shared: Shared) -> Router {
     Router::new()
         .route("/", get(browser_get))
         .route("/login", post(browser_login))
+        .route("/request/{id}", get(browser_request))
+        .route("/request/{id}/login", post(browser_request_login))
+        .route("/request/{id}/approve", post(browser_request_approve))
         .route("/close", post(browser_close))
         .route("/confirm/{id}", post(browser_confirm))
         .layer(DefaultBodyLimit::max(4096))
