@@ -662,7 +662,8 @@ impl WorkspacePolicy {
         let loopback = url
             .host_str()
             .is_some_and(|h| h == "127.0.0.1" || h == "::1" || h == "localhost");
-        if url.path() != "/mcp"
+        let valid_path = url.path() == "/mcp" || (loopback && url.path() == "/workspace");
+        if !valid_path
             || url.query().is_some()
             || url.fragment().is_some()
             || !url.username().is_empty()
