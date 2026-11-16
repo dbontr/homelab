@@ -12,6 +12,7 @@
     ./cloudflare.nix
     ./mcp-ingress.nix
     ./orchestration.nix
+    ./kueue.nix
     ./recovery.nix
     ./exporters.nix
     ./gpu-telemetry.nix
@@ -28,6 +29,7 @@
 
   homelab.native.applications.pihole.enable = true;
   homelab.native.kubernetes.enable = true;
+  homelab.native.kueue.enable = true;
 
   homelab.native.exporters.enable = true;
   homelab.native.applications.monitoring.enable = true;
