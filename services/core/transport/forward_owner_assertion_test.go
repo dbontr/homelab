@@ -47,3 +47,53 @@ func TestFederationForwardsOwnerIdentityOnlyToSelectedWorkspace(t *testing.T){
   t.Fatal("missing owner assertion was synthesized or cached")
  }
 }
+
+func TestToolDiscoveryForwardsOwnerAssertionOnlyWhenEnabled(t *testing.T) {
+ const identity = "signed-owner-assertion"
+ upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+  var call struct { Method string `json:"method"` }
+  if err := json.NewDecoder(r.Body).Decode(&call); err != nil || call.Method != "tools/list" {
+   http.Error(w, "invalid discovery request", http.StatusBadRequest)
+   return
+  }
+  if r.Header.Get("Cf-Access-Jwt-Assertion") != identity {
+   http.Error(w, "owner identity required", http.StatusUnauthorized)
+   return
+  }
+  w.Header().Set("Content-Type", "application/json")
+  _, _ = fmt.Fprint(w, `{"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"submit_compute_job","description":"Queue a compute job","inputSchema":{"type":"object"}}]}}`)
+ }))
+ defer upstream.Close()
+
+ cases := []struct {
+  name string
+  ownerAssertion string
+  forward bool
+  wantComputeTool bool
+ }{
+  {"signed owner", identity, true, true},
+  {"missing owner", "", true, false},
+  {"forwarding disabled", identity, false, false},
+ }
+ for _, tc := range cases {
+  t.Run(tc.name, func(t *testing.T) {
+   gateway := &Server{
+    client: &http.Client{Timeout: 5*time.Second},
+    backend: []Backend{{Name:"workspace", URL: upstream.URL, ForwardOwnerAssertion:tc.forward}},
+   }
+   req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
+   if tc.ownerAssertion != "" {
+    req.Header.Set("Cf-Access-Jwt-Assertion", tc.ownerAssertion)
+   }
+   found := false
+   for _, tool := range gateway.toolList(req) {
+    if tool["name"] == "compute__submit_compute_job" {
+     found = true
+    }
+   }
+   if found != tc.wantComputeTool {
+    t.Fatalf("Compute discovery = %t, want %t", found, tc.wantComputeTool)
+   }
+  })
+ }
+}
