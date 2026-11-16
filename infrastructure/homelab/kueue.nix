@@ -43,7 +43,7 @@ in
           sleep 2
         done
         ${k3s} kubectl get --raw=/readyz >/dev/null
-        ${k3s} kubectl apply --server-side -f ${manifest}
+        ${k3s} kubectl apply -f ${manifest}
 
         available=0
         for attempt in $(seq 1 90); do
