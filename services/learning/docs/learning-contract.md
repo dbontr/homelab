@@ -1,6 +1,6 @@
 # Learning contract
 
-Adaptive Teaching MCP separates three records: domain knowledge, the learner's demonstrated understanding, and the learner's independent problem-solving ability. These records interact but do not substitute for one another. Encountering a statement, receiving an explanation, or uploading completed work never awards mastery by itself.
+Learning MCP separates three records: domain knowledge, the learner's demonstrated understanding, and the learner's independent problem-solving ability. These records interact but do not substitute for one another. Encountering a statement, receiving an explanation, or uploading completed work never awards mastery by itself.
 
 ## Foundational reconstruction
 

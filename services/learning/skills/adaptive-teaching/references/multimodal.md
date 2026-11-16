@@ -1,6 +1,6 @@
 # Multimodal work and original evidence
 
-Photographs and original documents are an ordinary way to submit work in Adaptive Teaching, whether the subject is mathematics, electrical engineering, art, language, biology, history or practical craft.
+Photographs and original documents are an ordinary way to submit work in Learning, whether the subject is mathematics, electrical engineering, art, language, biology, history or practical craft.
 
 - In compatible MCP App clients, the learner opens a saved problem or learning session, chooses one or more files and uses **Save originals**. The browser sends the original bytes to `upload_attachment`, associated with the specific problem, session, or source. Text drafts are a separate record. The interface currently caps each upload at 5 MiB; the storage API caps files at 10 MiB.
 - Supported originals: PNG, JPEG, WebP, HEIC, PDF, UTF-8 text and Markdown. The backend checks a file's signature against the supplied MIME; unsafe SVG or executable file types are not admitted. Original files and interpretations reside in private SQLite storage, not GitHub.

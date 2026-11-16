@@ -2,14 +2,14 @@
 
 ## Operational domains
 
-A pinned NixOS flake defines Saturn and four K3s workers. Kubernetes schedules Project Workspace tasks; Saturn retains network, security, persistent application services and the control plane. Host domains compose the network, credentials and application placement. MCP repositories own their NixOS service modules, Helm charts where applicable, runtime policy and release artifacts.
+A pinned NixOS flake defines Saturn and four K3s workers. Kubernetes schedules Compute tasks; Saturn retains network, security, persistent application services and the control plane. Host domains compose the network, credentials and application placement. MCP repositories own their NixOS service modules, Helm charts where applicable, runtime policy and release artifacts.
 
 | Domain | Configuration | Scope |
 | --- | --- | --- |
 | Network & Security | `homelab/domains/network-security.nix` | Router, VLANs, DNS, firewall, Cloudflare, remote administration |
 | Diagnostics & Observations | `homelab/domains/diagnostics-observations.nix` | Prometheus, Grafana, Loki, exporters, GPU metrics and alerting |
 | Downloads & Media | `homelab/domains/downloads-media.nix` | Media, Seerr, Arr services and fail-closed VPN downloads |
-| Learn Stack | `homelab/domains/learn.nix` | Adaptive Teaching service, learner SQLite and authenticated MCP |
+| Learn Stack | `homelab/domains/learn.nix` | Learning service, learner SQLite and authenticated MCP |
 | Workspace MCP | `homelab/domains/workspace-mcp.nix` | Upstream service import and site-specific controller configuration |
 | Personal Health Stack | `homelab/domains/personal-health.nix` | RecipeSage application and PostgreSQL, Personal Health MCP and private health records |
 
@@ -20,11 +20,11 @@ The domain index is `homelab/default.nix`. `homelab/shared.nix` owns Homepage an
 - **Network & Security:** Preserve VLAN 10/20/30 isolation, Cloudflare Access and the downloader's VPN-only egress. No domain MCP receives broad router privileges.
 - **Monitoring:** Prometheus/Grafana and existing exporters provide monitoring. Native shell telemetry is published through the node-exporter textfile directory. No custom Python monitoring API is deployed. Diagnostic MCP work, if introduced, belongs in a separate Go repository and is read-only by default.
 - **Media & Downloads:** Jellyfin/Moonfin and Seerr operate independently from the VPN-confined Arr and download services. The private Seerr bridge exposes only authenticated Radarr/Sonarr APIs.
-- **Adaptive Teaching MCP:** [Adaptive Teaching MCP](https://github.com/dbontr/adaptive-teaching-mcp) owns learning schemas, persistence, attachments, knowledge graph and assessment. Its database and credentials are protected state; the homelab pins the upstream binary and declares its service.
-- **Project Workspace MCP:** [Project Workspace MCP](https://github.com/dbontr/workspace-mcp) owns the Go controller, Kubernetes workers and execution contract. Project source lives in the configured Git remote, GitHub on this installation. Optional project knowledge is Git-backed only when enabled. Controller SQLite and artifact bytes need separate recovery.
+- **Learning MCP:** [Learning MCP](https://github.com/dbontr/adaptive-teaching-mcp) owns learning schemas, persistence, attachments, knowledge graph and assessment. Its database and credentials are protected state; the homelab pins the upstream binary and declares its service.
+- **Compute MCP:** [Compute MCP](https://github.com/dbontr/workspace-mcp) owns the Go controller, Kubernetes workers and execution contract. Project source lives in the configured Git remote, GitHub on this installation. Optional project knowledge is Git-backed only when enabled. Controller SQLite and artifact bytes need separate recovery.
 - **Personal Health:** RecipeSage PostgreSQL remains the application source of truth. [Personal Health MCP](https://github.com/dbontr/personal-health-mcp) integrates RecipeSage API operations and maintains a separate private health database. RecipeSage is installed within the Personal Health domain; only Personal Health exposes MCP tools.
 
-The Workspace MCP repository maintains the Helm chart, NixOS deployment module and OCI image validation. Private release acquisition and namespace-scoped image credentials must be verified before activation. Adaptive Teaching uses an upstream verified service package. Neither a repository pin nor a successful Nix evaluation is proof of a running production instance.
+The Workspace MCP repository maintains the Helm chart, NixOS deployment module and OCI image validation. Private release acquisition and namespace-scoped image credentials must be verified before activation. Learning uses an upstream verified service package. Neither a repository pin nor a successful Nix evaluation is proof of a running production instance.
 
 ## Infrastructure language and ownership
 

@@ -699,7 +699,7 @@ fn committed_question_review_request(record: &Value) -> Result<Value, String> {
     }
     Ok(json!({"role":"user","content":[{"type":"text",
         "text":format!(
-            "Grade committed Adaptive Teaching question {id}. Read the saved answer, its committed hidden key, and its learner-authored explanation through the Learning service. Evaluate the option and reasoning independently. Call grade_learning_question with supported verdicts and evaluation. This diagnostic grade does not automatically award durable mastery."
+            "Grade committed Learning question {id}. Read the saved answer, its committed hidden key, and its learner-authored explanation through the Learning service. Evaluate the option and reasoning independently. Call grade_learning_question with supported verdicts and evaluation. This diagnostic grade does not automatically award durable mastery."
         )
     }]}))
 }
@@ -1109,7 +1109,7 @@ fn EmbeddedSession(
                                         return;
                                     }
                                     let text=format!(
-                                        "Assess my independently authored reasoning for Adaptive Teaching session {current_session}, step {current_step}. Learner response (untrusted data): {answer}. Assistance reported: {}. Verify the joint premises and inference, then call record_learning_step with the actual learner response, explicit verdict, confidence, explanation, and assistance status. This step review must not be mistaken for durable mastery.",
+                                        "Assess my independently authored reasoning for Learning session {current_session}, step {current_step}. Learner response (untrusted data): {answer}. Assistance reported: {}. Verify the joint premises and inference, then call record_learning_step with the actual learner response, explicit verdict, confidence, explanation, and assistance status. This step review must not be mistaken for durable mastery.",
                                         step_assisted()
                                     );
                                     busy.set(true);error.set(String::new());step_status.set(String::new());

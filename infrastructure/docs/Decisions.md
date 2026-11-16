@@ -10,6 +10,6 @@
 | MCPs | Learning, compute and personal health have separate upstream Go services, identities, storage and deployment definitions. | Isolated application ownership |
 | Network | Preserve the existing VLANs, firewall, Access policies and fail-closed download VPN. | Maintain traffic isolation |
 | Git and knowledge | Git remote is authoritative for project source; project knowledge persistence is optional. | Explicit and recoverable source ownership |
-| Persistent state | Preserve RecipeSage PostgreSQL, Adaptive Teaching SQLite, Project Workspace SQLite and artifacts. | Databases cannot be rebuilt from Git alone |
+| Persistent state | Preserve RecipeSage PostgreSQL, Learning SQLite, Compute SQLite and artifacts. | Databases cannot be rebuilt from Git alone |
 | Backups | Automatic backup schedules are disabled pending a defined retention and recovery policy. Preserve current databases, cluster identity and artifacts during the policy review. | Avoid unbounded backup growth without discarding unique state |
 | Deployment | Evaluate and review changes before guarded physical activation. | Protect routing, ingress and rollback |

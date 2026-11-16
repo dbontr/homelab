@@ -64,7 +64,7 @@ pub fn Learning(csrf: String) -> Element {
         section{class:"card",
             div{class:"card-header",
                 h2{class:"card-title","Start a learning session"}
-                p{class:"card-description","Select an existing concept ID from Adaptive Teaching; progress is earned by your work, not by creating a session."}
+                p{class:"card-description","Select an existing concept ID from Learning; progress is earned by your work, not by creating a session."}
             }
             form{class:"card-body task-editor-fields",
                 onsubmit:move |event|{
@@ -204,7 +204,7 @@ pub fn Learning(csrf: String) -> Element {
                 Card{title:"Pending work".to_owned(),
                     description:"No ungraded learning question is available.".to_owned(),
                     div{class:"card-body",
-                        p{class:"small muted","Continue planning and asking questions through Adaptive Teaching."}
+                        p{class:"small muted","Continue planning and asking questions through Learning."}
                     }
                 }
             }
@@ -218,7 +218,7 @@ pub fn Learning(csrf: String) -> Element {
                     let rows=api::list(&value,&["queue","reviews","items"]);
                     rsx!{
                         if rows.is_empty(){Empty{title:"No reviews currently due".to_owned(),
-                            description:"Delayed reviews appear when scheduled by Adaptive Teaching.".to_owned()}}
+                            description:"Delayed reviews appear when scheduled by Learning.".to_owned()}}
                         else{
                             div{class:"table-clip",
                                 table{class:"table",

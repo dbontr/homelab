@@ -62,7 +62,7 @@ func TestTaskHardwareLeasesAreExclusiveWithProjectWorkspaces(t *testing.T) {
 	if _, err := db.CreateWorkspace(WorkspaceRequest{
 		ProjectID: "research", Hardware: resources, NodeID: "worker-one",
 	}); err != nil {
-		t.Fatalf("hardware not available to project workspace after job release: %v", err)
+		t.Fatalf("hardware not available to compute workspace after job release: %v", err)
 	}
 }
 

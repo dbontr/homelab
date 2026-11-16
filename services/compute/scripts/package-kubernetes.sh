@@ -12,7 +12,7 @@ done
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 if [[ ! -f "$root/deploy/helm/project-workspace/Chart.yaml" ]]; then
-  echo 'Run the packaging script from its Project Workspace source tree' >&2
+  echo 'Run the packaging script from its Compute source tree' >&2
   exit 2
 fi
 if [[ -n "$(git -C "$root" status --porcelain --untracked-files=all)" ]]; then

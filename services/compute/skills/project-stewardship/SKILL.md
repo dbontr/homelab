@@ -1,6 +1,6 @@
 ---
 name: project-stewardship
-description: Operate Project Workspace MCP as a project-first research and software system. Use for creating or organizing projects that span multiple GitHub repositories, maintaining local-first project knowledge, linking reusable research libraries and GitHub Projects V2, coordinating Issues/PRs/Actions/Packages/releases, resolving repository renames, running authorized compute, publishing artifacts, and keeping durable project records professional and free of assistant-development residue. Check live permissions and tools; compose with professional-code for implementation quality.
+description: Operate Compute MCP as a project-first research and software system. Use for creating or organizing projects that span multiple GitHub repositories, maintaining local-first project knowledge, linking reusable research libraries and GitHub Projects V2, coordinating Issues/PRs/Actions/Packages/releases, resolving repository renames, running authorized compute, publishing artifacts, and keeping durable project records professional and free of assistant-development residue. Check live permissions and tools; compose with professional-code for implementation quality.
 ---
 
 # Project Stewardship

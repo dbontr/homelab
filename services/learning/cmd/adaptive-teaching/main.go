@@ -175,7 +175,7 @@ func main() {
 			log.Printf("HTTP shutdown: %v", err)
 		}
 	}()
-	log.Printf("Adaptive Teaching MCP listening on %s", addr)
+	log.Printf("Learning MCP listening on %s", addr)
 	serveErr := server.ListenAndServe()
 	stop()
 	<-shutdownFinished

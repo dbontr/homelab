@@ -1,11 +1,11 @@
-# Project Workspace MCP Operations
+# Compute MCP Operations
 
-Use this reference for live Project Workspace MCP operations. The controller owns project metadata, task coordination, worker leases and artifact routing; Git owns code revisions; Workspace owns local project knowledge and shared library objects. Tool names identify capabilities, not permission grants. Inspect the connected server's `tools/list` and schemas before invoking a tool; versions and available adapters can differ.
+Use this reference for live Compute MCP operations. The controller owns project metadata, task coordination, worker leases and artifact routing; Git owns code revisions; Workspace owns local project knowledge and shared library objects. Tool names identify capabilities, not permission grants. Inspect the connected server's `tools/list` and schemas before invoking a tool; versions and available adapters can differ.
 
 ## Establish identity and scope
 
-1. Confirm the authenticated caller and Project Workspace server, relevant project IDs, project grants, linked repositories and active resource inventory. Controller owner access does not automatically establish provider permissions or hardware readiness.
-2. Choose **project workspace**, **project compute job**, **independent personal task**, or **explicitly reserved external resource**. Never invent a project just to obtain compute. A personal task does not inherit a project's repositories or knowledge policy.
+1. Confirm the authenticated caller and Compute server, relevant project IDs, project grants, linked repositories and active resource inventory. Controller owner access does not automatically establish provider permissions or hardware readiness.
+2. Choose **compute workspace**, **project compute job**, **independent personal task**, or **explicitly reserved external resource**. Never invent a project just to obtain compute. A personal task does not inherit a project's repositories or knowledge policy.
 3. For source work, discover `git_provider_capabilities` and the actual repository membership. Use the provider-neutral `git_*` operations for supported GitHub or operator-approved `local:OWNER/REPOSITORY` identities; do not call `github_*` on local Git.
 4. Keep the controller credential, GitHub PAT/App signing key, OIDC tokens, worker pairing tokens and private certificates outside repository contents, worker commands, generated artifacts, logs and messages. Project viewer/editor authorization is narrower than owner authority.
 
@@ -28,7 +28,7 @@ To consume it, use `library_link` in each authorized consuming project, then `li
 - GitHub repository account discovery and administration are separate, owner-authorized operations. Before `github_account_rename` or `github_account_transfer`, verify immutable repository ID, destination, administrator permission and exact confirmation. Reconciliation can be incomplete when an external provider transfer awaits acceptance; use `github_account_reconcile` only after the provider independently confirms identity.
 - A local Git repository has commits and branches, not native GitHub Issues, pull requests or Projects. A separate, explicitly linked GitHub `planning` repository may own those objects. A planning-repository PR does not review code that exists only in local Git. See [github-workflow.md](github-workflow.md).
 
-## Project workspaces
+## Compute workspaces
 
 1. Inspect `resource_plan`, `list_compute_nodes`, `list_hardware`, `pool_list_images`, `environment_list` and available quotas. A favorable plan is advisory; it is **not** a hardware lease.
 2. Select an operator-approved OCI image and architecture; record its digest and toolchain versions when available. An environment definition is not a running workspace. `environment_define_from_pool` and `environment_build` require the configured backend; proprietary toolchains require valid operator licensing.

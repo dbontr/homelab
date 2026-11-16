@@ -1,17 +1,17 @@
 # Cluster Operations and Delivery
 
-Use this reference for Project Workspace MCP, Kubernetes, external systems, artifacts and acceptance. The controller is the authority for leased compute; Git remains the authority for code; knowledge and large binary storage are independently selected.
+Use this reference for Compute MCP, Kubernetes, external systems, artifacts and acceptance. The controller is the authority for leased compute; Git remains the authority for code; knowledge and large binary storage are independently selected.
 
 ## Admission and resource selection
 
 1. Discover current controllers, worker connectivity, cluster namespace, allowed OCI images, device-plugin resources, capability manifests, access grants and quota. Distinguish registered from healthy, available from leased and implemented from proposed.
-2. Choose the execution scope: finite standalone task, project workspace, shared library import, or explicitly reserved external machine. A standalone task never gains project knowledge implicitly. Kubernetes execution should use the project's authorized namespace and restricted service account.
+2. Choose the execution scope: finite standalone task, compute workspace, shared library import, or explicitly reserved external machine. A standalone task never gains project knowledge implicitly. Kubernetes execution should use the project's authorized namespace and restricted service account.
 3. Request CPU, memory, storage and job timeout. Request GPU/NPU/FPGA only when essential. Physical devices require valid exclusive leases; GPU VRAM needs actual advertised capacity. A compiler simulation is not proof of physical board access.
 4. Select an exact approved OCI image. Prefer immutable image digests and record toolchain/driver versions. Proprietary FPGA/EDA toolchains require operator-supplied licensed images; never copy licenses or credentials into logs, Git, or arbitrary Pods.
 5. Treat USB passthrough, flashing, disk partitioning, firmware changes and host configuration changes as privileged operations. Require exact device/node identity and explicit authorization; never infer permission from mere discoverability.
 6. Preserve the existing network/security posture. Do not route through unrestricted host paths, weaken Kubernetes RBAC, attach broad host namespaces or disable Cloudflare/VPN controls to satisfy an operation.
 
-## Project workspaces
+## Compute workspaces
 
 Use this repository's [MCP operations reference](mcp-operations.md) and the live MCP schemas for exact tool arguments. Wait for the workspace to report ready. Import code at a verified Git commit and check artifact digests. A remote asynchronous operation is not complete until its own terminal status, exit code and output are inspected.
 
@@ -21,7 +21,7 @@ Before a destructive or costly job, confirm inputs, target, expected side effect
 
 Standalone finite tasks use an administrator-approved worker. A worker's reported capabilities do not grant authorization. For Kubernetes use the explicitly isolated personal-task scope; for hardware, request only controller-approved GPU/NPU/FPGA device-plugin resources. USB access is not a generic finite-job capability.
 
-An expired lease says only that communication or time expired. It does not establish that the process released the device. Keep uncertain reservations unavailable until remote teardown has been independently verified and the administrator explicitly authorizes recovery. Project workspaces and independent jobs must not claim the same device simultaneously.
+An expired lease says only that communication or time expired. It does not establish that the process released the device. Keep uncertain reservations unavailable until remote teardown has been independently verified and the administrator explicitly authorizes recovery. Compute workspaces and independent jobs must not claim the same device simultaneously.
 
 ## External clusters and laboratory hardware
 

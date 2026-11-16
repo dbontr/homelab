@@ -6,7 +6,7 @@ let
   credentialFile = if cfg.bearerCredentialFile == null then "/dev/null" else cfg.bearerCredentialFile;
 in {
   options.homelab.learning = {
-    enable = lib.mkEnableOption "the independently packaged Adaptive Teaching MCP";
+    enable = lib.mkEnableOption "the independently packaged Learning MCP";
     package = lib.mkOption {
       type = lib.types.nullOr lib.types.package;
       default = null;
@@ -67,28 +67,28 @@ in {
     assertions = [
       {
         assertion = (cfg.package != null) != (cfg.binaryPath != null);
-        message = "Adaptive Teaching requires exactly one release source: a Nix package or an immutable host executable.";
+        message = "Learning requires exactly one release source: a Nix package or an immutable host executable.";
       }
       {
         assertion = cfg.binaryPath == null || builtins.match "[0-9a-f]{64}" cfg.binarySHA256 != null;
-        message = "Adaptive Teaching host releases require an exact SHA-256.";
+        message = "Learning host releases require an exact SHA-256.";
       }
       {
         assertion = cfg.bearerCredentialFile != null;
-        message = "Adaptive Teaching requires an external bearer token file.";
+        message = "Learning requires an external bearer token file.";
       }
       {
         assertion = (cfg.access.issuer == "" && cfg.access.audience == "" &&
           cfg.access.certsURL == "" && cfg.access.ownerCredentialFile == null) ||
           (cfg.access.issuer != "" && cfg.access.audience != "" &&
           cfg.access.certsURL != "" && cfg.access.ownerCredentialFile != null);
-        message = "Adaptive Teaching Access identity requires all verification fields and an owner credential.";
+        message = "Learning Access identity requires all verification fields and an owner credential.";
       }
       {
         assertion = lib.hasPrefix "127.0.0.1:" cfg.listenAddress ||
           lib.hasPrefix "[::1]:" cfg.listenAddress ||
           lib.hasPrefix "localhost:" cfg.listenAddress;
-        message = "Adaptive Teaching must listen on loopback behind the trusted ingress.";
+        message = "Learning must listen on loopback behind the trusted ingress.";
       }
     ];
 
@@ -96,7 +96,7 @@ in {
       lib.mkDefault "/var/lib/adaptive-teaching/learning.db";
 
     systemd.services.adaptive-teaching = {
-      description = "Adaptive Teaching MCP";
+      description = "Learning MCP";
       wantedBy = [ "multi-user.target" ];
       after = [ "network.target" ];
       serviceConfig = {

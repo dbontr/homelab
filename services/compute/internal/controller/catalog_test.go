@@ -274,7 +274,7 @@ func TestLibraryMultiProjectImmutableSourcesAndObjects(t *testing.T) {
 	}
 	_, e = db.QueueLibraryObjectImport("demo", asString(otherWS["id"]), "lean-foundations", "lean-cache.tar.zst", "lib/cache")
 	if e == nil {
-		t.Fatal("cross-project workspace import accepted")
+		t.Fatal("cross-compute workspace import accepted")
 	}
 }
 

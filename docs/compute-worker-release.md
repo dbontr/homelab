@@ -3,7 +3,7 @@
 The four compute workers are independent NixOS hosts. Release validation and
 live activation are separate operations. A worker trial can interrupt its
 K3s agent and node-local workloads; Kubernetes Job inventory alone does not
-establish that Project Workspace hardware leases or sessions are idle.
+establish that Compute hardware leases or sessions are idle.
 
 ## Source and build
 
