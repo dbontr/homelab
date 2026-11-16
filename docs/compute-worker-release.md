@@ -203,3 +203,32 @@ Do not delete old image caches, host generations, state directories or
 credentials as part of this procedure. A source build, a live registry
 advertisement, or a successful `switch-to-configuration test` alone cannot
 establish workload recovery.
+
+## Authenticated peer image recovery
+
+Use `services/compute/scripts/copy-peer-image.sh` when an approved complete
+image exists on one cluster node but an independent node cannot obtain its OCI
+layers through the registry. The operator must have previously established
+noninteractive SSH authorization and pinned host keys on **both** nodes. Do not
+replace the managed SSH access policy merely to run this procedure.
+
+Run the tool from Saturn with a verified digest-qualified image reference
+present on the publisher. It verifies both nodes are Ready, requires an
+explicit destination confirmation, compares the source index digest with the
+requested image, and checks source content completeness before initiating the
+transfer. A destination image with a conflicting digest is never overwritten.
+The tool streams the image directly between authenticated nodes, then verifies
+the destination OCI index digest and content completeness. It does not stop
+K3s, restart hosts, schedule hardware workloads, or remove an image. For
+example, with a source-owned digest alias already present:
+
+```sh
+bash services/compute/scripts/copy-peer-image.sh venus janus \
+  images.dbontr.internal/dbontr/compute-gateway@sha256:REPLACE_WITH_64_HEX \
+  --confirm janus
+```
+
+A successful copy is a **bounded recovery receipt**, not proof that the Spegel
+peer layer-serving defect is fixed. For that separate qualification, follow
+the unprimed cold-layer test and cache-hit baseline procedure above. Retain
+rollback images, project artifacts and host generations.
