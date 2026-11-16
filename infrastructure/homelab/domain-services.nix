@@ -46,6 +46,12 @@
       clientTokenFile = "/srv/homelab/secrets/homelab-mcp-client.token";
       serviceTokenFile = "/srv/homelab/secrets/homelab-mcp-service.token";
       allowedOrigins = [ "https://chatgpt.com" "https://chat.openai.com" ];
+      access = {
+        issuer = config.services.homelabSecurity.access.issuer;
+        audience = config.services.homelabSecurity.access.gatewayAudience;
+        ownerEmailFile = config.services.homelabSecurity.access.ownerEmailFile;
+        jwksFile = config.services.homelabSecurity.access.jwksFile;
+      };
     };
     api = {
       enable = true;
