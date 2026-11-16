@@ -1,8 +1,0 @@
-*.db
-*.db-shm
-*.db-wal
-data/
-.env
-.env.*
-!.env.example
-personal-health-mcp

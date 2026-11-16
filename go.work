@@ -1,9 +1,0 @@
-go 1.27.3
-
-use (
-  .
-  ./services/core
-  ./services/compute
-  ./services/learning
-  ./services/health
-)

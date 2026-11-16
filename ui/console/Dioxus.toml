@@ -1,9 +1,0 @@
-[application]
-name = "homelab-console"
-default_platform = "web"
-
-[web.app]
-title = "Homelab"
-
-[web.watcher]
-reload_html = true
