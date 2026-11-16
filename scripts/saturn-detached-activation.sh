@@ -62,6 +62,38 @@ if [[ "$#" -eq 3 && "$1" == "--run" ]]; then
       printf 'Security socket type or permissions are invalid\n' >&2
       status=1
     else
+      # Exercise the client socket as the unprivileged platform identity.
+      platform_pid=$(systemctl show -p MainPID --value homelab-platform.service)
+      if [[ ! "$platform_pid" =~ ^[1-9][0-9]*$ ||
+            ! -r "/proc/$platform_pid/status" ]]; then
+        printf 'Cannot identify the running platform process\n' >&2
+        status=1
+      else
+        platform_uid=$(awk '/^Uid:/ { print $2 }' "/proc/$platform_pid/status")
+        platform_gid=$(awk '/^Gid:/ { print $2 }' "/proc/$platform_pid/status")
+        platform_groups=$(awk '/^Groups:/ {
+          for (i=2; i<=NF; i++) printf "%s%s", (i>2 ? "," : ""), $i
+        }' "/proc/$platform_pid/status")
+        if [[ -z "$platform_groups" ]]; then
+          platform_groups="$platform_gid"
+        fi
+        client_peer_status=$(setpriv --reuid "$platform_uid" --regid "$platform_gid" \
+          --groups "$platform_groups" \
+          curl --silent --max-time 5 --output /dev/null --write-out '%{http_code}' \
+          --unix-socket "$security_dir/client.sock" http://unix/v1/session) || client_peer_status=""
+        if [[ "$client_peer_status" != 403 ]]; then
+          printf 'Platform identity cannot reach the denied-by-default security client socket\n' >&2
+          status=1
+        fi
+        if setpriv --reuid "$platform_uid" --regid "$platform_gid" \
+          --groups "$platform_groups" \
+          curl --silent --fail --max-time 5 \
+          --unix-socket "$security_dir/owner.sock" http://unix/v1/session \
+          >/dev/null 2>&1; then
+          printf 'Platform identity must not reach the owner-only socket\n' >&2
+          status=1
+        fi
+      fi
       owner_status=$(curl --silent --show-error --max-time 5 \
         --unix-socket "$security_dir/owner.sock" \
         --output /dev/null --write-out '%{http_code}' \
