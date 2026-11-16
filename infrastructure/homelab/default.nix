@@ -15,7 +15,6 @@
     ./kueue.nix
     ./recovery.nix
     ./exporters.nix
-    ./gpu-telemetry.nix
     ./media-tailnet.nix
     ./media-local.nix
     ./media-proxy.nix
