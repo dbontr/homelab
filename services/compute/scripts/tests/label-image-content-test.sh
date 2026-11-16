@@ -87,4 +87,16 @@ bash "$script" --apply "$reference" --confirm "$reference" >/dev/null
 if grep -v '^SOURCE_COMPLETE' "$tmp/checked"; then
   echo 'Completed image still has missing source labels' >&2; exit 1
 fi
+# Immutable references must resolve to their declared content index.
+export MOCK_IMAGE="images.dbontr.internal/dbontr/acceptance@$index"
+bash "$script" --check "$MOCK_IMAGE" > "$tmp/immutable-checked"
+grep -q '^SOURCE_COMPLETE ' "$tmp/immutable-checked"
+bash "$script" --apply "$MOCK_IMAGE" --confirm "$MOCK_IMAGE" >/dev/null
+[[ $(wc -l < "$tmp/writes") == 4 ]] || {
+  echo 'Immutable recheck performed unnecessary writes' >&2; exit 1;
+}
+if bash "$script" --check "images.dbontr.internal/dbontr/acceptance@sha256:$(printf 'f%.0s' {1..64})" >/dev/null 2>&1; then
+  echo 'Mismatched digest-qualified image reference was accepted' >&2
+  exit 1
+fi
 printf '%s\n' 'Peer image content label verification, corruption refusal, conflict refusal, and repair tests passed.'
