@@ -71,7 +71,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: acceptance
-          image: docker.io/library/alpine:3.20@sha256:c64c687cbea9300178b30c95835354e34c4efebc4badfe27102879de0483b5e
+          image: docker.io/library/alpine:3.20
           command: ["/bin/sh", "-c", "printf 'kueue-admission-ok'"]
           resources:
             requests:
