@@ -558,6 +558,68 @@ impl ReleaseController {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::os::unix::fs::{symlink, PermissionsExt};
+
+    #[test]
+    fn candidate_credentials_are_verified_before_release_mutation() {
+        let system = std::env::temp_dir().join(format!(
+            "homelab-release-credential-{}-{}",
+            std::process::id(),
+            random_hex::<8>().unwrap()
+        ));
+        let unit_dir = system.join("etc/systemd/system");
+        fs::create_dir_all(&unit_dir).unwrap();
+        let security = unit_dir.join("homelab-securityd.service");
+        let executor = unit_dir.join("homelab-executord.service");
+        fs::write(&security, b"[Service]\n").unwrap();
+
+        let credential = system.join("owner-only-token");
+        fs::write(&credential, b"fixture-only-not-a-credential").unwrap();
+        let set_mode = |mode| {
+            fs::set_permissions(&credential, fs::Permissions::from_mode(mode)).unwrap();
+        };
+        set_mode(0o600);
+        let mapping = format!(
+            "[Service]\nLoadCredential=workspace-token:{}\n",
+            credential.display()
+        );
+        fs::write(&executor, &mapping).unwrap();
+
+        // Tests may run without root, but actual release entrypoints require UID 0.
+        let owner = unsafe { libc::geteuid() };
+        assert!(verify_candidate_credentials(&system, owner).is_ok());
+        set_mode(0o640);
+        assert!(verify_candidate_credentials(&system, owner).is_ok());
+
+        set_mode(0o644);
+        assert!(verify_candidate_credentials(&system, owner).is_err());
+        set_mode(0o660);
+        assert!(verify_candidate_credentials(&system, owner).is_err());
+        set_mode(0o600);
+        assert!(verify_candidate_credentials(&system, owner + 1).is_err());
+
+        fs::remove_file(&credential).unwrap();
+        assert!(verify_candidate_credentials(&system, owner).is_err());
+        fs::write(&credential, b"fixture-only-not-a-credential").unwrap();
+        set_mode(0o600);
+        let linked = system.join("linked-token");
+        symlink(&credential, &linked).unwrap();
+        fs::write(
+            &executor,
+            format!("[Service]\nLoadCredential=workspace-token:{}\n", linked.display()),
+        )
+        .unwrap();
+        assert!(verify_candidate_credentials(&system, owner).is_err());
+
+        fs::write(&executor, b"[Service]\nLoadCredential=workspace-token:relative\n").unwrap();
+        assert!(verify_candidate_credentials(&system, owner).is_err());
+        fs::write(&executor, b"[Service]\nLoadCredential=workspace-token:\n").unwrap();
+        assert!(verify_candidate_credentials(&system, owner).is_err());
+        fs::write(&executor, mapping).unwrap();
+        assert!(verify_candidate_credentials(&system, owner).is_ok());
+
+        fs::remove_dir_all(&system).unwrap();
+    }
 
     #[test]
     fn release_flake_selects_an_exact_git_commit() {
