@@ -49,7 +49,6 @@ else
 fi
 MOCK
 # Escaped interpolation in the outer source template must not persist in fixture.
-sed -i 's/\\${/${/g' "$tmp/ssh"
 chmod 0700 "$tmp/ssh" "$KUBECTL_BIN"
 printf 'verified OCI image content' > "$tmp/expected_bytes"
 bash -n "$script"
