@@ -88,9 +88,9 @@ fn verify_candidate_credentials(system: &Path, expected_uid: u32) -> Result<(), 
                     .split_once(':')
                     .ok_or(Error::Denied("invalid candidate credential mapping"))?;
                 if name.is_empty()
-                    || !name.bytes().all(|b| {
-                        b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.')
-                    })
+                    || !name
+                        .bytes()
+                        .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'))
                     || source.len() > 4096
                 {
                     return Err(Error::Denied("invalid candidate credential mapping"));
