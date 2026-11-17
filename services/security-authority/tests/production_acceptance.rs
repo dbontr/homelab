@@ -20,10 +20,7 @@ impl PrivateState {
     fn new() -> Self {
         let mut nonce = [0u8; 16];
         getrandom::fill(&mut nonce).unwrap();
-        let path = std::env::temp_dir().join(format!(
-            "security-acceptance-{}",
-            hex::encode(nonce)
-        ));
+        let path = std::env::temp_dir().join(format!("security-acceptance-{}", hex::encode(nonce)));
         fs::create_dir(&path).unwrap();
         fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
         Self(path)
@@ -84,9 +81,13 @@ fn synthetic_password_totp_replay_and_lockout_survive_restart() {
     );
     for _ in 0..4 {
         assert_eq!(
-            factors.verify(&mut replay, "invalid password", &totp_at(100), 3_000, |next| {
-                store.persist_authenticator(next)
-            }),
+            factors.verify(
+                &mut replay,
+                "invalid password",
+                &totp_at(100),
+                3_000,
+                |next| { store.persist_authenticator(next) }
+            ),
             Err(Error::AuthenticationDenied)
         );
     }
@@ -189,14 +190,22 @@ fn copy_only_rust_go_rollback_preserves_replay_state_and_rejects_stale_receipts(
     migration::admit(state.path(), "rust", Some(&rust)).unwrap();
     assert!(migration::admit(state.path(), "rust", Some(&rust)).is_ok());
     assert!(migration::admit(state.path(), "go", None).is_err());
-    assert!(migration::admit(state.path(), "go", Some(&receipt(state.path(), "go", None))).is_err());
+    assert!(
+        migration::admit(state.path(), "go", Some(&receipt(state.path(), "go", None))).is_err()
+    );
     let marker = fs::read(state.path().join(".authority-selection.json")).unwrap();
     let parent = hex::encode(Sha256::digest(marker));
     let go = receipt(state.path(), "go", Some(parent));
     migration::admit(state.path(), "go", Some(&go)).unwrap();
     assert!(migration::admit(state.path(), "rust", Some(&rust)).is_err());
-    assert_eq!(fs::read(state.path().join("authenticator.json")).unwrap(), original);
-    let readback = StateStore::inspect(state.path()).unwrap().load_authenticator().unwrap();
+    assert_eq!(
+        fs::read(state.path().join("authenticator.json")).unwrap(),
+        original
+    );
+    let readback = StateStore::inspect(state.path())
+        .unwrap()
+        .load_authenticator()
+        .unwrap();
     assert_eq!(readback.last_totp_step, 42);
     assert_eq!(readback.failures, 2);
 }
@@ -206,7 +215,10 @@ fn canonical_approval_arguments_reject_ambiguity() {
     use homelab_security_authority::canonical::canonical_arguments;
     let ordered = br#"{"host":"jupiter","service":"research-runner.service"}"#;
     let reordered = br#"{"service":"research-runner.service","host":"jupiter"}"#;
-    assert_eq!(canonical_arguments(ordered).unwrap(), canonical_arguments(reordered).unwrap());
+    assert_eq!(
+        canonical_arguments(ordered).unwrap(),
+        canonical_arguments(reordered).unwrap()
+    );
     for ambiguous in [
         br#"{"host":"jupiter","host":"venus"}"#.as_slice(),
         br#"[]"#.as_slice(),
