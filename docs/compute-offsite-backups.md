@@ -321,3 +321,37 @@ age-encrypted archive as part of Restic retention.
 A scheduled off-host snapshot, an exact independent restore, actual alert
 delivery, and independently measured destination capacity are required
 before unattended production recovery is certified.
+
+## Reproducible isolated source qualification
+
+Use a disposable, unprivileged source-pinned runner, **not** any production
+Compute or Projects workload. The test harness creates temporary SQLite,
+artifact and encrypted Restic storage. It never connects to Janus.
+
+Prerequisites: the repository's pinned Go 1.27.3 toolchain, `restic` in
+`PATH`, adequate disposable scratch capacity and the exact Git commit.
+The Restic-backed tests skip when `restic` is missing; the following
+explicit prerequisite prevents a skipped test from being counted as a pass.
+
+```sh
+command -v restic >/dev/null || exit 1
+cd services/compute
+go test -count=1 -v ./cmd/legacy-reconcile
+go test -count=1 -v ./internal/controller -run \
+  'TestEncryptedIntegratedResearchRecovery|TestEncryptedOffsiteBackupRestoreAndVerification|TestOffsiteRetentionPreservesIndependentSnapshots|TestRepositoryOutageDoesNotDestroyExistingEncryptedRecovery|TestInterruptedOffsiteBackupPreservesPreviousSnapshot|TestEncryptedRepositoryFullCheckDetectsSimulatedPackCorruption|TestRestoreRejectsManifestMissingDatabaseReferencedArtifact|TestRestoreRejectsInvalidForeignKeyRelations|TestRestoreRejectsOrphanDurableJobProject'
+go test -count=1 ./cmd/project-workspace-controller
+go vet ./cmd/legacy-reconcile ./internal/controller ./cmd/project-workspace-controller
+```
+
+The combined test independently exports historical artifact inventories
+before and after recovery and compares all record metadata and bytes. It
+requires the project note revision, experimental notebook provenance,
+historical original/copy association, immutable contribution, two task
+file revisions and the completed Kueue receipt to survive one encrypted
+snapshot. An extra restored file must fail reconciliation.
+
+Record each command's actual exit status, Go and Restic versions, snapshot
+ID, tested commit, and evidence for negative cases. The code and commands
+are an acceptance procedure, **not** evidence that the combined tests
+have run. Source qualification does not substitute for the separately
+authorized scheduled Janus snapshot and independent production restore.
