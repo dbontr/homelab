@@ -49,7 +49,7 @@ Four standalone Go tests pass in a disposable local runner using `GO111MODULE=of
 | Subject | Evidence | Status |
 | --- | --- | --- |
 | Catalog visibility and rollback | PR #197 contains owner-only revision-fenced hide/unhide, listing filters, and temporary-database tests | Implemented in source; full module suite and protected live authorization not certified here |
-| `acceptance` and `workspace-mcp` artifacts | Issue #196 records 10 and 16 copied artifacts with preserved digests and source originals | Reported in historical issue; independent per-record reconciliation pending |
+| `acceptance` and `workspace-mcp` artifacts | Read-only controller inventory: all 10 and 16 original artifact metadata records have exactly one target in `homelab-platform`, with matching source-ID-prefixed filename, SHA-256 and size; two sampled pairs also passed byte-for-byte readback | Exact catalog metadata match 26/26; all-byte independent off-host restoration remains pending |
 | Historical Jobs and knowledge | Issue #196 inventories 11 acceptance Jobs, 4 workspace Jobs, preserved Git knowledge and immutable reference records | Source IDs, job receipts, revisions, relationships and cross-chat retrieval require independent comparison |
 | `health-stack` historical records | Still has associated worker registrations and possible historical dependencies | Not reconciled; do not retire |
 | `/srv/project-source` | Read-only issue #196 inventory reports about 147 MB, three historical repository groups and content-addressed artifact groups | Full manifest and bytes not provided to this isolated workstream; do not claim imported |
@@ -57,7 +57,7 @@ Four standalone Go tests pass in a disposable local runner using `GO111MODULE=of
 | Independent off-host recovery | Issue #196 points to Janus age archives and issue #192 | Encrypted scheduled backup and post-consolidation restore are outstanding gates |
 | Record search, file revisions, task/dataset links, compute results | Existing controller offers project knowledge, artifacts, libraries, research index and durable Job lookup | No complete legacy-to-current relationship audit or fresh-chat restore certificate |
 
-This inventory distinguishes historical assertions from records independently verified in this development branch. Zero production files were examined or modified by the local test suite.
+This inventory distinguishes historical assertions from records independently verified in this development branch. A separate read-only live controller inventory confirmed seven visible IDs (`acceptance`, `aup-zu3-pynq`, `health-stack`, `homelab-platform`, `minecraft-rust`, `web-game-console-emulator`, `workspace-mcp`), 10 acceptance artifacts, 16 workspace-mcp artifacts, 0 health-stack artifacts, 68 homelab-platform artifacts, 11 historical acceptance Jobs and four historical workspace-mcp Jobs. Every one of the 26 source artifacts had exactly one source-ID-prefixed target with matching displayed SHA-256, filename and size. Two small independent source/target artifact reads yielded identical base64 payloads and metadata. These findings are not proof of a complete off-host restore or reconciliation of unindexed filesystem contents; the local test suite did not access production or mutate any records.
 
 ## Owner-approved migration sequence
 
