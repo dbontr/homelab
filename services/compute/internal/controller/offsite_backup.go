@@ -136,6 +136,23 @@ func (db *Database) BackupOffsite(ctx context.Context, c ResticRepositoryConfig)
 	return snapshot, nil
 }
 
+// PruneOffsite applies retention only to Compute-owned snapshots. Preserve at
+// least two recent recovery points and do not group by the ephemeral Pod host.
+// This is a separate operator action so snapshot creation never deletes data.
+func PruneOffsite(ctx context.Context, c ResticRepositoryConfig) error {
+	if err := c.run(ctx, "", "forget",
+		"--tag", "project-workspace",
+		"--group-by", "tags",
+		"--keep-last", "2",
+		"--keep-daily", "7",
+		"--keep-weekly", "5",
+		"--keep-monthly", "12",
+		"--prune"); err != nil {
+		return err
+	}
+	return c.run(ctx, "", "check")
+}
+
 // RestoreOffsite restores an explicitly selected snapshot to an empty data
 // directory. It never assumes that 'latest' belongs to the intended owner.
 func RestoreOffsite(ctx context.Context, c ResticRepositoryConfig, snapshot, databasePath string) error {

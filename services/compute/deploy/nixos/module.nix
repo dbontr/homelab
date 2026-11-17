@@ -13,6 +13,7 @@ let
       databaseSize = cfg.databaseSize;
       storageClass = cfg.storageClass;
       backupInterval = cfg.backupInterval;
+      backupRetention = cfg.backupRetention;
       embedding = {
         url = cfg.embedding.url;
         model = cfg.embedding.model;
@@ -264,6 +265,11 @@ in {
       model = lib.mkOption { type = lib.types.str; default = ""; description = "Configured embedding model identifier."; };
       tokenSecretName = lib.mkOption { type = lib.types.str; default = ""; description = "Preprovisioned controller-only Secret with token key."; };
     };
+    backupRetention = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "Prune Compute-tagged snapshots after each verified scheduled backup; preserve two recent, seven daily, five weekly and twelve monthly recovery points.";
+    };
     backupInterval = lib.mkOption {
       type = lib.types.str;
       default = "";
@@ -358,6 +364,10 @@ in {
         message = "Workspace builders require a digest-pinned image, a credential Secret and the controller's OCI registry prefix.";
       }
       {
+        assertion = !cfg.backupRetention || cfg.backupInterval != "";
+        message = "Compute retention requires scheduled encrypted backups.";
+      }
+      {
         assertion = cfg.backupInterval == "" ||
           (cfg.offsite.repository != "" && cfg.offsite.passwordSecretName != "");
         message = "Workspace scheduled backups require a Restic repository and an external password Secret.";
@@ -402,6 +412,12 @@ in {
         ''}
         ${lib.optionalString (cfg.embedding.tokenSecretName != "") ''
           kubectl -n pwm-system get secret ${lib.escapeShellArg cfg.embedding.tokenSecretName} >/dev/null
+        ''}
+        ${lib.optionalString (cfg.backupInterval != "") ''
+          kubectl -n pwm-system get secret ${lib.escapeShellArg cfg.offsite.passwordSecretName} >/dev/null
+          ${lib.optionalString (lib.hasPrefix "sftp:" cfg.offsite.repository) ''
+            kubectl -n pwm-system get secret ${lib.escapeShellArg cfg.offsite.sshSecretName} >/dev/null
+          ''}
         ''}
         helm upgrade --install pwm-controller ${lib.escapeShellArg chartPath} \
           --namespace pwm-system --values ${controllerValues} \

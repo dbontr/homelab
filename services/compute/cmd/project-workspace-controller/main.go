@@ -81,7 +81,7 @@ func runScheduledOffsiteBackups(ctx context.Context, interval time.Duration,
 }
 func command(args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: project-workspace-controller init|controller|pair|backup|restore|backup-offsite|restore-offsite|verify-offsite")
+		return errors.New("usage: project-workspace-controller init|controller|pair|backup|restore|backup-offsite|restore-offsite|verify-offsite|prune-offsite")
 	}
 	dbPath, tokenFile := location()
 	switch args[0] {
@@ -137,6 +137,13 @@ func command(args []string) error {
 			fmt.Printf("Restic snapshot %s uploaded and repository checked\n", id)
 		}
 		return err
+	case "prune-offsite":
+		if len(args) != 1 {
+			return errors.New("usage: project-workspace-controller prune-offsite")
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 12*time.Hour)
+		defer cancel()
+		return controller.PruneOffsite(ctx, controller.ResticConfigFromEnv())
 	case "restore-offsite":
 		if len(args) != 2 {
 			return errors.New("usage: project-workspace-controller restore-offsite SNAPSHOT_ID")
@@ -226,7 +233,16 @@ func command(args []string) error {
 			go func() {
 				defer offsite.Done()
 				runScheduledOffsiteBackups(ctx, interval, func(backupCtx context.Context) (string, error) {
-					return db.BackupOffsite(backupCtx, config)
+					snapshot, err := db.BackupOffsite(backupCtx, config)
+					if err != nil {
+						return "", err
+					}
+					if os.Getenv("PWM_RESTIC_AUTO_PRUNE") == "1" {
+						if err := controller.PruneOffsite(backupCtx, config); err != nil {
+							return snapshot, fmt.Errorf("snapshot %s saved but retention failed: %w", snapshot, err)
+						}
+					}
+					return snapshot, nil
 				}, func(snapshot string, err error) {
 					if err != nil {
 						log.Printf("scheduled offsite backup failed: %v", err)

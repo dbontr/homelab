@@ -42,6 +42,7 @@ controller:
     model: ""
     tokenSecretName: ""
   backupInterval: ""
+  backupRetention: false
   offsite:
     repository: ""
     passwordSecretName: ""
