@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -196,12 +197,22 @@ func TestEncryptedIntegratedResearchRecovery(t *testing.T) {
 	}
 	for revision, want := range []string{"experimental hypothesis", "experimental result and corrections"} {
 		data, err := recovered.PersonalTaskFileBase64("controller-owner", taskID, "notes.txt", revision+1)
-		if err != nil || data["sha256"] != checksum([]byte(want)) {
-			t.Fatalf("file revision %d lost: %v %v", revision+1, data, err)
+		if err != nil {
+			t.Fatalf("file revision %d unavailable: %v", revision+1, err)
+		}
+		bytes, err := base64.StdEncoding.DecodeString(asString(data["data_base64"]))
+		if err != nil || string(bytes) != want ||
+			data["sha256"] != checksum([]byte(want)) {
+			t.Fatalf("file revision %d changed: %v %v", revision+1, data, err)
 		}
 	}
-	for _, entry := range []struct { saved map[string]any; project string }{
-		{original, "acceptance"}, {copied, "homelab-platform"}, {experiment, "homelab-platform"},
+	for _, entry := range []struct {
+		saved   map[string]any
+		project string
+	}{
+		{original, "acceptance"},
+		{copied, "homelab-platform"},
+		{experiment, "homelab-platform"},
 	} {
 		saved, project := entry.saved, entry.project
 		id := asString(saved["id"])
@@ -209,9 +220,9 @@ func TestEncryptedIntegratedResearchRecovery(t *testing.T) {
 		if err != nil || asString(restoredMeta["sha256"]) != asString(saved["sha256"]) {
 			t.Fatalf("restored artifact metadata lost: %s %v %v", id, restoredMeta, err)
 		}
-		if _, size, err := hashFile(recovered.artifactPath(id)); err != nil ||
-			size != int64(asFloat(saved["size"])) {
-			t.Fatalf("restored artifact bytes unavailable: %s %v", id, err)
+		if digest, size, err := hashFile(recovered.artifactPath(id)); err != nil ||
+			digest != asString(saved["sha256"]) || size != int64(asFloat(saved["size"])) {
+			t.Fatalf("restored artifact checksum or size mismatch: %s %v", id, err)
 		}
 	}
 	restoredManifest := filepath.Join(root, "restored-manifest.json")
