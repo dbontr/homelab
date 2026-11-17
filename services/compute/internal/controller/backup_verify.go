@@ -60,6 +60,24 @@ func verifyRestoredState(directory string, manifestFiles map[string]bool) error 
 			return fmt.Errorf("restored library object %s does not match SQLite metadata", digest)
 		}
 	}
+	// Several legacy controller tables have no SQLite foreign key. Validate
+	// their logical project ownership explicitly before accepting recovery.
+	for _, relation := range []struct {
+		name  string
+		query string
+	}{
+		{"job", "SELECT j.id FROM jobs j LEFT JOIN projects p ON p.id=j.project WHERE p.id IS NULL LIMIT 1"},
+		{"artifact", "SELECT a.id FROM artifacts a LEFT JOIN projects p ON p.id=a.project WHERE p.id IS NULL LIMIT 1"},
+		{"repository", "SELECT r.full_name FROM repositories r LEFT JOIN projects p ON p.id=r.project WHERE p.id IS NULL LIMIT 1"},
+	} {
+		orphans, err := db.query(relation.query)
+		if err != nil {
+			return fmt.Errorf("restored %s project relationship verification failed: %w", relation.name, err)
+		}
+		if len(orphans) != 0 {
+			return fmt.Errorf("restored %s has an orphan project relationship", relation.name)
+		}
+	}
 	// The Kueue receipt and durable result must identify the same project.
 	// SQLite foreign keys enforce existence, but not this cross-table equality.
 	inconsistent, err := db.query(`SELECT k.job FROM kueue_jobs k JOIN jobs j ON j.id=k.job
