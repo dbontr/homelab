@@ -98,7 +98,7 @@ func (db *Database) BackupOffsite(ctx context.Context, c ResticRepositoryConfig)
 	if err := db.BackupTo(filepath.Join(stage, "snapshot")); err != nil {
 		return "", fmt.Errorf("snapshot preparation failed: %w", err)
 	}
-	cmd := c.resticCommand(ctx, stage, "backup", "--json", "--tag", "project-workspace", "snapshot")
+	cmd := c.resticCommand(ctx, stage, "backup", "--json", "--group-by", "tags", "--tag", "project-workspace", "snapshot")
 	out, err := cmd.StdoutPipe()
 	if err != nil {
 		return "", err
@@ -134,6 +134,23 @@ func (db *Database) BackupOffsite(ctx context.Context, c ResticRepositoryConfig)
 		return "", fmt.Errorf("encrypted repository verification failed for snapshot %s: %w", snapshot, err)
 	}
 	return snapshot, nil
+}
+
+// PruneOffsite applies retention only to Compute-owned snapshots. Preserve at
+// least two recent recovery points and do not group by the ephemeral Pod host.
+// This is a separate operator action so snapshot creation never deletes data.
+func PruneOffsite(ctx context.Context, c ResticRepositoryConfig) error {
+	if err := c.run(ctx, "", "forget",
+		"--tag", "project-workspace",
+		"--group-by", "tags",
+		"--keep-last", "2",
+		"--keep-daily", "7",
+		"--keep-weekly", "5",
+		"--keep-monthly", "12",
+		"--prune"); err != nil {
+		return err
+	}
+	return c.run(ctx, "", "check")
 }
 
 // RestoreOffsite restores an explicitly selected snapshot to an empty data
