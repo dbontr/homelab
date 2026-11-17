@@ -62,6 +62,8 @@ while IFS= read -r project; do
     --argjson policy "${PWM_PROJECT_ALLOWED_IMAGES_JSON:-"{}"}" \
     '["debian:bookworm-slim"] + ($policy[$project] // []) | unique')
   images_csv=$(jq -r 'join(",")' <<< "$images_json")
+  jq -n --arg allowed "$images_csv" '{worker:{allowedImages:$allowed}}' \
+    > "$scratch/worker-image-values.json"
   for host in "${hosts[@]}"; do
     if [[ ! "$host" =~ ^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$ ]]; then
       echo "Invalid approved Kubernetes host $host" >&2
@@ -107,7 +109,7 @@ while IFS= read -r project; do
       --set-json "worker.nodeSelector={\"kubernetes.io/hostname\":\"$host\"}" \
       --set "worker.image=$PWM_WORKER_IMAGE" \
       --set worker.imagePullPolicy=IfNotPresent \
-      --set-string "worker.allowedImages=$images_csv" --set worker.cpuCapacity=2 \
+      --values "$scratch/worker-image-values.json" --set worker.cpuCapacity=2 \
       --set worker.memoryCapacityMB=4096 --set worker.maxJobs=1 \
       --wait --timeout 5m >/dev/null
     printf 'Provisioned project %s on %s\n' "$project" "$host"
