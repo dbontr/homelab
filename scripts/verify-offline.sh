@@ -161,7 +161,9 @@ backup_render=$(helm template homelab-backup-acceptance "$chart" \
   --set controller.backupRetention=true \
   --set-string controller.offsite.repository=sftp:compute-backup@10.77.30.232:/repository \
   --set controller.offsite.passwordSecretName=backup-password \
-  --set controller.offsite.sshSecretName=backup-ssh)
+  --set controller.offsite.sshSecretName=backup-ssh \
+  --set-string controller.offsite.alertURL=https://alerts.example.invalid/hook \
+  --set controller.offsite.alertSecretName=acceptance-alert-secret)
 printf '%s\n' "$backup_render" | grep -q 'name: PWM_RESTIC_BACKUP_INTERVAL'
 printf '%s\n' "$backup_render" | grep -q 'name: PWM_RESTIC_AUTO_PRUNE'
 printf '%s\n' "$backup_render" | grep -q 'name: restic-ssh-input'
