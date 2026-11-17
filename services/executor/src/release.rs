@@ -53,8 +53,8 @@ impl Journal {
 // have completed. Only terminal receipts assert a specific live generation.
 fn journal_matches_generation(journal: &Journal, current: &str) -> bool {
     match journal.phase.as_str() {
-        "active" => current == journal.target,
-        "rolled-back" => current == journal.previous,
+        "active" => current == journal.target.as_str(),
+        "rolled-back" => current == journal.previous.as_str(),
         _ => true,
     }
 }
@@ -559,7 +559,7 @@ impl ReleaseController {
         self.rollback(txn).await
     }
 
-    pub async fn status(&self) -> Result<Journal, Error> {
+    pub async fn status(&self) -> Result<(Journal, Manifest), Error> {
         let _guard = self.operation.lock().await;
         let _file = self.state_lock()?;
         let journal: Journal = self.read("journal.json")?;
@@ -578,7 +578,11 @@ impl ReleaseController {
         {
             return Err(Error::Storage("release journal differs from live generation"));
         }
-        Ok(journal)
+        let manifest = self.load_stage(&journal.id)?;
+        if manifest.system != journal.target {
+            return Err(Error::Storage("release journal target differs from staged generation"));
+        }
+        Ok((journal, manifest))
     }
 }
 
