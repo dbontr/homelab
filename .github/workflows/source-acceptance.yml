@@ -193,3 +193,32 @@ jobs:
           bash -n services/compute/scripts/rollout-project-fleet.sh
           bash -n services/compute/scripts/tests/rollout-project-worker-test.sh
           bash services/compute/scripts/tests/rollout-project-worker-test.sh
+      - name: Verify protected backup Helm admission without Kubernetes access
+        shell: bash
+        run: |
+          bash -n services/compute/scripts/tests/compute-backup-chart-test.sh
+          bash services/compute/scripts/tests/compute-backup-chart-test.sh
+
+  compute-backup-recovery:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27.3"
+      - name: Install isolated encrypted backup test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends restic libsqlite3-dev
+          restic version
+      - name: Verify synthetic encrypted backup, retention and exact recovery
+        working-directory: services/compute
+        env:
+          GOWORK: "off"
+        run: |
+          set -euo pipefail
+          go test -count=1 -timeout 15m -v ./internal/controller \
+            -run 'TestEncryptedOffsiteBackupRestoreAndVerification|TestOffsiteRetentionPreservesIndependentSnapshots|TestResticCredentialsAndMissingBackend|TestBackup|TestRestore'
+          go test -count=1 -timeout 5m -v ./cmd/project-workspace-controller \
+            -run 'TestBackup|TestScheduledOffsite'
