@@ -89,6 +89,15 @@ func TestReleaseStagesOnlyCleanExactOfflineGeneration(t *testing.T){
  stage,err:=ctrl.Stage(context.Background(),testRevision)
  if err!=nil{t.Fatal(err)}
  if stage.Host!="jupiter"||stage.System!=builtSystem||len(stage.ID)!=48{t.Fatal("bad staged manifest")}
+ pinned:=false
+ for _,call:=range runner.calls {
+  if strings.Contains(call,"build --offline") {
+   pinned=strings.Contains(call,"git+file://")&&
+    strings.Contains(call,"?rev="+testRevision+"#nixosConfigurations.jupiter.config.system.build.toplevel")
+   if !pinned{t.Fatalf("Nix build used mutable source: %s",call)}
+  }
+ }
+ if !pinned{t.Fatal("exact-commit Nix reference not observed")}
  if _,err:=ctrl.loadStage("../evil");err==nil{t.Fatal("path traversal accepted")}
 }
 
