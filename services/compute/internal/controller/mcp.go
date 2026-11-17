@@ -91,6 +91,7 @@ var tools = []toolDefinition{
 	{"workspace_call", "Queue a command or file operation", []string{"project_id", "workspace_id", "action", "payload"}, nil},
 	{"workspace_capture_display", "Capture the isolated workspace virtual display as a durable PNG artifact; inspect the completed operation for its artifact ID", []string{"project_id", "workspace_id"}, nil},
 	{"workspace_operation", "Get a worker-confirmed operation result", []string{"project_id", "workspace_id", "operation_id"}, nil},
+	{"workspace_operation_by_request", "Resolve a project workspace command by its independently authorized execution request identity", []string{"project_id", "workspace_id", "request_id"}, nil},
 	{"workspace_import_artifact", "Import a stored artifact into a workspace", []string{"project_id", "workspace_id", "artifact_id", "path"}, nil},
 	{"workspace_destroy", "Stop a workspace and release confirmed resources", []string{"project_id", "workspace_id"}, nil},
 	{"list_hardware", "List hardware and leases", nil, nil},
@@ -738,6 +739,8 @@ func (s *Server) callToolFor(who caller, name string, a map[string]any) (any, er
 		return db.CallWorkspace(project, workspace, "capture_display", map[string]any{})
 	case "workspace_operation":
 		return db.Operation(project, workspace, get("operation_id"))
+	case "workspace_operation_by_request":
+		return db.OperationByRequest(project, workspace, get("request_id"))
 	case "workspace_import_artifact":
 		return db.QueueImportFile(project, workspace, get("artifact_id"), get("path"))
 	case "workspace_checkpoint_stop":
