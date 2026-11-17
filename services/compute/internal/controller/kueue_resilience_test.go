@@ -240,3 +240,55 @@ func TestKueueRejectsCancellationWithoutRemoteIdentityMatch(t *testing.T) {
 	fake.mu.Lock(); stillPresent := fake.job != nil; fake.mu.Unlock()
 	if !stillPresent { t.Fatal("deleted a Job with a foreign UID") }
 }
+
+type unavailableBatchLogs struct {
+	base http.RoundTripper
+	unavailable bool
+}
+
+func (t *unavailableBatchLogs) RoundTrip(r *http.Request) (*http.Response, error) {
+	if t.unavailable && strings.HasSuffix(r.URL.Path, "/log") {
+		return &http.Response{
+			StatusCode: http.StatusServiceUnavailable,
+			Header: http.Header{"Content-Type": []string{"application/json"}},
+			Body: io.NopCloser(strings.NewReader("temporary Pod log outage")),
+			Request: r,
+		}, nil
+	}
+	return t.base.RoundTrip(r)
+}
+
+func TestKueueDoesNotSilentlyLoseTerminalOutput(t *testing.T) {
+	db, srv, _, fake := batchFixture(t)
+	request, err := db.QueueKueueJob("research", "missing-logs-001", "echo evidence", testBatchImage, 0.2, 128)
+	if err != nil { t.Fatal(err) }
+	id := asString(request["id"])
+	pending, err := db.pendingKueueJobs()
+	if err != nil { t.Fatal(err) }
+	if err := srv.Kueue.reconcile(context.Background(), db, pending[0]); err != nil { t.Fatal(err) }
+	fake.mu.Lock(); fake.complete = true; fake.mu.Unlock()
+	logs := &unavailableBatchLogs{base: srv.Kueue.client.Transport, unavailable: true}
+	srv.Kueue.client = &http.Client{Transport: logs}
+	pending, err = db.pendingKueueJobs()
+	if err != nil { t.Fatal(err) }
+	if err := srv.Kueue.reconcile(context.Background(), db, pending[0]); err != nil { t.Fatal(err) }
+	uncertain, err := db.KueueJob("research", id)
+	if err != nil || uncertain["status"] != "recovery_required" ||
+		!strings.Contains(asString(uncertain["last_error"]), "output is unavailable") {
+		t.Fatalf("terminal status hid lost output: %v %v", uncertain, err)
+	}
+	reopened, err := OpenDatabase(db.filename)
+	if err != nil { t.Fatal(err) }
+	defer reopened.Close()
+	logs.unavailable = false
+	pending, err = reopened.pendingKueueJobs()
+	if err != nil || len(pending) != 1 { t.Fatalf("unreconciled output disappeared: %v %v", pending, err) }
+	if err := srv.Kueue.reconcile(context.Background(), reopened, pending[0]); err != nil { t.Fatal(err) }
+	persisted, err := reopened.KueueJob("research", id)
+	if err != nil || persisted["status"] != "succeeded" ||
+		!strings.Contains(asString(persisted["result"]), "calculation-complete") {
+		t.Fatalf("terminal stdout not recovered: %v %v", persisted, err)
+	}
+	fake.mu.Lock(); created := fake.created; fake.mu.Unlock()
+	if created != 1 { t.Fatalf("log recovery started %d executions", created) }
+}
