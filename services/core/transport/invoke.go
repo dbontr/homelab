@@ -19,8 +19,8 @@ func privilegedExecutorTool(name string)bool{
  case "compute__submit_batch_job","compute__cancel_batch_job",
   "infrastructure__workspace_register_image","infrastructure__workspace_propose_program",
   "infrastructure__workspace_review_program","infrastructure__workspace_update_entry",
-  "infrastructure__workspace_create","infrastructure__workspace_stop",
-  "infrastructure__workspace_build_environment","infrastructure__workspace_register_software",
+  "infrastructure__workspace_create","infrastructure__workspace_command",
+  "infrastructure__workspace_stop","infrastructure__workspace_build_environment","infrastructure__workspace_register_software",
   "infrastructure__workspace_revoke_worker","infrastructure__service_start",
   "infrastructure__service_stop","infrastructure__service_reload",
   "infrastructure__service_restart","infrastructure__release_activate",
@@ -67,6 +67,13 @@ func (s *Server) invoke(ctx context.Context,name string,args json.RawMessage,id 
    }
    encoded,_:=json.Marshal(requestID)
    fields["job_request_id"]=encoded
+  }
+  if name=="infrastructure__workspace_command" {
+   if _,exists:=fields["workspace_request_id"];exists{
+    return toolError("workspace_request_id is reserved for the trusted gateway")
+   }
+   encoded,_:=json.Marshal(requestID)
+   fields["workspace_request_id"]=encoded
   }
   scopedArgs,err:=json.Marshal(fields)
   if err!=nil{return toolError("invalid privileged execution arguments")}
