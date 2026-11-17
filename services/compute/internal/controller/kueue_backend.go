@@ -317,7 +317,9 @@ func (k *KueueBackend) reconcile(ctx context.Context,db *Database,row map[string
 	}
 	if failed{
 		result,outputErr:=k.output(ctx,name,uid)
-		if outputErr!=nil{result="Kubernetes Job failed; output unavailable: "+outputErr.Error()}
+		if outputErr!=nil{
+			return db.requireKueueRecovery(id,"Kubernetes Job failed but output is unavailable: "+outputErr.Error())
+		}
 		if result==""{result="Kubernetes Job failed (empty stdout)"}
 		return db.updateKueueJob(id,uid,"failed",result)
 	}
