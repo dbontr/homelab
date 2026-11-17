@@ -2,6 +2,7 @@ package controller
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -21,7 +22,61 @@ type ResticRepositoryConfig struct {
 	PasswordFile string
 }
 
-var resticSnapshotID = regexp.MustCompile(`^[a-f0-9]{8,64}$`)
+var resticSnapshotID = regexp.MustCompile(`^[a-f0-9]{8,64}package controller
+
+import (
+	"bufio"
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"regexp"
+	"strings"
+)
+
+// ResticRepositoryConfig delegates encryption and remote storage to Restic.
+// Credentials are controller-local and never travel to worker payloads.
+type ResticRepositoryConfig struct {
+	Repository   string
+	PasswordFile string
+}
+
+)
+
+type resticDiagnostic struct {
+	bytes.Buffer
+}
+
+func (d *resticDiagnostic) Write(p []byte) (int, error) {
+	remaining := 4096 - d.Len()
+	if remaining > 0 {
+		d.Buffer.Write(p[:min(remaining, len(p))])
+	}
+	return len(p), nil
+}
+
+// Report only a classified failure, never raw backend diagnostics that could
+// contain repository URLs, account names or storage credentials.
+func (d *resticDiagnostic) classify(err error) error {
+	message := strings.ToLower(d.String())
+	switch {
+	case strings.Contains(message, "no space left on device"),
+		strings.Contains(message, "insufficient space"),
+		strings.Contains(message, "disk full"):
+		return fmt.Errorf("backup destination has insufficient capacity: %w", err)
+	case strings.Contains(message, "hash mismatch"),
+		strings.Contains(message, "checksum mismatch"),
+		strings.Contains(message, "data corruption"):
+		return fmt.Errorf("encrypted repository integrity failure: %w", err)
+	default:
+		return err
+	}
+}
 
 func ResticConfigFromEnv() ResticRepositoryConfig {
 	return ResticRepositoryConfig{
@@ -76,8 +131,10 @@ func (c ResticRepositoryConfig) run(ctx context.Context, directory string, args 
 	}
 	cmd := c.resticCommand(ctx, directory, args...)
 	cmd.Stdout = io.Discard
+	var diagnostic resticDiagnostic
+	cmd.Stderr = &diagnostic
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("Restic %s failed: %w", args[0], err)
+		return fmt.Errorf("Restic %s failed: %w", args[0], diagnostic.classify(err))
 	}
 	return nil
 }
@@ -99,6 +156,8 @@ func (db *Database) BackupOffsite(ctx context.Context, c ResticRepositoryConfig)
 		return "", fmt.Errorf("snapshot preparation failed: %w", err)
 	}
 	cmd := c.resticCommand(ctx, stage, "backup", "--json", "--tag", "project-workspace", "snapshot")
+	var diagnostic resticDiagnostic
+	cmd.Stderr = &diagnostic
 	out, err := cmd.StdoutPipe()
 	if err != nil {
 		return "", err
@@ -125,7 +184,7 @@ func (db *Database) BackupOffsite(ctx context.Context, c ResticRepositoryConfig)
 		return "", fmt.Errorf("cannot read Restic backup summary: %w", scanErr)
 	}
 	if waitErr != nil {
-		return "", fmt.Errorf("Restic backup failed: %w", waitErr)
+		return "", fmt.Errorf("Restic backup failed: %w", diagnostic.classify(waitErr))
 	}
 	if snapshot == "" {
 		return "", errors.New("Restic did not confirm a saved snapshot ID")
@@ -208,4 +267,11 @@ func VerifyOffsite(ctx context.Context, c ResticRepositoryConfig, snapshot strin
 		return errors.New("restored SQLite database failed integrity check")
 	}
 	return nil
+}
+
+ 
+// FullCheckOffsite reads and verifies all encrypted repository data without
+// materializing a second copy of the controller PVC in its scratch volume.
+func FullCheckOffsite(ctx context.Context, c ResticRepositoryConfig) error {
+	return c.run(ctx, "", "check", "--read-data")
 }
