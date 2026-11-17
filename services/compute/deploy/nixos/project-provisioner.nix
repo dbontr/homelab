@@ -12,6 +12,7 @@ let
       export PWM_COMPUTE_NODES=${lib.escapeShellArg (lib.concatStringsSep " " cfg.computeNodes)}
       export PWM_EXCLUDE_PROJECTS=${lib.escapeShellArg (lib.concatStringsSep " " cfg.excludeProjects)}
       export PWM_COMPUTE_LIBRARY_PROJECTS=${lib.escapeShellArg (lib.concatStringsSep " " cfg.computeLibraryProjects)}
+      export PWM_PROJECT_ALLOWED_IMAGES_JSON=${lib.escapeShellArg (builtins.toJSON cfg.projectApprovedImages)}
       exec ${pkgs.bash}/bin/bash ${../../scripts/reconcile-kubernetes-projects.sh}
     '';
   };
@@ -44,6 +45,11 @@ in
       default = [];
       description = "Library projects explicitly allowed to receive project compute workers; default is no workers for library-only projects.";
     };
+    projectApprovedImages = lib.mkOption {
+      type = lib.types.attrsOf (lib.types.listOf lib.types.str);
+      default = {};
+      description = "Additional immutable OCI image references permitted only in the named project workers. Existing workers are not changed automatically.";
+    };
     interval = lib.mkOption {
       type = lib.types.str;
       default = "2min";
@@ -55,6 +61,14 @@ in
       {
         assertion = builtins.match ".+@sha256:[0-9a-f]{64}" cfg.workerImage != null && cfg.computeNodes != [];
         message = "Workspace project provisioning requires a digest-pinned worker image and at least one compute node.";
+      }
+      {
+        assertion = builtins.all (project:
+          builtins.match "[a-z0-9]([-a-z0-9]{0,50}[a-z0-9])?" project != null
+          && builtins.all (image: builtins.match ".+@sha256:[0-9a-f]{64}" image != null)
+            cfg.projectApprovedImages.${project}
+        ) (builtins.attrNames cfg.projectApprovedImages);
+        message = "Additional project OCI images require a canonical project ID and immutable SHA-256 digest.";
       }
     ];
     systemd.services.workspace-project-provisioner = {
