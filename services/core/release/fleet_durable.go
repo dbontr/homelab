@@ -21,6 +21,10 @@ import (
 type ReleaseObservation struct {
  ID string `json:"id"`
  Phase string `json:"phase"`
+ Host string `json:"host,omitempty"`
+ Revision string `json:"revision,omitempty"`
+ TargetSystem string `json:"target_system,omitempty"`
+ PreviousSystem string `json:"previous_system,omitempty"`
 }
 
 type ReleaseObserver interface {
