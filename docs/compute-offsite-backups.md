@@ -23,6 +23,8 @@ Secrets in `pwm-system`. The chart expects:
 
 - `controller.offsite.passwordSecretName`: a `password` data key;
 - `controller.offsite.sshSecretName`: `id_ed25519` and `known_hosts` keys;
+- `controller.offsite.alertSecretName`: a separate `token` data key;
+- `controller.offsite.alertURL`: the approved HTTPS notification receiver.
 - `controller.offsite.repository`: `sftp:compute-backup@10.77.30.232:/repository`.
 
 The chroot path is interpreted inside the independent Janus SFTP service.
@@ -32,7 +34,10 @@ scratch. Create and initialize the Restic repository with the dedicated
 identity and protected password, then verify its exact URL from within the
 same controller container environment. Use strict SSH host-key checking.
 Do not put password, SSH key or token bytes in Helm values, Nix source,
-logs, GitHub issues or MCP tool arguments.
+logs, GitHub issues or MCP tool arguments. The alert receiver URL above is an
+example only, not a configured or authorized endpoint. The source overlay
+leaves the alert URL and Secret name empty, and Helm must refuse activation
+until these values are supplied through the protected release process.
 
 ## Declarative configuration
 
@@ -46,6 +51,8 @@ controller:
     repository: "sftp:compute-backup@10.77.30.232:/repository"
     passwordSecretName: "pwm-compute-restic-password"
     sshSecretName: "pwm-compute-restic-ssh"
+    alertURL: "https://backup-alerts.example.invalid/hooks/compute"
+    alertSecretName: "pwm-compute-backup-alert"
 ```
 
 The running production controller is managed by the existing `pwm-controller`
@@ -70,9 +77,14 @@ and compare the complete Deployment to its existing Helm release before
 `helm upgrade --atomic --wait`. The NixOS deploy service fails before Helm
 if an enabled backup Secret is missing.
 
-The scheduler snapshots immediately on controller start and on each interval,
-with five-minute bounded retry after a failed backup. Successful snapshots
-can trigger scoped retention of the tagged Compute backup set. Retention keeps
+The scheduler snapshots immediately on controller start and on each interval.
+It attempts up to two five-minute retries for a failed snapshot and then
+returns to its normal interval. Each attempt has a 12-hour maximum duration.
+On success it verifies the encrypted repository, and it performs a full
+`restic check --read-data` after controller startup and at least every seven
+days. A full-data check failure is recorded as a failed backup cycle.
+Successful verified snapshots can trigger scoped retention of the tagged
+Compute backup set. Retention keeps
 at least two latest, seven daily, five weekly and twelve monthly snapshots;
 the policy groups by tag rather than the ephemeral Kubernetes Pod hostname.
 The `forget` operation never targets untagged or unrelated snapshots. It
@@ -110,3 +122,112 @@ with the same protected repository environment.
 **Production acceptance requires an observed scheduled snapshot and a
 separate verified restoration.** A source build, a successful manual archive
 or a Helm rollout alone does not establish unattended recovery.
+
+## Unattended health, alerts and recovery records
+
+When enabled, the controller writes a private, atomic
+`.compute-backup-health.json` receipt beside its SQLite database. This
+persisted state tracks the last attempted and successful snapshot, full-data
+verification time, consecutive failures and outstanding alert. The receipt
+survives controller replacement and permits detection of an interrupted or
+missed daily schedule. It contains no credential bytes or database contents.
+
+The backup receiver must support authenticated HTTPS POST requests carrying
+`Authorization: Bearer <dedicated-token>` and JSON with these string fields:
+
+```json
+{"source":"compute-backup","condition":"repeated_failures","status":"firing","observed_at":"2026-01-01T00:00:00Z"}
+```
+
+Supported conditions include `missed_backup` (no successful receipt within
+twice the interval), `repeated_failures` (three consecutive failed attempts),
+`insufficient_capacity`, and `corrupt_snapshot`. On recovery, the controller
+posts the matching `resolved` event. A failed notification is logged and can
+be retried. The receiver must authenticate the token, deduplicate transitions,
+notify the operator, and preserve its own independent alert history. Only a
+2xx response acknowledges delivery. The receiver itself must be provisioned
+and independently accepted before enabling unattended backups; a syntactically
+valid HTTPS URL is not evidence of notification delivery.
+
+Janus also exposes a source-owned Prometheus alert when its backup-bearing
+root filesystem has less than 40 GiB available. The coordinator must validate
+that `/srv/compute-restic` remains on that filesystem, check Alertmanager or
+Grafana contact delivery, and adjust the threshold if its mount changes. A
+backup failure or low capacity does not authorize deleting the protected
+age-encrypted recovery archive.
+
+## Protected activation sequence (coordinator only)
+
+This procedure describes a future independently authorized cutover. Source
+publication and test results never grant permission to activate services.
+
+1. **Freeze and record the baseline.** Resolve exact main and candidate
+   commit IDs; save the complete existing Helm values, Deployment and release
+   revisions, controller OCI digest, source and bound PVC identity,
+   `pwm-controller-state` capacity, Janus running and boot NixOS generation,
+   active Vivado hardware services, Kubernetes and worker readiness. Verify
+   that the preserved age-encrypted archive is still intact. Do not access
+   the archive contents.
+2. **Verify identity and capacity.** With an independent administrator
+   approval, reconcile the Janus boot-generation drift and evaluate the
+   restricted `compute-backup` Nix module. Before any activation, verify
+   chroot parents are root owned, repository directory is writable only by
+   the dedicated account, port forwarding and shell commands are disabled,
+   and the source-pinned SSH host fingerprint is confirmed out of band.
+   Check actual Janus free space and the 40 GiB warning floor.
+3. **Provision protected credentials.** Use the security-owned credential
+   path to create an independent repository password, dedicated Ed25519
+   client key, pinned host-key file and dedicated alert token. Store secrets
+   separately in `pwm-system` Kubernetes Secrets. Create the root-owned
+   Janus authorized-key entry through an approved host operation. Never use
+   the host's root SSH key or expose secrets in command arguments, logs,
+   source control or this document.
+4. **Prepare off-host storage.** After the restricted principal is active,
+   initialize a *new* Restic SFTP repository at the verified Janus chroot
+   path. Never reuse the manually encrypted recovery archive or overwrite
+   another Restic repository. Establish the approved dedicated HTTPS alert
+   receiver, test delivery and receipt of `firing` and `resolved` messages.
+5. **Stage the exact release.** Build and verify a digest-pinned Compute
+   controller image containing this source. Keep the existing Helm release
+   name, its PVC, all unrelated values, owner authorization, Kueue settings,
+   worker configurations, and workload identity unchanged. Populate the
+   otherwise intentionally incomplete source Helm overlay with the approved
+   alert URL and Secret name. Render with `helm template`, inspect a complete
+   base-versus-candidate manifest diff, and reject any unrelated change.
+   Do not invoke a direct `helm upgrade` or NixOS switch outside the
+   independent exact-commit release authority.
+6. **Authorize and activate.** Ask the independent Rust release authority
+   for an operation-scoped owner approval. Have the privileged executor apply
+   only the inspected release, with bounded health checks and an exact
+   rollback target. Do not use NanoKVM to bypass this boundary.
+7. **Observe a real scheduled backup.** Capture the controller's completed
+   full 64-character Restic snapshot ID and persisted health receipt; confirm
+   the off-host repository records it. Exercise outage/retry acceptance using
+   an explicitly approved non-destructive fault-injection technique.
+   Verify the alert receiver acknowledges both failure and recovery.
+8. **Verify independent recovery.** From an independently isolated host or
+   disposable container with dedicated read-only verification access, run
+   `restic check --read-data`; restore the exact snapshot to empty storage,
+   never the controller's live PVC. Confirm `PRAGMA integrity_check = ok`,
+   `PRAGMA foreign_key_check` has zero rows, exact artifact and library
+   object SHA-256 hashes, project note and contribution identities, and
+   durable Kueue Job result and request receipts. Preserve the independent
+   restore evidence and immutable snapshot identity.
+9. **Inspect retention and capacity.** Dry-run the Compute-tagged forget
+   policy, show multiple historical recovery points and confirm unrelated
+   tagged snapshots survive. Run pruning only after source identity,
+   capacity and dry-run inspection. Confirm fresh capacity metrics,
+   notification contact delivery, five Kubernetes nodes Ready and all
+   expected Compute worker instances healthy.
+10. **Close the production gate only on evidence.** Record protected release,
+    snapshot and exact restore audit IDs; preserve rollback options and the
+    independent age archive. A successful source test or manual snapshot
+    alone does not justify marking issue #192 complete.
+
+To verify the implementation without touching production, run the controller
+unit tests against a disposable SQLite database and local encrypted Restic
+repository, inspect the Helm render with synthetic values, and perform NixOS
+evaluation without activation. These tests must include an interrupted backup,
+unavailable repository, incomplete manifest, corrupted database relationship
+and retained independent snapshots. Do not expose production credentials to
+synthetic tests.
