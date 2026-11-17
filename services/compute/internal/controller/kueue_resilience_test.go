@@ -292,3 +292,37 @@ func TestKueueDoesNotSilentlyLoseTerminalOutput(t *testing.T) {
 	fake.mu.Lock(); created := fake.created; fake.mu.Unlock()
 	if created != 1 { t.Fatalf("log recovery started %d executions", created) }
 }
+
+func TestKueueLegacyMigrationFencesUnknownCreateHistory(t *testing.T) {
+	db, srv, _, fake := batchFixture(t)
+	submitted, err := db.QueueKueueJob("research", "legacy-record-001", "echo original", testBatchImage, 0.25, 128)
+	if err != nil { t.Fatal(err) }
+	id := asString(submitted["id"])
+	// Recreate the pre-migration Kueue table in this disposable SQLite
+	// database. Existing Jobs and project identifiers are unchanged.
+	if err := db.exec("DROP TABLE kueue_jobs"); err != nil { t.Fatal(err) }
+	if err := db.exec(`CREATE TABLE kueue_jobs(
+		job TEXT PRIMARY KEY,project TEXT NOT NULL,request_id TEXT NOT NULL,
+		remote_name TEXT NOT NULL UNIQUE,remote_uid TEXT NOT NULL DEFAULT '',
+		last_error TEXT NOT NULL DEFAULT '',created REAL NOT NULL,updated REAL NOT NULL,
+		UNIQUE(project,request_id),FOREIGN KEY(job) REFERENCES jobs(id),
+		FOREIGN KEY(project) REFERENCES projects(id))`); err != nil { t.Fatal(err) }
+	if err := db.exec("INSERT INTO kueue_jobs(job,project,request_id,remote_name,created,updated) VALUES(?,?,?,?,?,?)",
+		id, "research", "legacy-record-001", "pwm-"+id, stamp(), stamp()); err != nil { t.Fatal(err) }
+	// Opening the original file must migrate without assuming an old row
+	// has never sent a remote Kubernetes create request.
+	reopened, err := OpenDatabase(db.filename)
+	if err != nil { t.Fatal(err) }
+	defer reopened.Close()
+	pending, err := reopened.pendingKueueJobs()
+	if err != nil || len(pending) != 1 || asInt(pending[0]["create_attempted"]) != 1 {
+		t.Fatalf("old batch row was not conservatively fenced: %v %v", pending, err)
+	}
+	if err := srv.Kueue.reconcile(context.Background(), reopened, pending[0]); err != nil { t.Fatal(err) }
+	status, err := reopened.KueueJob("research", id)
+	if err != nil || status["status"] != "recovery_required" {
+		t.Fatalf("legacy batch was silently re-created: %v %v", status, err)
+	}
+	fake.mu.Lock(); created := fake.created; fake.mu.Unlock()
+	if created != 0 { t.Fatalf("migration duplicated %d uncertain remote Jobs", created) }
+}
