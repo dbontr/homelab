@@ -4,8 +4,16 @@ on:
   pull_request:
     paths:
       - '.github/workflows/combined-production-qualification.yml'
-      - 'scripts/verify-production-integration.sh'
-      - 'scripts/tests/production-manifest-compat-test.sh'
+      - '.github/workflows/source-acceptance.yml'
+      - 'services/**'
+      - 'scripts/**'
+      - 'infrastructure/**'
+      - 'nixosModules/**'
+      - 'mcp/**'
+      - 'api/**'
+      - 'flake.nix'
+      - 'flake.lock'
+      - 'go.work'
 
 permissions:
   contents: read
