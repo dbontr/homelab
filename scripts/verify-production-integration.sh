@@ -17,6 +17,8 @@ Offline integration checks (source and test fixtures only):
   4. Encrypted Restic backup and exact-snapshot restore test
   5. Kueue and cold OCI recovery fixture tests
   6. Project-catalog preservation and revision tests
+  7. Protected backup, Kueue resilience and provenance reconciliation
+  8. Helm baseline comparisons and explicit five-host Nix evaluation
 Live ingress, host recovery, real Kueue outages, off-host backup and
 owner-approved rollback require separate evidence and authorization.
 PLAN
@@ -67,13 +69,13 @@ run compute_batch bash -c 'cd "$1/services/compute" && go test -count=1 ./intern
 
 run executor_format bash -c 'cd "$1/services/executor" && cargo fmt --all -- --check' _ "$root"
 run executor_clippy bash -c 'cd "$1/services/executor" && cargo clippy --locked --offline --all-targets -- -D warnings' _ "$root"
-run protected_backup_helm bash "$root/services/compute/scripts/tests/compute-backup-chart-test.sh"
+run protected_backup_helm bash "$root/services/compute/scripts/tests/compute-backup-chart-test.sh" "$root/services/compute/deploy/helm/project-workspace"
 run helm_manifest_compat bash "$root/scripts/tests/production-manifest-compat-test.sh" "53c40842cc7354deb29ce64608dcb4bd0794a6fa"
 run encrypted_backup_scheduler bash -c 'cd "$1/services/compute" && go test -count=1 ./cmd/project-workspace-controller -run "TestBackup|TestScheduledOffsite"' _ "$root"
 run compute_resilience bash "$root/services/compute/scripts/tests/compute-resilience-isolated.sh"
 run legacy_project_reconcile bash -c 'cd "$1/services/compute" && go test -race -count=1 ./cmd/legacy-reconcile' _ "$root"
 run monitor_ingress_contract bash "$root/scripts/tests/accept-monitor-ingress-test.sh"
-run five_host_evaluation bash -c 'cd "$1"; for host in saturn jupiter venus mercury janus; do nix eval --offline --raw ".#nixosConfigurations.$host.config.system.build.toplevel.drvPath" >/dev/null || exit 1; done' _ "$root"
+run five_host_evaluation bash -c 'cd "$1"; for host in saturn jupiter venus mercury janus; do nix --extra-experimental-features "nix-command flakes" eval --offline --raw ".#nixosConfigurations.$host.config.system.build.toplevel.drvPath" >/dev/null || exit 1; done' _ "$root"
 
 if (( failures )); then
   printf '%d offline integration checks failed; no deployment was attempted.\n' "$failures" >&2
