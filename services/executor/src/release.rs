@@ -624,7 +624,9 @@ impl ReleaseController {
         }
         let profile = self.current_system()?;
         if !recoverable_generation(&txn, &profile, &self.running_system()?) {
-            return Err(Error::Denied("running generation differs from release journal"));
+            return Err(Error::Denied(
+                "running generation differs from release journal",
+            ));
         }
         // If the rollback switch completed before a crash, verify the restored
         // services without switching the same generation a second time.
