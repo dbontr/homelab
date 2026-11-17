@@ -244,3 +244,32 @@ func TestRestorePreservesKueueJobResult(t *testing.T) {
 		t.Fatalf("durable Kueue receipt lost: job=%v err=%v", job, err)
 	}
 }
+
+func TestRestoreRejectsOrphanDurableJobProject(t *testing.T) {
+	root := t.TempDir()
+	db, err := OpenDatabase(filepath.Join(root, "source", "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The legacy jobs table lacks a declared foreign key to projects.
+	if err := db.exec(`INSERT INTO jobs(id,project,command,image,cpu,memory_mb,status,created,updated)
+		VALUES(?,?,?,?,?,?,?,?,?)`, strings.Repeat("a", 32), "nonexistent",
+		"printf lost", "example/image", 0.2, 128, "succeeded", stamp(), stamp()); err != nil {
+		t.Fatal(err)
+	}
+	backup := filepath.Join(root, "snapshot")
+	if err := db.BackupTo(backup); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	destination := filepath.Join(root, "recovery", "state.db")
+	if err := RestoreBackup(backup, destination); err == nil ||
+		!strings.Contains(err.Error(), "orphan project relationship") {
+		t.Fatalf("orphan durable job must be rejected before promotion: %v", err)
+	}
+	if _, err := os.Stat(destination); !os.IsNotExist(err) {
+		t.Fatalf("failed restore created a database: %v", err)
+	}
+}
