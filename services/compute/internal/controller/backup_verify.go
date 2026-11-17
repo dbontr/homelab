@@ -68,7 +68,13 @@ func verifyRestoredState(directory string, manifestFiles map[string]bool) error 
 		args  []any
 	}{
 		{"job", "SELECT j.id FROM jobs j LEFT JOIN projects p ON p.id=j.project WHERE p.id IS NULL AND j.project<>? LIMIT 1", []any{personalComputeScope}},
-		{"artifact", "SELECT a.id FROM artifacts a LEFT JOIN projects p ON p.id=a.project WHERE p.id IS NULL AND a.project<>? LIMIT 1", []any{personalComputeScope}},
+		{"artifact", `SELECT a.id FROM artifacts a
+			LEFT JOIN projects p ON p.id=a.project
+			LEFT JOIN personal_task_files f ON f.artifact_id=a.id
+			LEFT JOIN personal_tasks t ON t.id=f.task
+			WHERE p.id IS NULL AND a.project<>?
+			  AND (f.task IS NULL OR t.id IS NULL OR a.project<>(? || f.task))
+			LIMIT 1`, []any{personalComputeScope, taskFileScope("")}},
 		{"repository", "SELECT r.full_name FROM repositories r LEFT JOIN projects p ON p.id=r.project WHERE p.id IS NULL LIMIT 1", nil},
 	} {
 		orphans, err := db.query(relation.query, relation.args...)
