@@ -266,3 +266,22 @@ func TestReleaseStageIdentityCannotBeReusedAfterLaterTransaction(t *testing.T){
   if info.Mode().Perm()!=0600{t.Fatal("unsafe release attempt marker permissions")}
  }
 }
+
+func TestRecoveryRefusesUnrelatedGenerationAndStagedManifestMismatch(t *testing.T){
+ runner:=&fakeReleaseRunner{}
+ ctrl:=releaseTestController(t,runner)
+ staged,err:=ctrl.Stage(context.Background(),testRevision)
+ if err!=nil{t.Fatal(err)}
+ journal:=Journal{Phase:"rollback-failed",ID:staged.ID,Previous:priorSystem,Target:builtSystem}
+ if err:=ctrl.atomic("journal.json",journal);err!=nil{t.Fatal(err)}
+ runner.current="/nix/store/cccccccccccccccccccccccccccccccc-out-of-band"
+ before:=len(runner.calls)
+ if err:=ctrl.Recover(context.Background());err==nil{t.Fatal("recovery overwrote an unrelated generation")}
+ if len(runner.calls)!=before{t.Fatal("recovery dispatched a mutation despite external generation drift")}
+ runner.current=priorSystem
+ journal.Target="/nix/store/dddddddddddddddddddddddddddddddd-unexpected-target"
+ if err:=ctrl.atomic("journal.json",journal);err!=nil{t.Fatal(err)}
+ before=len(runner.calls)
+ if err:=ctrl.Recover(context.Background());err==nil{t.Fatal("recovery accepted a mismatched staged manifest")}
+ if len(runner.calls)!=before{t.Fatal("untrusted recovery journal dispatched a mutation")}
+}

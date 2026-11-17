@@ -59,6 +59,16 @@ fn journal_matches_generation(journal: &Journal, current: &str) -> bool {
     }
 }
 
+// A recovery journal must describe the installed profile and the running
+// generation. A generation changed outside this transaction is never replaced.
+fn recoverable_generation(journal: &Journal, profile: &str, running: &str) -> bool {
+    if profile == journal.previous {
+        running == journal.previous
+    } else {
+        profile == journal.target && (running == journal.previous || running == journal.target)
+    }
+}
+
 fn store_path(path: &str) -> bool {
     path.len() < 512
         && path.starts_with("/nix/store/")
@@ -374,6 +384,19 @@ impl ReleaseController {
         Ok(record)
     }
 
+    fn running_system(&self) -> Result<String, Error> {
+        let path = fs::canonicalize("/run/current-system")
+            .map_err(|_| Error::Storage("running NixOS generation unavailable"))?;
+        let value = path
+            .to_str()
+            .ok_or(Error::Storage("running NixOS path not UTF-8"))?
+            .to_owned();
+        if !store_path(&value) {
+            return Err(Error::Storage("running generation is not a Nix store path"));
+        }
+        Ok(value)
+    }
+
     fn current_system(&self) -> Result<String, Error> {
         let path = fs::canonicalize(PROFILE)
             .map_err(|_| Error::Storage("current system generation unavailable"))?;
@@ -591,12 +614,21 @@ impl ReleaseController {
         let _guard = self.operation.lock().await;
         let _file = self.state_lock()?;
         let mut txn: Journal = self.read("journal.json")?;
-        if !txn.interrupted() || !store_path(&txn.previous) {
+        if !txn.interrupted()
+            || !valid_hex(&txn.id, 48)
+            || !store_path(&txn.previous)
+            || !store_path(&txn.target)
+            || self.load_stage(&txn.id)?.system != txn.target
+        {
             return Err(Error::Denied("no trusted interrupted release to recover"));
+        }
+        let profile = self.current_system()?;
+        if !recoverable_generation(&txn, &profile, &self.running_system()?) {
+            return Err(Error::Denied("running generation differs from release journal"));
         }
         // If the rollback switch completed before a crash, verify the restored
         // services without switching the same generation a second time.
-        if self.current_system()? == txn.previous {
+        if profile == txn.previous {
             self.health().await?;
             txn.phase = "rolled-back".into();
             return self.atomic("journal.json", &txn);
@@ -729,6 +761,47 @@ mod tests {
         assert!(verify_candidate_credentials(&system, owner).is_ok());
 
         fs::remove_dir_all(&system).unwrap();
+    }
+
+    #[test]
+    fn recovery_rejects_unrelated_or_inconsistent_generations() {
+        let journal = Journal {
+            phase: "rollback-failed".into(),
+            id: "a".repeat(48),
+            previous: "/nix/store/prior-system".into(),
+            target: "/nix/store/target-system".into(),
+            time: Utc::now(),
+        };
+        assert!(recoverable_generation(
+            &journal,
+            &journal.previous,
+            &journal.previous
+        ));
+        assert!(recoverable_generation(
+            &journal,
+            &journal.target,
+            &journal.target
+        ));
+        assert!(recoverable_generation(
+            &journal,
+            &journal.target,
+            &journal.previous
+        ));
+        assert!(!recoverable_generation(
+            &journal,
+            &journal.previous,
+            &journal.target
+        ));
+        assert!(!recoverable_generation(
+            &journal,
+            "/nix/store/unrelated-system",
+            &journal.previous
+        ));
+        assert!(!recoverable_generation(
+            &journal,
+            &journal.target,
+            "/nix/store/unrelated-system"
+        ));
     }
 
     #[test]
