@@ -109,7 +109,7 @@ func (db *Database) CancelKueueJob(project,id string)(map[string]any,error){
 }
 
 func (db *Database) pendingKueueJobs()([]map[string]any,error){
-	return db.query("SELECT j.id,j.project,j.status,j.command,j.image,j.cpu,j.memory_mb,k.request_id,k.remote_name,k.remote_uid,k.create_attempted FROM jobs j JOIN kueue_jobs k ON j.id=k.job WHERE j.status IN ('kueue_queued','admitted','running','cancel_requested') ORDER BY j.created,j.id LIMIT 100")
+	return db.query("SELECT j.id,j.project,j.status,j.command,j.image,j.cpu,j.memory_mb,k.request_id,k.remote_name,k.remote_uid,k.create_attempted FROM jobs j JOIN kueue_jobs k ON j.id=k.job WHERE j.status IN ('kueue_queued','admitted','running','cancel_requested','recovery_required') ORDER BY j.created,j.id LIMIT 100")
 }
 
 // beginKueueSubmission commits the outbound-create fence before any remote
