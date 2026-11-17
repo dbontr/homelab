@@ -34,6 +34,8 @@ bash services/compute/scripts/verify-cold-peer-pull.sh DONOR RECEIVER IMAGE SHA2
 
 It checks complete donor content, a missing receiver layer, the final receiver index digest and CRI visibility, and a **new receiver-node** Spegel cache hit. A donor-only hit, a cached receiver, or an incomplete transfer is a failure. This live test is not performed by the isolated suite.
 
+Upstream [Spegel v0.8.0](https://spegel.dev/blog/spegel-v0.8.0/) (October 2026) reworked advertisement of locally imported containerd images, but it requires containerd 2.2+ and replaces `spegel_advertised_image_digests` with `spegel_advertised_keys`. The source-owned mirror receipt currently requires the older registry-labelled metric. Before any future embedded-Spegel upgrade, confirm the exact K3s/Spegel/containerd versions and update metric parsing without weakening the registry-specific and receiver-specific cold-pull proof. An upstream release announcement is not evidence that this K3s deployment already includes the fix.
+
 If a managed peer cannot serve a complete layer, use the separately authorized, digest-verified `recover-oci-peer.sh` only on a permitted idle receiver. That path rejects unrecognized hosts and conflicting receiver digests, bounds SSH sessions, streams peer content without archives, and verifies containerd source metadata. A successful fallback does **not** certify Spegel cold-layer service. No script deletes production images or forces K3s restarts.
 
 ## Coordinator gates
