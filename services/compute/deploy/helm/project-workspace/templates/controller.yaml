@@ -24,6 +24,9 @@
 {{- fail "Cloudflare Access requires issuer, audience, JWKS URL and owner email Secret together" }}
 {{- end }}
 {{- end }}
+{{- if and .Values.controller.backupRetention (not .Values.controller.backupInterval) }}
+{{- fail "controller.backupRetention requires scheduled encrypted backups" }}
+{{- end }}
 {{- if and .Values.controller.backupInterval (or (not .Values.controller.offsite.repository) (not .Values.controller.offsite.passwordSecretName)) }}
 {{- fail "controller encrypted backups require controller.offsite.repository and controller.offsite.passwordSecretName" }}
 {{- end }}
@@ -321,6 +324,10 @@ spec:
               value: {{ .Values.controller.offsite.repository | quote }}
             - name: PWM_RESTIC_PASSWORD_FILE
               value: /run/restic/password
+            {{- if .Values.controller.backupRetention }}
+            - name: PWM_RESTIC_AUTO_PRUNE
+              value: "1"
+            {{- end }}
             {{- end }}
           {{- if and .Values.controller.backupInterval .Values.controller.offsite.backendSecretName }}
           envFrom:
