@@ -59,7 +59,7 @@ while IFS= read -r project; do
   fi
   key=$(printf '%s' "$project" | sha256sum | cut -c 1-12)
   images_json=$(jq -cn --arg project "$project" \
-    --argjson policy "${PWM_PROJECT_ALLOWED_IMAGES_JSON:-{}}" \
+    --argjson policy "${PWM_PROJECT_ALLOWED_IMAGES_JSON:-"{}"}" \
     '["debian:bookworm-slim"] + ($policy[$project] // []) | unique')
   images_csv=$(jq -r 'join(",")' <<< "$images_json")
   for host in "${hosts[@]}"; do
