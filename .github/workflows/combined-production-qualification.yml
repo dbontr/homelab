@@ -98,11 +98,22 @@ jobs:
             -run '^(TestKueue|TestBatchSubmissionIdempotenceAndWorkerIsolation|TestEncryptedOffsiteBackupRestoreAndVerification|TestRestic|TestOffsite|TestRestore|TestTaskHardware|TestFailedTaskHardware|TestInterruptedWorkerReconciliationFencesOldClaims)'
           go test -race -count=1 -timeout 10m ./cmd/legacy-reconcile ./cmd/oci-archive-verify
           go test -count=1 -timeout 10m ./cmd/project-workspace-controller -run 'TestBackup|TestScheduledOffsite'
-      - name: Run isolated Kueue and OCI recovery fixture matrix
+      - name: Run unprivileged isolated Kueue and OCI recovery fixtures
         env:
           GOWORK: 'off'
           GOPROXY: 'off'
           GOSUMDB: 'off'
           GOTOOLCHAIN: local
           GOMAXPROCS: '2'
-        run: bash services/compute/scripts/tests/compute-resilience-isolated.sh
+        run: |
+          set -euo pipefail
+          bash services/compute/scripts/tests/recover-oci-peer-test.sh
+          bash services/compute/scripts/tests/verify-cold-peer-pull-test.sh
+          bash services/compute/scripts/tests/verify-registry-mirror-test.sh
+      - name: Exercise privileged OCI fixture locks with mocked local commands
+        run: |
+          set -euo pipefail
+          # Both tests substitute all SSH/Kubernetes/containerd interactions with
+          # local mocks. Privilege is needed only for their synthetic /run/lock files.
+          sudo bash services/compute/scripts/tests/copy-peer-image-test.sh
+          sudo bash services/compute/scripts/tests/label-image-content-test.sh
