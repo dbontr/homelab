@@ -9,3 +9,7 @@ controller:
     passwordSecretName: pwm-compute-restic-password
     backendSecretName: ""
     sshSecretName: pwm-compute-restic-ssh
+    # Complete these settings only after the protected receiver and Secret exist.
+    # Empty settings deliberately prevent Helm from enabling the scheduler.
+    alertURL: ""
+    alertSecretName: ""
