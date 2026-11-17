@@ -257,6 +257,20 @@ func(c *Controller) rollback(ctx context.Context,j Journal)error{
  return c.atomic("journal.json",j)
 }
 
+// claimAttempt reserves a staged release identity before the first host mutation.
+// It remains reserved even when the active transaction journal is replaced.
+func(c *Controller)claimAttempt(id string)error{
+ if !idPattern.MatchString(id){return errors.New("invalid release identity")}
+ file,err:=os.OpenFile(filepath.Join(c.Config.StateDir,"attempt-"+id),os.O_WRONLY|os.O_CREATE|os.O_EXCL,0600)
+ if errors.Is(err,os.ErrExist){return errors.New("staged release already attempted")}
+ if err!=nil{return err}
+ if err:=file.Sync();err!=nil{_ = file.Close();return err}
+ if err:=file.Close();err!=nil{return err}
+ dir,err:=os.Open(c.Config.StateDir);if err!=nil{return err}
+ defer dir.Close()
+ return dir.Sync()
+}
+
 // Activate performs a local NixOS switch and restores the old generation if
 // either activation or the declared service health probes fail.
 func(c *Controller) Activate(ctx context.Context,id string)error{
@@ -270,6 +284,7 @@ func(c *Controller) Activate(ctx context.Context,id string)error{
   if err!=nil||!checkStorePath(current){return errors.New("current NixOS generation cannot be verified")}
   if current==m.System{return errors.New("generation already active")}
   txn:=Journal{Phase:"activating",ID:id,Previous:current,Target:m.System,Time:time.Now().UTC()}
+  if err:=c.claimAttempt(id);err!=nil{return err}
   if err:=c.atomic("journal.json",txn);err!=nil{return err}
   // Do not use the caller's cancellation for rollback. A cancelled user
   // request must not leave an unverified generation active.
@@ -314,17 +329,24 @@ func(c *Controller) Recover(ctx context.Context)error{
   var txn Journal
   if err:=c.read("journal.json",&txn);err!=nil{return err}
   if txn.Phase!="activating"&&txn.Phase!="reverting"&&txn.Phase!="rollback-failed"{return errors.New("no interrupted release")}
-  if !checkStorePath(txn.Previous){return errors.New("invalid recovery generation")}
+  if !idPattern.MatchString(txn.ID)||!checkStorePath(txn.Previous)||!checkStorePath(txn.Target){
+   return errors.New("invalid recovery journal")
+  }
+  stage,err:=c.loadStage(txn.ID)
+  if err!=nil||stage.System!=txn.Target{return errors.New("recovery journal differs from staged release")}
   current,err:=c.Config.Current()
   if err!=nil||!checkStorePath(current){return errors.New("current generation cannot be verified")}
+  if current!=txn.Previous&&current!=txn.Target{return errors.New("current generation differs from recovery journal")}
+  if c.Config.TrustedSource{
+   running,err:=filepath.EvalSymlinks("/run/current-system")
+   if err!=nil||!checkStorePath(running)||(current==txn.Previous&&running!=txn.Previous)||
+    (current==txn.Target&&running!=txn.Previous&&running!=txn.Target){
+    return errors.New("running generation differs from recovery journal")
+   }
+  }
   if current==txn.Previous{
    // An interrupted rollback can already have restored the boot profile.
    // Do not restart privileged services while the release lease is held.
-   // Trusted hosts must also prove the actual running generation.
-   if c.Config.TrustedSource{
-    running,err:=filepath.EvalSymlinks("/run/current-system")
-    if err!=nil||running!=txn.Previous{return errors.New("running generation differs from recovery target")}
-   }
    if err:=c.health(ctx);err!=nil{return err}
    txn.Phase="rolled-back"
    return c.atomic("journal.json",txn)

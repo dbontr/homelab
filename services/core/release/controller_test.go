@@ -245,3 +245,43 @@ func TestPrivateReleaseReadinessSocketChecks(t *testing.T){
   t.Fatal("closed protected service socket passed readiness")
  }
 }
+
+func TestReleaseStageIdentityCannotBeReusedAfterLaterTransaction(t *testing.T){
+ runner:=&fakeReleaseRunner{}
+ ctrl:=releaseTestController(t,runner)
+ first,err:=ctrl.Stage(context.Background(),testRevision)
+ if err!=nil{t.Fatal(err)}
+ if err:=ctrl.Activate(context.Background(),first.ID);err!=nil{t.Fatal(err)}
+ if err:=ctrl.Revert(context.Background(),first.ID);err!=nil{t.Fatal(err)}
+ second,err:=ctrl.Stage(context.Background(),testRevision)
+ if err!=nil{t.Fatal(err)}
+ if err:=ctrl.Activate(context.Background(),second.ID);err!=nil{t.Fatal(err)}
+ if err:=ctrl.Revert(context.Background(),second.ID);err!=nil{t.Fatal(err)}
+ calls:=len(runner.calls)
+ if err:=ctrl.Activate(context.Background(),first.ID);err==nil{t.Fatal("an already attempted release identity was reused")}
+ if len(runner.calls)!=calls{t.Fatal("replay reached privileged generation mutation")}
+ for _,id:=range []string{first.ID,second.ID}{
+  info,err:=os.Stat(filepath.Join(ctrl.Config.StateDir,"attempt-"+id))
+  if err!=nil{t.Fatal(err)}
+  if info.Mode().Perm()!=0600{t.Fatal("unsafe release attempt marker permissions")}
+ }
+}
+
+func TestRecoveryRefusesUnrelatedGenerationAndStagedManifestMismatch(t *testing.T){
+ runner:=&fakeReleaseRunner{}
+ ctrl:=releaseTestController(t,runner)
+ staged,err:=ctrl.Stage(context.Background(),testRevision)
+ if err!=nil{t.Fatal(err)}
+ journal:=Journal{Phase:"rollback-failed",ID:staged.ID,Previous:priorSystem,Target:builtSystem}
+ if err:=ctrl.atomic("journal.json",journal);err!=nil{t.Fatal(err)}
+ runner.current="/nix/store/cccccccccccccccccccccccccccccccc-out-of-band"
+ before:=len(runner.calls)
+ if err:=ctrl.Recover(context.Background());err==nil{t.Fatal("recovery overwrote an unrelated generation")}
+ if len(runner.calls)!=before{t.Fatal("recovery dispatched a mutation despite external generation drift")}
+ runner.current=priorSystem
+ journal.Target="/nix/store/dddddddddddddddddddddddddddddddd-unexpected-target"
+ if err:=ctrl.atomic("journal.json",journal);err!=nil{t.Fatal(err)}
+ before=len(runner.calls)
+ if err:=ctrl.Recover(context.Background());err==nil{t.Fatal("recovery accepted a mismatched staged manifest")}
+ if len(runner.calls)!=before{t.Fatal("untrusted recovery journal dispatched a mutation")}
+}
