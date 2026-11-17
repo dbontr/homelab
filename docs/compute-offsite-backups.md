@@ -48,7 +48,20 @@ controller:
     sshSecretName: "pwm-compute-restic-ssh"
 ```
 
-The matching NixOS options are `services.workspaceMcp.backupInterval`,
+The running production controller is managed by the existing `pwm-controller`
+Helm release in `pwm-system`. Its NixOS `services.workspaceMcp.enable` is
+disabled; **enabling the NixOS module is not part of this rollout**. The
+source-owned overlay is
+`infrastructure/homelab/workspace/controller-backup-values.yaml`.
+Apply it only as a values overlay to the *verified existing Helm release*,
+preserving the installed controller OCI image digest, Kueue/RBAC, Access,
+persistent-volume claim and other credentials. Review the exact diff between
+`helm get manifest` and the rendered chart before any approved upgrade. The
+source-built controller image must include the intended scheduler and retention
+implementation; a Helm chart change alone does not update its executable.
+
+For alternative installations that deliberately enable the NixOS module,
+the matching options are `services.workspaceMcp.backupInterval`,
 `backupRetention`, and `offsite.*`. These are configuration examples,
 not proof that the live release has these Secrets or settings. Do not activate
 until the existing Helm values, controller image digest, PVC, credentials
