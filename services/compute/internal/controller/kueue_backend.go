@@ -271,7 +271,11 @@ func (k *KueueBackend) reconcile(ctx context.Context,db *Database,row map[string
 	if row["status"]=="cancel_requested"{
 		job,err:=k.object(ctx,"GET",batchKubernetesJobPath(name),nil)
 		if errors.Is(err,errKubernetesNotFound){
-			return db.updateKueueJob(id,asString(row["remote_uid"]),"cancelled","Kubernetes workload removal confirmed")
+			result:="Kubernetes workload absent at cancellation"
+			if asString(row["remote_uid"])=="" && asInt(row["create_attempted"])!=0 {
+				result="Kubernetes workload absent; prior execution outcome unverified"
+			}
+			return db.updateKueueJob(id,asString(row["remote_uid"]),"cancelled",result)
 		}
 		if err!=nil{return err}
 		uid,err:=matchBatchJob(job,row)
