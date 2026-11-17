@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"sort"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -26,7 +27,7 @@ type backupHealthState struct {
 	LastSnapshot        string    `json:"last_snapshot,omitempty"`
 	ConsecutiveFailures int       `json:"consecutive_failures"`
 	LastFailure         string    `json:"last_failure,omitempty"`
-	ActiveAlert         string    `json:"active_alert,omitempty"`
+	ActiveAlerts        map[string]bool `json:"active_alerts,omitempty"`
 }
 
 type backupHealthMonitor struct {
@@ -72,7 +73,7 @@ func newBackupHealthMonitor(file string, interval time.Duration, endpoint, token
 	}
 	monitor := &backupHealthMonitor{
 		file: file, interval: interval, endpoint: endpoint, token: token, client: client,
-		state: backupHealthState{Version: 1, StartedAt: time.Now().UTC()},
+		state: backupHealthState{Version: 1, StartedAt: time.Now().UTC(), ActiveAlerts: map[string]bool{}},
 	}
 	if raw, err := os.ReadFile(file); err == nil {
 		if err := json.Unmarshal(raw, &monitor.state); err != nil ||
@@ -81,6 +82,9 @@ func newBackupHealthMonitor(file string, interval time.Duration, endpoint, token
 		}
 	} else if !os.IsNotExist(err) {
 		return nil, err
+	}
+	if monitor.state.ActiveAlerts == nil {
+		monitor.state.ActiveAlerts = map[string]bool{}
 	}
 	if err := monitor.persistLocked(); err != nil {
 		return nil, err
@@ -148,7 +152,8 @@ func backupFailureClass(err error) string {
 	case strings.Contains(message, "insufficient capacity"), strings.Contains(message, "no space left"):
 		return "insufficient_capacity"
 	case strings.Contains(message, "integrity"), strings.Contains(message, "corrupt"),
-		strings.Contains(message, "checksum"), strings.Contains(message, "verification failed"):
+		strings.Contains(message, "checksum"), strings.Contains(message, "verification failed"),
+		strings.Contains(message, "content mismatch"):
 		return "corrupt_snapshot"
 	default:
 		return "backup_failure"
@@ -168,83 +173,80 @@ func (m *backupHealthMonitor) fullCheckSucceeded() error {
 	return m.persistLocked()
 }
 
-// recordAttempt persists a nonsecret receipt and notifies only on alert state
-// transitions. The receiver must acknowledge the alert before it is marked sent.
+// notifyLocked transmits a state transition only if it has not been
+// acknowledged. A failed delivery remains pending for the next attempt.
+func (m *backupHealthMonitor) notifyLocked(condition, action string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := m.notify(ctx, condition, action); err != nil {
+		return err
+	}
+	if action == "resolved" {
+		delete(m.state.ActiveAlerts, condition)
+	} else {
+		m.state.ActiveAlerts[condition] = true
+	}
+	return m.persistLocked()
+}
+
+// recordAttempt stores the latest receipt and independently manages every
+// active failure condition. Alert delivery is serialized with status changes.
 func (m *backupHealthMonitor) recordAttempt(snapshot string, attemptErr error) error {
 	m.mu.Lock()
+	defer m.mu.Unlock()
 	now := time.Now().UTC()
 	m.state.LastAttemptAt = now
-	alert, action := "", ""
+	alerts := []string{}
 	if attemptErr == nil {
 		m.state.LastSuccessAt = now
 		m.state.LastSnapshot = snapshot
 		m.state.ConsecutiveFailures = 0
 		m.state.LastFailure = ""
-		if m.state.ActiveAlert != "" {
-			alert, action = m.state.ActiveAlert, "resolved"
+		for condition := range m.state.ActiveAlerts {
+			alerts = append(alerts, condition)
 		}
+		sort.Strings(alerts)
 	} else {
 		m.state.ConsecutiveFailures++
 		m.state.LastFailure = backupFailureClass(attemptErr)
 		if m.state.LastFailure == "insufficient_capacity" || m.state.LastFailure == "corrupt_snapshot" {
-			alert = m.state.LastFailure
-		} else if m.state.ConsecutiveFailures >= 3 {
-			alert = "repeated_failures"
+			alerts = append(alerts, m.state.LastFailure)
 		}
-		if alert != "" && alert != m.state.ActiveAlert {
-			action = "firing"
+		if m.state.ConsecutiveFailures >= 3 {
+			alerts = append(alerts, "repeated_failures")
 		}
 	}
-	persistErr := m.persistLocked()
-	m.mu.Unlock()
-	if persistErr != nil {
-		return persistErr
-	}
-	if action == "" {
-		return nil
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	if err := m.notify(ctx, alert, action); err != nil {
+	if err := m.persistLocked(); err != nil {
 		return err
 	}
-	m.mu.Lock()
-	if action == "resolved" {
-		if m.state.ActiveAlert == alert {
-			m.state.ActiveAlert = ""
+	var deliveryErr error
+	for _, condition := range alerts {
+		if attemptErr == nil {
+			if err := m.notifyLocked(condition, "resolved"); err != nil {
+				deliveryErr = errors.Join(deliveryErr, err)
+			}
+		} else if !m.state.ActiveAlerts[condition] {
+			if err := m.notifyLocked(condition, "firing"); err != nil {
+				deliveryErr = errors.Join(deliveryErr, err)
+			}
 		}
-	} else {
-		m.state.ActiveAlert = alert
 	}
-	err := m.persistLocked()
-	m.mu.Unlock()
-	return err
+	return deliveryErr
 }
 
-// checkMissed is independent of the backup retry loop. A successful receipt
-// must not be older than twice the configured schedule, including across restarts.
+// checkMissed runs separately from the backup cycle. A persistent last-success
+// receipt is authoritative across restarts, regardless of retry activity.
 func (m *backupHealthMonitor) checkMissed(now time.Time) error {
 	m.mu.Lock()
+	defer m.mu.Unlock()
 	since := m.state.LastSuccessAt
 	if since.IsZero() {
 		since = m.state.StartedAt
 	}
-	missing := now.Sub(since) > 2*m.interval
-	pending := missing && m.state.ActiveAlert != "missed_backup"
-	m.mu.Unlock()
-	if !pending {
+	if now.Sub(since) <= 2*m.interval || m.state.ActiveAlerts["missed_backup"] {
 		return nil
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	if err := m.notify(ctx, "missed_backup", "firing"); err != nil {
-		return err
-	}
-	m.mu.Lock()
-	m.state.ActiveAlert = "missed_backup"
-	err := m.persistLocked()
-	m.mu.Unlock()
-	return err
+	return m.notifyLocked("missed_backup", "firing")
 }
 
 func (m *backupHealthMonitor) watch(ctx context.Context) {
