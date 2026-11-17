@@ -237,6 +237,9 @@ func RestoreBackup(source, databasePath string) error {
 			return err
 		}
 	}
+	if err := verifyRestoredState(temp, seen); err != nil {
+		return fmt.Errorf("recovery verification failed: %w", err)
+	}
 	if err := os.MkdirAll(filepath.Join(temp, "artifacts"), 0700); err != nil {
 		return err
 	}
