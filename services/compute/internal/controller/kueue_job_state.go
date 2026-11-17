@@ -98,7 +98,7 @@ func (db *Database) CancelKueueJob(project,id string)(map[string]any,error){
 		if err!=nil{return err}
 		if row==nil{return errors.New("batch job not found")}
 		status:=asString(row["status"])
-		if status=="kueue_queued"||status=="admitted"||status=="running"{
+		if status=="kueue_queued"||status=="admitted"||status=="running"||status=="recovery_required"{
 			status="cancel_requested"
 			if err:=db.execLocked("UPDATE jobs SET status=?,updated=? WHERE id=? AND project=?",status,stamp(),id,project);err!=nil{return err}
 		}
@@ -109,7 +109,41 @@ func (db *Database) CancelKueueJob(project,id string)(map[string]any,error){
 }
 
 func (db *Database) pendingKueueJobs()([]map[string]any,error){
-	return db.query("SELECT j.id,j.project,j.status,j.command,j.image,j.cpu,j.memory_mb,k.request_id,k.remote_name,k.remote_uid FROM jobs j JOIN kueue_jobs k ON j.id=k.job WHERE j.status IN ('kueue_queued','admitted','running','cancel_requested') ORDER BY j.created,j.id LIMIT 100")
+	return db.query("SELECT j.id,j.project,j.status,j.command,j.image,j.cpu,j.memory_mb,k.request_id,k.remote_name,k.remote_uid,k.create_attempted FROM jobs j JOIN kueue_jobs k ON j.id=k.job WHERE j.status IN ('kueue_queued','admitted','running','cancel_requested') ORDER BY j.created,j.id LIMIT 100")
+}
+
+// beginKueueSubmission commits the outbound-create fence before any remote
+// HTTP request. A second reconciler must not send a competing create, even
+// when the first process loses its response or exits before the request.
+func (db *Database) beginKueueSubmission(id string) (bool, error) {
+	var permitted bool
+	err := db.transaction(func() error {
+		row, err := db.lockedOne("SELECT j.status,k.create_attempted FROM kueue_jobs k JOIN jobs j ON j.id=k.job WHERE k.job=?", id)
+		if err != nil { return err }
+		if row == nil { return errors.New("batch job not found") }
+		if asString(row["status"]) != "kueue_queued" || asInt(row["create_attempted"]) != 0 { return nil }
+		if err := db.execLocked("UPDATE kueue_jobs SET create_attempted=1,updated=? WHERE job=? AND create_attempted=0", stamp(), id); err != nil { return err }
+		permitted = true
+		return nil
+	})
+	return permitted, err
+}
+
+// A missing remote Job after a recorded create attempt is ambiguous: the
+// cluster may already have run and garbage-collected it. Preserve the job and
+// surface the uncertainty instead of silently submitting the work again.
+func (db *Database) requireKueueRecovery(id, reason string) error {
+	if len(reason) > 500 { reason = reason[:500] }
+	return db.transaction(func() error {
+		row, err := db.lockedOne("SELECT j.status,k.last_error FROM kueue_jobs k JOIN jobs j ON j.id=k.job WHERE k.job=?", id)
+		if err != nil { return err }
+		if row == nil { return errors.New("batch job not found") }
+		prior := asString(row["status"])
+		if prior == "cancel_requested" || prior == "succeeded" || prior == "failed" || prior == "cancelled" { return nil }
+		if prior == "recovery_required" && asString(row["last_error"]) == reason { return nil }
+		if err := db.execLocked("UPDATE jobs SET status='recovery_required',updated=? WHERE id=?", stamp(), id); err != nil { return err }
+		return db.execLocked("UPDATE kueue_jobs SET last_error=?,updated=? WHERE job=?", reason, stamp(), id)
+	})
 }
 
 func (db *Database) updateKueueJob(id,uid,status,result string)error{
