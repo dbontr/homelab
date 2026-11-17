@@ -48,6 +48,8 @@ controller:
     passwordSecretName: ""
     backendSecretName: ""
     sshSecretName: ""
+    alertURL: ""
+    alertSecretName: ""
   resources:
     requests:
       cpu: 250m
