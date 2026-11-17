@@ -13,6 +13,7 @@
 - [Kueue v0.20.6 installation](https://kueue.sigs.k8s.io/docs/getting-started/installation/) — Kubernetes SIG Scheduling. Used for: versioned queue-admission controller installation, safe namespace opt-in, and CRD removal order.
 - [Kueue quick start](https://kueue.sigs.k8s.io/docs/getting-started/quick-start/) — Kubernetes SIG Scheduling. Used for: ResourceFlavor, ClusterQueue, LocalQueue and Job admission contracts.
 - [K3s Helm Controller](https://docs.k3s.io/add-ons/helm) — K3s project. Used for: declarative HelmChart reconciliation and bounded Helm installation failure policies.
+- [k3d cluster list](https://k3d.io/stable/usage/commands/k3d_cluster_list/) — k3d project. Used for: validating a named disposable K3s cluster and refusing ambiguous production contexts during failure qualification.
 
 - [K3s live-import Spegel peer advertisement race](https://github.com/k3s-io/k3s/issues/13794) — K3s project. Used for: requiring an uncached-layer pull and new mirror-hit evidence after live OCI import rather than treating metadata advertisements as proof of transfer.
 - [Spegel imported-content advertisement issue](https://github.com/spegel-org/spegel/issues/1096) — Spegel project. Used for: diagnosing missing per-blob registry source metadata after direct containerd image import, and requiring guarded index refresh before cold-layer acceptance.

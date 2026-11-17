@@ -4,11 +4,27 @@
 
 The controller owns durable project identity, batch Job requests, terminal records, and hardware leases. Kueue alone owns CPU quota admission. Neither Kueue nor batch reconciliation may take a workspace FPGA, GPU, NPU, or EDA device reservation. Jupiter and Janus are excluded from the `research-cpu` resource flavors; the CPU batch queue targets Venus and Mercury. Production reconciliation and release execution are outside this acceptance suite.
 
+Before using a real Kubernetes API, run the read-only qualification preflight with an explicit kubeconfig for a separate, three-node k3d cluster. An unsupported environment returns exit code 77; a context that does not match the requested disposable cluster is refused. This check is not a substitute for a genuine controller/worker failure or cold peer-transfer receipt.
+
+```sh
+KUBECONFIG=/absolute/path/to/disposable-k3d.yaml \
+  bash services/compute/scripts/tests/disposable-k3s-preflight.sh compute-qualification-<unique-id>
+```
+
 Run the local fault-injection suite from an isolated checkout:
 
 ```sh
 bash services/compute/scripts/tests/compute-resilience-isolated.sh
 ```
+
+For repeated race detection on the same disposable fixtures, run:
+
+```sh
+COMPUTE_RESILIENCE_REPEATS=10 \
+  bash services/compute/scripts/tests/compute-resilience-isolated.sh
+```
+
+The runner permits one to ten repetitions and enables Go race detection with bounded parallelism when repeated. A toolchain mismatch returns exit code 77, not a passing receipt. The replay fence prevents repeated Kubernetes Job creation attempts; it does not promise exactly-once arbitrary effects within a container after worker/network failures.
 
 The suite uses temporary SQLite files, fake Kubernetes HTTP servers, and SSH/containerd mocks. It does not run `kubectl`, call the live controller, alter Kueue queues, or transfer production OCI content. A Go toolchain compatible with `services/compute/go.mod`, SQLite development headers, and `jq` are required. Do not interpret a simulated pass as evidence of a successful live outage or genuine cold peer distribution.
 
@@ -17,7 +33,7 @@ The suite uses temporary SQLite files, fake Kubernetes HTTP servers, and SSH/con
 1. A project-scoped request ID binds one exact command, image digest, CPU and memory allocation to a controller-owned Job ID.
 2. A transaction commits `create_attempted=1` before an outbound Kubernetes Job creation call. A lost response, process termination, or 409 conflict cannot authorize an unguarded second creation.
 3. Reconciliation uses the exact remote Job name, project and request annotations, immutable command/image/resources and its Kubernetes UID. A different UID or execution specification is rejected.
-4. An absent Job after a recorded creation attempt is `recovery_required`, never silently retried or called a failed execution. This also applies when a succeeded Job's Pod output is temporarily unavailable. The controller can resume the original Job and capture its log output when it reappears.
+4. An absent Job after a recorded creation attempt is `recovery_required`, never silently retried or called a failed execution. This also applies when a completed or failed Job's Pod output is temporarily unavailable. The controller can resume the original Job and capture its log output when it reappears.
 5. During migration, existing requests without a creation-attempt field are conservatively treated as already attempted. Recover or cancel them only after inspecting their original remote execution.
 6. Cancellation is issued with a Job UID precondition and foreground deletion. Do not reuse the request ID for different work. A vanished workload whose prior attempt is recorded may have run; the cancellation result retains this uncertainty.
 7. Device lease recovery is independent of Kueue admission. A failed native worker retains its device reservation until the documented cleanup-verification and confirmation sequence completes.
