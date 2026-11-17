@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS nodes(id TEXT PRIMARY KEY,token_hash TEXT NOT NULL,ca
 CREATE TABLE IF NOT EXISTS node_maintenance(node TEXT PRIMARY KEY,paused INTEGER NOT NULL CHECK(paused IN (0,1)),revision INTEGER NOT NULL,updated REAL NOT NULL,FOREIGN KEY(node) REFERENCES nodes(id));
 CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY,project TEXT NOT NULL,node TEXT,command TEXT NOT NULL,image TEXT NOT NULL,cpu REAL NOT NULL,memory_mb INTEGER NOT NULL,status TEXT NOT NULL,lease_until REAL,token_hash TEXT,created REAL NOT NULL,updated REAL NOT NULL,result TEXT);
 CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status,created);
-CREATE TABLE IF NOT EXISTS kueue_jobs(job TEXT PRIMARY KEY,project TEXT NOT NULL,request_id TEXT NOT NULL,remote_name TEXT NOT NULL UNIQUE,remote_uid TEXT NOT NULL DEFAULT '',last_error TEXT NOT NULL DEFAULT '',created REAL NOT NULL,updated REAL NOT NULL,UNIQUE(project,request_id),FOREIGN KEY(job) REFERENCES jobs(id),FOREIGN KEY(project) REFERENCES projects(id));
+CREATE TABLE IF NOT EXISTS kueue_jobs(job TEXT PRIMARY KEY,project TEXT NOT NULL,request_id TEXT NOT NULL,remote_name TEXT NOT NULL UNIQUE,remote_uid TEXT NOT NULL DEFAULT '',create_attempted INTEGER NOT NULL DEFAULT 0 CHECK(create_attempted IN (0,1)),last_error TEXT NOT NULL DEFAULT '',created REAL NOT NULL,updated REAL NOT NULL,UNIQUE(project,request_id),FOREIGN KEY(job) REFERENCES jobs(id),FOREIGN KEY(project) REFERENCES projects(id));
 CREATE INDEX IF NOT EXISTS idx_kueue_jobs_project ON kueue_jobs(project,created);
 CREATE TABLE IF NOT EXISTS pairings(code_hash TEXT PRIMARY KEY,expires REAL NOT NULL);
 CREATE TABLE IF NOT EXISTS workspaces(id TEXT PRIMARY KEY,project TEXT NOT NULL,node TEXT NOT NULL,image TEXT NOT NULL,cpu REAL NOT NULL,memory_mb INTEGER NOT NULL,status TEXT NOT NULL,expires REAL NOT NULL,created REAL NOT NULL,updated REAL NOT NULL,FOREIGN KEY(project) REFERENCES projects(id));
@@ -233,6 +233,21 @@ func (db *Database) InitSchema() error {
 		if err := db.exec(part); err != nil {
 			return fmt.Errorf("database schema: %w", err)
 		}
+	}
+	// Existing pending jobs may already have been submitted by an older
+	// controller. Their create history is unknown, so an upgrade must not
+	// authorize a second Kubernetes Job by assuming no attempt occurred.
+	columns, err := db.query("PRAGMA table_info(kueue_jobs)")
+	if err != nil {
+		return fmt.Errorf("inspect batch submission state: %w", err)
+	}
+	for _, column := range columns {
+		if asString(column["name"]) == "create_attempted" {
+			return nil
+		}
+	}
+	if err := db.exec("ALTER TABLE kueue_jobs ADD COLUMN create_attempted INTEGER NOT NULL DEFAULT 1 CHECK(create_attempted IN (0,1))"); err != nil {
+		return fmt.Errorf("migrate batch submission state: %w", err)
 	}
 	return nil
 }

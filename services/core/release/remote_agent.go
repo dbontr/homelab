@@ -144,6 +144,12 @@ func(a *RemoteReleaseAgent)Observe(ctx context.Context)(ReleaseObservation,error
  case "active","rolled-back","activating","reverting","rollback-failed":
  default:return ReleaseObservation{},errors.New("invalid remote release journal")
  }
- if !idPattern.MatchString(result.ID){return ReleaseObservation{},errors.New("invalid remote release journal")}
+ if !idPattern.MatchString(result.ID) ||
+  (result.Host!=""&&result.Host!=a.host) ||
+  (result.Revision!=""&&!revisionPattern.MatchString(result.Revision)) ||
+  (result.TargetSystem!=""&&!checkStorePath(result.TargetSystem)) ||
+  (result.PreviousSystem!=""&&!checkStorePath(result.PreviousSystem)){
+  return ReleaseObservation{},errors.New("invalid remote release journal")
+ }
  return result,nil
 }

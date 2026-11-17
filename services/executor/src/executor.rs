@@ -450,7 +450,16 @@ impl Executor {
         if !decision.allowed {
             return Err(Error::Denied("release observation not authorized"));
         }
-        let status = self.release.status().await?;
-        Ok(json!({"id":status.id,"phase":status.phase}))
+        let (status, manifest) = self.release.status().await?;
+        Ok(json!({
+            "host": host,
+            "id": status.id,
+            "phase": status.phase,
+            "revision": manifest.revision,
+            "target_system": status.target,
+            "previous_system": status.previous,
+            "journal_time": status.time,
+            "stage_time": manifest.created,
+        }))
     }
 }

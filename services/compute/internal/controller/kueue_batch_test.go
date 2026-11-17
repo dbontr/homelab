@@ -298,7 +298,7 @@ func TestKueuePinsUIDBeforeAdmissionError(t *testing.T){
 	pending,_=db.pendingKueueJobs()
 	if err:=srv.Kueue.reconcile(context.Background(),db,pending[0]);err!=nil{t.Fatal(err)}
 	persisted,_=db.KueueJob("research",asString(created["id"]))
-	if persisted["status"]!="failed"{t.Fatalf("missing Job was recreated: %v",persisted)}
+	if persisted["status"]!="recovery_required"{t.Fatalf("missing Job was recreated or lost: %v",persisted)}
 	fake.mu.Lock()
 	count:=fake.created
 	fake.mu.Unlock()

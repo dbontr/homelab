@@ -29,6 +29,7 @@ if ! command -v bash >/dev/null 2>&1; then
   exit 1
 fi
 bash "$root/scripts/tests/verify-release-test.sh"
+bash "$root/scripts/tests/accept-monitor-ingress-test.sh"
 bash "$root/scripts/tests/mcp-acceptance-token-test.sh"
 bash "$root/scripts/tests/unified-mcp-acceptance-test.sh"
 bash "$root/services/compute/scripts/tests/rollout-project-worker-test.sh"

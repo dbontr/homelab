@@ -3,6 +3,7 @@ package release
 import (
  "context"
  "errors"
+ "net"
  "os"
  "os/exec"
  "path/filepath"
@@ -89,6 +90,15 @@ func TestReleaseStagesOnlyCleanExactOfflineGeneration(t *testing.T){
  stage,err:=ctrl.Stage(context.Background(),testRevision)
  if err!=nil{t.Fatal(err)}
  if stage.Host!="jupiter"||stage.System!=builtSystem||len(stage.ID)!=48{t.Fatal("bad staged manifest")}
+ pinned:=false
+ for _,call:=range runner.calls {
+  if strings.Contains(call,"build --offline") {
+   pinned=strings.Contains(call,"git+file://")&&
+    strings.Contains(call,"?rev="+testRevision+"#nixosConfigurations.jupiter.config.system.build.toplevel")
+   if !pinned{t.Fatalf("Nix build used mutable source: %s",call)}
+  }
+ }
+ if !pinned{t.Fatal("exact-commit Nix reference not observed")}
  if _,err:=ctrl.loadStage("../evil");err==nil{t.Fatal("path traversal accepted")}
 }
 
@@ -194,4 +204,44 @@ func TestRecoveryAlreadyRestoredStillRequiresHealth(t *testing.T){
  if err:=ctrl.atomic("journal.json",Journal{Phase:"rollback-failed",ID:staged.ID,Previous:priorSystem,Target:builtSystem});err!=nil{t.Fatal(err)}
  if err:=ctrl.Recover(context.Background());err==nil{t.Fatal("unhealthy runtime accepted as recovered")}
  journal,err:=ctrl.Status();if err!=nil||journal.Phase!="rollback-failed"{t.Fatalf("failed recovery changed journal: %+v %v",journal,err)}
+}
+
+func TestCriticalReleaseHealthProbesAreReadOnlyAndValidated(t *testing.T){
+ cfg:=releaseTestController(t,&fakeReleaseRunner{}).Config
+ cfg.HealthServices=[]string{
+  "sshd.service",
+  "systemd-networkd.service",
+  "dnsmasq.service",
+  "cloudflared-saturn.service",
+  "k3s.service",
+  "homelab-mcp.service",
+ }
+ if _,err:=New(cfg);err!=nil{t.Fatalf("critical health checks denied: %v",err)}
+ for _,unit:=range []string{"","sshd","sshd.socket","../sshd.service","ssh d.service","-sshd.service",strings.Repeat("s",129)+".service"}{
+  cfg.HealthServices=[]string{unit}
+  if _,err:=New(cfg);err==nil{t.Fatalf("invalid unit accepted: %q",unit)}
+ }
+}
+
+func TestPrivateReleaseReadinessSocketChecks(t *testing.T){
+ runner:=&fakeReleaseRunner{}
+ ctrl:=releaseTestController(t,runner)
+ for _,bad:=range []string{"0.0.0.0:22","8.8.8.8:53","example.com:443","10.77.30.1:0"}{
+  copy:=ctrl.Config
+  copy.HealthSockets=[]string{bad}
+  if _,err:=New(copy);err==nil{t.Fatalf("unsafe health socket accepted: %s",bad)}
+ }
+ copy:=ctrl.Config
+ copy.HealthSockets=[]string{"127.0.0.1:8104","127.0.0.1:8104"}
+ if _,err:=New(copy);err==nil{t.Fatal("duplicate health sockets accepted")}
+ listener,err:=net.Listen("tcp","127.0.0.1:0")
+ if err!=nil{t.Fatal(err)}
+ copy.HealthSockets=[]string{listener.Addr().String()}
+ protected,err:=New(copy)
+ if err!=nil{t.Fatal(err)}
+ if err:=protected.health(context.Background());err!=nil{t.Fatal("ready private socket denied:",err)}
+ if err:=listener.Close();err!=nil{t.Fatal(err)}
+ if err:=protected.health(context.Background());err==nil{
+  t.Fatal("closed protected service socket passed readiness")
+ }
 }
