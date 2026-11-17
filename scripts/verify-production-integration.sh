@@ -45,7 +45,7 @@ run() {
   local label=$1
   shift
   printf 'CHECK %s at %s\n' "$label" "$sha" >&2
-  if "$@"; then
+  if "$@" >&2; then
     printf '{"check":"%s","result":"passed","source_sha":"%s"}\n' "$label" "$sha"
   else
     printf '{"check":"%s","result":"failed","source_sha":"%s"}\n' "$label" "$sha"
