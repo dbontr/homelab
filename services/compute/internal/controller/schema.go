@@ -15,6 +15,7 @@ import (
 
 const schema = `
 CREATE TABLE IF NOT EXISTS projects(id TEXT PRIMARY KEY,title TEXT NOT NULL,created REAL NOT NULL);
+CREATE TABLE IF NOT EXISTS project_catalog_visibility(project TEXT PRIMARY KEY,visible INTEGER NOT NULL CHECK(visible IN (0,1)),revision INTEGER NOT NULL CHECK(revision>0),updated REAL NOT NULL,FOREIGN KEY(project) REFERENCES projects(id));
 CREATE TABLE IF NOT EXISTS notes(project TEXT NOT NULL,name TEXT NOT NULL,body TEXT NOT NULL,version INTEGER NOT NULL DEFAULT 1,updated REAL NOT NULL,PRIMARY KEY(project,name),FOREIGN KEY(project) REFERENCES projects(id));
 CREATE TABLE IF NOT EXISTS repositories(project TEXT NOT NULL,full_name TEXT NOT NULL,PRIMARY KEY(project,full_name));
 CREATE TABLE IF NOT EXISTS artifacts(id TEXT PRIMARY KEY,project TEXT NOT NULL,name TEXT NOT NULL,sha256 TEXT NOT NULL,size INTEGER NOT NULL,created REAL NOT NULL);
