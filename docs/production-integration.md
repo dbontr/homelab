@@ -57,6 +57,21 @@ generated files, not only textual conflicts. Do not automatically resolve
 differences in state schema, operation policy, Helm defaults, service
 identities or NixOS option defaults.
 
+### Existing draft outside the integration workstreams
+
+[Draft PR #142](https://github.com/dbontr/homelab/pull/142)
+(`feature/identity-motivation`, head
+`f62f40b6a9fa48744a03c0d97b202129a221842c`) modifies 33 paths.
+It is outside this release's five-workstream scope. Its changed paths
+include integration-owned `REFERENCES.md`, `flake.nix`,
+`scripts/stage-release.sh`, `scripts/verify-offline.sh`, release
+verification and packaging tests, as well as motivation-specific services.
+The connected commit-status endpoint returned no status checks for this
+head. Do not incorporate it into the integration candidate, reuse its
+release changes, or assume test completion. If its files change `main`
+before cutover, repeat the branch-base comparison, ownership review,
+dependency reconciliation and full exact-head acceptance.
+
 ## Evidence register (as of November 17, 2026)
 
 | Workstream | Demonstrated evidence | Not yet demonstrated |
