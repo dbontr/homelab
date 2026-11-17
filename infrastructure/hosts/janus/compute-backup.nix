@@ -8,19 +8,18 @@
     group = "compute-backup";
     home = "/var/empty";
     createHome = false;
-    shell = "${pkgs.shadow}/bin/nologin";
+    shell = "${pkgs.util-linux}/bin/nologin";
   };
 
   systemd.tmpfiles.rules = [
     "d /srv/compute-restic 0755 root root -"
     "d /srv/compute-restic/repository 0700 compute-backup compute-backup -"
-    "d /srv/homelab 0700 root root -"
-    "d /srv/homelab/secrets 0700 root root -"
+    "d /etc/ssh/authorized_keys.d 0755 root root -"
   ];
 
   services.openssh.extraConfig = ''
     Match User compute-backup
-      AuthorizedKeysFile /srv/homelab/secrets/compute-backup.authorized_keys
+      AuthorizedKeysFile /etc/ssh/authorized_keys.d/compute-backup
       ChrootDirectory /srv/compute-restic
       ForceCommand internal-sftp -d /repository
       PermitTTY no
