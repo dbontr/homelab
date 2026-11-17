@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -120,5 +121,67 @@ func TestResticCredentialsAndMissingBackend(t *testing.T) {
 	}
 	if err := cfg.run(context.Background(), "", "check"); err == nil {
 		t.Fatal("repository command must fail without a configured backend")
+	}
+}
+
+func TestOffsiteRetentionPreservesIndependentSnapshots(t *testing.T) {
+	conf, root := setupResticTest(t)
+	db, err := OpenDatabase(filepath.Join(root, "source", "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.CreateProject("research", "Research"); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+	var snapshots []string
+	for i := 0; i < 3; i++ {
+		id, err := db.BackupOffsite(ctx, conf)
+		if err != nil {
+			t.Fatal(err)
+		}
+		snapshots = append(snapshots, id)
+	}
+	unrelated := filepath.Join(root, "unrelated.txt")
+	if err := os.WriteFile(unrelated, []byte("unrelated backup"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	external := conf.resticCommand(ctx, root, "backup", "--tag", "independent", unrelated)
+	if out, err := external.CombinedOutput(); err != nil {
+		t.Fatalf("independent backup: %v %s", err, out)
+	}
+	if err := PruneOffsite(ctx, conf); err != nil {
+		t.Fatal(err)
+	}
+	cmd := conf.resticCommand(ctx, root, "snapshots", "--json")
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var list []struct {
+		ID   string   `json:"id"`
+		Tags []string `json:"tags"`
+	}
+	if err := json.Unmarshal(out, &list); err != nil {
+		t.Fatal(err)
+	}
+	keptCompute := map[string]bool{}
+	independent := 0
+	for _, snapshot := range list {
+		for _, tag := range snapshot.Tags {
+			if tag == "project-workspace" {
+				keptCompute[snapshot.ID] = true
+			}
+			if tag == "independent" {
+				independent++
+			}
+		}
+	}
+	// Restic policies preserve the two most recent Compute snapshots.
+	// Older snapshots can also be retained by calendar policies.
+	if !keptCompute[snapshots[1]] || !keptCompute[snapshots[2]] || independent != 1 {
+		t.Fatalf("retention lost recovery points: compute=%v independent=%d", keptCompute, independent)
 	}
 }
