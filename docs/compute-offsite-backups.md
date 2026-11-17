@@ -11,7 +11,7 @@ Janus runs a dedicated `compute-backup` SFTP identity confined to
 `/srv/compute-restic/repository` by an OpenSSH chroot and
 `internal-sftp`. The account cannot use interactive SSH, port forwarding or
 a remote command. Its `authorized_keys` file is provisioned locally at
-`/srv/homelab/secrets/compute-backup.authorized_keys` and must not be
+`/etc/ssh/authorized_keys.d/compute-backup` and must not be
 committed to Git. Protect this file as root-owned, mode 0600. The server's
 host-key fingerprint must be verified independently before writing a pinned
 `known_hosts` entry.
