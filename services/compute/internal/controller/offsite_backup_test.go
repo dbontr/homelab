@@ -287,6 +287,11 @@ func TestEncryptedRepositoryFullCheckDetectsSimulatedPackCorruption(t *testing.T
 		t.Fatalf("data pack unexpectedly small: %d", len(data))
 	}
 	data[len(data)/2] ^= 0x80
+	// Restic makes pack files read-only; this disposable fixture must
+	// explicitly permit controlled corruption before editing ciphertext.
+	if err := os.Chmod(pack, 0600); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(pack, data, 0600); err != nil {
 		t.Fatal(err)
 	}
