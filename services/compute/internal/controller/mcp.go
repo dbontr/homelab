@@ -209,7 +209,7 @@ func kindFor(key string) string {
 		return "number"
 	case "memory_mb", "min_gpu_memory_mb", "duration_minutes", "expected_version", "expected_revision", "expected_repo_id", "revision", "number", "generation", "lease_seconds", "limit", "page", "size_bytes", "offset":
 		return "integer"
-	case "usb_passthrough", "draft", "confirm", "cleanup_branch", "enabled", "allowed", "cleanup_verified":
+	case "usb_passthrough", "draft", "confirm", "cleanup_branch", "enabled", "allowed", "cleanup_verified", "visible":
 		return "boolean"
 	case "packages", "software_ids", "artifact_ids", "tags", "passages", "passage_ids", "questions", "embedding", "workloads":
 		return "array"
