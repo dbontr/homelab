@@ -57,6 +57,12 @@ func TestBackupHealthDetectsMissedScheduleAcrossRestart(t *testing.T) {
 	if err := m.checkMissed(time.Now()); err != nil {
 		t.Fatal(err)
 	}
+	reloaded, err := newBackupHealthMonitor(m.file, time.Hour, m.endpoint,
+		filepath.Join(filepath.Dir(m.file), "alert-token"), m.client)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m = reloaded
 	if err := m.checkMissed(time.Now()); err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +74,7 @@ func TestBackupHealthDetectsMissedScheduleAcrossRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	var persisted backupHealthState
-	if err := json.Unmarshal(raw, &persisted); err != nil || persisted.ActiveAlert != "missed_backup" {
+	if err := json.Unmarshal(raw, &persisted); err != nil || !persisted.ActiveAlerts["missed_backup"] {
 		t.Fatalf("failed to save missed backup alert: %v, %v", persisted, err)
 	}
 	if err := m.recordAttempt("12345678", nil); err != nil {
@@ -160,5 +166,29 @@ func TestBackupSchedulerStopsOnInterruption(t *testing.T) {
 	case <-done:
 	case <-time.After(2 * time.Second):
 		t.Fatal("interrupted backup did not stop")
+	}
+}
+
+func TestBackupHealthReportsConcurrentFailuresIndependently(t *testing.T) {
+	m, events, closeServer := testBackupHealthMonitor(t)
+	defer closeServer()
+	if err := m.recordAttempt("", errors.New("backup destination has insufficient capacity")); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.recordAttempt("", errors.New("encrypted repository verification failed")); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.recordAttempt("", errors.New("destination unavailable")); err != nil {
+		t.Fatal(err)
+	}
+	if len(*events) != 3 || !m.state.ActiveAlerts["insufficient_capacity"] ||
+		!m.state.ActiveAlerts["corrupt_snapshot"] || !m.state.ActiveAlerts["repeated_failures"] {
+		t.Fatalf("independent backup failures must remain active: alerts=%v events=%v", m.state.ActiveAlerts, *events)
+	}
+	if err := m.recordAttempt("12345678", nil); err != nil {
+		t.Fatal(err)
+	}
+	if len(*events) != 6 || len(m.state.ActiveAlerts) != 0 {
+		t.Fatalf("all active alerts must resolve on recovery: alerts=%v events=%v", m.state.ActiveAlerts, *events)
 	}
 }
