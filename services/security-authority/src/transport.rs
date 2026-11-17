@@ -39,7 +39,6 @@ struct OwnerRequest {
     completed: bool,
 }
 
-
 // Keep a remote credential protected until its HTTP body releases the buffer.
 struct ProtectedBody(Zeroizing<Vec<u8>>);
 
@@ -169,9 +168,11 @@ impl Shared {
 }
 
 fn valid_owner_request_id(id: &str) -> bool {
-    id.len() == 48 && id.bytes().all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+    id.len() == 48
+        && id
+            .bytes()
+            .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
 }
-
 
 fn valid_origin(origin: &str) -> bool {
     let Some(host) = origin.strip_prefix("https://") else {
@@ -820,7 +821,12 @@ fn checked_browser_assertion<'a>(
     owner_assertion(headers)
 }
 
-fn browser_page(shared: &Shared, assertion: &str, message: &str, request_id: Option<&str>) -> Response {
+fn browser_page(
+    shared: &Shared,
+    assertion: &str,
+    message: &str,
+    request_id: Option<&str>,
+) -> Response {
     let (principal, session, pending) = shared.with_authority(|auth| {
         (
             auth.browser_principal(assertion),
@@ -945,7 +951,11 @@ async fn browser_form(
     let result = shared.with_authority(|auth| match action {
         "login" | "request_login" => auth.login_browser(assertion, &password, otp).map(|_| ()),
         "request_approve" => auth.browser_status(assertion).and_then(|status| {
-            if status.active { Ok(()) } else { Err(Error::Unauthorized) }
+            if status.active {
+                Ok(())
+            } else {
+                Err(Error::Unauthorized)
+            }
         }),
         "close" => auth.browser_revoke(assertion).and_then(|closed| {
             if closed {
@@ -1241,16 +1251,27 @@ mod tests {
                 targets: vec!["jupiter".into()],
                 destructive: false,
             }],
-        ).unwrap();
-        let shared = Shared::new(authority, Some("https://auth.example.invalid".into()), None).unwrap();
+        )
+        .unwrap();
+        let shared =
+            Shared::new(authority, Some("https://auth.example.invalid".into()), None).unwrap();
         let request = shared.issue_owner_request("verified-owner").unwrap();
         assert!(valid_owner_request_id(&request));
-        assert_eq!(shared.owner_request_status("verified-owner", &request), Some(false));
+        assert_eq!(
+            shared.owner_request_status("verified-owner", &request),
+            Some(false)
+        );
         assert_eq!(shared.owner_request_status("other-owner", &request), None);
-        assert_eq!(shared.owner_request_status("verified-owner", &request.to_uppercase()), None);
+        assert_eq!(
+            shared.owner_request_status("verified-owner", &request.to_uppercase()),
+            None
+        );
         assert!(!shared.approve_owner_request("other-owner", &request));
         assert!(shared.approve_owner_request("verified-owner", &request));
-        assert_eq!(shared.owner_request_status("verified-owner", &request), Some(true));
+        assert_eq!(
+            shared.owner_request_status("verified-owner", &request),
+            Some(true)
+        );
         assert!(!shared.approve_owner_request("verified-owner", &request));
         let stale = shared.issue_owner_request("verified-owner").unwrap();
         {
