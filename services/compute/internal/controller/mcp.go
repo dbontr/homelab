@@ -396,6 +396,23 @@ func (s *Server) callToolFor(who caller, name string, a map[string]any) (any, er
   return db.LinkRepositoryWithRole(project,repository,get("role"),get("ref"))
 	case "list_projects":
 		return db.Projects()
+	case "list_project_catalog":
+		return db.ProjectCatalog()
+	case "project_catalog_set":
+		visible, ok := a["visible"].(bool)
+		if !ok {
+			return nil, errors.New("visible must be a boolean")
+		}
+		switch a["expected_revision"].(type) {
+		case float64, int, int64:
+		default:
+			return nil, errors.New("expected_revision must be an integer")
+		}
+		revision := asInt(a["expected_revision"])
+		if revision < 0 || asFloat(a["expected_revision"]) != float64(revision) {
+			return nil, errors.New("expected_revision must be a nonnegative integer")
+		}
+		return db.SetProjectCatalogVisibility(project, visible, revision, get("confirm_project_id"))
 	case "create_project":
 		return db.CreateProject(project, get("title"))
 	case "create_library_project":
