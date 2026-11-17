@@ -18,7 +18,9 @@ type toolDefinition struct {
 }
 
 var tools = []toolDefinition{
-	{"list_projects", "List registered projects", nil, nil},
+	{"list_projects", "List visible projects", nil, nil},
+	{"list_project_catalog", "Inspect all projects and revisioned catalog visibility; administrator only", nil, nil},
+	{"project_catalog_set", "Set only the catalog visibility of a project, without deleting historical records; administrator only", []string{"project_id", "visible", "expected_revision", "confirm_project_id"}, nil},
 	{"create_project", "Create a project", []string{"project_id", "title"}, nil},
 	{"create_library_project", "Create a standalone library-centered project that publishes a reusable library with the same stable ID", []string{"project_id", "title", "library_kind"}, []string{"description"}},
 	{"project_published_library", "Resolve the library published by this Workspace project", []string{"project_id"}, nil},
