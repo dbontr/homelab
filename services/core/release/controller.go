@@ -10,12 +10,14 @@ import (
  "errors"
  "fmt"
  "io"
+ "net"
  "net/http"
  "net/url"
  "os"
  "os/exec"
  "path/filepath"
  "regexp"
+ "strconv"
  "strings"
  "syscall"
  "time"
@@ -35,6 +37,7 @@ type Config struct {
  Git string
  Systemctl string
  HealthServices []string
+ HealthSockets []string
  TrustedSource bool
  Run Run
  Current func()(string,error)
@@ -78,6 +81,17 @@ func New(cfg Config)(*Controller,error){
  !filepath.IsAbs(cfg.Nix)||!filepath.IsAbs(cfg.NixEnv)||!filepath.IsAbs(cfg.Git)||!filepath.IsAbs(cfg.Systemctl) ||
  cfg.Run==nil||cfg.Current==nil||len(cfg.HealthServices)==0||len(cfg.HealthServices)>32 {
   return nil,errors.New("invalid local release controller configuration")
+ }
+ if len(cfg.HealthSockets)>16{return nil,errors.New("too many release health sockets")}
+ seenSockets:=make(map[string]bool,len(cfg.HealthSockets))
+ for _,socket:=range cfg.HealthSockets{
+  host,port,err:=net.SplitHostPort(socket)
+  ip:=net.ParseIP(host)
+  value,portErr:=strconv.Atoi(port)
+  if err!=nil||portErr!=nil||value<1||value>65535||ip==nil||!(ip.IsPrivate()||ip.IsLoopback())||seenSockets[socket]{
+   return nil,errors.New("invalid private release health socket")
+  }
+  seenSockets[socket]=true
  }
  // Health probes are read-only. Critical service names remain forbidden
  // to the privileged service-mutation policy, but must be checked on release.
@@ -291,6 +305,12 @@ func(c *Controller) health(ctx context.Context)error{
  for _,svc:=range c.Config.HealthServices{
   out,err:=c.Config.Run(ctx,c.Config.Systemctl,"is-active",svc)
   if err!=nil||strings.TrimSpace(out)!="active"{return fmt.Errorf("service %s is not active",svc)}
+ }
+ for _,socket:=range c.Config.HealthSockets{
+  dialer:=net.Dialer{Timeout:3*time.Second}
+  conn,err:=dialer.DialContext(ctx,"tcp",socket)
+  if err!=nil{return errors.New("release protected TCP health check failed")}
+  if err:=conn.Close();err!=nil{return errors.New("release TCP health connection did not close")}
  }
  return nil
 }
