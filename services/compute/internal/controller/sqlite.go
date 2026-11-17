@@ -188,6 +188,8 @@ func (db *Database) Projects() ([]map[string]any, error) {
 		CASE WHEN lp.project IS NULL THEN 'standard' ELSE 'library' END AS kind,
 		COALESCE(lp.library,'') AS published_library
 		FROM projects p LEFT JOIN project_library_publications lp ON lp.project=p.id
+		LEFT JOIN project_catalog_visibility cv ON cv.project=p.id
+		WHERE COALESCE(cv.visible,1)=1
 		ORDER BY p.id`)
 }
 func (db *Database) ReadNote(project, name string) (map[string]any, error) {

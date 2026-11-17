@@ -21,6 +21,8 @@ func TestBackendOperationScopes(t *testing.T){
   "learning__reset_progress":"personal.data.manage",
   "workspace__resource_plan":"",
   "workspace__list_projects":"",
+  "workspace__list_project_catalog":"",
+  "workspace__project_catalog_set":"",
   "workspace__task_create":"",
  }
  for name,want:=range cases{

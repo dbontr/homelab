@@ -20,7 +20,7 @@ func ScopeFor(name string) string {
     tool := strings.TrimPrefix(name, "workspace__")
     // Routine personal operations and inspection are available without a second unlock.
     switch tool {
-    case "list_projects", "project_published_library", "read_project_note",
+    case "list_projects", "list_project_catalog", "project_catalog_set", "project_published_library", "read_project_note",
         "search_project_knowledge", "knowledge_policy", "knowledge_git_read",
         "knowledge_context", "knowledge_contributions", "knowledge_contribution",
         "knowledge_search_contributions", "list_compute_nodes",

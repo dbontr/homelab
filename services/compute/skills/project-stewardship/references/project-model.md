@@ -40,6 +40,12 @@ A linked library currently exposes its **shared published source revision**; upd
 5. If planning is wanted, attach an existing, explicitly selected GitHub Projects V2 board with `github_project_attach`, then inspect `github_project_board`, `github_project_fields` and `github_project_items`. Do not guess a board ID or create a board as a proxy for Workspace project creation.
 6. Read `knowledge_policy` independently of repository links. The default is `local`, storing project notes and immutable contributions in Workspace. Use `none` to suspend canonical knowledge, or explicitly configure `git` when an external repository must remain authoritative. Never derive a knowledge destination from a source repository or move existing Git-backed records without verified import and readback.
 
+## Project catalog visibility
+
+The project catalog is a presentation index, not an authority for deleting or transferring project data. `list_projects` and the native Projects view show only visible projects. A verified controller administrator can inspect every project with `list_project_catalog`, then use `project_catalog_set` with the exact `project_id`, a boolean `visible`, the current `expected_revision`, and a matching `confirm_project_id`.
+
+Hiding a project does not revoke its grants, terminate workers, cancel workloads, change library publications, or remove knowledge, job history or artifacts. Authorized direct reads by stable project ID remain available. To restore a project to the catalog, set `visible=true` at the latest revision. Retirement of resources and deletion of original recovery archives are separate, independently approved operations.
+
 ## Stable repository links and rename recovery
 
 GitHub gives repositories stable numeric IDs; `owner/name`, remote URL and display names are mutable. A preserved URL redirect is not a durable identity system: reuse of the old name can invalidate it, and some GitHub Actions references do not redirect. Record the provider ID alongside the human-readable locator in the project's private authority record when knowledge is enabled, or in an authorized operational inventory when disabled.

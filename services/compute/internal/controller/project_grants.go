@@ -82,7 +82,10 @@ func (db *Database) ProjectGrants(project string) ([]map[string]any, error) {
 }
 
 func (db *Database) ProjectsForPrincipal(principal string) ([]map[string]any, error) {
-	return db.query("SELECT p.id,p.title,p.created,g.role FROM projects p JOIN project_grants g ON g.project=p.id WHERE g.principal=? ORDER BY p.id", principal)
+	return db.query(`SELECT p.id,p.title,p.created,g.role FROM projects p
+		JOIN project_grants g ON g.project=p.id
+		LEFT JOIN project_catalog_visibility cv ON cv.project=p.id
+		WHERE g.principal=? AND COALESCE(cv.visible,1)=1 ORDER BY p.id`, principal)
 }
 
 func (db *Database) AuditAccess(principal, project, action string, allowed bool) {

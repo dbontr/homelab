@@ -18,7 +18,9 @@ type toolDefinition struct {
 }
 
 var tools = []toolDefinition{
-	{"list_projects", "List registered projects", nil, nil},
+	{"list_projects", "List visible projects", nil, nil},
+	{"list_project_catalog", "Inspect all projects and revisioned catalog visibility; administrator only", nil, nil},
+	{"project_catalog_set", "Set only the catalog visibility of a project, without deleting historical records; administrator only", []string{"project_id", "visible", "expected_revision", "confirm_project_id"}, nil},
 	{"create_project", "Create a project", []string{"project_id", "title"}, nil},
 	{"create_library_project", "Create a standalone library-centered project that publishes a reusable library with the same stable ID", []string{"project_id", "title", "library_kind"}, []string{"description"}},
 	{"project_published_library", "Resolve the library published by this Workspace project", []string{"project_id"}, nil},
@@ -207,7 +209,7 @@ func kindFor(key string) string {
 		return "number"
 	case "memory_mb", "min_gpu_memory_mb", "duration_minutes", "expected_version", "expected_revision", "expected_repo_id", "revision", "number", "generation", "lease_seconds", "limit", "page", "size_bytes", "offset":
 		return "integer"
-	case "usb_passthrough", "draft", "confirm", "cleanup_branch", "enabled", "allowed", "cleanup_verified":
+	case "usb_passthrough", "draft", "confirm", "cleanup_branch", "enabled", "allowed", "cleanup_verified", "visible":
 		return "boolean"
 	case "packages", "software_ids", "artifact_ids", "tags", "passages", "passage_ids", "questions", "embedding", "workloads":
 		return "array"
@@ -394,6 +396,23 @@ func (s *Server) callToolFor(who caller, name string, a map[string]any) (any, er
   return db.LinkRepositoryWithRole(project,repository,get("role"),get("ref"))
 	case "list_projects":
 		return db.Projects()
+	case "list_project_catalog":
+		return db.ProjectCatalog()
+	case "project_catalog_set":
+		visible, ok := a["visible"].(bool)
+		if !ok {
+			return nil, errors.New("visible must be a boolean")
+		}
+		switch a["expected_revision"].(type) {
+		case float64, int, int64:
+		default:
+			return nil, errors.New("expected_revision must be an integer")
+		}
+		revision := asInt(a["expected_revision"])
+		if revision < 0 || asFloat(a["expected_revision"]) != float64(revision) {
+			return nil, errors.New("expected_revision must be a nonnegative integer")
+		}
+		return db.SetProjectCatalogVisibility(project, visible, revision, get("confirm_project_id"))
 	case "create_project":
 		return db.CreateProject(project, get("title"))
 	case "create_library_project":
