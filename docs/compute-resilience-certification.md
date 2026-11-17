@@ -17,6 +17,15 @@ Run the local fault-injection suite from an isolated checkout:
 bash services/compute/scripts/tests/compute-resilience-isolated.sh
 ```
 
+For repeated race detection on the same disposable fixtures, run:
+
+```sh
+COMPUTE_RESILIENCE_REPEATS=10 \
+  bash services/compute/scripts/tests/compute-resilience-isolated.sh
+```
+
+The runner permits one to ten repetitions and enables Go race detection with bounded parallelism when repeated. A toolchain mismatch returns exit code 77, not a passing receipt. The replay fence prevents repeated Kubernetes Job creation attempts; it does not promise exactly-once arbitrary effects within a container after worker/network failures.
+
 The suite uses temporary SQLite files, fake Kubernetes HTTP servers, and SSH/containerd mocks. It does not run `kubectl`, call the live controller, alter Kueue queues, or transfer production OCI content. A Go toolchain compatible with `services/compute/go.mod`, SQLite development headers, and `jq` are required. Do not interpret a simulated pass as evidence of a successful live outage or genuine cold peer distribution.
 
 ## Durable execution invariants
