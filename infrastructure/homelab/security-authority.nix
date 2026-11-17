@@ -8,6 +8,7 @@ let
     "infrastructure__service_restart"
     "infrastructure__service_reload"
     "infrastructure__workspace_create"
+    "infrastructure__workspace_command"
     "infrastructure__workspace_stop"
     "infrastructure__workspace_register_image"
     "infrastructure__workspace_register_software"
