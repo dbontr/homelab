@@ -231,3 +231,93 @@ evaluation without activation. These tests must include an interrupted backup,
 unavailable repository, incomplete manifest, corrupted database relationship
 and retained independent snapshots. Do not expose production credentials to
 synthetic tests.
+
+## Recovery when the original controller is unavailable
+
+Use an independent recovery host or disposable isolated container. Install
+the versioned `project-workspace-controller` binary corresponding to the
+snapshot's schema, `restic`, and a read-only verification credential.
+The active controller, its token, and its PVC are not prerequisites. Set
+`RESTIC_REPOSITORY` and `RESTIC_PASSWORD_FILE` through protected credential
+custody. For an SFTP repository, configure an independent verification SSH
+identity and pinned host key with strict host-key checking. Do not reuse an
+operator's administrative SSH key or publish any credential contents.
+
+The following procedure is read-only against the remote repository. The
+recovery destination **must not exist** and must be on independent disposable
+storage. Supply the exact 64-character lowercase hexadecimal `SNAPSHOT_ID`
+recorded in the scheduled backup receipt. Never use `latest` or a shortened
+snapshot prefix.
+
+```sh
+: "${SNAPSHOT_ID:?provide a 64-character snapshot receipt}"
+: "${RECOVERY_ROOT:?provide an unused independent recovery directory}"
+test "${#SNAPSHOT_ID}" -eq 64
+case "$SNAPSHOT_ID" in *[!0123456789abcdef]*) exit 2;; esac
+test ! -e "$RECOVERY_ROOT"
+install -d -m 0700 "$RECOVERY_ROOT"
+restic snapshots --json --tag project-workspace
+restic check --read-data
+restic restore "$SNAPSHOT_ID" --target "$RECOVERY_ROOT/restic"
+export PWM_DB="$RECOVERY_ROOT/recovered/state.db"
+project-workspace-controller restore "$RECOVERY_ROOT/restic/snapshot"
+sqlite3 "$PWM_DB" 'PRAGMA integrity_check; PRAGMA foreign_key_check;'
+```
+
+Require `integrity_check` to return exactly `ok` and
+`foreign_key_check` to return no rows. The restore command validates every
+manifest SHA-256 and file size, rejects an existing destination, checks
+logical project/artifact/Job ownership, and verifies contribution digests.
+Inspect the recovered database and artifact tree as evidence without starting
+another controller on the active production identity. Compare independently
+captured project identities, note versions, contribution provenance, file
+revisions, task links and completed Kueue request/result receipts. Retain
+the exact snapshot ID, versioned binary digest, manifest hash and inspection
+receipt in a protected audit record.
+
+### Historical record boundary
+
+The controller snapshot covers the SQLite database and its referenced
+immutable artifacts and library objects. It does **not** automatically cover
+untracked historical host directories or external Git repositories. For
+legacy filesystem sources, acquire a separately authorized independent archive
+and independently generated source and restored manifests with original
+project IDs, revisions, timestamps, names and relationships. Run:
+
+```sh
+cd services/compute
+go run ./cmd/legacy-reconcile \
+  --source-root "$COPIED_LEGACY_ROOT" \
+  --manifest "$SOURCE_MANIFEST" \
+  --restore-root "$RESTORED_LEGACY_ROOT" \
+  --restored-manifest "$RESTORED_MANIFEST"
+```
+
+Both trees must be separate, disposable copies. An empty or incomplete
+inventory, a missing or unexpected file, mismatched relationship, altered
+provenance, invalid digest, or non-independent restored file fails the audit.
+Do not mark historic data migrated, hide source projects or retire workers
+merely because current project artifact metadata matches. The original age
+archive and existing legacy sources remain protected until independently
+approved recovery acceptance.
+
+### Capacity and retention admission
+
+Measure the actual filesystem holding `/srv/compute-restic/repository`,
+not merely Janus's root-volume utilization percentage. Record available
+bytes, filesystem size, existing protected archive consumption, the measured
+first encrypted snapshot footprint, expected unique changed bytes over the
+retention window, and growth margin. Admit scheduled backups only when the
+measured **additional** requirement fits above the 40 GiB minimum free-space
+alert floor. Compression and deduplication estimates are not a guarantee of
+available space. Make another observation after the first real snapshot.
+
+Run the Compute-tagged `restic forget` policy with `--dry-run` before
+authorizing retention. Review snapshot IDs by tag and verify that snapshots
+with unrelated or absent tags are unaffected. Never prune another backup
+owner's history to make Compute fit, and never remove the independent
+age-encrypted archive as part of Restic retention.
+
+A scheduled off-host snapshot, an exact independent restore, actual alert
+delivery, and independently measured destination capacity are required
+before unattended production recovery is certified.
