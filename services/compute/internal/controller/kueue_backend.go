@@ -20,6 +20,7 @@ import (
 
 var errKubernetesNotFound=errors.New("Kubernetes resource not found")
 var errKubernetesConflict=errors.New("Kubernetes resource conflict")
+var errKueueRecoveryRequired=errors.New("Kubernetes Job execution needs recovery")
 
 type KueueBackend struct{
 	endpoint string
@@ -196,13 +197,20 @@ func matchBatchJob(job,row map[string]any)(string,error){
 	return uid,nil
 }
 
-func (k *KueueBackend) ensureJob(ctx context.Context,row map[string]any)(map[string]any,error){
+func (k *KueueBackend) ensureJob(ctx context.Context,db *Database,row map[string]any)(map[string]any,error){
 	name:=asString(row["remote_name"])
 	obj,err:=k.object(ctx,"GET",batchKubernetesJobPath(name),nil)
 	if errors.Is(err,errKubernetesNotFound){
-		if asString(row["status"])!="kueue_queued"||asString(row["remote_uid"])!=""{
-			return nil,errors.New("previous Kubernetes Job disappeared")
+		if asString(row["status"])!="kueue_queued"||asString(row["remote_uid"])!=""||asInt(row["create_attempted"])!=0{
+			return nil,fmt.Errorf("%w: %s is absent after a recorded submission; verify the execution outcome before any retry",errKueueRecoveryRequired,name)
 		}
+		permitted,beginErr:=db.beginKueueSubmission(asString(row["id"]))
+		if beginErr!=nil{return nil,beginErr}
+		if !permitted{
+			return nil,fmt.Errorf("%w: submission ownership is already recorded for %s",errKueueRecoveryRequired,name)
+		}
+		// The durable attempt flag is committed before the outbound POST.
+		// A timeout must never reset it or create a second execution.
 		obj,err=k.object(ctx,"POST","/apis/batch/v1/namespaces/"+batchNamespace+"/jobs",batchKubernetesJob(row))
 		if errors.Is(err,errKubernetesConflict){
 			obj,err=k.object(ctx,"GET",batchKubernetesJobPath(name),nil)
@@ -277,10 +285,10 @@ func (k *KueueBackend) reconcile(ctx context.Context,db *Database,row map[string
 		}
 		return err
 	}
-	job,err:=k.ensureJob(ctx,row)
+	job,err:=k.ensureJob(ctx,db,row)
 	if err!=nil{
-		if strings.Contains(err.Error(),"previous Kubernetes Job disappeared"){
-			return db.updateKueueJob(id,asString(row["remote_uid"]),"failed","Kubernetes Job disappeared")
+		if errors.Is(err,errKueueRecoveryRequired){
+			return db.requireKueueRecovery(id,err.Error())
 		}
 		return err
 	}
