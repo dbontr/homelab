@@ -242,9 +242,9 @@ func (k *KueueBackend) admitted(ctx context.Context,uid string)(bool,error){
 	return false,nil
 }
 
-func (k *KueueBackend) output(ctx context.Context,name,uid string)string{
+func (k *KueueBackend) output(ctx context.Context,name,uid string)(string,error){
 	obj,err:=k.object(ctx,"GET","/api/v1/namespaces/"+batchNamespace+"/pods?labelSelector=job-name%3D"+name,nil)
-	if err!=nil{return ""}
+	if err!=nil{return "",fmt.Errorf("read batch output pods: %w",err)}
 	items,_:=obj["items"].([]any)
 	for _,item:=range items{
 		pod:=decodeAnyObject(item)
@@ -258,21 +258,19 @@ func (k *KueueBackend) output(ctx context.Context,name,uid string)string{
 		podName:=asString(metadata["name"])
 		if podName==""{continue}
 		raw,err:=k.request(ctx,"GET","/api/v1/namespaces/"+batchNamespace+"/pods/"+podName+"/log?container=compute&limitBytes=16384",nil)
-		if err==nil{
-			if len(raw)>16384{raw=raw[:16384]}
-			return string(raw)
-		}
+		if err!=nil{return "",fmt.Errorf("read batch output logs: %w",err)}
+		if len(raw)>16384{raw=raw[:16384]}
+		return string(raw),nil
 	}
-	return ""
+	return "",errors.New("Kubernetes Job output Pod unavailable")
 }
-
 func (k *KueueBackend) reconcile(ctx context.Context,db *Database,row map[string]any)error{
 	id,name:=asString(row["id"]),asString(row["remote_name"])
 	if row["status"]=="cancel_requested"{
 		job,err:=k.object(ctx,"GET",batchKubernetesJobPath(name),nil)
 		if errors.Is(err,errKubernetesNotFound){
 			result:="Kubernetes workload absent at cancellation"
-			if asString(row["remote_uid"])=="" && asInt(row["create_attempted"])!=0 {
+			if asInt(row["create_attempted"])!=0 {
 				result="Kubernetes workload absent; prior execution outcome unverified"
 			}
 			return db.updateKueueJob(id,asString(row["remote_uid"]),"cancelled",result)
@@ -310,13 +308,17 @@ func (k *KueueBackend) reconcile(ctx context.Context,db *Database,row map[string
 		if condition["type"]=="Failed"{failed=true}
 	}
 	if complete||asInt(status["succeeded"])>0{
-		result:=k.output(ctx,name,uid)
-		if result==""{result="Kubernetes Job completed"}
+		result,outputErr:=k.output(ctx,name,uid)
+		if outputErr!=nil{
+			return db.requireKueueRecovery(id,"Kubernetes Job completed but output is unavailable: "+outputErr.Error())
+		}
+		if result==""{result="Kubernetes Job completed (empty stdout)"}
 		return db.updateKueueJob(id,uid,"succeeded",result)
 	}
 	if failed{
-		result:=k.output(ctx,name,uid)
-		if result==""{result="Kubernetes Job failed"}
+		result,outputErr:=k.output(ctx,name,uid)
+		if outputErr!=nil{result="Kubernetes Job failed; output unavailable: "+outputErr.Error()}
+		if result==""{result="Kubernetes Job failed (empty stdout)"}
 		return db.updateKueueJob(id,uid,"failed",result)
 	}
 	if asInt(status["active"])>0{return db.updateKueueJob(id,uid,"running","")}
