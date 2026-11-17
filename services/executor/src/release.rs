@@ -390,6 +390,19 @@ impl ReleaseController {
                 return Err(Error::Unavailable("release health service is not active"));
             }
         }
+        // These destinations are parsed, deduplicated and constrained to
+        // literal private IPs by the immutable Nix executor policy.
+        for address in &self.policy.health_sockets {
+            match tokio::time::timeout(
+                Duration::from_secs(3),
+                tokio::net::TcpStream::connect(*address),
+            )
+            .await
+            {
+                Ok(Ok(connection)) => drop(connection),
+                _ => return Err(Error::Unavailable("protected release TCP health check failed")),
+            }
+        }
         Ok(())
     }
 
