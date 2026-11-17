@@ -745,6 +745,36 @@ impl WorkspacePolicy {
                 let request = WorkspaceAllocation::checked(fields, self)?;
                 ("workspace_create", request)
             }
+            "infrastructure__workspace_command" if fields.len() == 5 => {
+                let project = string("project_id")?;
+                if !self.projects.iter().any(|s| s == project) {
+                    return Err(Error::Denied("project not permitted"));
+                }
+                let command = fields
+                    .get("command")
+                    .and_then(Value::as_str)
+                    .ok_or(Error::Denied("workspace command required"))?;
+                let request_id = fields
+                    .get("workspace_request_id")
+                    .and_then(Value::as_str)
+                    .ok_or(Error::Denied("workspace request identity required"))?;
+                if command.trim().is_empty()
+                    || command.len() > 4096
+                    || command.as_bytes().contains(&0)
+                    || !valid_hex(request_id, 32)
+                {
+                    return Err(Error::Denied("invalid workspace command or request identity"));
+                }
+                (
+                    "workspace_call",
+                    serde_json::json!({
+                        "project_id": project,
+                        "workspace_id": string("workspace_id")?,
+                        "action": "command",
+                        "payload": {"command": command, "workspace_request_id": request_id}
+                    }),
+                )
+            }
             "infrastructure__workspace_stop" if fields.len() == 3 => {
                 let project = string("project_id")?;
                 if !self.projects.iter().any(|s| s == project) {
