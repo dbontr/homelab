@@ -236,7 +236,8 @@ synthetic tests.
 
 Use an independent recovery host or disposable isolated container. Install
 the versioned `project-workspace-controller` binary corresponding to the
-snapshot's schema, `restic`, and a read-only verification credential.
+snapshot's schema, `restic`, `jq`, `sqlite3`, and a read-only verification
+credential.
 The active controller, its token, and its PVC are not prerequisites. Set
 `RESTIC_REPOSITORY` and `RESTIC_PASSWORD_FILE` through protected credential
 custody. For an SFTP repository, configure an independent verification SSH
@@ -250,13 +251,16 @@ recorded in the scheduled backup receipt. Never use `latest` or a shortened
 snapshot prefix.
 
 ```sh
+set -eu
 : "${SNAPSHOT_ID:?provide a 64-character snapshot receipt}"
 : "${RECOVERY_ROOT:?provide an unused independent recovery directory}"
+command -v jq >/dev/null
 test "${#SNAPSHOT_ID}" -eq 64
 case "$SNAPSHOT_ID" in *[!0123456789abcdef]*) exit 2;; esac
 test ! -e "$RECOVERY_ROOT"
 install -d -m 0700 "$RECOVERY_ROOT"
-restic snapshots --json --tag project-workspace
+restic snapshots --json --tag project-workspace \
+  | jq -e --arg snapshot "$SNAPSHOT_ID" 'any(.[]; .id == $snapshot)' >/dev/null
 restic check --read-data
 restic restore "$SNAPSHOT_ID" --target "$RECOVERY_ROOT/restic"
 export PWM_DB="$RECOVERY_ROOT/recovered/state.db"
