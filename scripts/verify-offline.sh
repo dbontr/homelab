@@ -151,6 +151,40 @@ if helm template homelab-acceptance "$chart" \
   exit 1
 fi
 
+# Backup opt-in must preserve the pinned controller image and refuse incomplete
+# credential or retention configuration before Kubernetes receives a Deployment.
+backup_render=$(helm template homelab-backup-acceptance "$chart" \
+  --set controller.enabled=true \
+  --set-string controller.image="$pinned_controller" \
+  --set-string controller.backupInterval=24h \
+  --set controller.backupRetention=true \
+  --set-string controller.offsite.repository=sftp:compute-backup@10.77.30.232:/repository \
+  --set controller.offsite.passwordSecretName=backup-password \
+  --set controller.offsite.sshSecretName=backup-ssh)
+printf '%s\n' "$backup_render" | grep -q 'name: PWM_RESTIC_BACKUP_INTERVAL'
+printf '%s\n' "$backup_render" | grep -q 'name: PWM_RESTIC_AUTO_PRUNE'
+printf '%s\n' "$backup_render" | grep -q 'name: restic-ssh-input'
+[ "$(printf '%s\n' "$backup_render" | grep -Fc "image: \"$pinned_controller\"")" -ge 3 ] || {
+  printf '%s\n' 'Backup init containers must use the immutable controller image' >&2
+  exit 1
+}
+if helm template homelab-backup-acceptance "$chart" \
+  --set controller.enabled=true \
+  --set-string controller.image="$pinned_controller" \
+  --set controller.backupRetention=true >/dev/null 2>&1; then
+  printf '%s\n' 'Backup retention was accepted without scheduled snapshots' >&2
+  exit 1
+fi
+if helm template homelab-backup-acceptance "$chart" \
+  --set controller.enabled=true \
+  --set-string controller.image="$pinned_controller" \
+  --set-string controller.backupInterval=24h \
+  --set-string controller.offsite.repository=sftp:compute-backup@10.77.30.232:/repository \
+  --set controller.offsite.passwordSecretName=backup-password >/dev/null 2>&1; then
+  printf '%s\n' 'SFTP backup was accepted without a pinned identity Secret' >&2
+  exit 1
+fi
+
 # Neither a mutable image tag nor an unspecified image may create a
 # controller or worker Deployment in the self-hosted release chart.
 for image in "ghcr.io/dbontr/homelab/controller:main" ""; do
