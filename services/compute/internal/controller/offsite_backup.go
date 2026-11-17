@@ -98,7 +98,7 @@ func (db *Database) BackupOffsite(ctx context.Context, c ResticRepositoryConfig)
 	if err := db.BackupTo(filepath.Join(stage, "snapshot")); err != nil {
 		return "", fmt.Errorf("snapshot preparation failed: %w", err)
 	}
-	cmd := c.resticCommand(ctx, stage, "backup", "--json", "--group-by", "tags", "--tag", "project-workspace", "snapshot")
+	cmd := c.resticCommand(ctx, stage, "backup", "--json", "--tag", "project-workspace", "snapshot")
 	out, err := cmd.StdoutPipe()
 	if err != nil {
 		return "", err
