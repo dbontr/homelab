@@ -88,9 +88,12 @@ must fail admission rather than silently switching to another compiler.
 
 ## Source-backed acceptance
 
-In an approved Axiom workspace after source checkout, run
-`scripts/verify-research-toolchains.sh 1.91.1 4.34.0` from the Homelab
-release artifact, then execute the exact commands required by the pinned
+In an approved Axiom workspace after source checkout, first import the
+reviewed preflight script from the exact Homelab source revision as a verified
+artifact, then invoke `bash verify-research-toolchains.sh 1.91.1 4.34.0`
+from the imported location. The source-owned script is
+`services/compute/scripts/verify-research-toolchains.sh`. Then execute the
+exact commands required by the pinned
 Axiom project source, including Cargo formatting, tests and Clippy, a
 `wasm32-unknown-unknown` compilation, `lake build`, Lean inspector
 smoke tests, and independent Lean proof acceptance/rejection tests.
