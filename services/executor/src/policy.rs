@@ -119,27 +119,16 @@ pub fn valid_service(value: &str) -> bool {
         && !FORBIDDEN_SERVICES.iter().any(|name| lower.contains(name))
 }
 
+// A health probe only observes a configured unit. The mutation allowlist
+// must not prevent checking the critical services a release must preserve.
 pub fn valid_health_service(value: &str) -> bool {
-    const CRITICAL: &[&str] = &[
-        "network",
-        "firewall",
-        "cloudflared",
-        "pihole",
-        "k3s",
-        "tailscale",
-        "docker",
-        "jellyfin",
-        "nginx",
-        "systemd-networkd",
-    ];
-    let lower = value.to_ascii_lowercase();
-    !value.is_empty()
+    value.len() > ".service".len()
         && value.len() <= 128
+        && value.ends_with(".service")
         && value.as_bytes()[0].is_ascii_alphanumeric()
         && value
             .bytes()
             .all(|c| c.is_ascii_alphanumeric() || b"@_.-".contains(&c))
-        && !CRITICAL.iter().any(|term| lower.contains(term))
 }
 
 pub fn valid_kube_name(value: &str) -> bool {
@@ -1108,6 +1097,27 @@ impl Policy {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn release_health_can_check_critical_units_without_granting_mutation() {
+        for unit in [
+            "sshd.service",
+            "systemd-networkd.service",
+            "dnsmasq.service",
+            "cloudflared-saturn.service",
+            "k3s.service",
+            "homelab-mcp.service",
+        ] {
+            assert!(valid_health_service(unit), "health probe denied: {unit}");
+            assert!(!valid_service(unit), "critical unit gained mutation access: {unit}");
+        }
+        for unit in [
+            "", "sshd", "../sshd.service", "sshd.socket", "ssh d.service",
+            "sshd.service\\n", "-sshd.service",
+        ] {
+            assert!(!valid_health_service(unit), "invalid health unit: {unit}");
+        }
+    }
 
     #[test]
     fn catalog_mutations_require_exact_operator_resources() {
