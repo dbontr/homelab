@@ -622,8 +622,7 @@ impl WorkspacePolicy {
                     .get("memory_mb")
                     .and_then(Value::as_u64)
                     .ok_or(Error::Denied("batch memory limit required"))?;
-                if !cpu.is_finite() || !(0.1..=2.0).contains(&cpu)
-                    || !(64..=4096).contains(&memory)
+                if !cpu.is_finite() || !(0.1..=2.0).contains(&cpu) || !(64..=4096).contains(&memory)
                 {
                     return Err(Error::Denied("batch resource limits exceeded"));
                 }
@@ -1371,7 +1370,11 @@ mod tests {
             changed[key] = value;
             assert!(
                 policy
-                    .admit("compute__submit_batch_job", "jupiter", changed.as_object().unwrap())
+                    .admit(
+                        "compute__submit_batch_job",
+                        "jupiter",
+                        changed.as_object().unwrap()
+                    )
                     .is_err(),
                 "invalid batch field accepted: {key}",
             );
@@ -1385,9 +1388,13 @@ mod tests {
         ));
         let mut wrong = cancel.clone();
         wrong["job_id"] = json!("../../job");
-        assert!(policy.admit(
-            "compute__cancel_batch_job", "jupiter", wrong.as_object().unwrap()
-        ).is_err());
+        assert!(policy
+            .admit(
+                "compute__cancel_batch_job",
+                "jupiter",
+                wrong.as_object().unwrap()
+            )
+            .is_err());
     }
 
     fn policy() -> Policy {
