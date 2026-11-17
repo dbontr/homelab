@@ -49,6 +49,8 @@ type Report struct {
 	RestoreVerified int       `json:"restore_verified"`
 	UnmappedFiles   int       `json:"unmapped_files"`
 	UnreportedFiles int       `json:"unreported_files,omitempty"`
+	UnmappedRestoredFiles int `json:"unmapped_restored_files"`
+	UnreportedRestoredFiles int `json:"unreported_restored_files,omitempty"`
 	Findings        []Finding `json:"findings"`
 }
 
@@ -153,11 +155,13 @@ func equalRecord(a, b Record) bool {
 func audit(sourceRoot, restoreRoot string, original Manifest, restored *Manifest, manifestSHA string) Report {
 	result := Report{Version: 1, ManifestSHA256: manifestSHA, Records: len(original.Records), Findings: []Finding{}}
 	add := func(code, key, path string) { result.Findings = append(result.Findings, Finding{code, key, path}) }
+	if len(original.Records) == 0 { add("empty_source_manifest", "", "") }
 	keys, sourcePaths, restorePaths := map[string]bool{}, map[string]bool{}, map[string]bool{}
 	restoredByKey := map[string]Record{}
 	if restored != nil {
 		for _, r := range restored.Records {
 			key := recordKey(r)
+			if !validRecord(r) { add("invalid_restored_record", key, r.RestorePath) }
 			if _, exists := restoredByKey[key]; exists {
 				add("duplicate_restored_identity", key, r.RestorePath)
 			}
@@ -254,6 +258,22 @@ func audit(sourceRoot, restoreRoot string, original Manifest, restored *Manifest
 		}
 		return nil
 	})
+	if restored != nil && restoreRoot != "" {
+		_ = filepath.WalkDir(restoreRoot, func(path string, entry os.DirEntry, err error) error {
+			if err != nil { add("unreadable_restore", "", ""); return nil }
+			if path == restoreRoot || entry.IsDir() { return nil }
+			relative, relErr := filepath.Rel(restoreRoot, path)
+			if relErr != nil { add("unreadable_restore", "", ""); return nil }
+			relative = filepath.ToSlash(relative)
+			if !restorePaths[relative] {
+				result.UnmappedRestoredFiles++
+				if result.UnmappedRestoredFiles <= 100 {
+					add("unmapped_restored_file", "", relative)
+				} else { result.UnreportedRestoredFiles++ }
+			}
+			return nil
+		})
+	}
 	slices.SortFunc(result.Findings, func(a, b Finding) int {
 		if c := strings.Compare(a.Code, b.Code); c != 0 {
 			return c
