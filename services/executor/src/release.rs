@@ -49,6 +49,16 @@ impl Journal {
     }
 }
 
+// An interrupted transaction can be observed before the switch is known to
+// have completed. Only terminal receipts assert a specific live generation.
+fn journal_matches_generation(journal: &Journal, current: &str) -> bool {
+    match journal.phase.as_str() {
+        "active" => current == journal.target,
+        "rolled-back" => current == journal.previous,
+        _ => true,
+    }
+}
+
 fn store_path(path: &str) -> bool {
     path.len() < 512
         && path.starts_with("/nix/store/")
@@ -478,8 +488,13 @@ impl ReleaseController {
         let _guard = self.operation.lock().await;
         let _file = self.state_lock()?;
         let manifest = self.load_stage(id)?;
-        if self.optional_journal()?.is_some_and(|j| j.interrupted()) {
-            return Err(Error::Denied("interrupted release must be recovered first"));
+        if let Some(previous_attempt) = self.optional_journal()? {
+            if previous_attempt.interrupted() {
+                return Err(Error::Denied("interrupted release must be recovered first"));
+            }
+            if previous_attempt.id == id {
+                return Err(Error::Denied("staged release already attempted"));
+            }
         }
         let previous = self.current_system()?;
         if previous == manifest.system {
@@ -530,9 +545,16 @@ impl ReleaseController {
     pub async fn recover(&self) -> Result<(), Error> {
         let _guard = self.operation.lock().await;
         let _file = self.state_lock()?;
-        let txn: Journal = self.read("journal.json")?;
+        let mut txn: Journal = self.read("journal.json")?;
         if !txn.interrupted() || !store_path(&txn.previous) {
             return Err(Error::Denied("no trusted interrupted release to recover"));
+        }
+        // If the rollback switch completed before a crash, verify the restored
+        // services without switching the same generation a second time.
+        if self.current_system()? == txn.previous {
+            self.health().await?;
+            txn.phase = "rolled-back".into();
+            return self.atomic("journal.json", &txn);
         }
         self.rollback(txn).await
     }
@@ -550,6 +572,11 @@ impl ReleaseController {
             )
         {
             return Err(Error::Storage("release journal is invalid"));
+        }
+        if matches!(journal.phase.as_str(), "active" | "rolled-back")
+            && !journal_matches_generation(&journal, &self.current_system()?)
+        {
+            return Err(Error::Storage("release journal differs from live generation"));
         }
         Ok(journal)
     }
@@ -628,6 +655,36 @@ mod tests {
         assert!(verify_candidate_credentials(&system, owner).is_ok());
 
         fs::remove_dir_all(&system).unwrap();
+    }
+
+    #[test]
+    fn release_receipts_reject_inconsistent_live_generations() {
+        let mut journal = Journal {
+            phase: "active".into(),
+            id: "a".repeat(48),
+            previous: "/nix/store/prior-system".into(),
+            target: "/nix/store/target-system".into(),
+            time: Utc::now(),
+        };
+        assert!(journal_matches_generation(&journal, &journal.target));
+        assert!(!journal_matches_generation(&journal, &journal.previous));
+        journal.phase = "rolled-back".into();
+        assert!(journal_matches_generation(&journal, &journal.previous));
+        assert!(!journal_matches_generation(&journal, &journal.target));
+        journal.phase = "activating".into();
+        assert!(journal_matches_generation(&journal, &journal.previous));
+    }
+
+    #[test]
+    fn released_generation_identifiers_are_not_mutable_refs() {
+        assert!(store_path("/nix/store/0123456789abcdef-generation"));
+        for path in [
+            "/nix/store/../profiles/system",
+            "/nix/store/unstable path",
+            "/tmp/untrusted",
+        ] {
+            assert!(!store_path(path));
+        }
     }
 
     #[test]
