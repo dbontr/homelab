@@ -1,0 +1,162 @@
+package controller
+
+import (
+	"context"
+	"errors"
+	"io"
+	"net/http"
+	"strings"
+	"sync"
+	"testing"
+)
+
+// A remote POST can commit even when its response is lost. This transport
+// makes the failure deterministic without creating a Kubernetes resource.
+type lostBatchCreateResponse struct {
+	base http.RoundTripper
+	mu sync.Mutex
+	lost bool
+}
+
+func (t *lostBatchCreateResponse) RoundTrip(request *http.Request) (*http.Response, error) {
+	response, err := t.base.RoundTrip(request)
+	if err != nil { return response, err }
+	if request.Method != http.MethodPost || request.URL.Path != "/apis/batch/v1/namespaces/pwm-batch/jobs" {
+		return response, nil
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.lost { return response, nil }
+	t.lost = true
+	_ = response.Body.Close()
+	return nil, errors.New("simulated lost Kubernetes create response")
+}
+
+func TestKueueLostCreateResponseReconcilesOneExecution(t *testing.T) {
+	db, srv, _, fake := batchFixture(t)
+	queued, err := db.QueueKueueJob("research", "lost-response-001", "echo persistent", testBatchImage, 0.2, 128)
+	if err != nil { t.Fatal(err) }
+	id := asString(queued["id"])
+	transport := &lostBatchCreateResponse{base:srv.Kueue.client.Transport}
+	srv.Kueue.client = &http.Client{Transport:transport}
+	pending, err := db.pendingKueueJobs()
+	if err != nil || len(pending) != 1 { t.Fatalf("pending: %v %v", pending, err) }
+	if err := srv.Kueue.reconcile(context.Background(), db, pending[0]); err == nil || !strings.Contains(err.Error(), "lost Kubernetes") {
+		t.Fatalf("expected the injected lost response, got %v", err)
+	}
+	pending, err = db.pendingKueueJobs()
+	if err != nil || len(pending) != 1 || asInt(pending[0]["create_attempted"]) != 1 {
+		t.Fatalf("outbound create was not fenced before network failure: %v %v", pending, err)
+	}
+	// A separate DB handle simulates a process restart against durable state.
+	reopened, err := OpenDatabase(db.filename)
+	if err != nil { t.Fatal(err) }
+	defer reopened.Close()
+	pending, err = reopened.pendingKueueJobs()
+	if err != nil { t.Fatal(err) }
+	if err := srv.Kueue.reconcile(context.Background(), reopened, pending[0]); err != nil { t.Fatal(err) }
+	fake.mu.Lock()
+	count := fake.created
+	fake.complete = true
+	fake.mu.Unlock()
+	if count != 1 { t.Fatalf("Kubernetes created %d Jobs after response loss", count) }
+	pending, err = reopened.pendingKueueJobs()
+	if err != nil { t.Fatal(err) }
+	if err := srv.Kueue.reconcile(context.Background(), reopened, pending[0]); err != nil { t.Fatal(err) }
+	persisted, err := reopened.KueueJob("research", id)
+	if err != nil || persisted["status"] != "succeeded" ||
+		!strings.Contains(asString(persisted["result"]), "calculation-complete") {
+		t.Fatalf("result missing across restart: %v %v", persisted, err)
+	}
+	if _, err := reopened.QueueKueueJob("research", "lost-response-001", "echo changed", testBatchImage, 0.2, 128); err == nil {
+		t.Fatal("replay changed execution after a durable submission")
+	}
+}
+
+func TestKueueInterruptedBeforeRemoteCreateRequiresRecovery(t *testing.T) {
+	db, srv, _, fake := batchFixture(t)
+	queued, err := db.QueueKueueJob("research", "outbound-crash-001", "echo never-duplicated", testBatchImage, 0.1, 64)
+	if err != nil { t.Fatal(err) }
+	id := asString(queued["id"])
+	permitted, err := db.beginKueueSubmission(id)
+	if err != nil || !permitted { t.Fatalf("could not record outbound attempt: %v %v", permitted, err) }
+	permitted, err = db.beginKueueSubmission(id)
+	if err != nil || permitted { t.Fatalf("outbound fence is not exclusive: %v %v", permitted, err) }
+	reopened, err := OpenDatabase(db.filename)
+	if err != nil { t.Fatal(err) }
+	defer reopened.Close()
+	for i := 0; i < 3; i++ {
+		pending, err := reopened.pendingKueueJobs()
+		if err != nil || len(pending) != 1 { t.Fatalf("missing recovery candidate: %v %v", pending, err) }
+		if err := srv.Kueue.reconcile(context.Background(), reopened, pending[0]); err != nil { t.Fatal(err) }
+	}
+	record, err := reopened.KueueJob("research", id)
+	if err != nil || record["status"] != "recovery_required" ||
+		!strings.Contains(asString(record["last_error"]), "verify the execution outcome") {
+		t.Fatalf("uncertain execution not visible: %v %v", record, err)
+	}
+	again, err := reopened.QueueKueueJob("research", "outbound-crash-001", "echo never-duplicated", testBatchImage, 0.1, 64)
+	if err != nil || again["id"] != id || again["status"] != "recovery_required" {
+		t.Fatalf("replay did not reuse the interrupted identity: %v %v", again, err)
+	}
+	fake.mu.Lock(); count := fake.created; fake.mu.Unlock()
+	if count != 0 { t.Fatalf("uncertain execution was resubmitted: %d", count) }
+	if _, err := reopened.CancelKueueJob("research", id); err != nil { t.Fatal(err) }
+	pending, err := reopened.pendingKueueJobs()
+	if err != nil { t.Fatal(err) }
+	if err := srv.Kueue.reconcile(context.Background(), reopened, pending[0]); err != nil { t.Fatal(err) }
+	final, err := reopened.KueueJob("research", id)
+	if err != nil || final["status"] != "cancelled" ||
+		!strings.Contains(asString(final["result"]), "unverified") {
+		t.Fatalf("cancel hid uncertain execution history: %v %v", final, err)
+	}
+}
+
+func TestKueueMissingObservedJobNeverCreatesReplacement(t *testing.T) {
+	db, srv, _, fake := batchFixture(t)
+	queued, err := db.QueueKueueJob("research", "missing-worker-001", "echo one", testBatchImage, 0.1, 64)
+	if err != nil { t.Fatal(err) }
+	pending, err := db.pendingKueueJobs()
+	if err != nil { t.Fatal(err) }
+	if err := srv.Kueue.reconcile(context.Background(), db, pending[0]); err != nil { t.Fatal(err) }
+	fake.mu.Lock(); fake.job = nil; fake.mu.Unlock()
+	pending, err = db.pendingKueueJobs()
+	if err != nil { t.Fatal(err) }
+	if err := srv.Kueue.reconcile(context.Background(), db, pending[0]); err != nil { t.Fatal(err) }
+	for i := 0; i < 2; i++ {
+		pending, err = db.pendingKueueJobs()
+		if err != nil { t.Fatal(err) }
+		if err := srv.Kueue.reconcile(context.Background(), db, pending[0]); err != nil { t.Fatal(err) }
+	}
+	record, err := db.KueueJob("research", asString(queued["id"]))
+	if err != nil || record["status"] != "recovery_required" {
+		t.Fatalf("missing execution not flagged: %v %v", record, err)
+	}
+	fake.mu.Lock(); count := fake.created; fake.mu.Unlock()
+	if count != 1 { t.Fatalf("missing Job was silently replaced: %d", count) }
+}
+
+func TestKueueConcurrentReconcilersCreateAtMostOneJob(t *testing.T) {
+	db, srv, _, fake := batchFixture(t)
+	if _, err := db.QueueKueueJob("research", "parallel-requests-001", "echo once", testBatchImage, 0.25, 128); err != nil { t.Fatal(err) }
+	pending, err := db.pendingKueueJobs()
+	if err != nil || len(pending) != 1 { t.Fatalf("pending: %v %v", pending, err) }
+	var group sync.WaitGroup
+	for i := 0; i < 12; i++ {
+		group.Add(1)
+		go func() {
+			defer group.Done()
+			// An in-flight competing reconciliation may see a missing Job
+			// before the owner has submitted it. Recovery remains safe.
+			_ = srv.Kueue.reconcile(context.Background(), db, pending[0])
+		}()
+	}
+	group.Wait()
+	pending, err = db.pendingKueueJobs()
+	if err != nil { t.Fatal(err) }
+	if len(pending) == 1 {
+		if err := srv.Kueue.reconcile(context.Background(), db, pending[0]); err != nil { t.Fatal(err) }
+	}
+	fake.mu.Lock(); count := fake.created; fake.mu.Unlock()
+	if count != 1 { t.Fatalf("concurrent requests created %d remote Jobs", count) }
+}
