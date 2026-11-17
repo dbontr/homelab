@@ -606,12 +606,19 @@ mod tests {
         symlink(&credential, &linked).unwrap();
         fs::write(
             &executor,
-            format!("[Service]\nLoadCredential=workspace-token:{}\n", linked.display()),
+            format!(
+                "[Service]\nLoadCredential=workspace-token:{}\n",
+                linked.display()
+            ),
         )
         .unwrap();
         assert!(verify_candidate_credentials(&system, owner).is_err());
 
-        fs::write(&executor, b"[Service]\nLoadCredential=workspace-token:relative\n").unwrap();
+        fs::write(
+            &executor,
+            b"[Service]\nLoadCredential=workspace-token:relative\n",
+        )
+        .unwrap();
         assert!(verify_candidate_credentials(&system, owner).is_err());
         fs::write(&executor, b"[Service]\nLoadCredential=workspace-token:\n").unwrap();
         assert!(verify_candidate_credentials(&system, owner).is_err());
