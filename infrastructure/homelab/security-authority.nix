@@ -94,5 +94,13 @@ in
       "homelab-api.service"
       "homelab-securityd.service"
     ];
+    # Fixed router, DNS, SSH, and MCP readiness probes. No external network
+    # destination is needed to decide whether a local switch can be retained.
+    healthSockets = [
+      "10.77.10.1:22"
+      "10.77.20.1:53"
+      "10.77.30.1:53"
+      "127.0.0.1:8104"
+    ];
   };
 }
