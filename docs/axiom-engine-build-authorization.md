@@ -1,0 +1,34 @@
+# Axiom Engine build authorization
+
+## Scope
+
+The independent Rust executor permits Axiom Engine to submit bounded CPU batch work only under its exact project identity, after the owner approves and activates the corresponding NixOS release. The project keeps its existing dedicated Kubernetes worker identities, namespaces, ServiceAccounts, quotas and default-deny NetworkPolicies.
+
+Allowing a project in the executor does not provision a general editing workspace, install toolchains, enable network access, or grant new deployment permissions.
+
+## Build dependencies
+
+Axiom Engine requires:
+- Rust 1.91.1, Cargo, rustfmt and clippy;
+- wasm32-unknown-unknown Rust standard library;
+- pinned Lean 4.34.0 and Lake;
+- offline-vendored Rust crates for its Cargo workspace;
+- the repository at an immutable reviewed commit;
+- an approved OCI build image with all dependencies preinstalled.
+
+The existing Debian Bookworm image is not an Axiom Engine toolchain image. It is intentionally inadequate for Rust, Lean or WebAssembly build certification. Build and publish a separate image through the approved image-builder path with restricted egress. Verify its provenance, contents and digest before registering its exact OCI digest in the independent operator image policy. Do not relax the worker namespace NetworkPolicy for dependency installation.
+
+## Protected activation
+
+1. Review the policy change, verify its precise project scope and independent executor tests, and record the exact source commit.
+2. Validate the generated NixOS source and evaluate the Rust executor policy using disposable or nonproduction tooling.
+3. Stage the candidate through the independently authorized NixOS release interface. Do not activate a release that would disrupt running Compute or Projects jobs.
+4. Obtain separate owner approval for activation and retain the rollback generation.
+5. After successful activation, inspect the active project's policy and execute a minimal nonprivileged diagnostic CPU job in an Axiom Engine worker namespace.
+6. Register the independently reviewed build image by exact digest; submit bounded build/test work without mounting controller credentials or altering production volumes.
+
+## Evidence
+
+The accepted build must report exact source revision, image digest, rustc, cargo and Lean versions, compiler and test return codes, and source-verified Lean proof receipts. A queued job, an incomplete run or a stale status does not qualify the build.
+
+This policy never gives Axiom Engine permission to modify other research projects, rewrite the production project catalog, restart controllers, or change other workspace reservations.
