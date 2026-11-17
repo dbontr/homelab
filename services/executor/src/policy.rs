@@ -763,7 +763,9 @@ impl WorkspacePolicy {
                     || command.as_bytes().contains(&0)
                     || !valid_hex(request_id, 32)
                 {
-                    return Err(Error::Denied("invalid workspace command or request identity"));
+                    return Err(Error::Denied(
+                        "invalid workspace command or request identity",
+                    ));
                 }
                 (
                     "workspace_call",
