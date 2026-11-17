@@ -78,12 +78,92 @@ func New(cfg Config)(*Controller,error){
  cfg.Run==nil||cfg.Current==nil||len(cfg.HealthServices)==0||len(cfg.HealthServices)>32 {
   return nil,errors.New("invalid local release controller configuration")
  }
+ // Health probes are read-only. Critical service names remain forbidden
+ // to the privileged service-mutation policy, but must be checked on release.
+ healthUnit := regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9@_.-]{0,119}[.]service// Package release provides local, auditable NixOS generation staging and rollback.
+// It never accepts shell commands or unrestricted paths from an MCP request.
+package release
+
+import (
+ "context"
+ "crypto/rand"
+ "encoding/hex"
+ "encoding/json"
+ "errors"
+ "fmt"
+ "io"
+ "net/http"
+ "os"
+ "os/exec"
+ "path/filepath"
+ "regexp"
+ "strings"
+ "syscall"
+ "time"
+)
+
+var revisionPattern=regexp.MustCompile(`^[0-9a-f]{40}$`)
+var idPattern=regexp.MustCompile(`^[0-9a-f]{48}$`)
+
+type Run func(context.Context,string,...string)(string,error)
+
+type Config struct {
+ Host string
+ FlakeDir string
+ StateDir string
+ Nix string
+ NixEnv string
+ Git string
+ Systemctl string
+ HealthServices []string
+ TrustedSource bool
+ Run Run
+ Current func()(string,error)
+}
+
+type Manifest struct {
+ ID string `json:"id"`
+ Host string `json:"host"`
+ Revision string `json:"revision"`
+ System string `json:"system"`
+ Created time.Time `json:"created"`
+}
+
+type Journal struct {
+ Phase string `json:"phase"`
+ ID string `json:"id"`
+ Previous string `json:"previous"`
+ Target string `json:"target"`
+ Time time.Time `json:"time"`
+}
+
+type Controller struct{Config Config}
+
+func Exec(ctx context.Context,name string,args ...string)(string,error){
+ // Nix needs a writable XDG cache even when HOME is deliberately read-only.
+ // Give each command a private cache and remove it when the command finishes.
+ cacheDir,err:=os.MkdirTemp("","homelab-release-cache-")
+ if err!=nil{return "",fmt.Errorf("create private release cache: %w",err)}
+ defer os.RemoveAll(cacheDir)
+ cmd:=exec.CommandContext(ctx,name,args...)
+ cmd.Env=[]string{"PATH=/run/current-system/sw/bin:/usr/bin:/bin","LANG=C","HOME=/var/empty","XDG_CACHE_HOME="+cacheDir}
+ data,err:=cmd.CombinedOutput()
+ if len(data)>8192{data=data[:8192]}
+ if err!=nil{return "",fmt.Errorf("release command %s failed: %w (%s)",filepath.Base(name),err,strings.TrimSpace(string(data)))}
+ return string(data),nil
+}
+
+func New(cfg Config)(*Controller,error){
+ if !regexp.MustCompile(`^[a-z][a-z0-9-]*$`).MatchString(cfg.Host) ||
+ !filepath.IsAbs(cfg.FlakeDir)||!filepath.IsAbs(cfg.StateDir) || cfg.StateDir=="/" ||
+ !filepath.IsAbs(cfg.Nix)||!filepath.IsAbs(cfg.NixEnv)||!filepath.IsAbs(cfg.Git)||!filepath.IsAbs(cfg.Systemctl) ||
+ cfg.Run==nil||cfg.Current==nil||len(cfg.HealthServices)==0||len(cfg.HealthServices)>32 {
+  return nil,errors.New("invalid local release controller configuration")
+ }
+)
  for _,svc:=range cfg.HealthServices{
-  if !regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9@_.-]{0,127}$`).MatchString(svc){
+  if len(svc)>128||!healthUnit.MatchString(svc){
    return nil,errors.New("invalid health service")
-  }
-  for _,forbidden:=range []string{"network","firewall","cloudflared","pihole","k3s","tailscale","docker","jellyfin","nginx","systemd-networkd"}{
-   if strings.Contains(strings.ToLower(svc),forbidden){return nil,errors.New("network and media services require manual rollout")}
   }
  }
  return &Controller{Config:cfg},nil
