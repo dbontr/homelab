@@ -137,3 +137,47 @@ func TestCLIEmitsMachineReadableAuditWithoutMutation(t *testing.T) {
 		t.Fatal("self-restore accepted")
 	}
 }
+
+func TestReconciliationRejectsIncompleteRestoredInventory(t *testing.T) {
+	root := t.TempDir()
+	source, restored := filepath.Join(root, "source"), filepath.Join(root, "restored")
+	record := fixtureRecord(t, source, restored)
+	original := Manifest{Version: 1, Records: []Record{record}}
+	unexpected := filepath.Join(restored, "objects", "undocumented")
+	if err := os.WriteFile(unexpected, []byte("unclassified restored bytes"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	report := audit(source, restored, original, &original, "digest")
+	if report.UnmappedRestoredFiles != 1 || !containsCode(report, "unmapped_restored_file") {
+		t.Fatalf("unclassified restored file was accepted: %+v", report)
+	}
+	if err := os.Remove(unexpected); err != nil {
+		t.Fatal(err)
+	}
+	report = audit(source, restored, original, &original, "digest")
+	if len(report.Findings) != 0 {
+		t.Fatalf("complete independent restore rejected: %+v", report)
+	}
+	invalid := original
+	invalid.Records = []Record{record}
+	invalid.Records[0].SHA256 = "invalid"
+	report = audit(source, restored, original, &invalid, "digest")
+	if !containsCode(report, "invalid_restored_record") {
+		t.Fatalf("invalid restored metadata was accepted: %+v", report)
+	}
+}
+
+func TestReconciliationRequiresNonemptySourceInventory(t *testing.T) {
+	root := t.TempDir()
+	source, restored := filepath.Join(root, "source"), filepath.Join(root, "restored")
+	for _, directory := range []string{source, restored} {
+		if err := os.MkdirAll(directory, 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	empty := Manifest{Version: 1}
+	report := audit(source, restored, empty, &empty, "digest")
+	if !containsCode(report, "empty_source_manifest") {
+		t.Fatalf("empty manifests cannot establish recovery completeness: %+v", report)
+	}
+}
