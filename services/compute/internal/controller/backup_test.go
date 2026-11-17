@@ -151,13 +151,10 @@ func TestRestoreRejectsManifestMissingDatabaseReferencedArtifact(t *testing.T) {
 	if err := json.Unmarshal(raw, &manifest); err != nil {
 		t.Fatal(err)
 	}
-		// Keep the signed database but omit the artifact from the manifest.
+	// Keep the database but deliberately omit a referenced artifact.
+	original := manifest.Files
 	manifest.Files = []backupEntry{}
-	var original backupManifest
-	if err := json.Unmarshal(raw, &original); err != nil {
-		t.Fatal(err)
-	}
-	for _, entry := range original.Files {
+	for _, entry := range original {
 		if entry.Path == "state.db" {
 			manifest.Files = append(manifest.Files, entry)
 		}
