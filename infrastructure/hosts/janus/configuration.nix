@@ -1,6 +1,6 @@
 { config, lib, pkgs, hardwareNode, ... }:
 {
-  imports = [ ./hardware-configuration.nix ./homelab-worker.nix ../common/eda-build-vm.nix ./eda-node-settings.nix ];
+  imports = [ ./hardware-configuration.nix ./homelab-worker.nix ./compute-backup.nix ../common/eda-build-vm.nix ./eda-node-settings.nix ];
   boot.loader.systemd-boot.enable = true;
   boot.loader.efi.canTouchEfiVariables = true;
   networking.hostName = hardwareNode.id;
