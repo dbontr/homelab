@@ -160,3 +160,83 @@ func TestKueueConcurrentReconcilersCreateAtMostOneJob(t *testing.T) {
 	fake.mu.Lock(); count := fake.created; fake.mu.Unlock()
 	if count != 1 { t.Fatalf("concurrent requests created %d remote Jobs", count) }
 }
+
+type suspendedKueueAdmission struct {
+	base http.RoundTripper
+	blocked bool
+}
+
+func (s *suspendedKueueAdmission) RoundTrip(r *http.Request) (*http.Response, error) {
+	if s.blocked && strings.HasSuffix(r.URL.Path, "/workloads") {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header: http.Header{"Content-Type": []string{"application/json"}},
+			Body: io.NopCloser(strings.NewReader(`{"items":[]}`)),
+			Request: r,
+		}, nil
+	}
+	return s.base.RoundTrip(r)
+}
+
+func TestKueueQuotaBlockedAndWorkerRecovery(t *testing.T) {
+	db, srv, _, fake := batchFixture(t)
+	admission := &suspendedKueueAdmission{base: srv.Kueue.client.Transport, blocked: true}
+	srv.Kueue.client = &http.Client{Transport: admission}
+	queued, err := db.QueueKueueJob("research", "quota-blocked-001", "echo accepted", testBatchImage, 0.25, 128)
+	if err != nil { t.Fatal(err) }
+	id := asString(queued["id"])
+	for i := 0; i < 3; i++ {
+		pending, err := db.pendingKueueJobs()
+		if err != nil || len(pending) != 1 { t.Fatalf("pending: %v %v", pending, err) }
+		if err := srv.Kueue.reconcile(context.Background(), db, pending[0]); err != nil { t.Fatal(err) }
+		job, err := db.KueueJob("research", id)
+		if err != nil || job["status"] != "queued" { t.Fatalf("quota must block admission: %v %v", job, err) }
+	}
+	fake.mu.Lock(); count := fake.created; fake.mu.Unlock()
+	if count != 1 { t.Fatalf("queue retries created %d Jobs", count) }
+	// Simulate restored quota and an eligible worker, without using any
+	// production Kubernetes controller or node.
+	admission.blocked = false
+	pending, err := db.pendingKueueJobs()
+	if err != nil { t.Fatal(err) }
+	if err := srv.Kueue.reconcile(context.Background(), db, pending[0]); err != nil { t.Fatal(err) }
+	job, err := db.KueueJob("research", id)
+	if err != nil || job["status"] != "admitted" { t.Fatalf("admission did not recover: %v %v", job, err) }
+	fake.mu.Lock(); fake.active = true; fake.mu.Unlock()
+	pending, _ = db.pendingKueueJobs()
+	if err := srv.Kueue.reconcile(context.Background(), db, pending[0]); err != nil { t.Fatal(err) }
+	job, _ = db.KueueJob("research", id)
+	if job["status"] != "running" { t.Fatalf("worker did not start: %v", job) }
+	fake.mu.Lock(); fake.complete = true; fake.mu.Unlock()
+	pending, _ = db.pendingKueueJobs()
+	if err := srv.Kueue.reconcile(context.Background(), db, pending[0]); err != nil { t.Fatal(err) }
+	job, _ = db.KueueJob("research", id)
+	if job["status"] != "succeeded" { t.Fatalf("worker recovery lost terminal result: %v", job) }
+	fake.mu.Lock(); count = fake.created; fake.mu.Unlock()
+	if count != 1 { t.Fatalf("worker recovery resubmitted Job %d times", count) }
+}
+
+func TestKueueRejectsCancellationWithoutRemoteIdentityMatch(t *testing.T) {
+	db, srv, _, fake := batchFixture(t)
+	queued, err := db.QueueKueueJob("research", "wrong-lease-001", "echo protected", testBatchImage, 0.1, 64)
+	if err != nil { t.Fatal(err) }
+	pending, err := db.pendingKueueJobs()
+	if err != nil { t.Fatal(err) }
+	if err := srv.Kueue.reconcile(context.Background(), db, pending[0]); err != nil { t.Fatal(err) }
+	if _, err := db.CancelKueueJob("research", asString(queued["id"])); err != nil { t.Fatal(err) }
+	fake.mu.Lock()
+	decodeAnyObject(fake.job["metadata"])["uid"] = "different-execution-uid"
+	fake.mu.Unlock()
+	pending, err = db.pendingKueueJobs()
+	if err != nil { t.Fatal(err) }
+	if err := srv.Kueue.reconcile(context.Background(), db, pending[0]); err == nil ||
+		!strings.Contains(err.Error(), "UID changed") {
+		t.Fatalf("unowned Job deletion was not rejected: %v", err)
+	}
+	record, err := db.KueueJob("research", asString(queued["id"]))
+	if err != nil || record["status"] != "cancel_requested" {
+		t.Fatalf("bad lease caused premature cancellation: %v %v", record, err)
+	}
+	fake.mu.Lock(); stillPresent := fake.job != nil; fake.mu.Unlock()
+	if !stillPresent { t.Fatal("deleted a Job with a foreign UID") }
+}
