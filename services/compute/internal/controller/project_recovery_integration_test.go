@@ -200,9 +200,11 @@ func TestEncryptedIntegratedResearchRecovery(t *testing.T) {
 			t.Fatalf("file revision %d lost: %v %v", revision+1, data, err)
 		}
 	}
-	for _, saved := range []map[string]any{original, copied, experiment} {
+	for _, entry := range []struct { saved map[string]any; project string }{
+		{original, "acceptance"}, {copied, "homelab-platform"}, {experiment, "homelab-platform"},
+	} {
+		saved, project := entry.saved, entry.project
 		id := asString(saved["id"])
-		project := asString(saved["project"])
 		restoredMeta, err := recovered.ArtifactInfo(project, id)
 		if err != nil || asString(restoredMeta["sha256"]) != asString(saved["sha256"]) {
 			t.Fatalf("restored artifact metadata lost: %s %v %v", id, restoredMeta, err)
