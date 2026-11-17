@@ -155,3 +155,6 @@
 - [gloo-timers Documentation](https://docs.rs/gloo-timers/latest/gloo_timers/) — Rust/WASM Gloo maintainers. Used for: bounded in-app refresh of the scheduled motivation inbox while the console view is active.
 - [Bubblewrap project](https://github.com/containers/bubblewrap) — Bubblewrap maintainers. Used for: Linux mount namespace, network isolation, parent-death process control and read-only sandbox bindings.
 - [Git rev-parse](https://git-scm.com/docs/git-rev-parse) — Git project. Used for: verifying the workspace's expected source revision before permitted build/test execution.
+
+- [Lean 4 official repository](https://github.com/leanprover/lean4) — Lean project. Used for: identifying and independently validating the pinned Lean compiler and Lake build tool in formal-proof development workspaces.
+- [Rust wasm32-unknown-unknown target](https://doc.rust-lang.org/rustc/platform-support/wasm32-unknown-unknown.html) — Rust project. Used for: verifying the exact WebAssembly target available in the declared project compiler environment.
