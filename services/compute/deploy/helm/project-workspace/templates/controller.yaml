@@ -109,7 +109,7 @@ spec:
       initContainers:
         {{- if .Values.controller.backupInterval }}
         - name: restic-password
-          image: busybox:1.36
+          image: {{ .Values.controller.image | quote }}
           command:
             - sh
             - -ec
@@ -136,7 +136,7 @@ spec:
               mountPath: /output
         {{- if .Values.controller.offsite.sshSecretName }}
         - name: restic-ssh
-          image: busybox:1.36
+          image: {{ .Values.controller.image | quote }}
           command:
             - sh
             - -ec
