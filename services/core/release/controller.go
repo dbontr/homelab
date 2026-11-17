@@ -11,6 +11,7 @@ import (
  "fmt"
  "io"
  "net/http"
+ "net/url"
  "os"
  "os/exec"
  "path/filepath"
@@ -249,10 +250,13 @@ func(c *Controller) Stage(ctx context.Context,revision string)(Manifest,error){
   }else if err!=nil&&!errors.Is(err,os.ErrNotExist){return err}
   head,err:=c.Config.Run(ctx,c.Config.Git,"-C",c.Config.FlakeDir,"rev-parse","HEAD")
   if err!=nil||strings.TrimSpace(head)!=revision{return errors.New("source revision does not match clean checkout")}
-  dirty,err:=c.Config.Run(ctx,c.Config.Git,"-C",c.Config.FlakeDir,"status","--porcelain")
+  dirty,err:=c.Config.Run(ctx,c.Config.Git,"-C",c.Config.FlakeDir,"status","--porcelain","--untracked-files=all")
   if err!=nil||strings.TrimSpace(dirty)!=""{return errors.New("release requires a clean Git worktree")}
-  system,err:=c.Config.Run(ctx,c.Config.Nix,"build","--offline","--no-link","--print-out-paths",
-   c.Config.FlakeDir+"#nixosConfigurations."+c.Config.Host+".config.system.build.toplevel")
+  // Pin the exact Git object in the Nix flake reference. A moving checkout
+  // cannot change which source revision is built after the cleanliness check.
+  source:=(&url.URL{Scheme:"git+file",Path:c.Config.FlakeDir,RawQuery:"rev="+revision,
+   Fragment:"nixosConfigurations."+c.Config.Host+".config.system.build.toplevel"}).String()
+  system,err:=c.Config.Run(ctx,c.Config.Nix,"build","--offline","--no-link","--print-out-paths",source)
   if err!=nil{return err}
   system=strings.TrimSpace(system)
   if !checkStorePath(system){return errors.New("Nix build did not return one valid store path")}
