@@ -245,3 +245,24 @@ func TestPrivateReleaseReadinessSocketChecks(t *testing.T){
   t.Fatal("closed protected service socket passed readiness")
  }
 }
+
+func TestReleaseStageIdentityCannotBeReusedAfterLaterTransaction(t *testing.T){
+ runner:=&fakeReleaseRunner{}
+ ctrl:=releaseTestController(t,runner)
+ first,err:=ctrl.Stage(context.Background(),testRevision)
+ if err!=nil{t.Fatal(err)}
+ if err:=ctrl.Activate(context.Background(),first.ID);err!=nil{t.Fatal(err)}
+ if err:=ctrl.Revert(context.Background(),first.ID);err!=nil{t.Fatal(err)}
+ second,err:=ctrl.Stage(context.Background(),testRevision)
+ if err!=nil{t.Fatal(err)}
+ if err:=ctrl.Activate(context.Background(),second.ID);err!=nil{t.Fatal(err)}
+ if err:=ctrl.Revert(context.Background(),second.ID);err!=nil{t.Fatal(err)}
+ calls:=len(runner.calls)
+ if err:=ctrl.Activate(context.Background(),first.ID);err==nil{t.Fatal("an already attempted release identity was reused")}
+ if len(runner.calls)!=calls{t.Fatal("replay reached privileged generation mutation")}
+ for _,id:=range []string{first.ID,second.ID}{
+  info,err:=os.Stat(filepath.Join(ctrl.Config.StateDir,"attempt-"+id))
+  if err!=nil{t.Fatal(err)}
+  if info.Mode().Perm()!=0600{t.Fatal("unsafe release attempt marker permissions")}
+ }
+}

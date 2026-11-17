@@ -149,6 +149,33 @@ fn pinned_flake(source: &Path, revision: &str, host: &str) -> Result<String, Err
     ))
 }
 
+// Stage identities remain single-use even when a later transaction replaces
+// the active release journal. A failed marker sync denies activation.
+fn claim_stage_attempt(state_dir: &Path, id: &str) -> Result<(), Error> {
+    if !valid_hex(id, 48) {
+        return Err(Error::Denied("invalid release identifier"));
+    }
+    let path = state_dir.join(format!("attempt-{id}"));
+    let file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
+        .open(path)
+        .map_err(|error| {
+            if error.kind() == std::io::ErrorKind::AlreadyExists {
+                Error::Denied("staged release has already been attempted")
+            } else {
+                Error::Storage("release attempt marker unavailable")
+            }
+        })?;
+    file.sync_all()
+        .map_err(|_| Error::Storage("release attempt marker sync failed"))?;
+    File::open(state_dir)
+        .and_then(|directory| directory.sync_all())
+        .map_err(|_| Error::Storage("release attempt directory sync failed"))
+}
+
 fn require_root_owned_path(path: &Path) -> Result<(), Error> {
     if !path.is_absolute() {
         return Err(Error::Configuration(
@@ -525,6 +552,7 @@ impl ReleaseController {
             target: manifest.system.clone(),
             time: Utc::now(),
         };
+        claim_stage_attempt(&self.policy.state_dir, id)?;
         self.atomic("journal.json", &txn)?;
         let attempt = async {
             self.set_generation(&manifest.system).await?;
@@ -611,6 +639,27 @@ impl ReleaseController {
 mod tests {
     use super::*;
     use std::os::unix::fs::{symlink, PermissionsExt};
+
+    #[test]
+    fn staged_release_attempt_identity_survives_later_transactions() {
+        let state = std::env::temp_dir().join(format!(
+            "homelab-release-attempt-{}-{}",
+            std::process::id(),
+            random_hex::<8>().unwrap()
+        ));
+        fs::create_dir(&state).unwrap();
+        fs::set_permissions(&state, fs::Permissions::from_mode(0o700)).unwrap();
+        let first = "a".repeat(48);
+        let second = "b".repeat(48);
+        assert!(claim_stage_attempt(&state, &first).is_ok());
+        assert!(claim_stage_attempt(&state, &second).is_ok());
+        assert!(claim_stage_attempt(&state, &first).is_err());
+        assert!(claim_stage_attempt(&state, &second).is_err());
+        assert!(claim_stage_attempt(&state, "not-an-identifier").is_err());
+        let marker = fs::metadata(state.join(format!("attempt-{first}"))).unwrap();
+        assert_eq!(marker.permissions().mode() & 0o777, 0o600);
+        fs::remove_dir_all(&state).unwrap();
+    }
 
     #[test]
     fn candidate_credentials_are_verified_before_release_mutation() {
