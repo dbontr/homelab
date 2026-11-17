@@ -62,27 +62,89 @@ fn executor_admits_only_matching_host_resources_arguments_and_enabled_operation(
     let mut policy = policy();
     let approved = json!({"host":"saturn", "service":"research-runner.service"});
     assert!(matches!(
-        policy.admit("infrastructure__service_restart", "saturn", approved.as_object().unwrap()),
+        policy.admit(
+            "infrastructure__service_restart",
+            "saturn",
+            approved.as_object().unwrap()
+        ),
         Ok(Action::Actuator(_))
     ));
-    assert!(policy.admit("infrastructure__service_restart", "jupiter", approved.as_object().unwrap()).is_err());
-    assert!(policy.admit("infrastructure__service_restart", "saturn", json!({"host":"jupiter", "service":"research-runner.service"}).as_object().unwrap()).is_err());
-    assert!(policy.admit("infrastructure__service_restart", "saturn", json!({"host":"saturn", "service":"homelab-securityd.service"}).as_object().unwrap()).is_err());
-    assert!(policy.admit("infrastructure__service_restart", "saturn", json!({"host":"saturn", "service":"research-runner.service", "unexpected":true}).as_object().unwrap()).is_err());
-    assert!(policy.admit("infrastructure__unregistered", "saturn", approved.as_object().unwrap()).is_err());
+    assert!(policy
+        .admit(
+            "infrastructure__service_restart",
+            "jupiter",
+            approved.as_object().unwrap()
+        )
+        .is_err());
+    assert!(policy
+        .admit(
+            "infrastructure__service_restart",
+            "saturn",
+            json!({"host":"jupiter", "service":"research-runner.service"})
+                .as_object()
+                .unwrap()
+        )
+        .is_err());
+    assert!(policy
+        .admit(
+            "infrastructure__service_restart",
+            "saturn",
+            json!({"host":"saturn", "service":"homelab-securityd.service"})
+                .as_object()
+                .unwrap()
+        )
+        .is_err());
+    assert!(policy
+        .admit(
+            "infrastructure__service_restart",
+            "saturn",
+            json!({"host":"saturn", "service":"research-runner.service", "unexpected":true})
+                .as_object()
+                .unwrap()
+        )
+        .is_err());
+    assert!(policy
+        .admit(
+            "infrastructure__unregistered",
+            "saturn",
+            approved.as_object().unwrap()
+        )
+        .is_err());
     let kube = json!({"host":"saturn", "namespace":"pwm-system", "deployment":"research-worker"});
     assert!(matches!(
-        policy.admit("cluster__deployment_restart", "saturn", kube.as_object().unwrap()),
+        policy.admit(
+            "cluster__deployment_restart",
+            "saturn",
+            kube.as_object().unwrap()
+        ),
         Ok(Action::Actuator(_))
     ));
-    assert!(policy.admit("cluster__deployment_restart", "saturn", json!({"host":"saturn", "namespace":"kube-system", "deployment":"research-worker"}).as_object().unwrap()).is_err());
+    assert!(policy
+        .admit(
+            "cluster__deployment_restart",
+            "saturn",
+            json!({"host":"saturn", "namespace":"kube-system", "deployment":"research-worker"})
+                .as_object()
+                .unwrap()
+        )
+        .is_err());
     assert!(policy.admit("cluster__deployment_scale", "saturn", json!({"host":"saturn", "namespace":"pwm-system", "deployment":"research-worker", "replicas":4}).as_object().unwrap()).is_err());
     assert!(policy.admit("cluster__deployment_scale", "saturn", json!({"host":"saturn", "namespace":"pwm-system", "deployment":"research-worker", "replicas":2, "resource_version":"bad/version"}).as_object().unwrap()).is_err());
     let release = json!({"host":"saturn", "release_id":"a".repeat(48)});
-    assert!(policy.admit("infrastructure__release_activate", "saturn", release.as_object().unwrap()).is_err());
+    assert!(policy
+        .admit(
+            "infrastructure__release_activate",
+            "saturn",
+            release.as_object().unwrap()
+        )
+        .is_err());
     policy.release_enabled = true;
     assert!(matches!(
-        policy.admit("infrastructure__release_activate", "saturn", release.as_object().unwrap()),
+        policy.admit(
+            "infrastructure__release_activate",
+            "saturn",
+            release.as_object().unwrap()
+        ),
         Ok(Action::Release { .. })
     ));
     // Admission is an offline policy decision; it never invokes an actuator.
@@ -99,25 +161,57 @@ fn restart_replay_and_operator_reconciliation_preserve_exact_durable_identity() 
     {
         let journal = AuditJournal::open(&path).unwrap();
         assert!(AuditJournal::open(&path).is_err());
-        journal.record(&original, operation, "saturn", &digest, "started").unwrap();
+        journal
+            .record(&original, operation, "saturn", &digest, "started")
+            .unwrap();
         assert_eq!(journal.unresolved().unwrap().len(), 1);
-        assert!(journal.record(&next, operation, "saturn", &digest, "started").is_err());
-        assert!(journal.request_outcome(&original, operation, "venus", &digest).is_err());
-        assert!(journal.request_outcome(&original, operation, "saturn", &"d".repeat(64)).is_err());
+        assert!(journal
+            .record(&next, operation, "saturn", &digest, "started")
+            .is_err());
+        assert!(journal
+            .request_outcome(&original, operation, "venus", &digest)
+            .is_err());
+        assert!(journal
+            .request_outcome(&original, operation, "saturn", &"d".repeat(64))
+            .is_err());
     }
     {
         let journal = AuditJournal::open(&path).unwrap();
-        assert_eq!(journal.request_outcome(&original, operation, "saturn", &digest).unwrap().as_deref(), Some("started"));
-        assert!(journal.record(&next, operation, "saturn", &digest, "started").is_err());
+        assert_eq!(
+            journal
+                .request_outcome(&original, operation, "saturn", &digest)
+                .unwrap()
+                .as_deref(),
+            Some("started")
+        );
+        assert!(journal
+            .record(&next, operation, "saturn", &digest, "started")
+            .is_err());
         journal.reconcile(&original, &"e".repeat(64)).unwrap();
         assert!(journal.reconcile(&original, &"f".repeat(64)).is_err());
-        journal.record(&next, operation, "saturn", &digest, "started").unwrap();
-        journal.record(&next, operation, "saturn", &digest, "succeeded").unwrap();
+        journal
+            .record(&next, operation, "saturn", &digest, "started")
+            .unwrap();
+        journal
+            .record(&next, operation, "saturn", &digest, "succeeded")
+            .unwrap();
         assert!(journal.unresolved().unwrap().is_empty());
     }
     let reopened = AuditJournal::open(&path).unwrap();
-    assert_eq!(reopened.request_outcome(&original, operation, "saturn", &digest).unwrap().as_deref(), Some("reconciled"));
-    assert_eq!(reopened.request_outcome(&next, operation, "saturn", &digest).unwrap().as_deref(), Some("succeeded"));
+    assert_eq!(
+        reopened
+            .request_outcome(&original, operation, "saturn", &digest)
+            .unwrap()
+            .as_deref(),
+        Some("reconciled")
+    );
+    assert_eq!(
+        reopened
+            .request_outcome(&next, operation, "saturn", &digest)
+            .unwrap()
+            .as_deref(),
+        Some("succeeded")
+    );
 }
 
 #[test]
@@ -130,7 +224,16 @@ fn concurrent_duplicate_attempts_admit_exactly_one_durable_start() {
             let journal = Arc::clone(&journal);
             let admitted = Arc::clone(&admitted);
             tasks.spawn(move || {
-                if journal.record(&"a".repeat(32), "infrastructure__service_restart", "saturn", &"b".repeat(64), "started").is_ok() {
+                if journal
+                    .record(
+                        &"a".repeat(32),
+                        "infrastructure__service_restart",
+                        "saturn",
+                        &"b".repeat(64),
+                        "started",
+                    )
+                    .is_ok()
+                {
                     admitted.fetch_add(1, Ordering::SeqCst);
                 }
             });
@@ -139,7 +242,14 @@ fn concurrent_duplicate_attempts_admit_exactly_one_durable_start() {
     assert_eq!(admitted.load(Ordering::SeqCst), 1);
     assert_eq!(journal.unresolved().unwrap().len(), 1);
     drop(journal);
-    assert_eq!(AuditJournal::open(&scratch.path()).unwrap().unresolved().unwrap().len(), 1);
+    assert_eq!(
+        AuditJournal::open(&scratch.path())
+            .unwrap()
+            .unresolved()
+            .unwrap()
+            .len(),
+        1
+    );
 }
 
 #[test]
@@ -149,13 +259,29 @@ fn corrupted_journal_and_replaced_inode_deny_all_execution_admission() {
     let journal = AuditJournal::open(&path).unwrap();
     let id = "a".repeat(32);
     let digest = "b".repeat(64);
-    journal.record(&id, "infrastructure__service_restart", "saturn", &digest, "started").unwrap();
+    journal
+        .record(
+            &id,
+            "infrastructure__service_restart",
+            "saturn",
+            &digest,
+            "started",
+        )
+        .unwrap();
     let replacement = scratch.0.join("replacement.jsonl");
     fs::write(&replacement, b"").unwrap();
     fs::set_permissions(&replacement, fs::Permissions::from_mode(0o600)).unwrap();
     fs::rename(&replacement, &path).unwrap();
     assert!(journal.unresolved().is_err());
-    assert!(journal.record(&"c".repeat(32), "infrastructure__service_restart", "saturn", &digest, "started").is_err());
+    assert!(journal
+        .record(
+            &"c".repeat(32),
+            "infrastructure__service_restart",
+            "saturn",
+            &digest,
+            "started"
+        )
+        .is_err());
     drop(journal);
     fs::write(&path, b"{\"partial\":true}").unwrap();
     assert!(AuditJournal::open(&path).is_err());
@@ -166,7 +292,10 @@ fn executor_uses_unambiguous_canonical_argument_identity() {
     use homelab_executor_authority::canonical::canonical_arguments;
     let ordered = br#"{"host":"saturn","release_id":"0123456789abcdef"}"#;
     let reordered = br#"{"release_id":"0123456789abcdef","host":"saturn"}"#;
-    assert_eq!(canonical_arguments(ordered).unwrap(), canonical_arguments(reordered).unwrap());
+    assert_eq!(
+        canonical_arguments(ordered).unwrap(),
+        canonical_arguments(reordered).unwrap()
+    );
     for ambiguous in [
         br#"{"host":"saturn","host":"jupiter"}"#.as_slice(),
         br#"[]"#.as_slice(),
