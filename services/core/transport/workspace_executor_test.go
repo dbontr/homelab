@@ -9,6 +9,7 @@ import (
     "strings"
     "testing"
 
+    "github.com/dbontr/homelab-new/system/approval"
     "github.com/dbontr/homelab-new/system/privileged"
     "github.com/dbontr/homelab-new/system/security"
 )
@@ -71,6 +72,10 @@ func TestWorkspaceCommandRequiresExecutorAndGatewayOwnedIdentity(t *testing.T) {
             if entry["name"] == target { return true }
         }
         return false
+    }
+    if approval.ScopeFor("workspace__workspace_call") != "compute.execute" ||
+       approval.ScopeFor("workspace__workspace_operation_by_request") != "" {
+        t.Fatal("mutable controller actions were exposed or request lookup was denied")
     }
     for _, operation := range []string{
         "infrastructure__workspace_create", "infrastructure__workspace_command",
