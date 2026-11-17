@@ -3,6 +3,7 @@ package release
 import (
  "context"
  "errors"
+ "net"
  "os"
  "os/exec"
  "path/filepath"
@@ -219,5 +220,28 @@ func TestCriticalReleaseHealthProbesAreReadOnlyAndValidated(t *testing.T){
  for _,unit:=range []string{"","sshd","sshd.socket","../sshd.service","ssh d.service","-sshd.service",strings.Repeat("s",129)+".service"}{
   cfg.HealthServices=[]string{unit}
   if _,err:=New(cfg);err==nil{t.Fatalf("invalid unit accepted: %q",unit)}
+ }
+}
+
+func TestPrivateReleaseReadinessSocketChecks(t *testing.T){
+ runner:=&fakeReleaseRunner{}
+ ctrl:=releaseTestController(t,runner)
+ for _,bad:=range []string{"0.0.0.0:22","8.8.8.8:53","example.com:443","10.77.30.1:0"}{
+  copy:=ctrl.Config
+  copy.HealthSockets=[]string{bad}
+  if _,err:=New(copy);err==nil{t.Fatalf("unsafe health socket accepted: %s",bad)}
+ }
+ copy:=ctrl.Config
+ copy.HealthSockets=[]string{"127.0.0.1:8104","127.0.0.1:8104"}
+ if _,err:=New(copy);err==nil{t.Fatal("duplicate health sockets accepted")}
+ listener,err:=net.Listen("tcp","127.0.0.1:0")
+ if err!=nil{t.Fatal(err)}
+ copy.HealthSockets=[]string{listener.Addr().String()}
+ protected,err:=New(copy)
+ if err!=nil{t.Fatal(err)}
+ if err:=protected.health(context.Background());err!=nil{t.Fatal("ready private socket denied:",err)}
+ if err:=listener.Close();err!=nil{t.Fatal(err)}
+ if err:=protected.health(context.Background());err==nil{
+  t.Fatal("closed protected service socket passed readiness")
  }
 }
