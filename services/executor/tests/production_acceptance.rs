@@ -52,6 +52,7 @@ fn policy() -> Policy {
         nix_env: inert.clone(),
         git: inert.clone(),
         health: vec!["research-runner.service".into()],
+        health_sockets: vec![],
         kubeconfig: Some(inert.clone()),
         kubectl: Some(inert),
     }
