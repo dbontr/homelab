@@ -1,0 +1,11 @@
+# Overlay for the existing pwm-controller Helm release. Preserve its image digest,
+# project identity, access rules, Kueue settings, credentials and state PVC.
+# Apply only after Janus SFTP, pinned host-key and namespaced Secrets are verified.
+controller:
+  backupInterval: "24h"
+  backupRetention: true
+  offsite:
+    repository: "sftp:compute-backup@10.77.30.232:/repository"
+    passwordSecretName: pwm-compute-restic-password
+    backendSecretName: ""
+    sshSecretName: pwm-compute-restic-ssh
