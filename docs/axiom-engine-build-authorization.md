@@ -2,7 +2,7 @@
 
 ## Scope
 
-The independent Rust executor permits Axiom Engine to submit bounded CPU batch work only under its exact project identity, after the owner approves and activates the corresponding NixOS release. The project keeps its existing dedicated Kubernetes worker identities, namespaces, ServiceAccounts, quotas and default-deny NetworkPolicies.
+The independent Rust executor permits Axiom Engine to submit bounded CPU batch work only under its exact project identity, after the owner approves and activates the corresponding NixOS release. Privileged batch jobs use the restricted Kueue queue in the `pwm-batch` namespace, not Axiom Engine's dedicated Workspace workers. Existing project worker identities, namespaces, quotas and NetworkPolicies remain unchanged.
 
 Allowing a project in the executor does not provision a general editing workspace, install toolchains, enable network access, or grant new deployment permissions.
 
@@ -16,7 +16,7 @@ Axiom Engine requires:
 - the repository at an immutable reviewed commit;
 - an approved OCI build image with all dependencies preinstalled.
 
-The existing Debian Bookworm image is not an Axiom Engine toolchain image. It is intentionally inadequate for Rust, Lean or WebAssembly build certification. Build and publish a separate image through the approved image-builder path with restricted egress. Verify its provenance, contents and digest before registering its exact OCI digest in the independent operator image policy. Do not relax the worker namespace NetworkPolicy for dependency installation.
+The existing Debian Bookworm image is not an Axiom Engine toolchain image. It is intentionally inadequate for Rust, Lean or WebAssembly build certification. Build and publish a separate image through the approved image-builder path with restricted egress. Verify its provenance, contents and digest before registering its exact OCI digest in the independent operator image policy. Do not relax any Workspace or batch-namespace NetworkPolicy for dependency installation.
 
 ## Protected activation
 
@@ -24,7 +24,7 @@ The existing Debian Bookworm image is not an Axiom Engine toolchain image. It is
 2. Validate the generated NixOS source and evaluate the Rust executor policy using disposable or nonproduction tooling.
 3. Stage the candidate through the independently authorized NixOS release interface. Do not activate a release that would disrupt running Compute or Projects jobs.
 4. Obtain separate owner approval for activation and retain the rollback generation.
-5. After successful activation, inspect the active project's policy and execute a minimal nonprivileged diagnostic CPU job in an Axiom Engine worker namespace.
+5. After successful activation, inspect the active project's policy and submit a minimal, owner-authorized and resource-bounded diagnostic CPU job to the restricted Kueue queue after confirming current research-job admission capacity.
 6. Register the independently reviewed build image by exact digest; submit bounded build/test work without mounting controller credentials or altering production volumes.
 
 ## Evidence
