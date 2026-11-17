@@ -58,6 +58,7 @@ func readToken(path string) (string, error) {
 // unprotected for an entire backup interval.
 func runScheduledOffsiteBackups(ctx context.Context, interval time.Duration,
 	backup func(context.Context) (string, error), report func(string, error)) {
+	consecutiveAttempts := 0
 	for ctx.Err() == nil {
 		backupCtx, cancel := context.WithTimeout(ctx, 12*time.Hour)
 		snapshot, err := backup(backupCtx)
@@ -67,8 +68,17 @@ func runScheduledOffsiteBackups(ctx context.Context, interval time.Duration,
 		}
 		report(snapshot, err)
 		delay := interval
-		if err != nil && delay > 5*time.Minute {
-			delay = 5 * time.Minute
+		if err != nil {
+			consecutiveAttempts++
+			// Two bounded retries precede the next normal interval.
+			if consecutiveAttempts < 3 && delay > 5*time.Minute {
+				delay = 5 * time.Minute
+			}
+			if consecutiveAttempts >= 3 {
+				consecutiveAttempts = 0
+			}
+		} else {
+			consecutiveAttempts = 0
 		}
 		timer := time.NewTimer(delay)
 		select {
@@ -229,13 +239,32 @@ func command(args []string) error {
 			if err := config.Validate(); err != nil {
 				return fmt.Errorf("offsite backup configuration: %w", err)
 			}
-			offsite.Add(1)
+			monitor, err := newBackupHealthMonitor(
+				filepath.Join(filepath.Dir(*dbFile), ".compute-backup-health.json"),
+				interval, os.Getenv("PWM_RESTIC_ALERT_URL"),
+				os.Getenv("PWM_RESTIC_ALERT_TOKEN_FILE"), nil)
+			if err != nil {
+				return fmt.Errorf("offsite backup health configuration: %w", err)
+			}
+			offsite.Add(2)
+			go func() {
+				defer offsite.Done()
+				monitor.watch(ctx)
+			}()
 			go func() {
 				defer offsite.Done()
 				runScheduledOffsiteBackups(ctx, interval, func(backupCtx context.Context) (string, error) {
 					snapshot, err := db.BackupOffsite(backupCtx, config)
 					if err != nil {
 						return "", err
+					}
+					if monitor.lastFullCheckDue(time.Now()) {
+						if err := controller.FullCheckOffsite(backupCtx, config); err != nil {
+							return snapshot, fmt.Errorf("encrypted repository verification failed: %w", err)
+						}
+						if err := monitor.fullCheckSucceeded(); err != nil {
+							return snapshot, fmt.Errorf("backup health persistence failed: %w", err)
+						}
 					}
 					if os.Getenv("PWM_RESTIC_AUTO_PRUNE") == "1" {
 						if err := controller.PruneOffsite(backupCtx, config); err != nil {
@@ -244,6 +273,9 @@ func command(args []string) error {
 					}
 					return snapshot, nil
 				}, func(snapshot string, err error) {
+					if healthErr := monitor.recordAttempt(snapshot, err); healthErr != nil {
+						log.Printf("scheduled backup health reporting failed: %v", healthErr)
+					}
 					if err != nil {
 						log.Printf("scheduled offsite backup failed: %v", err)
 					} else {

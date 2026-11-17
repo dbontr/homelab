@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -119,5 +120,156 @@ func TestBackupRejectsPendingUploads(t *testing.T) {
 	}
 	if err := db.BackupTo(filepath.Join(root, "snapshot")); err == nil || !strings.Contains(err.Error(), "pending") {
 		t.Fatalf("pending upload should block snapshot: %v", err)
+	}
+}
+
+func TestRestoreRejectsManifestMissingDatabaseReferencedArtifact(t *testing.T) {
+	root := t.TempDir()
+	db, err := OpenDatabase(filepath.Join(root, "source", "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.CreateProject("research", "Research"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ArtifactSave("research", "result.txt", []byte("durable result")); err != nil {
+		t.Fatal(err)
+	}
+	backup := filepath.Join(root, "backup")
+	if err := db.BackupTo(backup); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	manifestFile := filepath.Join(backup, "manifest.json")
+	raw, err := os.ReadFile(manifestFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var manifest backupManifest
+	if err := json.Unmarshal(raw, &manifest); err != nil {
+		t.Fatal(err)
+	}
+	// Keep the database but deliberately omit a referenced artifact.
+	original := manifest.Files
+	manifest.Files = []backupEntry{}
+	for _, entry := range original {
+		if entry.Path == "state.db" {
+			manifest.Files = append(manifest.Files, entry)
+		}
+	}
+	encoded, err := json.Marshal(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(manifestFile, encoded, 0600); err != nil {
+		t.Fatal(err)
+	}
+	destination := filepath.Join(root, "recovered", "state.db")
+	if err := RestoreBackup(backup, destination); err == nil || !strings.Contains(err.Error(), "missing from the backup manifest") {
+		t.Fatalf("incomplete manifest should fail before promotion: %v", err)
+	}
+	if _, err := os.Stat(destination); !os.IsNotExist(err) {
+		t.Fatalf("failed restore created a database: %v", err)
+	}
+}
+
+func TestRestoreRejectsInvalidForeignKeyRelations(t *testing.T) {
+	root := t.TempDir()
+	db, err := OpenDatabase(filepath.Join(root, "source", "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.exec("PRAGMA foreign_keys=OFF"); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.exec("INSERT INTO notes(project,name,body,version,updated) VALUES(?,?,?,?,?)",
+		"missing-project", "orphan", "invalid relation", 1, stamp()); err != nil {
+		t.Fatal(err)
+	}
+	backup := filepath.Join(root, "backup")
+	if err := db.BackupTo(backup); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	destination := filepath.Join(root, "restore", "state.db")
+	if err := RestoreBackup(backup, destination); err == nil || !strings.Contains(err.Error(), "foreign-key") {
+		t.Fatalf("foreign-key corruption must be rejected: %v", err)
+	}
+	if _, err := os.Stat(destination); !os.IsNotExist(err) {
+		t.Fatalf("invalid restore created a database: %v", err)
+	}
+}
+
+func TestRestorePreservesKueueJobResult(t *testing.T) {
+	root := t.TempDir()
+	db, err := OpenDatabase(filepath.Join(root, "source", "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.CreateProject("research", "Research"); err != nil {
+		t.Fatal(err)
+	}
+	record, err := db.QueueKueueJob("research", "synthetic-request-01",
+		"printf durable", "example/image@sha256:"+strings.Repeat("a", 64), 0.2, 128)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := asString(record["id"])
+	if err := db.updateKueueJob(id, "synthetic-uid", "succeeded", "proof-result-123"); err != nil {
+		t.Fatal(err)
+	}
+	backup := filepath.Join(root, "backup")
+	if err := db.BackupTo(backup); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	destination := filepath.Join(root, "independent", "state.db")
+	if err := RestoreBackup(backup, destination); err != nil {
+		t.Fatal(err)
+	}
+	recovered, err := OpenDatabase(destination)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer recovered.Close()
+	job, err := recovered.KueueJob("research", id)
+	if err != nil || job["result"] != "proof-result-123" ||
+		job["status"] != "succeeded" || job["request_id"] != "synthetic-request-01" {
+		t.Fatalf("durable Kueue receipt lost: job=%v err=%v", job, err)
+	}
+}
+
+func TestRestoreRejectsOrphanDurableJobProject(t *testing.T) {
+	root := t.TempDir()
+	db, err := OpenDatabase(filepath.Join(root, "source", "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The legacy jobs table lacks a declared foreign key to projects.
+	if err := db.exec(`INSERT INTO jobs(id,project,command,image,cpu,memory_mb,status,created,updated)
+		VALUES(?,?,?,?,?,?,?,?,?)`, strings.Repeat("a", 32), "nonexistent",
+		"printf lost", "example/image", 0.2, 128, "succeeded", stamp(), stamp()); err != nil {
+		t.Fatal(err)
+	}
+	backup := filepath.Join(root, "snapshot")
+	if err := db.BackupTo(backup); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	destination := filepath.Join(root, "recovery", "state.db")
+	if err := RestoreBackup(backup, destination); err == nil ||
+		!strings.Contains(err.Error(), "orphan project relationship") {
+		t.Fatalf("orphan durable job must be rejected before promotion: %v", err)
+	}
+	if _, err := os.Stat(destination); !os.IsNotExist(err) {
+		t.Fatalf("failed restore created a database: %v", err)
 	}
 }
