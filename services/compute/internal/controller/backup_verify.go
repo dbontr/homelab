@@ -65,12 +65,13 @@ func verifyRestoredState(directory string, manifestFiles map[string]bool) error 
 	for _, relation := range []struct {
 		name  string
 		query string
+		args  []any
 	}{
-		{"job", "SELECT j.id FROM jobs j LEFT JOIN projects p ON p.id=j.project WHERE p.id IS NULL LIMIT 1"},
-		{"artifact", "SELECT a.id FROM artifacts a LEFT JOIN projects p ON p.id=a.project WHERE p.id IS NULL LIMIT 1"},
-		{"repository", "SELECT r.full_name FROM repositories r LEFT JOIN projects p ON p.id=r.project WHERE p.id IS NULL LIMIT 1"},
+		{"job", "SELECT j.id FROM jobs j LEFT JOIN projects p ON p.id=j.project WHERE p.id IS NULL AND j.project<>? LIMIT 1", []any{personalComputeScope}},
+		{"artifact", "SELECT a.id FROM artifacts a LEFT JOIN projects p ON p.id=a.project WHERE p.id IS NULL AND a.project<>? LIMIT 1", []any{personalComputeScope}},
+		{"repository", "SELECT r.full_name FROM repositories r LEFT JOIN projects p ON p.id=r.project WHERE p.id IS NULL LIMIT 1", nil},
 	} {
-		orphans, err := db.query(relation.query)
+		orphans, err := db.query(relation.query, relation.args...)
 		if err != nil {
 			return fmt.Errorf("restored %s project relationship verification failed: %w", relation.name, err)
 		}
