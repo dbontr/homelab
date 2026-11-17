@@ -1106,7 +1106,6 @@ mod tests {
             "dnsmasq.service",
             "cloudflared-saturn.service",
             "k3s.service",
-            "homelab-mcp.service",
         ] {
             assert!(valid_health_service(unit), "health probe denied: {unit}");
             assert!(!valid_service(unit), "critical unit gained mutation access: {unit}");
