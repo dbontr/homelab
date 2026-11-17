@@ -17,6 +17,8 @@ export GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local
 go test -count=1 -timeout=180s \
   -run '^(TestKueue|TestBatchSubmissionIdempotenceAndWorkerIsolation|TestTaskHardware|TestFailedTaskHardware|TestInterruptedWorkerReconciliationFencesOldClaims)' \
   ./internal/controller
+# Standalone standard-library OCI archive verification and corruption cases.
+go test -count=1 -timeout=180s ./cmd/oci-archive-verify
 
 for test_script in \
   scripts/tests/recover-oci-peer-test.sh \
