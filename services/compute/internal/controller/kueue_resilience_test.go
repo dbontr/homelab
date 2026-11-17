@@ -293,6 +293,50 @@ func TestKueueDoesNotSilentlyLoseTerminalOutput(t *testing.T) {
 	if created != 1 { t.Fatalf("log recovery started %d executions", created) }
 }
 
+func TestKueuePreservesFailedJobLogsAcrossRestart(t *testing.T) {
+	db, srv, _, fake := batchFixture(t)
+	request, err := db.QueueKueueJob("research", "failed-logs-001", "echo failure-details", testBatchImage, 0.2, 128)
+	if err != nil { t.Fatal(err) }
+	id := asString(request["id"])
+	pending, err := db.pendingKueueJobs()
+	if err != nil || len(pending) != 1 { t.Fatalf("initial submission missing: %v %v", pending, err) }
+	if err := srv.Kueue.reconcile(context.Background(), db, pending[0]); err != nil { t.Fatal(err) }
+
+	fake.mu.Lock()
+	fake.job["status"] = map[string]any{
+		"conditions": []any{map[string]any{"type": "Failed", "status": "True"}},
+		"failed": 1,
+	}
+	fake.mu.Unlock()
+	logs := &unavailableBatchLogs{base: srv.Kueue.client.Transport, unavailable: true}
+	srv.Kueue.client = &http.Client{Transport: logs}
+	pending, err = db.pendingKueueJobs()
+	if err != nil || len(pending) != 1 { t.Fatalf("terminal job missing: %v %v", pending, err) }
+	if err := srv.Kueue.reconcile(context.Background(), db, pending[0]); err != nil { t.Fatal(err) }
+	uncertain, err := db.KueueJob("research", id)
+	if err != nil || uncertain["status"] != "recovery_required" ||
+		!strings.Contains(asString(uncertain["last_error"]), "output is unavailable") {
+		t.Fatalf("failed job lost its terminal output: %v %v", uncertain, err)
+	}
+
+	reopened, err := OpenDatabase(db.filename)
+	if err != nil { t.Fatal(err) }
+	defer reopened.Close()
+	logs.unavailable = false
+	pending, err = reopened.pendingKueueJobs()
+	if err != nil || len(pending) != 1 { t.Fatalf("pending output recovery missing: %v %v", pending, err) }
+	if err := srv.Kueue.reconcile(context.Background(), reopened, pending[0]); err != nil { t.Fatal(err) }
+	persisted, err := reopened.KueueJob("research", id)
+	if err != nil || persisted["status"] != "failed" ||
+		!strings.Contains(asString(persisted["result"]), "calculation-complete") {
+		t.Fatalf("failed execution output was not recovered: %v %v", persisted, err)
+	}
+	replay, err := reopened.QueueKueueJob("research", "failed-logs-001", "echo failure-details", testBatchImage, 0.2, 128)
+	if err != nil || asString(replay["id"]) != id { t.Fatalf("request replay changed job identity: %v %v", replay, err) }
+	fake.mu.Lock(); created := fake.created; fake.mu.Unlock()
+	if created != 1 { t.Fatalf("reconciliation created %d remote Jobs", created) }
+}
+
 func TestKueueLegacyMigrationFencesUnknownCreateHistory(t *testing.T) {
 	db, srv, _, fake := batchFixture(t)
 	submitted, err := db.QueueKueueJob("research", "legacy-record-001", "echo original", testBatchImage, 0.25, 128)
