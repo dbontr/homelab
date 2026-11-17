@@ -83,6 +83,12 @@ in
     };
     allowedServices = [ "homelab-motivation.service" ];
     healthServices = [
+      "systemd-networkd.service"
+      "systemd-resolved.service"
+      "dnsmasq.service"
+      "sshd.service"
+      "cloudflared-saturn.service"
+      "k3s.service"
       "homelab-platform.service"
       "homelab-mcp.service"
       "homelab-api.service"
