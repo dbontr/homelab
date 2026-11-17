@@ -76,6 +76,10 @@ func main(){
  var health []string
  if err:=json.Unmarshal(healthData,&health);err!=nil{log.Fatal(err)}
  if len(health)==0{log.Fatal("at least one health service is required")}
+ socketData,err:=os.ReadFile(required("HOMELAB_EXECUTOR_HEALTH_SOCKETS_FILE"))
+ if err!=nil||len(socketData)>4096{log.Fatal("invalid release TCP health policy file")}
+ var healthSockets []string
+ if err:=json.Unmarshal(socketData,&healthSockets);err!=nil{log.Fatal("invalid release TCP health policy")}
  source:=required("HOMELAB_EXECUTOR_SOURCE")
  state:=required("HOMELAB_EXECUTOR_RELEASE_STATE")
  // A guarded NixOS release may restart this Type=simple unit while the
@@ -93,7 +97,7 @@ func main(){
  systemctl:=required("HOMELAB_EXECUTOR_SYSTEMCTL")
  releases,err:=release.New(release.Config{
   Host:host,FlakeDir:source,StateDir:state,TrustedSource:true,Nix:nix,NixEnv:nixEnv,Git:git,Systemctl:systemctl,
-  HealthServices:health,Run:release.Exec,
+  HealthServices:health,HealthSockets:healthSockets,Run:release.Exec,
   Current:func()(string,error){return filepath.EvalSymlinks("/nix/var/nix/profiles/system")},
  })
  if err!=nil{log.Fatal("invalid release policy: ",err)}
