@@ -149,8 +149,8 @@ func TestOffsiteRetentionPreservesIndependentSnapshots(t *testing.T) {
 		t.Fatal(err)
 	}
 	external := conf.resticCommand(ctx, root, "backup", "--tag", "independent", unrelated)
-	if out, err := external.CombinedOutput(); err != nil {
-		t.Fatalf("independent backup: %v %s", err, out)
+	if err := external.Run(); err != nil {
+		t.Fatalf("independent backup: %v", err)
 	}
 	if err := PruneOffsite(ctx, conf); err != nil {
 		t.Fatal(err)
