@@ -84,7 +84,7 @@ in
     };
     monitorAudTag = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
-      default = null;
+      default = "1b8828d43c60e266357d05e41a946d9ba204cf8e47539935a3e9b2273263a567";
       description = "Audience for the owner-only Cloudflare Access application on monitor.dbontr.me. Null does not publish this hostname.";
     };
   };
