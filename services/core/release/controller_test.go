@@ -195,3 +195,20 @@ func TestRecoveryAlreadyRestoredStillRequiresHealth(t *testing.T){
  if err:=ctrl.Recover(context.Background());err==nil{t.Fatal("unhealthy runtime accepted as recovered")}
  journal,err:=ctrl.Status();if err!=nil||journal.Phase!="rollback-failed"{t.Fatalf("failed recovery changed journal: %+v %v",journal,err)}
 }
+
+func TestCriticalReleaseHealthProbesAreReadOnlyAndValidated(t *testing.T){
+ cfg:=releaseTestController(t,&fakeReleaseRunner{}).Config
+ cfg.HealthServices=[]string{
+  "sshd.service",
+  "systemd-networkd.service",
+  "dnsmasq.service",
+  "cloudflared-saturn.service",
+  "k3s.service",
+  "homelab-mcp.service",
+ }
+ if _,err:=New(cfg);err!=nil{t.Fatalf("critical health checks denied: %v",err)}
+ for _,unit:=range []string{"","sshd","sshd.socket","../sshd.service","ssh d.service","-sshd.service",strings.Repeat("s",129)+".service"}{
+  cfg.HealthServices=[]string{unit}
+  if _,err:=New(cfg);err==nil{t.Fatalf("invalid unit accepted: %q",unit)}
+ }
+}
