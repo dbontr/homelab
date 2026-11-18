@@ -5,7 +5,32 @@ workspace is distinct from the Kueue CPU batch queue and does not inherit
 administrator access to Saturn, Kubernetes, the host filesystem, or another
 project's controller data.
 
-## Owner-authorized lifecycle
+## Standard Engineering workflow
+
+The `homelab-engineeringd` service is the canonical interface for ordinary
+research development. The platform exposes `engineering_run_submit`,
+`engineering_run_get`, and `engineering_run_list` only when its restricted
+Engineering socket is configured. Projects are admitted through the current,
+non-administrator Compute editor grant; permission changes do not require
+another NixOS release. The daemon stores execution receipts in independent,
+durable run records.
+
+For a reproducible build with no code changes, submit
+`engineering_run_submit` with `verify_only=true`,
+`prepare_only=true`, an exact Git commit, an approved image pool ID,
+bounded resources, and the source-owned build/test commands. The engine
+checks out that revision and records confirmed command results without
+invoking a model, modifying source or preparing a PR. Source-editing runs
+remain bounded to explicitly approved files and may publish only draft PRs
+after verification.
+
+A source toolchain definition alone is not an executable environment.
+A qualified, digest-pinned image must be admitted to a project worker, and
+the independent Compute controller must recognize the daemon's restricted
+editor identity. Neither ChatGPT's local toolchain nor the controller's
+administrator bearer token may substitute for these prerequisites.
+
+## Manual operator lifecycle
 
 The gateway exposes `infrastructure__workspace_create` only when an
 independent executor is configured. The caller supplies an exact executor
