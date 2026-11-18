@@ -169,3 +169,30 @@
 - [Nixpkgs JavaScript packaging](https://nixos.org/manual/nixpkgs/stable/#javascript) — Nixpkgs project. Used for: dependency-locked Node.js module linking and static React console package builds.
 - [Lean 4.34.0 official release](https://github.com/leanprover/lean4/releases/tag/v4.34.0) — Lean project. Used for: the independently SHA-256-verified Linux/amd64 Lean and Lake distribution in isolated mathematical research images.
 - [Docker Buildx imagetools inspect](https://docs.docker.com/reference/cli/docker/buildx/imagetools/inspect/) — Docker. Used for: resolving immutable upstream OCI base-image digests before building source-qualified Engineering toolchains.
+- [AMD FPGA development tools 2022.2](https://www.amd.com/en/support/downloads/adaptive-socs-and-fpgas/development-tools/2022-2.html) — AMD. Used for: Vivado 2022.2 release identity and vendor-authorized installer source.
+- [AMD FPGA development tools 2024.1](https://www.amd.com/en/support/downloads/adaptive-socs-and-fpgas/development-tools/2024-1.html) — AMD. Used for: Vivado 2024.1 release identity and vendor-authorized installer source.
+- [AMD FPGA development tools 2025.2](https://www.amd.com/en/support/downloads/adaptive-socs-and-fpgas/development-tools/2025-2.html) — AMD. Used for: Vivado and Vitis 2025.2 release identities, installation and entitlement review.
+- [Go downloads](https://go.dev/dl/) — Go project. Used for: Go toolchain release selection in the operator software catalog.
+- [Rust installation](https://rust-lang.org/install) — Rust project. Used for: project-pinned Rust and Cargo toolchain provisioning.
+- [GCC project](https://gcc.gnu.org/) — GNU project. Used for: GNU C and C++ toolchain catalog identity.
+- [LLVM project](https://llvm.org/) — LLVM project. Used for: LLVM and Clang toolchain catalog identity.
+- [Python downloads](https://www.python.org/downloads/) — Python Software Foundation. Used for: Python interpreter catalog identity and version selection.
+- [Julia downloads](https://julialang.org/downloads/) — Julia project. Used for: Julia versioned scientific-computing environment selection.
+- [Lean Lake reference](https://lean-lang.org/doc/reference/latest/Build-Tools-and-Distribution/Lake/) — Lean project. Used for: Lean and Lake build environment catalog identity.
+- [CMake project](https://cmake.org/) — Kitware. Used for: CMake native build tooling catalog identity.
+- [GHDL documentation](https://ghdl.github.io/ghdl/) — GHDL project. Used for: VHDL simulation and synthesis program identity.
+- [Verilator documentation](https://verilator.org/) — Verilator project. Used for: SystemVerilog simulation program identity.
+- [Icarus Verilog project](https://steveicarus.github.io/iverilog/) — Icarus Verilog project. Used for: Verilog simulation program identity.
+- [Yosys project](https://yosyshq.net/yosys/) — YosysHQ. Used for: logic synthesis program identity.
+- [OpenROAD project](https://theopenroadproject.org/) — OpenROAD project. Used for: physical-design software program identity.
+- [ngspice project](https://ngspice.sourceforge.io/) — ngspice project. Used for: Linux batch circuit simulation selection.
+- [LTspice vendor downloads](https://www.analog.com/en/resources/design-tools-and-calculators/ltspice-simulator.html) — Analog Devices. Used for: native Windows/macOS execution platforms and vendor license review.
+- [KiCad project](https://www.kicad.org/) — KiCad project. Used for: schematic capture and PCB CAD program identity.
+- [OpenOCD project](https://openocd.org/) — OpenOCD project. Used for: JTAG debugger program identity and external hardware boundary.
+- [GNU Octave project](https://octave.org/) — GNU Octave project. Used for: numerical computing program identity.
+- [SageMath project](https://www.sagemath.org/) — SageMath project. Used for: computer algebra software program identity.
+- [Jupyter project](https://jupyter.org/) — Project Jupyter. Used for: notebook software identity and authenticated GUI requirements.
+- [NVIDIA CUDA Toolkit](https://developer.nvidia.com/cuda-toolkit) — NVIDIA. Used for: CUDA toolchain catalog identity and separate GPU-lease constraints.
+- [FreeCAD project](https://www.freecad.org/) — FreeCAD project. Used for: mechanical CAD program identity and GUI requirements.
+- [GNU Radio project](https://www.gnuradio.org/) — GNU Radio project. Used for: digital signal processing program identity.
+- [Kubernetes image pull policies](https://kubernetes.io/docs/concepts/containers/images/) — Kubernetes project. Used for: distinguishing catalog approval from confirmed image pull and worker eligibility.

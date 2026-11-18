@@ -13,11 +13,12 @@ import { Overview } from "@/views/Overview"
 import { Projects } from "@/views/Projects"
 import { Monitoring } from "@/views/Monitoring"
 import { Engineering } from "@/views/Engineering"
+import { SoftwareLibrary } from "@/views/SoftwareLibrary"
 import { Records, recordPages } from "@/views/Records"
 import { useApi, type Session } from "@/lib/api"
 import { cn } from "@/lib/utils"
 
-type PageKey = "overview" | "projects" | "engineering" | "monitoring" | keyof typeof recordPages
+type PageKey = "overview" | "projects" | "engineering" | "software" | "monitoring" | keyof typeof recordPages
 
 type NavGroup = { group: string; items: Array<{ id: string; label: string; icon: LucideIcon }> }
 
@@ -153,6 +154,7 @@ export default function App() {
           page === "projects" ? <Projects revision={revision} /> :
           page === "engineering" ? <Engineering revision={revision} csrf={session.data.csrf_token ?? ""} refresh={refresh} /> :
           page === "monitoring" ? <Monitoring revision={revision} /> :
+          page === "software" ? <SoftwareLibrary revision={revision} /> :
           page in recordPages ? <Records definition={recordPages[page]} revision={revision} /> :
           <p className="text-muted-foreground">The selected view is unavailable.</p>}
       </div>

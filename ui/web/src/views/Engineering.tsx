@@ -14,6 +14,9 @@ const REVISION = /^[0-9a-f]{40}$/
 const IMAGE = /^[a-z0-9][a-z0-9_-]{0,79}$/
 
 function VerifiedRunForm({ csrf, onSubmitted }: { csrf: string; onSubmitted: () => void }) {
+  const catalog = useApi<unknown>("/v1/software")
+  const images = list(asRecord(catalog.data)?.images).filter(item =>
+    text(item, "status") === "active" && Array.isArray(item.available_nodes) && item.available_nodes.length > 0)
   const [project, setProject] = useState("")
   const [repository, setRepository] = useState("")
   const [revision, setRevision] = useState("")
@@ -70,7 +73,7 @@ function VerifiedRunForm({ csrf, onSubmitted }: { csrf: string; onSubmitted: () 
     <CardContent>
       <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
         <label className="space-y-1 text-sm">Project ID
-          <Input autoComplete="off" value={project} onChange={e => setProject(e.target.value)} required placeholder="axiom-engine" />
+          <Input autoComplete="off" value={project} onChange={e => setProject(e.target.value)} required placeholder="research-project" />
         </label>
         <label className="space-y-1 text-sm">Repository
           <Input autoComplete="off" value={repository} onChange={e => setRepository(e.target.value)} required placeholder="owner/repository" />
@@ -78,11 +81,17 @@ function VerifiedRunForm({ csrf, onSubmitted }: { csrf: string; onSubmitted: () 
         <label className="space-y-1 text-sm sm:col-span-2">Exact source commit
           <Input className="font-mono text-xs" autoComplete="off" value={revision} onChange={e => setRevision(e.target.value)} required placeholder="40 lowercase hexadecimal characters" />
         </label>
-        <label className="space-y-1 text-sm sm:col-span-2">Approved image-pool ID
-          <Input autoComplete="off" value={image} onChange={e => setImage(e.target.value)} required placeholder="approved-toolchain" />
+        <label className="space-y-1 text-sm sm:col-span-2">Approved execution environment
+          <select className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" value={image} onChange={e => setImage(e.target.value)} required>
+            <option value="">Select an image available on an online worker</option>
+            {images.map(item => <option key={text(item, "id")} value={text(item, "id")}>
+              {text(item, "id")} · {(item.available_nodes as unknown[]).length} worker(s)
+            </option>)}
+          </select>
+          {images.length === 0 && <span className="block text-xs text-muted-foreground">No eligible execution image is reported. Review the <a href="#software" className="underline">software library</a> and worker admission status.</span>}
         </label>
         <label className="space-y-1 text-sm sm:col-span-2">Verification commands, one per line
-          <Textarea className="min-h-28 font-mono text-xs" value={checks} onChange={e => setChecks(e.target.value)} required placeholder={"cargo test --locked\nlake build\ncargo build --target wasm32-unknown-unknown"} />
+          <Textarea className="min-h-28 font-mono text-xs" value={checks} onChange={e => setChecks(e.target.value)} required placeholder={"go test ./...\nmake test"} />
         </label>
         <label className="space-y-1 text-sm">CPU cores
           <Input inputMode="decimal" type="number" step="0.1" min="0.1" max="8" value={cpu} onChange={e => setCpu(e.target.value)} />

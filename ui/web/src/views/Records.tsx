@@ -54,7 +54,6 @@ export const recordPages: Record<string, ResourceDefinition> = {
   profiles: { title: "Build profiles", description: "Stored source and execution configurations", path: "/v1/compute/profiles" },
   tasks: { title: "Tasks", description: "Canonical owner task records", path: "/v1/tasks" },
   workflows: { title: "Workflows", description: "Recorded cross-capability workflows", path: "/v1/workflows" },
-  software: { title: "Software library", description: "Approved software and OCI image catalogs", path: "/v1/software" },
   activity: { title: "Activity", description: "Events derived from existing records", path: "/v1/activity?limit=100", collectionKeys: ["events"] },
   calendar: { title: "Calendar", description: "Read-only recurrence-expanded schedule", path: "/v1/calendar/occurrences", collectionKeys: ["occurrences", "events"] },
   planner: { title: "Weekly planner", description: "Advisory allocations based on recorded tasks", path: "/v1/planning/week" },
