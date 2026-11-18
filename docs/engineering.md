@@ -35,6 +35,26 @@ by substituting the pre-existing controller administrator token. The process
 keeps private state under a systemd-owned directory and the public gateway
 receives only the restricted Unix socket.
 
+## Verification-only builds
+
+A project can compile and test an immutable source revision without changing
+files, invoking an authoring model or publishing a pull request. Submit
+`engineering_run_submit` with `verify_only=true`, `prepare_only=true`,
+the approved `project`, linked `repository`, exact 40-character `revision`,
+`image_pool_id`, bounded CPU, memory and duration, and 1–8 exact `checks`.
+No `changes`, `allowed_paths`, `autonomous`, `review` or knowledge-writing
+option is permitted. The draft-PR fields are unnecessary in this mode.
+
+The daemon provisions an approved project workspace, checks out the pinned
+commit and runs each check in that isolated environment. A failed command
+fails the run; no model attempts automatic repairs. The durable engineering
+run records the source revision, each command and independently confirmed
+exit status. The workflow has no authoring, export or publication steps.
+Use verified project artifacts separately for binaries and datasets that
+must be preserved after the workspace expires. A `succeeded` run is proof
+of the listed tests only; mathematical claims still require Lean's own
+checker and proof acceptance receipts.
+
 ## Execution contract
 
 An engineering run belongs to one explicitly permitted project, independently of how many repositories it links. The requested repository must be linked to that project in the compute controller. The run pins one exact 40-character Git commit. Publication requires the same expected head and a named base branch.
