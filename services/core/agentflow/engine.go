@@ -26,16 +26,28 @@ type Engine struct {
 	Compute         ToolCaller
 	Author          Author
 	AllowedProjects map[string]bool
+	ProjectGrant     func(context.Context, string) error
 	NativeVerification bool
 	activeMu        sync.Mutex
 	active          map[string]context.CancelFunc
+}
+
+// projectAllowed checks an exact configured scope or the Compute controller's
+// current project-editor grant. Failed identity and grant checks deny access.
+func (e *Engine) projectAllowed(project string) bool {
+	if e == nil || !validID(project) { return false }
+	if e.AllowedProjects[project] { return true }
+	if e.ProjectGrant == nil { return false }
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	return e.ProjectGrant(ctx, project) == nil
 }
 
 func (e *Engine) Submit(p Program) (RunSummary, error) {
 	if e == nil || e.Store == nil || e.Compute == nil {
 		return RunSummary{}, errors.New("engineering service not configured")
 	}
-	if !e.AllowedProjects[p.Project] {
+	if !e.projectAllowed(p.Project) {
 		return RunSummary{}, errors.New("engineering project not authorized")
 	}
 	if e.NativeVerification {
@@ -73,7 +85,7 @@ func (e *Engine) Get(id string) (RunSummary, error) {
 	if err != nil {
 		return RunSummary{}, err
 	}
-	if !e.AllowedProjects[w.Project] {
+	if !e.projectAllowed(w.Project) {
 		return RunSummary{}, errors.New("engineering project not authorized")
 	}
 	return Summarize(w), nil
@@ -85,7 +97,7 @@ func (e *Engine) List() ([]RunSummary, error) {
 	}
 	selected := make([]RunSummary, 0, len(runs))
 	for _, run := range runs {
-		if e.AllowedProjects[run.Project] {
+		if e.projectAllowed(run.Project) {
 			selected = append(selected, run)
 		}
 	}
@@ -96,7 +108,7 @@ func (e *Engine) Cancel(id string, revision uint64) error {
 	if err != nil {
 		return err
 	}
-	if !e.AllowedProjects[w.Project] {
+	if !e.projectAllowed(w.Project) {
 		return errors.New("engineering project not authorized")
 	}
 	if err := e.Store.Cancel(id, revision); err != nil {
@@ -266,7 +278,7 @@ func (e *Engine) Dispatch(ctx context.Context, claim Claim) (json.RawMessage, er
 	if err != nil {
 		return nil, err
 	}
-	if !e.AllowedProjects[w.Project] || w.Cancelled {
+	if !e.projectAllowed(w.Project) || w.Cancelled {
 		return nil, errors.New("engineering project not authorized")
 	}
 	found := false
