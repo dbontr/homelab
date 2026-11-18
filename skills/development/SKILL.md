@@ -1,12 +1,16 @@
 ---
 name: development
-description: Develop, review, debug, refactor and organize software with production-grade code quality, GitHub Issues, Projects, Packages, Wiki, Actions, pull requests and branches, multi-repository projects, shared libraries, secure compute workspaces, research references, and verified engineering delivery. Use for programming, software architecture, code analysis, repository work, project orchestration or professional coding.
+description: Develop and operate the dbontr/homelab engineering platform, including its Go services, React console, NixOS network and security configuration, project-scoped Compute and workspaces, GitHub collaboration, source verification, image admission, and independently authorized releases. Use for changes to Homelab itself, connected Homelab services, or project work performed through its engineering and Compute system. Do not use this skill as a general coding standard for unrelated repositories.
 ---
 
 # Development
 
-Skill version: `1.7.0`.
+Skill version: `1.8.0`.
 
+
+## Scope
+
+Apply this skill to the Homelab platform and projects executed through its managed Engineering and Compute services. Its project identity, authorization, hardware, network, and release procedures are specific to the Homelab deployment. The independent [Professional Code skill](https://github.com/dbontr/skills/tree/main/professional-code) provides general coding conventions for unrelated repositories and does not grant Homelab access or authority.
 
 Produce software that looks like the intended final design, not the visible history of an AI conversation.
 
