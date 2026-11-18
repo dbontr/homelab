@@ -16,7 +16,7 @@ func TestDetachedReleaseDispatchUsesFixedUnitAndArguments(t *testing.T){
   Runner:"/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-release/bin/homelab-release-runner",
   Run:func(_ context.Context,cmd string,args ...string)error{
    calls++
-   if !strings.HasSuffix(cmd,"/systemd-run")||len(args)!=10{
+   if !strings.HasSuffix(cmd,"/systemd-run")||len(args)!=11{
     t.Fatalf("unexpected detached command: %s %v",cmd,args)
    }
    if args[0]!="--no-block"||args[1]!="--collect"||
@@ -24,8 +24,9 @@ func TestDetachedReleaseDispatchUsesFixedUnitAndArguments(t *testing.T){
     args[3]!="--property=Type=oneshot"||
     args[4]!="--property=TimeoutStartSec=20min"||
     args[5]!="--property=Restart=no"||
-    args[6]!="/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-release/bin/homelab-release-runner"||
-    args[7]!="guard-activate"||args[8]!=id||args[9]!=stage{
+    args[6]!="--property=IgnoreOnIsolate=yes"||
+    args[7]!="/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-release/bin/homelab-release-runner"||
+    args[8]!="guard-activate"||args[9]!=id||args[10]!=stage{
     t.Fatalf("wrong detached release arguments: %v",args)
    }
    return nil
