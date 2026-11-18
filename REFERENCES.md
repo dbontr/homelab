@@ -165,4 +165,3 @@
 - [Lean 4 official repository](https://github.com/leanprover/lean4) — Lean project. Used for: identifying and independently validating the pinned Lean compiler and Lake build tool in formal-proof development workspaces.
 - [Rust wasm32-unknown-unknown target](https://doc.rust-lang.org/rustc/platform-support/wasm32-unknown-unknown.html) — Rust project. Used for: verifying the exact WebAssembly target available in the declared project compiler environment.
 - [Nixpkgs JavaScript packaging](https://nixos.org/manual/nixpkgs/stable/#javascript) — Nixpkgs project. Used for: dependency-locked Node.js module linking and static React console package builds.
-- [npm ci](https://docs.npmjs.com/cli/v10/commands/npm-ci) — npm project. Used for: repeatable dependency installation from a committed npm lockfile in console CI.

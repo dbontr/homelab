@@ -10,6 +10,7 @@ pkgs.stdenvNoCC.mkDerivation {
   ];
   npmDeps = pkgs.importNpmLock.buildNodeModules {
     npmRoot = ../ui/web;
+    nodejs = pkgs.nodejs_22;
   };
 
   buildPhase = ''
