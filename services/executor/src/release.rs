@@ -51,6 +51,19 @@ impl Journal {
 
 // An interrupted transaction can be observed before the switch is known to
 // have completed. Only terminal receipts assert a specific live generation.
+// The exact stage ID remains spent even after another release replaces the
+// active journal. Files are inspected under the independent release lock.
+fn stage_was_attempted(state: &Path, id: &str) -> Result<bool, Error> {
+    if !valid_hex(id, 48) {
+        return Err(Error::Denied("invalid release identifier"));
+    }
+    match fs::symlink_metadata(state.join(format!("attempt-{id}.json"))) {
+        Ok(_) => Ok(true),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(_) => Err(Error::Storage("release attempt record cannot be inspected")),
+    }
+}
+
 fn journal_matches_generation(journal: &Journal, current: &str) -> bool {
     match journal.phase.as_str() {
         "active" => current == journal.target.as_str(),
@@ -501,6 +514,9 @@ impl ReleaseController {
         let _guard = self.operation.lock().await;
         let _file = self.state_lock()?;
         let manifest = self.load_stage(id)?;
+        if stage_was_attempted(&self.policy.state_dir, id)? {
+            return Err(Error::Denied("staged release already attempted"));
+        }
         if let Some(previous_attempt) = self.optional_journal()? {
             if previous_attempt.interrupted() {
                 return Err(Error::Denied("interrupted release must be recovered first"));
@@ -521,6 +537,8 @@ impl ReleaseController {
             target: manifest.system.clone(),
             time: Utc::now(),
         };
+        // Persist the attempt before switching any host generation.
+        self.atomic(&format!("attempt-{id}.json"), &txn)?;
         self.atomic("journal.json", &txn)?;
         let attempt = async {
             self.set_generation(&manifest.system).await?;
@@ -690,6 +708,24 @@ mod tests {
         assert!(!journal_matches_generation(&journal, &journal.target));
         journal.phase = "activating".into();
         assert!(journal_matches_generation(&journal, &journal.previous));
+    }
+
+    #[test]
+    fn stage_reuse_stays_denied_after_journal_replacement() {
+        let root = std::env::temp_dir().join(format!(
+            "homelab-stage-fence-{}",
+            random_hex::<16>().unwrap()
+        ));
+        fs::create_dir(&root).unwrap();
+        let first = "a".repeat(48);
+        let second = "b".repeat(48);
+        assert!(!stage_was_attempted(&root, &first).unwrap());
+        fs::write(root.join(format!("attempt-{first}.json")), b"{}").unwrap();
+        fs::write(root.join("journal.json"), format!("{{\\"id\\":\\"{second}\\"}}")).unwrap();
+        assert!(stage_was_attempted(&root, &first).unwrap());
+        assert!(!stage_was_attempted(&root, &second).unwrap());
+        assert!(stage_was_attempted(&root, "not-a-release-id").is_err());
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
