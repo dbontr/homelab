@@ -4,11 +4,13 @@ Five portable, standalone instruction sets live under this directory. Each inclu
 
 | Skill | Purpose |
 | --- | --- |
-| [Development](development/SKILL.md) | Production coding, repository hygiene, GitHub workflows, multi-repository project orchestration, source verification and independent release governance |
+| [Development](development/SKILL.md) | Homelab-specific engineering: Go services, React console, NixOS networking and security, Compute/Projects, GitHub workflows, project artifact custody and independent release governance |
 | [Writing](writing/SKILL.md) | Scholarly and practical drafting, editing, source integrity, argument and rhetorical quality |
 | [Teaching](teaching/SKILL.md) | Prerequisite-based, first-principles instruction, difficult transfer problems and evidence-backed mastery |
 | [Ideas](ideas/SKILL.md) | Interdisciplinary hypothesis generation, prior-art criticism and falsifiable experiments |
 | [Continuity](continuity/SKILL.md) | Revisioned project checkpoints, qualified context-pressure estimates, and safe handoffs between conversations |
+
+The [Professional Code skill](https://github.com/dbontr/skills/tree/main/professional-code) is the general-purpose coding standard and is maintained in the separate skills repository. Homelab Development is authoritative only for this platform and its connected Engineering/Compute projects.
 
 The Development and Ideas skills use only the Go standard library for their
 included executable utilities. Run them with `go run` from each skill directory.
