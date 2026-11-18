@@ -33,6 +33,10 @@ controller:
     audience: ""
     jwksURL: ""
     ownerEmailSecretName: ""
+  oidc:
+    issuer: ""
+    audience: ""
+    jwksURL: ""
   localGit:
     existingClaimName: ""
     authorName: ""
