@@ -2,6 +2,39 @@
 
 Engineering is a capability of Homelab. The owner uses the same authenticated native API and MCP identity as the rest of the platform. Its compute controller, source authoring, release executor and credential broker are internal trust boundaries, not separate user-facing products.
 
+## Deployment and project admission
+
+The Saturn configuration imports the Engineering NixOS module through
+`infrastructure/homelab/engineering.nix`. Its daemon connects to the Compute
+controller through an Nginx listener bound to `127.0.0.1:8106`. That listener
+forwards only `/mcp`, `/api/whoami` and exact project-role lookups. Nginx
+verifies the controller's certificate against the local pinned CA; the listener
+is not published through Cloudflare or another network interface.
+
+Engineering loads a dedicated Compute editor identity from
+`/srv/homelab/secrets/engineering-compute-editor.token` using systemd
+`LoadCredential`. Do not use the controller's administrator token or owner
+session for unattended engineering. The startup probe rejects missing credentials,
+administrator identities and invalid roles. `grantScopedProjects = true`
+causes every incoming project operation, status request and continuation to
+consult the controller's *current* editor grant. An unavailable identity
+provider or revoked grant denies the operation. The service's identity never
+receives permission to change the controller's project catalog or fleet policy.
+
+A new project becomes eligible when the trusted administrator assigns that
+non-administrator service principal an exact editor grant through the
+controller's existing grant authority; no host release is needed merely
+to update the project list. The separate project worker, image and repository
+policies still apply. Admin operations, image admission, and NixOS releases
+remain behind the independent owner security authority.
+
+The protected release requires a provisioned and checked project-editor
+credential, an exact clean source revision, and the isolated Engineering
+acceptance evidence before activation. A missing credential is not repaired
+by substituting the pre-existing controller administrator token. The process
+keeps private state under a systemd-owned directory and the public gateway
+receives only the restricted Unix socket.
+
 ## Execution contract
 
 An engineering run belongs to one explicitly permitted project, independently of how many repositories it links. The requested repository must be linked to that project in the compute controller. The run pins one exact 40-character Git commit. Publication requires the same expected head and a named base branch.
