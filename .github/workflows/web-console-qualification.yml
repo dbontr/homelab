@@ -10,6 +10,8 @@ on:
       - "packages/console-web.nix"
       - "flake.nix"
       - "nixosModules/console.nix"
+      - "infrastructure/homelab/**"
+      - "services/compute/images/project-allowlist.json"
   pull_request:
     paths:
       - ".github/workflows/web-console-qualification.yml"
@@ -17,6 +19,8 @@ on:
       - "packages/console-web.nix"
       - "flake.nix"
       - "nixosModules/console.nix"
+      - "infrastructure/homelab/**"
+      - "services/compute/images/project-allowlist.json"
 
 permissions:
   contents: read
@@ -61,4 +65,18 @@ jobs:
           test "$(nix eval --json .#nixosConfigurations.saturn.config.services.homelabExecutor.useRustActuator)" = false
           test "$(nix eval --json .#nixosConfigurations.saturn.config.services.homelabEngineering.enable)" = true
           nix eval --json .#nixosConfigurations.saturn.config.services.homelabExecutor.workspace.projects | jq -e 'index("axiom-engine") != null'
+      - name: Verify exact-project compiler image admission
+        run: |
+          set -euo pipefail
+          policy=services/compute/images/project-allowlist.json
+          jq -e '(keys | sort) == ["axiom-engine", "homelab-platform"] and
+            all(.[]; length == 1 and all(.[];
+              test("^ghcr[.]io/dbontr/homelab/engineering-(go|axiom)@sha256:[a-f0-9]{64}$")))' "$policy"
+          expected="$(jq -cS . "$policy")"
+          actual="$(nix eval --json .#nixosConfigurations.saturn.config.services.workspaceMcpProjectProvisioner.projectApprovedImages | jq -cS .)"
+          test "$actual" = "$expected"
+          references="$(nix eval --json .#nixosConfigurations.saturn.config.services.homelabExecutor.workspace.imageReferences)"
+          while IFS= read -r image; do
+            jq -e --arg image "$image" 'index($image) != null' <<< "$references"
+          done < <(jq -r '.[][]' "$policy")
 

@@ -112,7 +112,7 @@ Immediately before export, the engine checks the workspace file against the veri
 
 ## Engineering compute leases and source identity
 
-The engineering program can declare `hardware` as a bounded map of `gpu` or `npu` to device counts, with at most two accelerators in a run. `min_gpu_memory_mb` requires a GPU allocation. `node_id` and `architecture` optionally select the exact approved worker and machine architecture. CPU quantities must be finite. These declarations are forwarded unchanged to the Compute controller during `workspace_create`, where image approval, resource capacity, device ownership and lease conflicts are checked atomically. The engineering daemon does not create hardware leases itself and does not grant access to external boards. The Rust console accepts these options in its engineering run form.
+The engineering program can declare `hardware` as a bounded map of `gpu` or `npu` to device counts, with at most two accelerators in a run. `min_gpu_memory_mb` requires a GPU allocation. `node_id` and `architecture` optionally select the exact approved worker and machine architecture. CPU quantities must be finite. These declarations are forwarded unchanged to the Compute controller during `workspace_create`, where image approval, resource capacity, device ownership and lease conflicts are checked atomically. The engineering daemon does not create hardware leases itself and does not grant access to external boards. The React/TypeScript console accepts these options in its engineering run form.
 
 Every engineering run records an immutable `inputs` manifest with the complete request SHA-256, pinned primary and read-only repository revisions, selected compute image and hardware constraints, exact verification commands and permitted edit paths. Supplied file contents are represented by SHA-256 fingerprints, not copied into the public run summary. The verified export step separately records artifact IDs after source readback and controller SHA-256 verification. Together these provide inspectable provenance; they do not imply reproducible machine output unless independent builds yield matching artifact hashes.
 
@@ -130,7 +130,7 @@ The native endpoints are:
 - `GET /v1/engineering/runs/{id}`
 - `POST /v1/engineering/runs/{id}/cancel` with the exact run revision
 
-The MCP tools `engineering_run_submit`, `engineering_run_get`, `engineering_run_list` and `engineering_run_cancel` call the same implementation. The Rust console displays run progress and links to any confirmed draft pull request.
+The MCP tools `engineering_run_submit`, `engineering_run_get`, `engineering_run_list` and `engineering_run_cancel` call the same implementation. The React/TypeScript console displays run progress and links to any confirmed draft pull request.
 
 
 ## Multi-repository projects
@@ -200,7 +200,7 @@ deployment authorizations remain mandatory.
 
 ## Console
 
-The native Rust/WASM console provides authenticated engineering-run creation,
+The native React/TypeScript console provides authenticated engineering-run creation,
 execution progress, planning steps, changed-file paths, verification results,
 review findings, and links to confirmed GitHub draft diffs. The cooperative
 engineering view displays member roles and run status. Project Knowledge
@@ -291,7 +291,7 @@ owner instead of being reported as successful cleanup.
 
 ## Engineering console
 
-The Rust/WASM engineering console presents owner-authorized task planning,
+The React/TypeScript engineering console presents owner-authorized task planning,
 a selectable agent dependency graph, the integrated artifact manifest, final
 verification and cleanup status, source review findings, and links to the
 reviewable GitHub draft diff. It displays bounded agent activity and check
