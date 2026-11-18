@@ -24,6 +24,14 @@
 {{- fail "Cloudflare Access requires issuer, audience, JWKS URL and owner email Secret together" }}
 {{- end }}
 {{- end }}
+{{- if or .Values.controller.oidc.issuer .Values.controller.oidc.audience .Values.controller.oidc.jwksURL }}
+{{- if not (and .Values.controller.oidc.issuer .Values.controller.oidc.audience .Values.controller.oidc.jwksURL) }}
+{{- fail "Compute project editor OIDC requires issuer, audience and JWKS URL together" }}
+{{- end }}
+{{- if or (not (hasPrefix "https://" .Values.controller.oidc.issuer)) (not (hasPrefix "https://" .Values.controller.oidc.jwksURL)) }}
+{{- fail "Compute project editor OIDC identity issuer and JWKS must use HTTPS" }}
+{{- end }}
+{{- end }}
 {{- if and .Values.controller.backupRetention (not .Values.controller.backupInterval) }}
 {{- fail "controller.backupRetention requires scheduled encrypted backups" }}
 {{- end }}
@@ -295,6 +303,14 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.controller.access.ownerEmailSecretName }}
                   key: email
+            {{- end }}
+            {{- if .Values.controller.oidc.issuer }}
+            - name: PWM_OIDC_ISSUER
+              value: {{ .Values.controller.oidc.issuer | quote }}
+            - name: PWM_OIDC_AUDIENCE
+              value: {{ .Values.controller.oidc.audience | quote }}
+            - name: PWM_OIDC_JWKS_URL
+              value: {{ .Values.controller.oidc.jwksURL | quote }}
             {{- end }}
             {{- if .Values.controller.githubPATSecretName }}
             - name: PWM_GITHUB_TOKEN

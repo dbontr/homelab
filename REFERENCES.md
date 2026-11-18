@@ -162,3 +162,5 @@
 - [Radix UI Slot](https://www.radix-ui.com/primitives/docs/utilities/slot) — Radix UI project. Used for: accessible, composable shadcn/ui button and badge wrappers.
 - [shadcn/ui Components](https://ui.shadcn.com/docs/components) — shadcn/ui project. Used for: adapting the official new-york component registry under its MIT license.
 - [npm ci](https://docs.npmjs.com/cli/v10/commands/npm-ci) — npm project. Used for: immutable lockfile-based browser dependency installation.
+- [Lean 4 official repository](https://github.com/leanprover/lean4) — Lean project. Used for: identifying and independently validating the pinned Lean compiler and Lake build tool in formal-proof development workspaces.
+- [Rust wasm32-unknown-unknown target](https://doc.rust-lang.org/rustc/platform-support/wasm32-unknown-unknown.html) — Rust project. Used for: verifying the exact WebAssembly target available in the declared project compiler environment.

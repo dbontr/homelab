@@ -122,6 +122,17 @@ func(p *WorkspacePolicy)operationArgs(operation string,fields map[string]any)(st
   args,err:=p.allocationArgs(fields)
   if err!=nil{return "",nil,err}
   return "workspace_create",args,nil
+ case "infrastructure__workspace_command":
+  project,workspace:=value("project_id"),value("workspace_id")
+  command,ok:=fields["command"].(string)
+  requestID,identified:=fields["workspace_request_id"].(string)
+  if len(fields)!=5||project==""||workspace==""||!containsID(p.Projects,project)||
+   !ok||strings.TrimSpace(command)==""||len(command)>4096||strings.ContainsRune(command,'\x00')||
+   !identified||!ValidExecutionRequestID(requestID){
+   return "",nil,errors.New("Workspace command policy denied")
+  }
+  return "workspace_call",map[string]any{"project_id":project,"workspace_id":workspace,
+   "action":"command","payload":map[string]any{"command":command,"workspace_request_id":requestID}},nil
  case "infrastructure__workspace_stop":
   project,workspace:=value("project_id"),value("workspace_id")
   if len(fields)!=3||project==""||workspace==""||!containsID(p.Projects,project){

@@ -58,6 +58,12 @@ while IFS= read -r project; do
     continue
   fi
   key=$(printf '%s' "$project" | sha256sum | cut -c 1-12)
+  images_json=$(jq -cn --arg project "$project" \
+    --argjson policy "${PWM_PROJECT_ALLOWED_IMAGES_JSON:-"{}"}" \
+    '["debian:bookworm-slim"] + ($policy[$project] // []) | unique')
+  images_csv=$(jq -r 'join(",")' <<< "$images_json")
+  jq -n --arg allowed "$images_csv" '{worker:{allowedImages:$allowed}}' \
+    > "$scratch/worker-image-values.json"
   for host in "${hosts[@]}"; do
     if [[ ! "$host" =~ ^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$ ]]; then
       echo "Invalid approved Kubernetes host $host" >&2
@@ -84,7 +90,8 @@ while IFS= read -r project; do
       code=$(jq -er '.pairing_code' "$scratch/pairing.json")
       jq -nc --arg code "$code" --arg node "$node" --arg project "$project" \
         --arg namespace "$namespace" --arg host "$host" \
-        '{name:$node,pairing_code:$code,capabilities:{arch:"amd64",cpu:2,memory_mb:4096,max_jobs:1,docker:false,kubernetes:true,os:"linux",images:["debian:bookworm-slim"],devices:[],project_id:$project,namespace:$namespace,workload_node:$host}}' \
+        --argjson images "$images_json" \
+        '{name:$node,pairing_code:$code,capabilities:{arch:"amd64",cpu:2,memory_mb:4096,max_jobs:1,docker:false,kubernetes:true,os:"linux",images:$images,devices:[],project_id:$project,namespace:$namespace,workload_node:$host}}' \
         > "$scratch/enrollment.json"
       api POST /api/pair "$scratch/enrollment.json" |
         jq -er '.worker_token' > "$scratch/worker_token"
@@ -101,7 +108,8 @@ while IFS= read -r project; do
       --set "worker.workloadNode=$host" --set "worker.tokenSecretName=$secret" \
       --set-json "worker.nodeSelector={\"kubernetes.io/hostname\":\"$host\"}" \
       --set "worker.image=$PWM_WORKER_IMAGE" \
-      --set worker.imagePullPolicy=IfNotPresent --set worker.cpuCapacity=2 \
+      --set worker.imagePullPolicy=IfNotPresent \
+      --values "$scratch/worker-image-values.json" --set worker.cpuCapacity=2 \
       --set worker.memoryCapacityMB=4096 --set worker.maxJobs=1 \
       --wait --timeout 5m >/dev/null
     printf 'Provisioned project %s on %s\n' "$project" "$host"

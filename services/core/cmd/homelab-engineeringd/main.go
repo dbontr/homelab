@@ -28,12 +28,17 @@ func credential(file string)(string,error){
 }
 func main(){
  log.SetFlags(log.LstdFlags|log.LUTC)
+ mode:=os.Getenv("HOMELAB_ENGINEERING_GRANT_SCOPED")
+ if mode!=""&&mode!="0"&&mode!="1"{log.Fatal("invalid engineering grant scope")}
  projects:=map[string]bool{}
- for _,item:=range strings.Split(required("HOMELAB_ENGINEERING_PROJECTS"),","){
+ for _,item:=range strings.Split(os.Getenv("HOMELAB_ENGINEERING_PROJECTS"),","){
   project:=strings.TrimSpace(item)
   if project!=""{projects[project]=true}
  }
- if len(projects)==0||len(projects)>32{log.Fatal("invalid engineering project scope")}
+ grantScoped:=mode=="1"
+ if len(projects)>32||(grantScoped&&len(projects)!=0)||(!grantScoped&&len(projects)==0){
+  log.Fatal("invalid engineering project scope")
+ }
  // Autonomous engineering work executes after the initiating request has
  // finished. A short-lived human owner ticket cannot authorize unattended
  // compute or model calls. These use separately scoped service credentials.
@@ -73,6 +78,12 @@ func main(){
  nativeMode:=os.Getenv("HOMELAB_ENGINEERING_NATIVE_VERIFICATION")
  if nativeMode!=""&&nativeMode!="0"&&nativeMode!="1"{log.Fatal("invalid engineering verification selection")}
  engine:=&agentflow.Engine{Store:store,Compute:compute,Author:author,AllowedProjects:projects,NativeVerification:nativeMode=="1"}
+ if grantScoped {
+  engine.ProjectGrant=func(ctx context.Context,project string)error{
+   if err:=compute.VerifyProjectCredential(ctx);err!=nil{return err}
+   return compute.VerifyProjectEditor(ctx,project)
+  }
+ }
  ctx,stop:=signal.NotifyContext(context.Background(),syscall.SIGINT,syscall.SIGTERM)
  defer stop()
  go engine.Serve(ctx)

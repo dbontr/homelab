@@ -745,6 +745,38 @@ impl WorkspacePolicy {
                 let request = WorkspaceAllocation::checked(fields, self)?;
                 ("workspace_create", request)
             }
+            "infrastructure__workspace_command" if fields.len() == 5 => {
+                let project = string("project_id")?;
+                if !self.projects.iter().any(|s| s == project) {
+                    return Err(Error::Denied("project not permitted"));
+                }
+                let command = fields
+                    .get("command")
+                    .and_then(Value::as_str)
+                    .ok_or(Error::Denied("workspace command required"))?;
+                let request_id = fields
+                    .get("workspace_request_id")
+                    .and_then(Value::as_str)
+                    .ok_or(Error::Denied("workspace request identity required"))?;
+                if command.trim().is_empty()
+                    || command.len() > 4096
+                    || command.as_bytes().contains(&0)
+                    || !valid_hex(request_id, 32)
+                {
+                    return Err(Error::Denied(
+                        "invalid workspace command or request identity",
+                    ));
+                }
+                (
+                    "workspace_call",
+                    serde_json::json!({
+                        "project_id": project,
+                        "workspace_id": string("workspace_id")?,
+                        "action": "command",
+                        "payload": {"command": command, "workspace_request_id": request_id}
+                    }),
+                )
+            }
             "infrastructure__workspace_stop" if fields.len() == 3 => {
                 let project = string("project_id")?;
                 if !self.projects.iter().any(|s| s == project) {
@@ -1317,6 +1349,61 @@ mod tests {
         fpga.insert("node_id".into(), json!(""));
         assert!(policy
             .operation("infrastructure__workspace_create", &fpga)
+            .is_err());
+    }
+
+    #[test]
+    fn workspace_commands_require_exact_project_and_gateway_owned_request() {
+        let policy = WorkspacePolicy {
+            endpoint: "https://workspace.example/mcp".into(),
+            projects: vec!["research".into()],
+            workers: vec![],
+            devices: vec![],
+            images: vec!["approved-image".into()],
+            image_references: vec![],
+            software: vec![],
+            programs: vec![],
+            packages: vec![],
+        };
+        let request_id = "a".repeat(32);
+        let accepted = json!({
+            "host": "saturn",
+            "project_id": "research",
+            "workspace_id": "ws1",
+            "command": "cargo test --locked && lake build",
+            "workspace_request_id": request_id
+        });
+        let fields = accepted.as_object().unwrap();
+        let (name, args) = policy
+            .operation("infrastructure__workspace_command", fields)
+            .expect("valid project-isolated command");
+        assert_eq!(name, "workspace_call");
+        assert!(args.get("host").is_none());
+        assert_eq!(args["action"], "command");
+        assert_eq!(args["payload"]["workspace_request_id"], "a".repeat(32));
+        for (key, value) in [
+            ("project_id", json!("other")),
+            ("workspace_id", json!("../host")),
+            ("command", json!("")),
+            ("command", json!(" \t\n")),
+            ("command", json!("x".repeat(4097))),
+            ("workspace_request_id", json!("A".repeat(32))),
+            ("workspace_request_id", json!("abc")),
+            ("extra", json!("bypass")),
+        ] {
+            let mut changed = fields.clone();
+            changed.insert(key.into(), value);
+            assert!(
+                policy
+                    .operation("infrastructure__workspace_command", &changed)
+                    .is_err(),
+                "invalid workspace command accepted: {key}"
+            );
+        }
+        let mut absent = fields.clone();
+        absent.remove("workspace_request_id");
+        assert!(policy
+            .operation("infrastructure__workspace_command", &absent)
             .is_err());
     }
 

@@ -460,6 +460,29 @@ func (db *Database) Operation(project, ws, id string) (map[string]any, error) {
 	}
 	return row, nil
 }
+// OperationByRequest correlates an independently authorized executor request
+// with the worker's actual terminal receipt. Duplicate records fail closed.
+func (db *Database) OperationByRequest(project, ws, requestID string) (map[string]any, error) {
+	if len(requestID) != 32 {
+		return nil, errors.New("invalid workspace execution request identity")
+	}
+	for _, c := range requestID {
+		if c < '0' || c > '9' && (c < 'a' || c > 'f') {
+			return nil, errors.New("invalid workspace execution request identity")
+		}
+	}
+	rows, err := db.query(`SELECT o.id,o.workspace,o.action,o.status,o.result,o.created,o.updated
+		FROM operations o JOIN workspaces w ON w.id=o.workspace
+		WHERE w.project=? AND w.id=? AND o.action='command'
+		AND json_extract(o.payload,'$.workspace_request_id')=?
+		LIMIT 2`, project, ws, requestID)
+	if err != nil { return nil, err }
+	if len(rows) != 1 { return nil, errors.New("workspace execution not found or ambiguous") }
+	if rows[0]["result"] != nil {
+		rows[0]["result"] = decodeObject(asString(rows[0]["result"]))
+	}
+	return rows[0], nil
+}
 func (db *Database) CallWorkspace(project, ws, action string, payload map[string]any) (map[string]any, error) {
 	allowed := map[string]bool{"command": true, "read_file": true, "write_file": true, "list_directory": true, "search": true, "export_file": true, "snapshot": true, "capture_display": true}
 	if !allowed[action] || len(encode(payload)) > 262144 {

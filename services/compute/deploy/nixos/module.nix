@@ -48,6 +48,11 @@ let
         jwksURL = cfg.access.jwksURL;
         ownerEmailSecretName = cfg.access.ownerEmailSecretName;
       };
+      oidc = {
+        issuer = cfg.oidc.issuer;
+        audience = cfg.oidc.audience;
+        jwksURL = cfg.oidc.jwksURL;
+      };
     };
     worker.enabled = false;
   });
@@ -260,6 +265,11 @@ in {
         description = "Secret with the authorized Cloudflare Access owner email.";
       };
     };
+    oidc = {
+      issuer = lib.mkOption { type = lib.types.str; default = ""; description = "Independent non-administrator Compute OIDC issuer."; };
+      audience = lib.mkOption { type = lib.types.str; default = ""; description = "Exact project-editor audience for signed bearer tokens."; };
+      jwksURL = lib.mkOption { type = lib.types.str; default = ""; description = "HTTPS JWKS endpoint of the configured project-editor issuer."; };
+    };
     embedding = {
       url = lib.mkOption { type = lib.types.str; default = ""; description = "HTTPS or loopback embeddings-compatible endpoint."; };
       model = lib.mkOption { type = lib.types.str; default = ""; description = "Configured embedding model identifier."; };
@@ -318,6 +328,13 @@ in {
 
   config = lib.mkIf cfg.enable {
     assertions = [
+      {
+        assertion =
+          (cfg.oidc.issuer == "" && cfg.oidc.audience == "" && cfg.oidc.jwksURL == "") ||
+          (lib.hasPrefix "https://" cfg.oidc.issuer && cfg.oidc.audience != "" &&
+            lib.hasPrefix "https://" cfg.oidc.jwksURL);
+        message = "Compute project-editor OIDC requires a complete HTTPS issuer, nonempty audience and HTTPS JWKS endpoint.";
+      }
       {
         assertion = (cfg.embedding.url == "") == (cfg.embedding.model == "")
           && (cfg.embedding.url != "" || (cfg.embedding.tokenSecretName == "" && cfg.vault.embeddingsAlias == ""));

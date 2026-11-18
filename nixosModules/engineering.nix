@@ -36,7 +36,12 @@ in {
     allowedProjects = lib.mkOption {
       type = lib.types.listOf lib.types.str;
       default = [];
-      description = "Exact compute projects in which engineering runs may be submitted.";
+      description = "Exact Compute project allowlist when grantScopedProjects is false.";
+    };
+    grantScopedProjects = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "Admit only projects where the daemon's non-administrator identity has a current Compute editor grant. Grants are rechecked for every operation.";
     };
     model = {
       url = lib.mkOption {
@@ -71,9 +76,12 @@ in {
         message = "Engineering requires exactly one protected compute editor credential source.";
       }
       {
-        assertion = cfg.allowedProjects != [] && lib.length cfg.allowedProjects <= 32
-          && lib.length (lib.unique cfg.allowedProjects) == lib.length cfg.allowedProjects
-          && lib.all (project: builtins.match "^[a-z0-9][a-z0-9_-]{0,79}$" project != null) cfg.allowedProjects;
+        assertion =
+          (cfg.grantScopedProjects && cfg.allowedProjects == []) ||
+          (!cfg.grantScopedProjects && cfg.allowedProjects != []
+            && lib.length cfg.allowedProjects <= 32
+            && lib.length (lib.unique cfg.allowedProjects) == lib.length cfg.allowedProjects
+            && lib.all (project: builtins.match "^[a-z0-9][a-z0-9_-]{0,79}$" project != null) cfg.allowedProjects);
         message = "Engineering requires a finite list of unique approved project identifiers.";
       }
       {
@@ -111,6 +119,7 @@ in {
         HOMELAB_ENGINEERING_SOCKET = "/run/homelab-engineeringd/engineering.sock";
         HOMELAB_ENGINEERING_DIR = "/var/lib/homelab-engineeringd/runs";
         HOMELAB_ENGINEERING_PROJECTS = lib.concatStringsSep "," cfg.allowedProjects;
+        HOMELAB_ENGINEERING_GRANT_SCOPED = if cfg.grantScopedProjects then "1" else "0";
         HOMELAB_ENGINEERING_NATIVE_VERIFICATION = if cfg.nativeVerification then "1" else "0";
         HOMELAB_COMPUTE_URL = cfg.computeURL;
       } // lib.optionalAttrs (cfg.computeTokenFile != null) {

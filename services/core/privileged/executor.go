@@ -210,7 +210,7 @@ func (e *Executor) ExecuteWithID(ctx context.Context,requestID,operation,target 
 		if !ok || host != target {
 			return deny("host mismatch"), nil
 		}
-	case "infrastructure__workspace_create", "infrastructure__workspace_stop",
+	case "infrastructure__workspace_create", "infrastructure__workspace_command", "infrastructure__workspace_stop",
         "infrastructure__workspace_register_image", "infrastructure__workspace_propose_program",
         "infrastructure__workspace_review_program", "infrastructure__workspace_update_entry",
         "infrastructure__workspace_build_environment",
@@ -286,7 +286,7 @@ func (e *Executor) ExecuteWithID(ctx context.Context,requestID,operation,target 
 	switch operation {
 	case "infrastructure__service_start", "infrastructure__service_stop", "infrastructure__service_reload", "infrastructure__service_restart":
 		err = e.cfg.Run(ctx, e.cfg.Systemctl, verb, fields["service"].(string))
-	case "infrastructure__workspace_create", "infrastructure__workspace_stop",
+	case "infrastructure__workspace_create", "infrastructure__workspace_command", "infrastructure__workspace_stop",
         "infrastructure__workspace_register_image", "infrastructure__workspace_propose_program",
         "infrastructure__workspace_review_program", "infrastructure__workspace_update_entry",
         "infrastructure__workspace_build_environment",
