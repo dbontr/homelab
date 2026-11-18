@@ -52,7 +52,7 @@ func configured()( *release.Controller,error){
 // modifying the same generation journal while the privileged daemon owns it.
 func acquireReleaseLease(state,operation string)(*statelease.Lease,error){
  switch operation {
- case "status":return nil,nil
+ case "status","guard-activate","guard-revert":return nil,nil
  case "stage","activate","revert","recover":
   return statelease.Acquire(state,"executord")
  default:return nil,errors.New("unknown release operation")
@@ -62,7 +62,7 @@ func acquireReleaseLease(state,operation string)(*statelease.Lease,error){
 func run(args []string)error{
  if os.Geteuid()!=0{return errors.New("release management requires a local administrator")}
  ctrl,err:=configured();if err!=nil{return err}
- if len(args)==0{return errors.New("expected stage, activate, recover, or status")}
+ if len(args)==0{return errors.New("expected stage, activate, revert, recover, status, or guard operation")}
  lease,err:=acquireReleaseLease(ctrl.Config.StateDir,args[0])
  if err!=nil{return fmt.Errorf("exclusive release-state access unavailable: %w",err)}
  if lease!=nil{defer lease.Close()}
@@ -83,6 +83,11 @@ func run(args []string)error{
  case "revert":
   if len(args)!=2{return errors.New("revert requires the active staged release ID")}
   return ctrl.Revert(ctx,args[1])
+ case "guard-activate","guard-revert":
+  if len(args)!=3{return errors.New("protected release runner requires a request ID and staged release ID")}
+  action:="activate"
+  if args[0]=="guard-revert"{action="revert"}
+  return guardRelease(ctx,ctrl,action,args[1],args[2])
  case "recover":
   if len(args)!=1{return errors.New("recover accepts no arguments")}
   return ctrl.Recover(ctx)
