@@ -28,7 +28,7 @@ func TestEngineeringProgramManifest(t *testing.T) {
 	for _, id := range []string{
 		"amd-vivado-2022-2", "amd-vivado-2024-1", "amd-vivado-2025-2",
 		"go-1-27", "rust-toolchain", "gcc-cpp", "python-3", "julia-1-13",
-		"lean4-lake", "ltspice-windows", "ngspice",
+		"lean4-lake", "ltspice-windows", "ngspice", "matlab-r2026b", "minecraft-java-reference",
 	} {
 		if _, ok := byID[id]; !ok {
 			t.Fatalf("missing requested engineering tool: %s", id)
@@ -36,6 +36,14 @@ func TestEngineeringProgramManifest(t *testing.T) {
 	}
 	if byID["ltspice-windows"].Platform != "windows-native" {
 		t.Fatal("LTspice must not be described as a Linux container runtime")
+	}
+	if byID["matlab-r2026b"].SourceURL != "https://www.mathworks.com/downloads/" ||
+		!strings.Contains(byID["matlab-r2026b"].LicenseNotes, "license") {
+		t.Fatal("MATLAB must require official distribution and independent license qualification")
+	}
+	if !strings.Contains(byID["minecraft-java-reference"].LicenseNotes, "proprietary assets") ||
+		byID["minecraft-java-reference"].Distribution != "oci" {
+		t.Fatal("reference game must retain license and asset segregation")
 	}
 }
 
