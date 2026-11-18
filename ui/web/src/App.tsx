@@ -4,7 +4,7 @@ import {
   FolderKanban, HeartPulse, LayoutDashboard, Library, ListTodo,
   MonitorCog, Moon, RefreshCcw, ScrollText, Server,
   ShieldCheck, Sun, Workflow, Wrench, Menu, X, Utensils,
-  AlarmClock, ClipboardList, NotebookPen,
+  AlarmClock, ClipboardList, NotebookPen, type LucideIcon,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -19,7 +19,9 @@ import { cn } from "@/lib/utils"
 
 type PageKey = "overview" | "projects" | "engineering" | "monitoring" | keyof typeof recordPages
 
-const navigation = [
+type NavGroup = { group: string; items: Array<{ id: string; label: string; icon: LucideIcon }> }
+
+const navigation: NavGroup[] = [
   { group: "Research", items: [
     { id: "overview", label: "Overview", icon: LayoutDashboard },
     { id: "projects", label: "Projects", icon: FolderKanban },
@@ -45,7 +47,7 @@ const navigation = [
     { id: "activity", label: "Activity", icon: Activity },
     { id: "security", label: "Security", icon: ShieldCheck },
   ] },
-] as const
+]
 
 const ids = new Set<string>(navigation.flatMap(group => group.items.map(item => item.id)))
 
