@@ -40,6 +40,26 @@
     "license_notes": "Vendor-authenticated installation and license acceptance required; confirm device/IP entitlements. Do not redistribute installers, binaries, or license material."
   },
   {
+    "id": "matlab-r2026b",
+    "name": "MATLAB",
+    "version": "R2026b",
+    "platform": "linux-container",
+    "distribution": "oci",
+    "source_url": "https://www.mathworks.com/downloads/",
+    "description": "Numerical computing, signal processing, optimization and simulation. Batch execution requires a separately licensed, verified Linux environment; graphical MATLAB requires an approved session.",
+    "license_notes": "MathWorks account sign-in is required to obtain the installer. Installation and compute execution require the applicable individual, campus or network license and selected toolbox entitlements. Owner-only acquisition; do not publish installers, license files or activation secrets in repositories, logs or OCI registries."
+  },
+  {
+    "id": "minecraft-java-reference",
+    "name": "Minecraft: Java Edition (reference installation)",
+    "version": "vendor-selected",
+    "platform": "linux-container",
+    "distribution": "oci",
+    "source_url": "https://www.minecraft.net/download/",
+    "description": "Owner-licensed reference installation for observing gameplay and researching an independently implemented voxel engine. Requires a separate graphical runtime; not a project build dependency.",
+    "license_notes": "Download the official launcher using an authorized Microsoft account and a valid game entitlement. Keep game binaries, textures, sounds, account tokens and other proprietary assets private; independently implement the clone without redistributing protected code or assets. No approved compute image or game runtime is implied."
+  },
+  {
     "id": "go-1-27",
     "name": "Go",
     "version": "1.27.x",
