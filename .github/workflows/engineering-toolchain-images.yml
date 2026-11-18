@@ -1,0 +1,86 @@
+name: Engineering toolchain images
+
+on:
+  push:
+    branches:
+      - qualification/go-operational-platform
+    paths:
+      - ".github/workflows/engineering-toolchain-images.yml"
+      - "services/compute/images/**"
+      - "services/compute/scripts/verify-research-toolchains.sh"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  immutable-toolchains:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: go
+            base: docker.io/library/golang:1.27.3-bookworm
+            dockerfile: services/compute/images/go/Dockerfile
+            artifact: engineering-go
+            tag: go-1.27.3
+          - name: axiom
+            base: docker.io/library/rust:1.91.1-trixie
+            dockerfile: services/compute/images/axiom/Dockerfile
+            artifact: engineering-axiom
+            tag: rust-1.91.1-lean-4.34.0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Resolve and validate immutable upstream image identity
+        id: base
+        env:
+          BASE_TAG: ${{ matrix.base }}
+        run: |
+          set -euo pipefail
+          inspected="$(docker buildx imagetools inspect "$BASE_TAG")"
+          digest="$(printf '%s\n' "$inspected" | sed -nE 's/^Digest:[[:space:]]*(sha256:[a-f0-9]{64})[[:space:]]*$/\1/p' | head -n 1)"
+          if [[ ! "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+            echo "OCI registry did not return a valid immutable base digest" >&2
+            exit 1
+          fi
+          echo "ref=${BASE_TAG}@${digest}" >> "$GITHUB_OUTPUT"
+          printf 'Upstream image: %s@%s\n' "$BASE_TAG" "$digest" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Authenticate package publisher
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build, verify and publish image
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/${{ github.repository }}/${{ matrix.artifact }}:${{ matrix.tag }}
+          build-args: |
+            BASE_IMAGE=${{ steps.base.outputs.ref }}
+          provenance: mode=max
+          sbom: true
+
+      - name: Report immutable publication identity
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          IMAGE: ghcr.io/${{ github.repository }}/${{ matrix.artifact }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+            echo "Registry did not confirm a publishable image digest" >&2
+            exit 1
+          fi
+          printf 'Candidate image: %s@%s\n' "$IMAGE" "$DIGEST" >> "$GITHUB_STEP_SUMMARY"
+          printf 'Publication alone never changes worker allowlists, grants or production releases.\n' >> "$GITHUB_STEP_SUMMARY"

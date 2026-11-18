@@ -165,3 +165,5 @@
 - [Lean 4 official repository](https://github.com/leanprover/lean4) — Lean project. Used for: identifying and independently validating the pinned Lean compiler and Lake build tool in formal-proof development workspaces.
 - [Rust wasm32-unknown-unknown target](https://doc.rust-lang.org/rustc/platform-support/wasm32-unknown-unknown.html) — Rust project. Used for: verifying the exact WebAssembly target available in the declared project compiler environment.
 - [Nixpkgs JavaScript packaging](https://nixos.org/manual/nixpkgs/stable/#javascript) — Nixpkgs project. Used for: dependency-locked Node.js module linking and static React console package builds.
+- [Lean 4.34.0 official release](https://github.com/leanprover/lean4/releases/tag/v4.34.0) — Lean project. Used for: the independently SHA-256-verified Linux/amd64 Lean and Lake distribution in isolated mathematical research images.
+- [Docker Buildx imagetools inspect](https://docs.docker.com/reference/cli/docker/buildx/imagetools/inspect/) — Docker. Used for: resolving immutable upstream OCI base-image digests before building source-qualified Engineering toolchains.
