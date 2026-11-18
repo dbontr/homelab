@@ -6,6 +6,7 @@ pkgs.testers.runNixOSTest {
   name = "release-generation-switch";
   nodes.machine = { pkgs, ... }: {
     system.stateVersion = "26.05";
+    system.switch.enable = true;
     systemd.services.fixture-executor = {
       wantedBy = [ "multi-user.target" ];
       serviceConfig.ExecStart = "${pkgs.coreutils}/bin/sleep infinity";
@@ -17,6 +18,7 @@ pkgs.testers.runNixOSTest {
   };
   nodes.replacement = { pkgs, ... }: {
     system.stateVersion = "26.05";
+    system.switch.enable = true;
     networking.hostName = "machine";
     systemd.services.fixture-go-executor = {
       wantedBy = [ "multi-user.target" ];
@@ -67,7 +69,7 @@ pkgs.testers.runNixOSTest {
       print("RELEASE_JOURNAL_END")
       print("GENERATION_SERVICES")
       print(machine.succeed("systemctl is-active fixture-executor.service fixture-authority.service fixture-go-executor.service fixture-go-authority.service || true"))
-      machine.wait_until_succeeds("grep -Fx rolled-back /tmp/release-phase", timeout=90)
+      machine.wait_until_succeeds("test -f /tmp/release-phase && grep -Fx rolled-back /tmp/release-phase", timeout=90)
       machine.succeed("systemctl is-active fixture-executor.service")
       machine.succeed("systemctl is-active fixture-authority.service")
     '';
