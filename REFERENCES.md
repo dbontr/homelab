@@ -196,3 +196,9 @@
 - [FreeCAD project](https://www.freecad.org/) — FreeCAD project. Used for: mechanical CAD program identity and GUI requirements.
 - [GNU Radio project](https://www.gnuradio.org/) — GNU Radio project. Used for: digital signal processing program identity.
 - [Kubernetes image pull policies](https://kubernetes.io/docs/concepts/containers/images/) — Kubernetes project. Used for: distinguishing catalog approval from confirmed image pull and worker eligibility.
+
+- [GitHub Issues](https://docs.github.com/en/issues/tracking-your-work-with-issues) — GitHub Docs. Used for: problem reports, acceptance criteria and issue relationships in the Development skill.
+- [GitHub Projects](https://docs.github.com/en/issues/planning-and-tracking-with-projects) — GitHub Docs. Used for: projects and fields coordinating cross-repository engineering work.
+- [GitHub Packages](https://docs.github.com/en/packages) — GitHub Docs. Used for: scoped artifact publication and OCI package lifecycle in the Development skill.
+- [GitHub Actions](https://docs.github.com/en/actions) — GitHub Docs. Used for: workflow parity, runner usage and quota-aware local acceptance.
+- [GitHub Wikis](https://docs.github.com/en/communities/documenting-your-project-with-wikis) — GitHub Docs. Used for: separation of maintained wiki guidance from versioned release policy.

@@ -1,11 +1,11 @@
 ---
 name: development
-description: Develop, review, debug, refactor and organize software with production-grade code quality, GitHub issues and pull requests, multi-repository projects, shared libraries, secure compute workspaces, research references, and verified engineering delivery. Use for programming, software architecture, code analysis, repository work, project orchestration or professional coding.
+description: Develop, review, debug, refactor and organize software with production-grade code quality, GitHub Issues, Projects, Packages, Wiki, Actions, pull requests and branches, multi-repository projects, shared libraries, secure compute workspaces, research references, and verified engineering delivery. Use for programming, software architecture, code analysis, repository work, project orchestration or professional coding.
 ---
 
 # Development
 
-Skill version: `1.6.0`.
+Skill version: `1.7.0`.
 
 
 Produce software that looks like the intended final design, not the visible history of an AI conversation.
@@ -485,6 +485,12 @@ Before finishing, ask internally:
 - Did I run the references-page and AI-residue prechecks when available, inspect the final diff, and verify the relevant behavior?
 
 For difficult edge cases and concrete before/after examples, consult `references/examples.md`. For engineering-economy selection, dependency admission, root-cause repair, and subtraction review, consult `references/engineering-economy.md`. For controlled technical English, consult `references/technical-english.md`.
+
+## GitHub collaboration and local qualification
+
+Use available connected GitHub tools to keep Issues, Projects V2, branches, pull requests, Packages/GHCR, Wikis and Actions coherent with the actual project. Inspect feature availability and connector permissions; never claim to have performed an unsupported write. Prefer each native GitHub feature for its natural responsibility, with Homelab Projects retaining authority over compute and research data.
+
+GitHub Actions billing, runner limits and queue availability can prevent hosted tests. When they do, execute the matching checked-in CI commands against the exact source revision on an isolated local or approved Compute worker; preserve toolchain versions, logs, exit status and hashes. Label such evidence `local-pass`, not a GitHub Actions success, and do not override required branch checks or protected deployments. See [GitHub workflow](references/github-workflow.md) for feature-by-feature policy and the local test procedure.
 
 ## GitHub and project orchestration
 
