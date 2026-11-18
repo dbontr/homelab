@@ -77,8 +77,8 @@
 - [RFC 8018: PKCS #5 Password-Based Cryptography Specification, Version 2.1](https://www.rfc-editor.org/rfc/rfc8018) — IETF. Used for: PBKDF2-HMAC-SHA256 owner passphrase verification.
 - [MCP Streamable HTTP Transport — Security and Endpoint](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports) — Model Context Protocol. Used for: incoming Origin validation and authenticated Streamable HTTP requests.
 - [OWASP API Security Top 10](https://owasp.org/API-Security/editions/2023/en/0x11-t10/) — OWASP. Used for: function-level authorization, bounded downstream responses and unsafe external API consumption.
-- [shadcn/ui](https://github.com/shadcn-ui/ui) — shadcn/ui project. Used for: semantic component composition, design vocabulary, and accessible interaction patterns in the Rust console.
-- [shadcn/ui Theming](https://ui.shadcn.com/docs/theming) — shadcn/ui project. Used for: exact neutral light/dark design tokens, sidebar colors, and radius scale for the Rust/Dioxus console.
+- [shadcn/ui](https://github.com/shadcn-ui/ui) — shadcn/ui project. Used for: source-controlled React button, card, badge, input, table, alert, skeleton and textarea primitives in the shadcn/ui-based web console.
+- [shadcn/ui Theming](https://ui.shadcn.com/docs/theming) — shadcn/ui project. Used for: shadcn/ui neutral light/dark theme tokens and component styling in the React browser console.
 - [Dioxus 0.7 Documentation](https://dioxuslabs.com/learn/0.7/) — Dioxus project. Used for: Rust RSX components, WASM rendering and future desktop packaging.
 - [Dioxus v0.7.10 Release](https://github.com/DioxusLabs/dioxus/releases/tag/v0.7.10) — Dioxus project. Used for: pinned, checksummed WebAssembly console bundling.
 - [wasm-bindgen v0.2.130 Release](https://github.com/wasm-bindgen/wasm-bindgen/releases/tag/0.2.130) — wasm-bindgen project. Used for: pinned JavaScript binding generation matching the compiled console.
@@ -155,3 +155,10 @@
 - [gloo-timers Documentation](https://docs.rs/gloo-timers/latest/gloo_timers/) — Rust/WASM Gloo maintainers. Used for: bounded in-app refresh of the scheduled motivation inbox while the console view is active.
 - [Bubblewrap project](https://github.com/containers/bubblewrap) — Bubblewrap maintainers. Used for: Linux mount namespace, network isolation, parent-death process control and read-only sandbox bindings.
 - [Git rev-parse](https://git-scm.com/docs/git-rev-parse) — Git project. Used for: verifying the workspace's expected source revision before permitted build/test execution.
+- [React Documentation](https://react.dev/reference/react) — React project. Used for: function components, state and effect lifecycle in the first-party TypeScript web console.
+- [TypeScript Documentation](https://www.typescriptlang.org/docs/) — TypeScript project. Used for: strict typing of browser API responses, runtime-independent components and generated JavaScript.
+- [Vite Guide](https://vite.dev/guide/) — Vite project. Used for: the static React browser bundle and same-origin development tooling.
+- [Tailwind CSS with Vite](https://tailwindcss.com/docs/installation/using-vite) — Tailwind CSS project. Used for: utility classes, neutral design tokens and build-time CSS generation.
+- [Radix UI Slot](https://www.radix-ui.com/primitives/docs/utilities/slot) — Radix UI project. Used for: accessible, composable shadcn/ui button and badge wrappers.
+- [shadcn/ui Components](https://ui.shadcn.com/docs/components) — shadcn/ui project. Used for: adapting the official new-york component registry under its MIT license.
+- [npm ci](https://docs.npmjs.com/cli/v10/commands/npm-ci) — npm project. Used for: immutable lockfile-based browser dependency installation.
