@@ -17,6 +17,10 @@ function VerifiedRunForm({ csrf, onSubmitted }: { csrf: string; onSubmitted: () 
   const catalog = useApi<unknown>("/v1/software")
   const images = list(asRecord(catalog.data)?.images).filter(item =>
     text(item, "status") === "active" && Array.isArray(item.available_nodes) && item.available_nodes.length > 0)
+  const eligibleImageIDs = new Set(images.map(item => text(item, "id")))
+  const programs = list(asRecord(catalog.data)?.programs).filter(item =>
+    text(item, "status") === "available" && text(item, "pool_kind") === "image" &&
+    eligibleImageIDs.has(text(item, "pool_id")))
   const [project, setProject] = useState("")
   const [repository, setRepository] = useState("")
   const [revision, setRevision] = useState("")
@@ -84,9 +88,16 @@ function VerifiedRunForm({ csrf, onSubmitted }: { csrf: string; onSubmitted: () 
         <label className="space-y-1 text-sm sm:col-span-2">Approved execution environment
           <select className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" value={image} onChange={e => setImage(e.target.value)} required>
             <option value="">Select an image available on an online worker</option>
+            {programs.length > 0 && <optgroup label="Approved programs">
+              {programs.map(item => <option key={text(item, "id")} value={text(item, "pool_id")}>
+                {text(item, "name")} {text(item, "version")}
+              </option>)}
+            </optgroup>}
+            <optgroup label="Available OCI images">
             {images.map(item => <option key={text(item, "id")} value={text(item, "id")}>
               {text(item, "id")} · {(item.available_nodes as unknown[]).length} worker(s)
             </option>)}
+            </optgroup>
           </select>
           {images.length === 0 && <span className="block text-xs text-muted-foreground">No eligible execution image is reported. Review the <a href="#software" className="underline">software library</a> and worker admission status.</span>}
         </label>
