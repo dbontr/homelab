@@ -115,7 +115,7 @@ func (e *Engine) Knowledge(runID, proposalID string) (KnowledgeProposal, error) 
 	if err != nil {
 		return KnowledgeProposal{}, err
 	}
-	if !e.AllowedProjects[w.Project] || w.Agent == nil {
+	if !e.projectAllowed(w.Project) || w.Agent == nil {
 		return KnowledgeProposal{}, errors.New("knowledge proposal unavailable")
 	}
 	for _, proposal := range w.Agent.Knowledge {
@@ -134,7 +134,7 @@ func (e *Engine) ApproveKnowledge(runID, proposalID string) (KnowledgeProposal, 
 	if err != nil {
 		return KnowledgeProposal{}, err
 	}
-	if !e.AllowedProjects[w.Project] || Summarize(w).Status != Succeeded {
+	if !e.projectAllowed(w.Project) || Summarize(w).Status != Succeeded {
 		return KnowledgeProposal{}, errors.New("only completed authorized runs can contribute knowledge")
 	}
 	proposal, err := e.Knowledge(runID, proposalID)
