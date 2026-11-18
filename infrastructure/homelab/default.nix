@@ -64,6 +64,8 @@
     workerImage = "ghcr.io/dbontr/homelab/worker@sha256:c7ab035296db9aec360611c52737ca4e94143fb959c7ad56ca536cc20fd6ee4f";
     computeNodes = [ "jupiter" "venus" "mercury" "janus" ];
     excludeProjects = [ "acceptance" ];
+    projectApprovedImages = builtins.fromJSON
+      (builtins.readFile ../../services/compute/images/project-allowlist.json);
     interval = "2min";
   };
 

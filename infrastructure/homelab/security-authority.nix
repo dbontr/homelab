@@ -2,6 +2,8 @@
 let
   secretDir = "/srv/homelab/secrets/security";
   host = "saturn";
+  approvedImages = builtins.fromJSON
+    (builtins.readFile ../../services/compute/images/project-allowlist.json);
   privilegedOperations = [
     "infrastructure__service_start"
     "infrastructure__service_stop"
@@ -79,9 +81,10 @@ in
         "web-game-console-emulator"
         "workspace-mcp"
       ];
-      imageReferences = [
-        "docker.io/library/debian@sha256:99c0b25c46d0214d5a2091092e7908907dcaecd6a962cde0ac700acee222b6f3"
-      ];
+      images = [ "engineering-go-1273" "engineering-axiom-rust-lean" ];
+      imageReferences =
+        [ "docker.io/library/debian@sha256:99c0b25c46d0214d5a2091092e7908907dcaecd6a962cde0ac700acee222b6f3" ]
+        ++ builtins.concatLists (builtins.attrValues approvedImages);
     };
     allowedServices = [ "homelab-motivation.service" ];
     healthServices = [

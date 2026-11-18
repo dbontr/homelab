@@ -1,0 +1,8 @@
+{
+  "axiom-engine": [
+    "ghcr.io/dbontr/homelab/engineering-axiom@sha256:5d44a96fc68a5d82aedb1ce69c4c1221f4f6b262b0f47657ef43c842766f5cbb"
+  ],
+  "homelab-platform": [
+    "ghcr.io/dbontr/homelab/engineering-go@sha256:f33edc74b06fa39246ec30a7b3bf13d48b97d7590424d4ecd7aa6882d5b0558e"
+  ]
+}
