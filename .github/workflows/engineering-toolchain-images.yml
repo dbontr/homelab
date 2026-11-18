@@ -9,6 +9,11 @@ on:
       - "services/compute/images/**"
       - "services/compute/scripts/verify-research-toolchains.sh"
   workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/engineering-toolchain-images.yml"
+      - "services/compute/images/**"
+      - "services/compute/scripts/verify-research-toolchains.sh"
 
 permissions:
   contents: read
@@ -16,6 +21,7 @@ permissions:
 
 jobs:
   immutable-toolchains:
+    if: github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'qualification/go-operational-platform')
     runs-on: ubuntu-24.04
     timeout-minutes: 55
     strategy:
