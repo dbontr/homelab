@@ -7,6 +7,8 @@ pkgs.testers.runNixOSTest {
   nodes.machine = { pkgs, ... }: {
     system.stateVersion = "26.05";
     system.switch.enable = true;
+    boot.loader.grub.enable = pkgs.lib.mkForce false;
+    boot.loader.systemd-boot.enable = pkgs.lib.mkForce false;
     systemd.services.fixture-executor = {
       wantedBy = [ "multi-user.target" ];
       serviceConfig.ExecStart = "${pkgs.coreutils}/bin/sleep infinity";
@@ -19,6 +21,8 @@ pkgs.testers.runNixOSTest {
   nodes.replacement = { pkgs, ... }: {
     system.stateVersion = "26.05";
     system.switch.enable = true;
+    boot.loader.grub.enable = pkgs.lib.mkForce false;
+    boot.loader.systemd-boot.enable = pkgs.lib.mkForce false;
     networking.hostName = "machine";
     systemd.services.fixture-go-executor = {
       wantedBy = [ "multi-user.target" ];
