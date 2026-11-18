@@ -86,10 +86,7 @@ cat > "$scratch/bin/nix" <<'NIX'
 [ "${1:-}" = build ] || exit 2
 [ -n "${HOMELAB_RELEASE_TEST_CONSOLE_DIR:-}" ] || exit 2
 [ "$PWD" != "$HOMELAB_RELEASE_TEST_SOURCE_DIR" ] || exit 43
-case " $* " in
-  *" --offline "*" --no-write-lock-file "*" --no-link "*" .#homelab-console-web "*) ;;
-  *) exit 2 ;;
-esac
+[ "$*" = 'build --offline --no-write-lock-file --no-link --print-out-paths .#homelab-console-web' ] || exit 2
 printf '%s\n' "$HOMELAB_RELEASE_TEST_CONSOLE_DIR"
 NIX
 chmod 0700 "$scratch/bin/nix" "$scratch/bin/go" "$scratch/bin/cargo"
