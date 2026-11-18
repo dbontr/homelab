@@ -413,7 +413,11 @@ impl ReleaseController {
             .await
             {
                 Ok(Ok(connection)) => drop(connection),
-                _ => return Err(Error::Unavailable("protected release TCP health check failed")),
+                _ => {
+                    return Err(Error::Unavailable(
+                        "protected release TCP health check failed",
+                    ))
+                }
             }
         }
         Ok(())
@@ -607,11 +611,15 @@ impl ReleaseController {
         if matches!(journal.phase.as_str(), "active" | "rolled-back")
             && !journal_matches_generation(&journal, &self.current_system()?)
         {
-            return Err(Error::Storage("release journal differs from live generation"));
+            return Err(Error::Storage(
+                "release journal differs from live generation",
+            ));
         }
         let manifest = self.load_stage(&journal.id)?;
         if manifest.system != journal.target {
-            return Err(Error::Storage("release journal target differs from staged generation"));
+            return Err(Error::Storage(
+                "release journal target differs from staged generation",
+            ));
         }
         Ok((journal, manifest))
     }

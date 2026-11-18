@@ -987,7 +987,10 @@ impl Policy {
         }
         let health_sockets: Vec<SocketAddr> = socket_values
             .iter()
-            .map(|value| valid_health_socket(value).ok_or(Error::Configuration("invalid release health socket")))
+            .map(|value| {
+                valid_health_socket(value)
+                    .ok_or(Error::Configuration("invalid release health socket"))
+            })
             .collect::<Result<_, _>>()?;
         if health_sockets.iter().collect::<BTreeSet<_>>().len() != health_sockets.len() {
             return Err(Error::Configuration("duplicate release health socket"));
@@ -1169,8 +1172,12 @@ mod tests {
             assert!(valid_health_socket(address).is_some(), "{address}");
         }
         for address in [
-            "0.0.0.0:22", "8.8.8.8:53", "example.com:443",
-            "10.77.30.1:0", "[::]:22", "http://127.0.0.1:8104",
+            "0.0.0.0:22",
+            "8.8.8.8:53",
+            "example.com:443",
+            "10.77.30.1:0",
+            "[::]:22",
+            "http://127.0.0.1:8104",
         ] {
             assert!(valid_health_socket(address).is_none(), "{address}");
         }
@@ -1186,11 +1193,19 @@ mod tests {
             "k3s.service",
         ] {
             assert!(valid_health_service(unit), "health probe denied: {unit}");
-            assert!(!valid_service(unit), "critical unit gained mutation access: {unit}");
+            assert!(
+                !valid_service(unit),
+                "critical unit gained mutation access: {unit}"
+            );
         }
         for unit in [
-            "", "sshd", "../sshd.service", "sshd.socket", "ssh d.service",
-            "sshd.service\\n", "-sshd.service",
+            "",
+            "sshd",
+            "../sshd.service",
+            "sshd.socket",
+            "ssh d.service",
+            "sshd.service\\n",
+            "-sshd.service",
         ] {
             assert!(!valid_health_service(unit), "invalid health unit: {unit}");
         }
