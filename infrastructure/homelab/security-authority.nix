@@ -26,8 +26,8 @@ in
 {
   services.homelabSecurity = {
     enable = true;
-    implementation = "rust";
-    migration.receiptFile = "${secretDir}/authority-rust-cutover.json";
+    implementation = "go";
+    migration.receiptFile = "${secretDir}/authority-go-cutover.json";
     owner = "owner";
     passwordVerifierFile = "${secretDir}/owner-verifier.json";
     totpSecretFile = "${secretDir}/owner-totp";
@@ -60,8 +60,8 @@ in
 
   services.homelabExecutor = {
     enable = true;
-    implementation = "rust";
-    useRustActuator = true;
+    implementation = "go";
+    useRustActuator = false;
     allowReleaseActivation = true;
     sourceDirectory = "/srv/homelab-main-build";
     workspace = {
