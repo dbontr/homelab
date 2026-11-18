@@ -72,6 +72,7 @@ in
       projects = [
         "acceptance"
         "aup-zu3-pynq"
+        "axiom-engine"
         "health-stack"
         "homelab-platform"
         "minecraft-rust"
