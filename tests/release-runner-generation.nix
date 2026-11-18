@@ -60,6 +60,7 @@ pkgs.testers.runNixOSTest {
       replacement = nodes.replacement.config.system.build.toplevel;
       runner = pkgs.writeShellScript "fixture-release-runner" ''
         set -eu
+        export PATH="${pkgs.gnugrep}/bin:${pkgs.coreutils}/bin:${pkgs.systemd}/bin:$PATH"
         grep -Fx rust /run/fixture-executor-version
         grep -Fx rust /run/fixture-authority-version
         "${replacement}/bin/switch-to-configuration" switch
