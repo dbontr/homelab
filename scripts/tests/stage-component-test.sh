@@ -7,12 +7,13 @@ trap 'chmod -R u+w -- "$scratch"; rm -rf -- "$scratch"' EXIT
 mkdir -p "$scratch/bin"
 
 fixture="$scratch/repository"
-mkdir -p "$fixture/scripts" "$fixture/services/core" "$fixture/services/motivation"
+mkdir -p "$fixture/scripts" "$fixture/services/core" "$fixture/services/motivation" "$fixture/ui/web"
 cp "$root/scripts/stage-release.sh" "$fixture/scripts/stage-release.sh"
 cp "$root/scripts/verify-release.sh" "$fixture/scripts/verify-release.sh"
 printf 'pinned source\n' > "$fixture/fixture.txt"
 printf 'core\n' > "$fixture/services/core/.fixture"
 printf 'motivation\n' > "$fixture/services/motivation/.fixture"
+printf '{"lockfileVersion":3}\n' > "$fixture/ui/web/package-lock.json"
 git -C "$fixture" init -q
 git -C "$fixture" add .
 git -C "$fixture" -c user.name="Release fixture" -c user.email="fixture@example.invalid" \
@@ -76,7 +77,19 @@ case "${1-}" in
   *) exit 2 ;;
 esac
 CARGO
-chmod 0700 "$scratch/bin/go" "$scratch/bin/cargo"
+mkdir -p "$scratch/mock-console/assets"
+printf '<!doctype html><title>Homelab</title>\n' > "$scratch/mock-console/index.html"
+printf 'console bundle\n' > "$scratch/mock-console/assets/main.js"
+export HOMELAB_RELEASE_TEST_CONSOLE_DIR="$scratch/mock-console"
+cat > "$scratch/bin/nix" <<'NIX'
+#!/bin/sh
+[ "${1:-}" = build ] || exit 2
+[ -n "${HOMELAB_RELEASE_TEST_CONSOLE_DIR:-}" ] || exit 2
+[ "$PWD" != "$HOMELAB_RELEASE_TEST_SOURCE_DIR" ] || exit 43
+[ "$*" = 'build --offline --no-write-lock-file --no-link --print-out-paths .#homelab-console-web' ] || exit 2
+printf '%s\n' "$HOMELAB_RELEASE_TEST_CONSOLE_DIR"
+NIX
+chmod 0700 "$scratch/bin/nix" "$scratch/bin/go" "$scratch/bin/cargo"
 
 PATH="$scratch/bin:$PATH" bash "$fixture/scripts/stage-release.sh" \
   --component homelab-api "$scratch/api-release" >/dev/null
@@ -85,6 +98,13 @@ if ! grep -qx "source_revision=$revision" "$scratch/api-release/RELEASE"; then
   printf '%s\n' 'Staged release does not identify the exact tested Git commit' >&2
   exit 1
 fi
+
+PATH="$scratch/bin:$PATH" bash "$fixture/scripts/stage-release.sh" \
+  --component homelab-console "$scratch/console-release" >/dev/null
+bash "$root/scripts/verify-release.sh" "$scratch/console-release" >/dev/null
+test -s "$scratch/console-release/console/index.html"
+test -s "$scratch/console-release/console/assets/main.js"
+test -z "$(find "$scratch/console-release/bin" -type f -print -quit)"
 
 PATH="$scratch/bin:$PATH" bash "$fixture/scripts/stage-release.sh" \
   --component homelab-motivation "$scratch/motivation-release" >/dev/null

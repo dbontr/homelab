@@ -2,6 +2,59 @@
 
 Engineering is a capability of Homelab. The owner uses the same authenticated native API and MCP identity as the rest of the platform. Its compute controller, source authoring, release executor and credential broker are internal trust boundaries, not separate user-facing products.
 
+## Deployment and project admission
+
+The Saturn configuration imports the Engineering NixOS module through
+`infrastructure/homelab/engineering.nix`. Its daemon connects to the Compute
+controller through an Nginx listener bound to `127.0.0.1:8106`. That listener
+forwards only `/mcp`, `/api/whoami` and exact project-role lookups. Nginx
+verifies the controller's certificate against the local pinned CA; the listener
+is not published through Cloudflare or another network interface.
+
+Engineering loads a dedicated Compute editor identity from
+`/srv/homelab/secrets/engineering-compute-editor.token` using systemd
+`LoadCredential`. Do not use the controller's administrator token or owner
+session for unattended engineering. The startup probe rejects missing credentials,
+administrator identities and invalid roles. `grantScopedProjects = true`
+causes every incoming project operation, status request and continuation to
+consult the controller's *current* editor grant. An unavailable identity
+provider or revoked grant denies the operation. The service's identity never
+receives permission to change the controller's project catalog or fleet policy.
+
+A new project becomes eligible when the trusted administrator assigns that
+non-administrator service principal an exact editor grant through the
+controller's existing grant authority; no host release is needed merely
+to update the project list. The separate project worker, image and repository
+policies still apply. Admin operations, image admission, and NixOS releases
+remain behind the independent owner security authority.
+
+The protected release requires a provisioned and checked project-editor
+credential, an exact clean source revision, and the isolated Engineering
+acceptance evidence before activation. A missing credential is not repaired
+by substituting the pre-existing controller administrator token. The process
+keeps private state under a systemd-owned directory and the public gateway
+receives only the restricted Unix socket.
+
+## Verification-only builds
+
+A project can compile and test an immutable source revision without changing
+files, invoking an authoring model or publishing a pull request. Submit
+`engineering_run_submit` with `verify_only=true`, `prepare_only=true`,
+the approved `project`, linked `repository`, exact 40-character `revision`,
+`image_pool_id`, bounded CPU, memory and duration, and 1–8 exact `checks`.
+No `changes`, `allowed_paths`, `autonomous`, `review` or knowledge-writing
+option is permitted. The draft-PR fields are unnecessary in this mode.
+
+The daemon provisions an approved project workspace, checks out the pinned
+commit and runs each check in that isolated environment. A failed command
+fails the run; no model attempts automatic repairs. The durable engineering
+run records the source revision, each command and independently confirmed
+exit status. The workflow has no authoring, export or publication steps.
+Use verified project artifacts separately for binaries and datasets that
+must be preserved after the workspace expires. A `succeeded` run is proof
+of the listed tests only; mathematical claims still require Lean's own
+checker and proof acceptance receipts.
+
 ## Execution contract
 
 An engineering run belongs to one explicitly permitted project, independently of how many repositories it links. The requested repository must be linked to that project in the compute controller. The run pins one exact 40-character Git commit. Publication requires the same expected head and a named base branch.
@@ -59,7 +112,7 @@ Immediately before export, the engine checks the workspace file against the veri
 
 ## Engineering compute leases and source identity
 
-The engineering program can declare `hardware` as a bounded map of `gpu` or `npu` to device counts, with at most two accelerators in a run. `min_gpu_memory_mb` requires a GPU allocation. `node_id` and `architecture` optionally select the exact approved worker and machine architecture. CPU quantities must be finite. These declarations are forwarded unchanged to the Compute controller during `workspace_create`, where image approval, resource capacity, device ownership and lease conflicts are checked atomically. The engineering daemon does not create hardware leases itself and does not grant access to external boards. The Rust console accepts these options in its engineering run form.
+The engineering program can declare `hardware` as a bounded map of `gpu` or `npu` to device counts, with at most two accelerators in a run. `min_gpu_memory_mb` requires a GPU allocation. `node_id` and `architecture` optionally select the exact approved worker and machine architecture. CPU quantities must be finite. These declarations are forwarded unchanged to the Compute controller during `workspace_create`, where image approval, resource capacity, device ownership and lease conflicts are checked atomically. The engineering daemon does not create hardware leases itself and does not grant access to external boards. The React/TypeScript console accepts these options in its engineering run form.
 
 Every engineering run records an immutable `inputs` manifest with the complete request SHA-256, pinned primary and read-only repository revisions, selected compute image and hardware constraints, exact verification commands and permitted edit paths. Supplied file contents are represented by SHA-256 fingerprints, not copied into the public run summary. The verified export step separately records artifact IDs after source readback and controller SHA-256 verification. Together these provide inspectable provenance; they do not imply reproducible machine output unless independent builds yield matching artifact hashes.
 
@@ -77,7 +130,7 @@ The native endpoints are:
 - `GET /v1/engineering/runs/{id}`
 - `POST /v1/engineering/runs/{id}/cancel` with the exact run revision
 
-The MCP tools `engineering_run_submit`, `engineering_run_get`, `engineering_run_list` and `engineering_run_cancel` call the same implementation. The Rust console displays run progress and links to any confirmed draft pull request.
+The MCP tools `engineering_run_submit`, `engineering_run_get`, `engineering_run_list` and `engineering_run_cancel` call the same implementation. The React/TypeScript console displays run progress and links to any confirmed draft pull request.
 
 
 ## Multi-repository projects
@@ -147,7 +200,7 @@ deployment authorizations remain mandatory.
 
 ## Console
 
-The native Rust/WASM console provides authenticated engineering-run creation,
+The native React/TypeScript console provides authenticated engineering-run creation,
 execution progress, planning steps, changed-file paths, verification results,
 review findings, and links to confirmed GitHub draft diffs. The cooperative
 engineering view displays member roles and run status. Project Knowledge
@@ -238,7 +291,7 @@ owner instead of being reported as successful cleanup.
 
 ## Engineering console
 
-The Rust/WASM engineering console presents owner-authorized task planning,
+The React/TypeScript engineering console presents owner-authorized task planning,
 a selectable agent dependency graph, the integrated artifact manifest, final
 verification and cleanup status, source review findings, and links to the
 reviewable GitHub draft diff. It displays bounded agent activity and check

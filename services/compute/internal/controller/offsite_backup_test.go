@@ -185,3 +185,124 @@ func TestOffsiteRetentionPreservesIndependentSnapshots(t *testing.T) {
 		t.Fatalf("retention lost recovery points: compute=%v independent=%d", keptCompute, independent)
 	}
 }
+
+func TestRepositoryOutageDoesNotDestroyExistingEncryptedRecovery(t *testing.T) {
+	conf, root := setupResticTest(t)
+	db, err := OpenDatabase(filepath.Join(root, "source", "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.CreateProject("research", "Research"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ArtifactSave("research", "result.txt", []byte("independent recovery")); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+	baseline, err := db.BackupOffsite(ctx, conf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	unavailable := conf.Repository + ".offline"
+	if err := os.Rename(conf.Repository, unavailable); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.BackupOffsite(ctx, conf); err == nil {
+		t.Fatal("unavailable destination must not produce a successful receipt")
+	}
+	if err := os.Rename(unavailable, conf.Repository); err != nil {
+		t.Fatal(err)
+	}
+	if err := VerifyOffsite(ctx, conf, baseline); err != nil {
+		t.Fatalf("previous encrypted snapshot must survive destination outage: %v", err)
+	}
+}
+
+func TestInterruptedOffsiteBackupPreservesPreviousSnapshot(t *testing.T) {
+	conf, root := setupResticTest(t)
+	db, err := OpenDatabase(filepath.Join(root, "source", "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.CreateProject("research", "Research"); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+	baseline, err := db.BackupOffsite(ctx, conf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	aborted, abort := context.WithCancel(context.Background())
+	abort()
+	if _, err := db.BackupOffsite(aborted, conf); err == nil {
+		t.Fatal("cancelled backup must not produce a successful receipt")
+	}
+	if err := VerifyOffsite(ctx, conf, baseline); err != nil {
+		t.Fatalf("cancelled attempt lost previously verified snapshot: %v", err)
+	}
+}
+
+func TestEncryptedRepositoryFullCheckDetectsSimulatedPackCorruption(t *testing.T) {
+	conf, root := setupResticTest(t)
+	db, err := OpenDatabase(filepath.Join(root, "source", "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.CreateProject("research", "Research"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ArtifactSave("research", "result.txt", []byte("protected artifact")); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+	if _, err := db.BackupOffsite(ctx, conf); err != nil {
+		t.Fatal(err)
+	}
+	var pack string
+	if err := filepath.WalkDir(filepath.Join(conf.Repository, "data"), func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.Type().IsRegular() && pack == "" {
+			pack = path
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if pack == "" {
+		t.Fatal("encrypted Restic repository contains no data packs")
+	}
+	data, err := os.ReadFile(pack)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(data) < 128 {
+		t.Fatalf("data pack unexpectedly small: %d", len(data))
+	}
+	data[len(data)/2] ^= 0x80
+	// Restic makes pack files read-only; this disposable fixture must
+	// explicitly permit controlled corruption before editing ciphertext.
+	if err := os.Chmod(pack, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(pack, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := FullCheckOffsite(ctx, conf); err == nil {
+		t.Fatal("restic check --read-data must detect altered encrypted data")
+	}
+}
+
+func TestExactSnapshotIDRejectsPrefix(t *testing.T) {
+	conf, root := setupResticTest(t)
+	if err := RestoreOffsite(context.Background(), conf, "12345678", filepath.Join(root, "restored", "state.db")); err == nil {
+		t.Fatal("a truncated snapshot prefix must not be considered an exact recovery identity")
+	}
+}

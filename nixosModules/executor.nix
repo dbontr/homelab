@@ -166,6 +166,11 @@ in
       default = [];
       description = "Non-empty service readiness list required for activation and rollback.";
     };
+    healthSockets = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [];
+      description = "Fixed private IP:port readiness sockets checked during activation and rollback; no hostnames or external endpoints.";
+    };
   };
   config = lib.mkIf cfg.enable {
     assertions = [
@@ -196,6 +201,11 @@ in
       {
         assertion = cfg.healthServices != [];
         message = "Independent NixOS releases require at least one health service.";
+      }
+      {
+        assertion = lib.length cfg.healthSockets <= 16 &&
+          lib.length (lib.unique cfg.healthSockets) == lib.length cfg.healthSockets;
+        message = "Release TCP health policy must be bounded and deduplicated.";
       }
       {
         assertion = !cfg.workspace.enable ||
@@ -242,6 +252,7 @@ in
       export HOMELAB_RELEASE_GIT=${lib.escapeShellArg ("${pkgs.git}/bin/git")}
       export HOMELAB_RELEASE_SYSTEMCTL=${lib.escapeShellArg ("${pkgs.systemd}/bin/systemctl")}
       export HOMELAB_RELEASE_HEALTH_FILE=${lib.escapeShellArg (pkgs.writeText "homelab-release-health.json" (builtins.toJSON cfg.healthServices))}
+      export HOMELAB_RELEASE_HEALTH_SOCKETS_FILE=${lib.escapeShellArg (pkgs.writeText "homelab-release-health-sockets.json" (builtins.toJSON cfg.healthSockets))}
       exec ${cfg.package}/bin/homelab-release "$@"
     '') (pkgs.writeShellScriptBin "homelab-audit-inspect" ''
       export HOMELAB_EXECUTOR_RELEASE_STATE=${lib.escapeShellArg cfg.stateDirectory}
@@ -265,6 +276,7 @@ in
         HOMELAB_EXECUTOR_SYSTEMCTL = "${pkgs.systemd}/bin/systemctl";
         HOMELAB_EXECUTOR_SERVICES_FILE = pkgs.writeText "homelab-executor-services.json" (builtins.toJSON cfg.allowedServices);
         HOMELAB_EXECUTOR_HEALTH_FILE = pkgs.writeText "homelab-executor-health.json" (builtins.toJSON cfg.healthServices);
+        HOMELAB_EXECUTOR_HEALTH_SOCKETS_FILE = pkgs.writeText "homelab-executor-health-sockets.json" (builtins.toJSON cfg.healthSockets);
       } // lib.optionalAttrs rustActuatorEnabled {
         HOMELAB_EXECUTOR_RUST_ACTUATOR = "${rustActuator}/bin/homelab-actuator";
         HOMELAB_EXECUTOR_RUST_SERVICES = serviceAllowlist;
@@ -353,19 +365,34 @@ in
     };
     # This unit is not started automatically. It requires the active executor
     # to stop and release its state lease before recovery can begin.
-    systemd.services.homelab-executor-recovery = lib.mkIf
-      (cfg.implementation == "rust" && cfg.allowReleaseActivation) {
+    # Operator-triggered only: the active executor must surrender its state
+    # lease before either implementation can inspect or reconcile the journal.
+    systemd.services.homelab-executor-recovery = lib.mkIf cfg.allowReleaseActivation {
       description = "Recover interrupted NixOS generation from the private release journal";
       conflicts = [ "homelab-executord.service" ];
       after = [ "homelab-executord.service" ];
-      environment = config.systemd.services.homelab-executord.environment;
+      environment = if cfg.implementation == "rust"
+        then config.systemd.services.homelab-executord.environment
+        else {
+          HOMELAB_RELEASE_HOST = config.networking.hostName;
+          HOMELAB_RELEASE_SOURCE = cfg.sourceDirectory;
+          HOMELAB_RELEASE_STATE = cfg.stateDirectory;
+          HOMELAB_RELEASE_NIX = "${pkgs.nix}/bin/nix";
+          HOMELAB_RELEASE_NIX_ENV = "${pkgs.nix}/bin/nix-env";
+          HOMELAB_RELEASE_GIT = "${pkgs.git}/bin/git";
+          HOMELAB_RELEASE_SYSTEMCTL = "${pkgs.systemd}/bin/systemctl";
+          HOMELAB_RELEASE_HEALTH_FILE = pkgs.writeText "homelab-release-recovery-health.json"
+            (builtins.toJSON cfg.healthServices);
+        };
       serviceConfig = {
         Type = "oneshot";
         User = "root";
         Group = "root";
         StateDirectory = "homelab-releases";
         StateDirectoryMode = "0700";
-        ExecStart = "${rustPackage}/bin/recovery recover";
+        ExecStart = if cfg.implementation == "rust"
+          then "${rustPackage}/bin/recovery recover"
+          else "${cfg.package}/bin/homelab-release recover";
         UMask = "0077";
         NoNewPrivileges = false;
         PrivateTmp = true;

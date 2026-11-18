@@ -49,6 +49,29 @@ impl Journal {
     }
 }
 
+// An interrupted transaction can be observed before the switch is known to
+// have completed. Only terminal receipts assert a specific live generation.
+// The exact stage ID remains spent even after another release replaces the
+// active journal. Files are inspected under the independent release lock.
+fn stage_was_attempted(state: &Path, id: &str) -> Result<bool, Error> {
+    if !valid_hex(id, 48) {
+        return Err(Error::Denied("invalid release identifier"));
+    }
+    match fs::symlink_metadata(state.join(format!("attempt-{id}.json"))) {
+        Ok(_) => Ok(true),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(_) => Err(Error::Storage("release attempt record cannot be inspected")),
+    }
+}
+
+fn journal_matches_generation(journal: &Journal, current: &str) -> bool {
+    match journal.phase.as_str() {
+        "active" => current == journal.target.as_str(),
+        "rolled-back" => current == journal.previous.as_str(),
+        _ => true,
+    }
+}
+
 fn store_path(path: &str) -> bool {
     path.len() < 512
         && path.starts_with("/nix/store/")
@@ -380,6 +403,23 @@ impl ReleaseController {
                 return Err(Error::Unavailable("release health service is not active"));
             }
         }
+        // These destinations are parsed, deduplicated and constrained to
+        // literal private IPs by the immutable Nix executor policy.
+        for address in &self.policy.health_sockets {
+            match tokio::time::timeout(
+                Duration::from_secs(3),
+                tokio::net::TcpStream::connect(*address),
+            )
+            .await
+            {
+                Ok(Ok(connection)) => drop(connection),
+                _ => {
+                    return Err(Error::Unavailable(
+                        "protected release TCP health check failed",
+                    ))
+                }
+            }
+        }
         Ok(())
     }
 
@@ -478,8 +518,16 @@ impl ReleaseController {
         let _guard = self.operation.lock().await;
         let _file = self.state_lock()?;
         let manifest = self.load_stage(id)?;
-        if self.optional_journal()?.is_some_and(|j| j.interrupted()) {
-            return Err(Error::Denied("interrupted release must be recovered first"));
+        if stage_was_attempted(&self.policy.state_dir, id)? {
+            return Err(Error::Denied("staged release already attempted"));
+        }
+        if let Some(previous_attempt) = self.optional_journal()? {
+            if previous_attempt.interrupted() {
+                return Err(Error::Denied("interrupted release must be recovered first"));
+            }
+            if previous_attempt.id == id {
+                return Err(Error::Denied("staged release already attempted"));
+            }
         }
         let previous = self.current_system()?;
         if previous == manifest.system {
@@ -493,6 +541,8 @@ impl ReleaseController {
             target: manifest.system.clone(),
             time: Utc::now(),
         };
+        // Persist the attempt before switching any host generation.
+        self.atomic(&format!("attempt-{id}.json"), &txn)?;
         self.atomic("journal.json", &txn)?;
         let attempt = async {
             self.set_generation(&manifest.system).await?;
@@ -530,14 +580,21 @@ impl ReleaseController {
     pub async fn recover(&self) -> Result<(), Error> {
         let _guard = self.operation.lock().await;
         let _file = self.state_lock()?;
-        let txn: Journal = self.read("journal.json")?;
+        let mut txn: Journal = self.read("journal.json")?;
         if !txn.interrupted() || !store_path(&txn.previous) {
             return Err(Error::Denied("no trusted interrupted release to recover"));
+        }
+        // If the rollback switch completed before a crash, verify the restored
+        // services without switching the same generation a second time.
+        if self.current_system()? == txn.previous {
+            self.health().await?;
+            txn.phase = "rolled-back".into();
+            return self.atomic("journal.json", &txn);
         }
         self.rollback(txn).await
     }
 
-    pub async fn status(&self) -> Result<Journal, Error> {
+    pub async fn status(&self) -> Result<(Journal, Manifest), Error> {
         let _guard = self.operation.lock().await;
         let _file = self.state_lock()?;
         let journal: Journal = self.read("journal.json")?;
@@ -551,7 +608,20 @@ impl ReleaseController {
         {
             return Err(Error::Storage("release journal is invalid"));
         }
-        Ok(journal)
+        if matches!(journal.phase.as_str(), "active" | "rolled-back")
+            && !journal_matches_generation(&journal, &self.current_system()?)
+        {
+            return Err(Error::Storage(
+                "release journal differs from live generation",
+            ));
+        }
+        let manifest = self.load_stage(&journal.id)?;
+        if manifest.system != journal.target {
+            return Err(Error::Storage(
+                "release journal target differs from staged generation",
+            ));
+        }
+        Ok((journal, manifest))
     }
 }
 
@@ -628,6 +698,54 @@ mod tests {
         assert!(verify_candidate_credentials(&system, owner).is_ok());
 
         fs::remove_dir_all(&system).unwrap();
+    }
+
+    #[test]
+    fn release_receipts_reject_inconsistent_live_generations() {
+        let mut journal = Journal {
+            phase: "active".into(),
+            id: "a".repeat(48),
+            previous: "/nix/store/prior-system".into(),
+            target: "/nix/store/target-system".into(),
+            time: Utc::now(),
+        };
+        assert!(journal_matches_generation(&journal, &journal.target));
+        assert!(!journal_matches_generation(&journal, &journal.previous));
+        journal.phase = "rolled-back".into();
+        assert!(journal_matches_generation(&journal, &journal.previous));
+        assert!(!journal_matches_generation(&journal, &journal.target));
+        journal.phase = "activating".into();
+        assert!(journal_matches_generation(&journal, &journal.previous));
+    }
+
+    #[test]
+    fn stage_reuse_stays_denied_after_journal_replacement() {
+        let root = std::env::temp_dir().join(format!(
+            "homelab-stage-fence-{}",
+            random_hex::<16>().unwrap()
+        ));
+        fs::create_dir(&root).unwrap();
+        let first = "a".repeat(48);
+        let second = "b".repeat(48);
+        assert!(!stage_was_attempted(&root, &first).unwrap());
+        fs::write(root.join(format!("attempt-{first}.json")), b"{}").unwrap();
+        fs::write(root.join("journal.json"), second.as_bytes()).unwrap();
+        assert!(stage_was_attempted(&root, &first).unwrap());
+        assert!(!stage_was_attempted(&root, &second).unwrap());
+        assert!(stage_was_attempted(&root, "not-a-release-id").is_err());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn released_generation_identifiers_are_not_mutable_refs() {
+        assert!(store_path("/nix/store/0123456789abcdef-generation"));
+        for path in [
+            "/nix/store/../profiles/system",
+            "/nix/store/unstable path",
+            "/tmp/untrusted",
+        ] {
+            assert!(!store_path(path));
+        }
     }
 
     #[test]

@@ -33,6 +33,10 @@ controller:
     audience: ""
     jwksURL: ""
     ownerEmailSecretName: ""
+  oidc:
+    issuer: ""
+    audience: ""
+    jwksURL: ""
   localGit:
     existingClaimName: ""
     authorName: ""
@@ -48,6 +52,8 @@ controller:
     passwordSecretName: ""
     backendSecretName: ""
     sshSecretName: ""
+    alertURL: ""
+    alertSecretName: ""
   resources:
     requests:
       cpu: 250m

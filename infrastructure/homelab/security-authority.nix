@@ -2,12 +2,15 @@
 let
   secretDir = "/srv/homelab/secrets/security";
   host = "saturn";
+  approvedImages = builtins.fromJSON
+    (builtins.readFile ../../services/compute/images/project-allowlist.json);
   privilegedOperations = [
     "infrastructure__service_start"
     "infrastructure__service_stop"
     "infrastructure__service_restart"
     "infrastructure__service_reload"
     "infrastructure__workspace_create"
+    "infrastructure__workspace_command"
     "infrastructure__workspace_stop"
     "infrastructure__workspace_register_image"
     "infrastructure__workspace_register_software"
@@ -26,8 +29,8 @@ in
 {
   services.homelabSecurity = {
     enable = true;
-    implementation = "rust";
-    migration.receiptFile = "${secretDir}/authority-rust-cutover.json";
+    implementation = "go";
+    migration.receiptFile = "${secretDir}/authority-go-cutover.json";
     owner = "owner";
     passwordVerifierFile = "${secretDir}/owner-verifier.json";
     totpSecretFile = "${secretDir}/owner-totp";
@@ -60,8 +63,8 @@ in
 
   services.homelabExecutor = {
     enable = true;
-    implementation = "rust";
-    useRustActuator = true;
+    implementation = "go";
+    useRustActuator = false;
     allowReleaseActivation = true;
     sourceDirectory = "/srv/homelab-main-build";
     workspace = {
@@ -71,22 +74,40 @@ in
       projects = [
         "acceptance"
         "aup-zu3-pynq"
+        "axiom-engine"
         "health-stack"
         "homelab-platform"
         "minecraft-rust"
         "web-game-console-emulator"
         "workspace-mcp"
       ];
-      imageReferences = [
-        "docker.io/library/debian@sha256:99c0b25c46d0214d5a2091092e7908907dcaecd6a962cde0ac700acee222b6f3"
-      ];
+      images = [ "engineering-go-1273" "engineering-axiom-rust-lean" ];
+      imageReferences =
+        [ "docker.io/library/debian@sha256:99c0b25c46d0214d5a2091092e7908907dcaecd6a962cde0ac700acee222b6f3" ]
+        ++ builtins.concatLists (builtins.attrValues approvedImages);
     };
     allowedServices = [ "homelab-motivation.service" ];
     healthServices = [
+      "systemd-networkd.service"
+      "systemd-resolved.service"
+      "dnsmasq.service"
+      "sshd.service"
+      "cloudflared-saturn.service"
+      "k3s.service"
       "homelab-platform.service"
       "homelab-mcp.service"
       "homelab-api.service"
       "homelab-securityd.service"
+    ];
+    # Fixed router, DNS, SSH, and MCP readiness probes. No external network
+    # destination is needed to decide whether a local switch can be retained.
+    healthSockets = [
+      "10.77.10.1:22"
+      "10.77.20.1:53"
+      "10.77.30.1:53"
+      "127.0.0.1:8104"
+      "127.0.0.1:8300"
+      "127.0.0.1:8401"
     ];
   };
 }

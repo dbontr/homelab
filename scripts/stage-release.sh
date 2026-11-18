@@ -33,7 +33,7 @@ case "$component" in
   homelab-learning) source_module=services/learning ;;
   homelab-health) source_module=services/health ;;
   homelab-mcp|homelab-api) source_module=. ;;
-  homelab-console) source_module=ui/console ;;
+  homelab-console) source_module=ui/web ;;
   homelab-motivation) source_module=services/motivation ;;
   *) printf 'Unknown release component: %s\n' "$component" >&2; exit 2 ;;
 esac
@@ -49,9 +49,9 @@ for tool in git sha256sum find sort mktemp; do
   command -v "$tool" >/dev/null || { printf 'Missing build tool: %s\n' "$tool" >&2; exit 1; }
 done
 if [[ "$mode" == complete ]]; then
-  required_tools=(go cargo dx)
+  required_tools=(go cargo nix)
 elif [[ "$component" == homelab-console ]]; then
-  required_tools=(cargo dx)
+  required_tools=(nix)
 elif [[ "$component" == homelab-motivation ]]; then
   required_tools=(cargo)
 else
@@ -113,12 +113,10 @@ printf 'Verifying locally pinned source at %s\n' "$revision"
 if [[ "$mode" == complete ]]; then
   bash "$source_root/scripts/verify-offline.sh" --all
 elif [[ "$component" == homelab-console ]]; then
-  (
-    cd "$source_root/ui/console"
-    cargo fmt --all -- --check
-    cargo test --locked --offline
-    cargo check --locked --offline --target wasm32-unknown-unknown
-  )
+  [[ -s "$source_root/ui/web/package-lock.json" ]] || {
+    printf '%s\n' 'Console release requires its committed npm dependency lockfile' >&2
+    exit 1
+  }
 elif [[ "$component" == homelab-motivation ]]; then
   (
     cd "$source_root/services/motivation"
@@ -188,18 +186,26 @@ elif [[ "$component" != homelab-console ]]; then
 fi
 
 if [[ "$mode" == complete || "$component" == homelab-console ]]; then
-  (
-    cd "$source_root/ui/console"
-    dx bundle --web --release --out-dir "$stage/console-bundle"
-  )
-  if [[ ! -f "$stage/console-bundle/public/index.html" ]]; then
-    printf 'The Dioxus web bundle did not contain public/index.html\n' >&2
+  console_output=$(
+    cd "$source_root"
+    nix build --offline --no-write-lock-file --no-link --print-out-paths .#homelab-console-web
+  ) || {
+    printf '%s\n' 'The locked React console package did not build' >&2
+    exit 1
+  }
+  if [[ "$console_output" != /* || "$console_output" == *" "* ||
+        ! -d "$console_output" || -L "$console_output" ||
+        ! -s "$console_output/index.html" ||
+        ! -d "$console_output/assets" ]]; then
+    printf '%s\n' 'The React console package has an invalid static output' >&2
     exit 1
   fi
-  cp -a "$stage/console-bundle/public/." "$stage/console/"
-  rm -rf -- "$stage/console-bundle"
+  cp -a -- "$console_output/." "$stage/console/"
+  if [[ -z "$(find "$stage/console/assets" -maxdepth 1 -type f -name '*.js' -print -quit)" ]]; then
+    printf '%s\n' 'The React console package contains no JavaScript assets' >&2
+    exit 1
+  fi
 fi
-
 (
   cd "$stage"
   find bin console -type f -print0 |

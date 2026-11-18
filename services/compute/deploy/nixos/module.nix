@@ -24,6 +24,8 @@ let
         passwordSecretName = cfg.offsite.passwordSecretName;
         backendSecretName = cfg.offsite.backendSecretName;
         sshSecretName = cfg.offsite.sshSecretName;
+        alertURL = cfg.offsite.alertURL;
+        alertSecretName = cfg.offsite.alertSecretName;
       };
       allowedHosts = cfg.allowedHosts;
       allowedOrigins = cfg.allowedOrigins;
@@ -47,6 +49,11 @@ let
         audience = cfg.access.audience;
         jwksURL = cfg.access.jwksURL;
         ownerEmailSecretName = cfg.access.ownerEmailSecretName;
+      };
+      oidc = {
+        issuer = cfg.oidc.issuer;
+        audience = cfg.oidc.audience;
+        jwksURL = cfg.oidc.jwksURL;
       };
     };
     worker.enabled = false;
@@ -260,6 +267,11 @@ in {
         description = "Secret with the authorized Cloudflare Access owner email.";
       };
     };
+    oidc = {
+      issuer = lib.mkOption { type = lib.types.str; default = ""; description = "Independent non-administrator Compute OIDC issuer."; };
+      audience = lib.mkOption { type = lib.types.str; default = ""; description = "Exact project-editor audience for signed bearer tokens."; };
+      jwksURL = lib.mkOption { type = lib.types.str; default = ""; description = "HTTPS JWKS endpoint of the configured project-editor issuer."; };
+    };
     embedding = {
       url = lib.mkOption { type = lib.types.str; default = ""; description = "HTTPS or loopback embeddings-compatible endpoint."; };
       model = lib.mkOption { type = lib.types.str; default = ""; description = "Configured embedding model identifier."; };
@@ -296,6 +308,16 @@ in {
         default = "";
         description = "Preprovisioned backup-scoped SSH key and pinned known_hosts for SFTP Restic repositories.";
       };
+      alertURL = lib.mkOption {
+        type = lib.types.str;
+        default = "";
+        description = "HTTPS endpoint for encrypted backup failure and recovery notifications.";
+      };
+      alertSecretName = lib.mkOption {
+        type = lib.types.str;
+        default = "";
+        description = "Preprovisioned backup-alert Secret with a dedicated token key.";
+      };
     };
     publicURL = lib.mkOption {
       type = lib.types.str;
@@ -318,6 +340,13 @@ in {
 
   config = lib.mkIf cfg.enable {
     assertions = [
+      {
+        assertion =
+          (cfg.oidc.issuer == "" && cfg.oidc.audience == "" && cfg.oidc.jwksURL == "") ||
+          (lib.hasPrefix "https://" cfg.oidc.issuer && cfg.oidc.audience != "" &&
+            lib.hasPrefix "https://" cfg.oidc.jwksURL);
+        message = "Compute project-editor OIDC requires a complete HTTPS issuer, nonempty audience and HTTPS JWKS endpoint.";
+      }
       {
         assertion = (cfg.embedding.url == "") == (cfg.embedding.model == "")
           && (cfg.embedding.url != "" || (cfg.embedding.tokenSecretName == "" && cfg.vault.embeddingsAlias == ""));
@@ -373,6 +402,11 @@ in {
         message = "Workspace scheduled backups require a Restic repository and an external password Secret.";
       }
       {
+        assertion = cfg.backupInterval == "" ||
+          (lib.hasPrefix "https://" cfg.offsite.alertURL && cfg.offsite.alertSecretName != "");
+        message = "Workspace scheduled backups require an HTTPS alert receiver and a separate token Secret.";
+      }
+      {
         assertion = !(lib.hasPrefix "sftp:" cfg.offsite.repository) || cfg.offsite.sshSecretName != "";
         message = "Workspace SFTP backups require an SSH Secret with a scoped identity and pinned known_hosts.";
       }
@@ -415,6 +449,7 @@ in {
         ''}
         ${lib.optionalString (cfg.backupInterval != "") ''
           kubectl -n pwm-system get secret ${lib.escapeShellArg cfg.offsite.passwordSecretName} >/dev/null
+          kubectl -n pwm-system get secret ${lib.escapeShellArg cfg.offsite.alertSecretName} >/dev/null
           ${lib.optionalString (lib.hasPrefix "sftp:" cfg.offsite.repository) ''
             kubectl -n pwm-system get secret ${lib.escapeShellArg cfg.offsite.sshSecretName} >/dev/null
           ''}

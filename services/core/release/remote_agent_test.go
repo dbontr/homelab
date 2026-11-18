@@ -133,3 +133,38 @@ func TestRemoteAgentFailsClosedWithoutIdentityOrTrust(t *testing.T){
  cfg.Endpoint="http://127.0.0.1:9999"
  if _,err:=NewRemoteReleaseAgent(cfg);err==nil{t.Fatal("unencrypted transport accepted")}
 }
+
+func TestRemoteReleaseObservationRejectsIncorrectProvenance(t *testing.T){
+ id:=strings.Repeat("a",48)
+ observation:=ReleaseObservation{
+  ID:id,Phase:"active",Host:"jupiter",Revision:strings.Repeat("b",40),
+  TargetSystem:"/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-next-system",
+  PreviousSystem:"/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-prior-system",
+ }
+ handler:=http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){
+  _=json.NewEncoder(w).Encode(observation)
+ })
+ cfg,closeServer:=remoteFixture(t,handler)
+ defer closeServer()
+ agent,err:=NewRemoteReleaseAgent(cfg)
+ if err!=nil{t.Fatal(err)}
+ if _,err:=agent.Observe(context.Background());err!=nil{t.Fatal(err)}
+ for _,changed:=range []func(*ReleaseObservation){
+  func(o *ReleaseObservation){o.Host="saturn"},
+  func(o *ReleaseObservation){o.Revision="HEAD"},
+  func(o *ReleaseObservation){o.TargetSystem="../../etc/passwd"},
+  func(o *ReleaseObservation){o.PreviousSystem="https://example.invalid"},
+ }{
+  invalid:=observation
+  changed(&invalid)
+  observation=invalid
+  if _,err:=agent.Observe(context.Background());err==nil{
+   t.Fatalf("untrusted release provenance accepted: %+v",invalid)
+  }
+  observation=ReleaseObservation{
+   ID:id,Phase:"active",Host:"jupiter",Revision:strings.Repeat("b",40),
+   TargetSystem:"/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-next-system",
+   PreviousSystem:"/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-prior-system",
+  }
+ }
+}

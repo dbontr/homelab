@@ -21,7 +21,7 @@ func (e *Engine) SourceDiffs(runID string) ([]SourceDiff, error) {
 	if err != nil {
 		return nil, err
 	}
-	if !e.AllowedProjects[workflow.Project] || workflow.Agent == nil {
+	if !e.projectAllowed(workflow.Project) || workflow.Agent == nil {
 		return nil, errors.New("engineering source previews unavailable")
 	}
 	entries := make([]SourceDiff, 0, 8)

@@ -88,6 +88,13 @@ in
       description = "Audience for the owner-only Cloudflare Access application on monitor.dbontr.me. Null does not publish this hostname.";
     };
   };
+  config.assertions = [
+    {
+      assertion = config.homelab.access.monitorAudTag == null ||
+        builtins.match "[0-9a-f]{64}" config.homelab.access.monitorAudTag != null;
+      message = "Monitoring ingress requires an exact 64-character Cloudflare Access audience.";
+    }
+  ];
   config.systemd.services.cloudflared-saturn = {
     description = "Private Cloudflare Tunnel for dbontr.me";
     wantedBy = [ "multi-user.target" ];

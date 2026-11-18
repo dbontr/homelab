@@ -33,11 +33,11 @@
     tokenFile = "/srv/homelab/secrets/homelab-motivation.token";
   };
 
-  # Serve the Rust console on the public origin behind Cloudflare Access.
+  # Keep Homepage public until the browser console passes authenticated acceptance.
   services.homelabConsole = {
     enable = true;
-    replaceHomepage = true;
-    package = import ../../packages/console.nix { inherit pkgs; };
+    replaceHomepage = false;
+    package = import ../../packages/console-web.nix { inherit pkgs; };
   };
 
   services.homelabInterfaces = {

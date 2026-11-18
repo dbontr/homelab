@@ -1,16 +1,16 @@
 # Self-hosted release
 
-The repository is the source of truth for the domain Go services, independent Engineering execution, Compute, Learning, Health, Rust/Dioxus UI, and optional MCP and API entry points. These are capabilities of one product, with internal process isolation for credentials and failure recovery. The release process is independent of GitHub Actions and never grants deployment credentials to the primary MCP gateway.
+The repository is the source of truth for the domain Go services, independent Engineering execution, Compute, Learning, Health, React/TypeScript console, and optional MCP and API entry points. These are capabilities of one product, with internal process isolation for credentials and failure recovery. The release process is independent of GitHub Actions and never grants deployment credentials to the primary MCP gateway.
 
 ## Release staging
 
-Use an operator-controlled host with the Go toolchains required by the four Go modules, Rust, Cargo, the WebAssembly target and Dioxus CLI available. The output directory must be new, and its parent must already exist.
+Use an operator-controlled host with the Go toolchains required by the four Go modules, Rust, Cargo, the WebAssembly target and a pinned Nix toolchain available. The output directory must be new, and its parent must already exist.
 
 `bash scripts/stage-release.sh /srv/releases/homelab/<unique-release-id>`
 
 To stage one component without rebuilding unrelated services, use
 `bash scripts/stage-release.sh --component homelab-api /srv/releases/homelab/<unique-component-release-id>`.
-The accepted component names are the fourteen Go executable names in the full release, plus `homelab-console`. Each component release contains one executable or the console assets, with the same exact-source provenance, checksum verification, non-writable artifact rules and no activation. Component staging runs Go tests and vet for its owning module, or offline Rust/WASM checks for the console. It does not claim whole-fleet compatibility or authorize a deployment.
+The accepted component names are the fourteen Go executable names in the full release, plus `homelab-console`. Each component release contains one executable or the console assets, with the same exact-source provenance, checksum verification, non-writable artifact rules and no activation. Component staging runs Go tests and vet for its owning module, or a locked Nix build of the React console. It does not claim whole-fleet compatibility or authorize a deployment.
 
 The independent **Rust release controller** also inspects the generated security and executor `LoadCredential` sources during staged-release verification and immediately before activation. An absent or unsafe source rejects the request *before* any release journal enters `activating` and before the NixOS profile or services are changed. The checks inspect metadata and unit text only; they do not read protected credential values. Rollback and emergency recovery are deliberately not blocked by this activation-only readiness requirement.
 
@@ -31,9 +31,9 @@ A detached Saturn NixOS trial must validate the candidate's generated `homelab-s
 
 The trusted release CLI requires exclusive release-state ownership for staging, activation, reversion and recovery, so it cannot mutate release state while the privileged executor is running. Read-only status inspection remains available. Manual recovery requires an out-of-band administrator to stop the executor first.
 
-The complete release includes separately executable `homelab-mcp` and `homelab-api` adapters. Building them does not enable their optional NixOS listeners or alter running services. The web UI is built from `ui/console` and requires neither external listener.
+The complete release includes separately executable `homelab-mcp` and `homelab-api` adapters. Building them does not enable their optional NixOS listeners or alter running services. The web UI is built from `ui/web` and requires neither external listener.
 
-The staging script requires a clean, exact 40-character Git source revision and an operator-owned, non-symlink release parent that is not group or world writable. Before building, it runs `scripts/verify-offline.sh --all`, including module tests, Rust checks, Helm rendering, fleet NixOS evaluations and local package builds. It builds thirteen Go executables from cached source dependencies, packages the Dioxus web assets, and writes `SHA256SUMS` and `RELEASE`. The independent `scripts/verify-release.sh` then checks the release envelope, declared binary set, exact source revision, and digest of every asset before the temporary directory is atomically published. It does not alter NixOS generations, start services, publish images, stop the existing homepage, or touch application databases.
+The staging script requires a clean, exact 40-character Git source revision and an operator-owned, non-symlink release parent that is not group or world writable. Before building, it runs `scripts/verify-offline.sh --all`, including module tests, Rust checks, Helm rendering, fleet NixOS evaluations and local package builds. It builds thirteen Go executables from cached source dependencies, packages the Nix-built React web assets, and writes `SHA256SUMS` and `RELEASE`. The independent `scripts/verify-release.sh` then checks the release envelope, declared binary set, exact source revision, and digest of every asset before the temporary directory is atomically published. It does not alter NixOS generations, start services, publish images, stop the existing homepage, or touch application databases.
 
 Before publication, staging gives binary files read/execute permission and static files read permission for isolated service accounts, while removing write permission from the release tree. The release parent and all its ancestors must permit traversal by the intended service users and remain under operator-controlled write custody.
 
@@ -127,7 +127,7 @@ The executor permits only exact local service restart names and staging IDs. Its
 
 ## Activation
 
-The Go platform and Rust console have separate NixOS activation switches. They remain disabled unless an operator enables them and supplies the required protected credentials. The existing Homepage dashboard stays active until a release is accepted and the console's explicit `replaceHomepage` option is enabled.
+The Go platform and React console have separate NixOS activation switches. They remain disabled unless an operator enables them and supplies the required protected credentials. The existing Homepage dashboard stays active until a release is accepted and the console's explicit `replaceHomepage` option is enabled.
 
 The internal compute, learning and health services retain their own state and release ownership. The imported source in this repository does not automatically replace their active binaries or modify Kubernetes controllers. An operator must select locally built, digest-qualified artifacts in the relevant service definitions and provide a rollback plan for each replacement.
 
@@ -152,7 +152,7 @@ Failure of a required check blocks that stage; unrelated services remain active.
    at a time, and verify fresh-node pulls, worker registration, workspace
    lifecycle, hardware custody, job recovery, and five-node readiness. Do not
    rely on an image cached by a single node.
-4. **Rust/Dioxus console.** Accept Cloudflare owner sessions and required
+4. **React/TypeScript console.** Accept Cloudflare owner sessions and required
    browser operations before replacing Homepage. Verify the pinned shadcn/ui
    component contracts, accessibility, light and dark themes, responsive
    layouts, and authenticated application parity. Retain Homepage as a recovery

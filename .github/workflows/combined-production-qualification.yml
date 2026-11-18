@@ -1,0 +1,127 @@
+name: Combined production source qualification
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/combined-production-qualification.yml'
+      - '.github/workflows/source-acceptance.yml'
+      - 'services/**'
+      - 'scripts/**'
+      - 'infrastructure/**'
+      - 'nixosModules/**'
+      - 'mcp/**'
+      - 'api/**'
+      - 'flake.nix'
+      - 'flake.lock'
+      - 'go.work'
+
+permissions:
+  contents: read
+
+jobs:
+  executor-independent:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Fetch locked Rust dependencies
+        working-directory: services/executor
+        run: cargo fetch --locked
+      - name: Run Rust executor tests independently of formatting
+        working-directory: services/executor
+        env:
+          CARGO_BUILD_JOBS: '2'
+        run: cargo test --locked --offline --all-targets
+      - name: Check Rust executor Clippy
+        if: always()
+        working-directory: services/executor
+        env:
+          CARGO_BUILD_JOBS: '2'
+        run: cargo clippy --locked --offline --all-targets -- -D warnings
+
+  five-host-evaluation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+      - name: Prepare pinned flake inputs
+        run: nix flake show --no-write-lock-file
+      - name: Evaluate every enrolled NixOS host without activation
+        run: |
+          set -euo pipefail
+          for host in saturn jupiter venus mercury janus; do
+            echo "EVALUATING $host"
+            nix eval --offline --raw ".#nixosConfigurations.$host.config.system.build.toplevel.drvPath"
+          done
+
+  helm-inherited-manifests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.20.2
+      - name: Compare default controller and worker manifests to exact baseline
+        run: bash scripts/tests/production-manifest-compat-test.sh 53c40842cc7354deb29ce64608dcb4bd0794a6fa
+      - name: Verify protected-backup positive and negative Helm contracts
+        run: bash services/compute/scripts/tests/compute-backup-chart-test.sh
+
+  compute-recovery-fixtures:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.3'
+      - name: Install disposable fixture dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends restic libsqlite3-dev jq pkg-config
+      - name: Fetch pinned Go modules before offline execution
+        working-directory: services/compute
+        env:
+          GOWORK: 'off'
+        run: go mod download
+      - name: Run cross-workstream Compute and backup fault injection with race detection
+        working-directory: services/compute
+        env:
+          GOWORK: 'off'
+          GOPROXY: 'off'
+          GOSUMDB: 'off'
+          GOTOOLCHAIN: local
+          GOMAXPROCS: '2'
+        run: |
+          go test -race -count=1 -timeout 20m ./internal/controller \
+            -run '^(TestKueue|TestBatchSubmissionIdempotenceAndWorkerIsolation|TestEncryptedOffsiteBackupRestoreAndVerification|TestRestic|TestOffsite|TestRestore|TestTaskHardware|TestFailedTaskHardware|TestInterruptedWorkerReconciliationFencesOldClaims)'
+          go test -race -count=1 -timeout 10m ./cmd/legacy-reconcile ./cmd/oci-archive-verify
+          go test -count=1 -timeout 10m ./cmd/project-workspace-controller -run 'TestBackup|TestScheduledOffsite'
+      - name: Run unprivileged isolated Kueue and OCI recovery fixtures
+        env:
+          GOWORK: 'off'
+          GOPROXY: 'off'
+          GOSUMDB: 'off'
+          GOTOOLCHAIN: local
+          GOMAXPROCS: '2'
+        run: |
+          set -euo pipefail
+          bash services/compute/scripts/tests/recover-oci-peer-test.sh
+          bash services/compute/scripts/tests/verify-cold-peer-pull-test.sh
+          bash services/compute/scripts/tests/verify-registry-mirror-test.sh
+      - name: Exercise privileged OCI fixture locks with mocked local commands
+        run: |
+          set -euo pipefail
+          # Both tests substitute all SSH/Kubernetes/containerd interactions with
+          # local mocks. Privilege is needed only for their synthetic /run/lock files.
+          sudo bash services/compute/scripts/tests/copy-peer-image-test.sh
+          sudo bash services/compute/scripts/tests/label-image-content-test.sh

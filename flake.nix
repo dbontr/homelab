@@ -44,6 +44,9 @@
       nixosModules.homelabFleet = import ./nixosModules/fleet.nix;
       nixosModules.homelabInterfaces = import ./nixosModules/interfaces.nix;
       packages.${defaultSystem} = {
+        homelab-console-web = import ./packages/console-web.nix {
+          pkgs = nixpkgs.legacyPackages.${defaultSystem};
+        };
         homelab-engineering = import ./packages/engineering.nix {
           pkgs = nixpkgs.legacyPackages.${defaultSystem};
         };

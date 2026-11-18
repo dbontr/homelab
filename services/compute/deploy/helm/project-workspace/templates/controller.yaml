@@ -24,11 +24,25 @@
 {{- fail "Cloudflare Access requires issuer, audience, JWKS URL and owner email Secret together" }}
 {{- end }}
 {{- end }}
+{{- if or .Values.controller.oidc.issuer .Values.controller.oidc.audience .Values.controller.oidc.jwksURL }}
+{{- if not (and .Values.controller.oidc.issuer .Values.controller.oidc.audience .Values.controller.oidc.jwksURL) }}
+{{- fail "Compute project editor OIDC requires issuer, audience and JWKS URL together" }}
+{{- end }}
+{{- if or (not (hasPrefix "https://" .Values.controller.oidc.issuer)) (not (hasPrefix "https://" .Values.controller.oidc.jwksURL)) }}
+{{- fail "Compute project editor OIDC identity issuer and JWKS must use HTTPS" }}
+{{- end }}
+{{- end }}
 {{- if and .Values.controller.backupRetention (not .Values.controller.backupInterval) }}
 {{- fail "controller.backupRetention requires scheduled encrypted backups" }}
 {{- end }}
 {{- if and .Values.controller.backupInterval (or (not .Values.controller.offsite.repository) (not .Values.controller.offsite.passwordSecretName)) }}
 {{- fail "controller encrypted backups require controller.offsite.repository and controller.offsite.passwordSecretName" }}
+{{- end }}
+{{- if and .Values.controller.backupInterval (or (not .Values.controller.offsite.alertURL) (not .Values.controller.offsite.alertSecretName)) }}
+{{- fail "scheduled encrypted backups require a protected HTTPS alert receiver and a token Secret" }}
+{{- end }}
+{{- if and .Values.controller.backupInterval (not (hasPrefix "https://" .Values.controller.offsite.alertURL)) }}
+{{- fail "controller.offsite.alertURL must use HTTPS" }}
 {{- end }}
 {{- if and .Values.controller.backupInterval (hasPrefix "sftp:" .Values.controller.offsite.repository) (not .Values.controller.offsite.sshSecretName) }}
 {{- fail "SFTP backups require controller.offsite.sshSecretName with a pinned host key and a scoped identity" }}
@@ -118,6 +132,9 @@ spec:
               cat /input/password > /output/password
               test -s /output/password
               chmod 0600 /output/password
+              cat /alert-input/token > /alert-output/token
+              test -s /alert-output/token
+              chmod 0600 /alert-output/token
           securityContext:
             runAsNonRoot: true
             runAsUser: 65534
@@ -134,6 +151,11 @@ spec:
               readOnly: true
             - name: restic-password
               mountPath: /output
+            - name: restic-alert-input
+              mountPath: /alert-input
+              readOnly: true
+            - name: restic-alert
+              mountPath: /alert-output
         {{- if .Values.controller.offsite.sshSecretName }}
         - name: restic-ssh
           image: {{ .Values.controller.image | quote }}
@@ -296,6 +318,14 @@ spec:
                   name: {{ .Values.controller.access.ownerEmailSecretName }}
                   key: email
             {{- end }}
+            {{- if .Values.controller.oidc.issuer }}
+            - name: PWM_OIDC_ISSUER
+              value: {{ .Values.controller.oidc.issuer | quote }}
+            - name: PWM_OIDC_AUDIENCE
+              value: {{ .Values.controller.oidc.audience | quote }}
+            - name: PWM_OIDC_JWKS_URL
+              value: {{ .Values.controller.oidc.jwksURL | quote }}
+            {{- end }}
             {{- if .Values.controller.githubPATSecretName }}
             - name: PWM_GITHUB_TOKEN
               valueFrom:
@@ -324,6 +354,10 @@ spec:
               value: {{ .Values.controller.offsite.repository | quote }}
             - name: PWM_RESTIC_PASSWORD_FILE
               value: /run/restic/password
+            - name: PWM_RESTIC_ALERT_URL
+              value: {{ .Values.controller.offsite.alertURL | quote }}
+            - name: PWM_RESTIC_ALERT_TOKEN_FILE
+              value: /run/restic-alert/token
             {{- if .Values.controller.backupRetention }}
             - name: PWM_RESTIC_AUTO_PRUNE
               value: "1"
@@ -361,6 +395,9 @@ spec:
             {{- if .Values.controller.backupInterval }}
             - name: restic-password
               mountPath: /run/restic
+              readOnly: true
+            - name: restic-alert
+              mountPath: /run/restic-alert
               readOnly: true
             {{- end }}
             - name: state
@@ -465,6 +502,17 @@ spec:
               - key: password
                 path: password
         - name: restic-password
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Mi
+        - name: restic-alert-input
+          secret:
+            secretName: {{ .Values.controller.offsite.alertSecretName }}
+            defaultMode: 292
+            items:
+              - key: token
+                path: token
+        - name: restic-alert
           emptyDir:
             medium: Memory
             sizeLimit: 1Mi

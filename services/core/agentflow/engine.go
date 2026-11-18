@@ -26,16 +26,28 @@ type Engine struct {
 	Compute         ToolCaller
 	Author          Author
 	AllowedProjects map[string]bool
+	ProjectGrant     func(context.Context, string) error
 	NativeVerification bool
 	activeMu        sync.Mutex
 	active          map[string]context.CancelFunc
+}
+
+// projectAllowed checks an exact configured scope or the Compute controller's
+// current project-editor grant. Failed identity and grant checks deny access.
+func (e *Engine) projectAllowed(project string) bool {
+	if e == nil || !validID(project) { return false }
+	if e.AllowedProjects[project] { return true }
+	if e.ProjectGrant == nil { return false }
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	return e.ProjectGrant(ctx, project) == nil
 }
 
 func (e *Engine) Submit(p Program) (RunSummary, error) {
 	if e == nil || e.Store == nil || e.Compute == nil {
 		return RunSummary{}, errors.New("engineering service not configured")
 	}
-	if !e.AllowedProjects[p.Project] {
+	if !e.projectAllowed(p.Project) {
 		return RunSummary{}, errors.New("engineering project not authorized")
 	}
 	if e.NativeVerification {
@@ -52,7 +64,7 @@ func (e *Engine) Submit(p Program) (RunSummary, error) {
 		if _, ok := e.Author.(DecisionAuthor); !ok {
 			return RunSummary{}, errors.New("autonomous decision provider not configured")
 		}
-	} else if len(p.Changes) == 0 && e.Author == nil {
+	} else if !p.VerifyOnly && len(p.Changes) == 0 && e.Author == nil {
 		return RunSummary{}, errors.New("automatic authoring provider not configured")
 	}
 	w, err := Compile(p)
@@ -73,7 +85,7 @@ func (e *Engine) Get(id string) (RunSummary, error) {
 	if err != nil {
 		return RunSummary{}, err
 	}
-	if !e.AllowedProjects[w.Project] {
+	if !e.projectAllowed(w.Project) {
 		return RunSummary{}, errors.New("engineering project not authorized")
 	}
 	return Summarize(w), nil
@@ -85,7 +97,7 @@ func (e *Engine) List() ([]RunSummary, error) {
 	}
 	selected := make([]RunSummary, 0, len(runs))
 	for _, run := range runs {
-		if e.AllowedProjects[run.Project] {
+		if e.projectAllowed(run.Project) {
 			selected = append(selected, run)
 		}
 	}
@@ -96,7 +108,7 @@ func (e *Engine) Cancel(id string, revision uint64) error {
 	if err != nil {
 		return err
 	}
-	if !e.AllowedProjects[w.Project] {
+	if !e.projectAllowed(w.Project) {
 		return errors.New("engineering project not authorized")
 	}
 	if err := e.Store.Cancel(id, revision); err != nil {
@@ -266,7 +278,7 @@ func (e *Engine) Dispatch(ctx context.Context, claim Claim) (json.RawMessage, er
 	if err != nil {
 		return nil, err
 	}
-	if !e.AllowedProjects[w.Project] || w.Cancelled {
+	if !e.projectAllowed(w.Project) || w.Cancelled {
 		return nil, errors.New("engineering project not authorized")
 	}
 	found := false
@@ -412,6 +424,26 @@ func (e *Engine) Dispatch(ctx context.Context, claim Claim) (json.RawMessage, er
 		repo := str(checkout["repository"])
 		if !repositoryName.MatchString(repo) {
 			return nil, errors.New("invalid checkout repository")
+		}
+		if args["verification_only"] == true {
+			reports := make([]map[string]any, 0, len(commands))
+			for _, entry := range commands {
+				command := str(entry)
+				result, callErr := e.verificationCommand(ctx, w, repo, command)
+				if callErr != nil {
+					return nil, callErr
+				}
+				code, confirmed := result["exit_code"].(float64)
+				if !confirmed || code != 0 {
+					return nil, errors.New("verification-only command did not pass")
+				}
+				reports = append(reports, map[string]any{"command": command, "exit_code": code})
+			}
+			if w.Inputs == nil || !commitName.MatchString(w.Inputs.Primary.Revision) {
+				return nil, errors.New("verification source revision unavailable")
+			}
+			out = map[string]any{"passed": true, "checks": reports, "source_revision": w.Inputs.Primary.Revision, "attempts": 1}
+			break
 		}
 		if w.Agent != nil {
 			if !w.Agent.Completed || len(w.Agent.Changed) == 0 {

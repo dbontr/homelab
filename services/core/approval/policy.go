@@ -29,7 +29,7 @@ func ScopeFor(name string) string {
         "task_list", "task_details", "task_files", "task_file_info",
         "task_read_base64", "task_compute_jobs", "personal_task_claim_list",
         "personal_task_claim_status", "task_claim_list", "task_claim_status",
-        "resource_plan", "workspace_list", "workspace_operation", "list_hardware",
+        "resource_plan", "workspace_list", "workspace_operation", "workspace_operation_by_request", "list_hardware",
         "environment_list", "pool_list_images", "pool_list_software",
         "pool_list_programs", "pool_entry_info", "pool_events",
         "workspace_snapshot_list", "workspace_checkpoint_stop_status",

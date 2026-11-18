@@ -1,0 +1,82 @@
+name: Web console source qualification
+
+on:
+  push:
+    branches:
+      - qualification/go-web-engineering
+    paths:
+      - ".github/workflows/web-console-qualification.yml"
+      - "ui/web/**"
+      - "packages/console-web.nix"
+      - "flake.nix"
+      - "nixosModules/console.nix"
+      - "infrastructure/homelab/**"
+      - "services/compute/images/project-allowlist.json"
+  pull_request:
+    paths:
+      - ".github/workflows/web-console-qualification.yml"
+      - "ui/web/**"
+      - "packages/console-web.nix"
+      - "flake.nix"
+      - "nixosModules/console.nix"
+      - "infrastructure/homelab/**"
+      - "services/compute/images/project-allowlist.json"
+
+permissions:
+  contents: read
+
+jobs:
+  web-console:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install locked dependencies and compile console
+        working-directory: ui/web
+        run: |
+          set -euo pipefail
+          test -s package-lock.json
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run typecheck
+          npm run build
+
+  nix-console:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+      - name: Build exact-source Nix web console package
+        run: nix build --no-link .#homelab-console-web
+      - name: Evaluate all five host systems and Go architecture
+        run: |
+          set -euo pipefail
+          for host in saturn jupiter venus mercury janus; do
+            nix eval --raw ".#nixosConfigurations.${host}.config.system.build.toplevel.drvPath" >/dev/null
+          done
+          test "$(nix eval --raw .#nixosConfigurations.saturn.config.services.homelabSecurity.implementation)" = go
+          test "$(nix eval --raw .#nixosConfigurations.saturn.config.services.homelabExecutor.implementation)" = go
+          test "$(nix eval --json .#nixosConfigurations.saturn.config.services.homelabExecutor.useRustActuator)" = false
+          test "$(nix eval --json .#nixosConfigurations.saturn.config.services.homelabEngineering.enable)" = true
+          nix eval --json .#nixosConfigurations.saturn.config.services.homelabExecutor.workspace.projects | jq -e 'index("axiom-engine") != null'
+      - name: Verify exact-project compiler image admission
+        run: |
+          set -euo pipefail
+          policy=services/compute/images/project-allowlist.json
+          jq -e '(keys | sort) == ["axiom-engine", "homelab-platform"] and
+            all(.[]; length == 1 and all(.[];
+              test("^ghcr[.]io/dbontr/homelab/engineering-(go|axiom)@sha256:[a-f0-9]{64}$")))' "$policy"
+          expected="$(jq -cS . "$policy")"
+          actual="$(nix eval --json .#nixosConfigurations.saturn.config.services.workspaceMcpProjectProvisioner.projectApprovedImages | jq -cS .)"
+          test "$actual" = "$expected"
+          references="$(nix eval --json .#nixosConfigurations.saturn.config.services.homelabExecutor.workspace.imageReferences)"
+          while IFS= read -r image; do
+            jq -e --arg image "$image" 'index($image) != null' <<< "$references"
+          done < <(jq -r '.[][]' "$policy")
+

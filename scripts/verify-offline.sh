@@ -29,6 +29,7 @@ if ! command -v bash >/dev/null 2>&1; then
   exit 1
 fi
 bash "$root/scripts/tests/verify-release-test.sh"
+bash "$root/scripts/tests/accept-monitor-ingress-test.sh"
 bash "$root/scripts/tests/mcp-acceptance-token-test.sh"
 bash "$root/scripts/tests/unified-mcp-acceptance-test.sh"
 bash "$root/services/compute/scripts/tests/rollout-project-worker-test.sh"
@@ -97,12 +98,13 @@ if ! command -v cargo >/dev/null 2>&1; then
   printf '%s\n' 'Rust Cargo is required to verify the console source.' >&2
   exit 1
 fi
+if ! command -v nix >/dev/null 2>&1; then
+  printf '%s\n' 'Nix is required to verify the locked React console release.' >&2
+  exit 1
+fi
 (
-  cd "$root/ui/console"
-  cargo fmt --all -- --check
-  cargo test --locked --offline
-  cargo check --locked --offline --target wasm32-unknown-unknown
-  cargo check --locked --offline --features embedded-app --target wasm32-unknown-unknown
+  cd "$root"
+  nix build --offline --no-write-lock-file --no-link .#homelab-console-web
 )
 (
   cd "$root/services/motivation"
@@ -160,7 +162,9 @@ backup_render=$(helm template homelab-backup-acceptance "$chart" \
   --set controller.backupRetention=true \
   --set-string controller.offsite.repository=sftp:compute-backup@10.77.30.232:/repository \
   --set controller.offsite.passwordSecretName=backup-password \
-  --set controller.offsite.sshSecretName=backup-ssh)
+  --set controller.offsite.sshSecretName=backup-ssh \
+  --set-string controller.offsite.alertURL=https://alerts.example.invalid/hook \
+  --set controller.offsite.alertSecretName=acceptance-alert-secret)
 printf '%s\n' "$backup_render" | grep -q 'name: PWM_RESTIC_BACKUP_INTERVAL'
 printf '%s\n' "$backup_render" | grep -q 'name: PWM_RESTIC_AUTO_PRUNE'
 printf '%s\n' "$backup_render" | grep -q 'name: restic-ssh-input'

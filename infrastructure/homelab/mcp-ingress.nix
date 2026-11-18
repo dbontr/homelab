@@ -19,6 +19,50 @@ let
   '';
 in
 {
+  # The Engineering daemon authenticates to the Compute controller with its
+  # own project-editor credential. Only its MCP and role-verification endpoints
+  # are reachable through this loopback listener.
+  services.nginx.virtualHosts."homelab-engineering-compute" = {
+    listen = [{ addr = "127.0.0.1"; port = 8106; }];
+    extraConfig = ''
+      resolver 10.43.0.10 valid=30s ipv6=off;
+      client_max_body_size 8m;
+    '';
+    locations = {
+      "= /mcp".extraConfig = streamProxy + ''
+        set $workspace_host pwm-controller.pwm-system.svc.cluster.local;
+        proxy_pass https://$workspace_host:8443;
+        proxy_set_header Host pwm-controller.pwm-system.svc.cluster.local;
+        proxy_ssl_name pwm-controller.pwm-system.svc.cluster.local;
+        proxy_ssl_server_name on;
+        proxy_ssl_verify on;
+        proxy_ssl_verify_depth 2;
+        proxy_ssl_trusted_certificate /srv/mcp-trust/pwm-controller-ca.pem;
+      '';
+      "= /api/whoami".extraConfig = streamProxy + ''
+        set $workspace_host pwm-controller.pwm-system.svc.cluster.local;
+        proxy_pass https://$workspace_host:8443;
+        proxy_set_header Host pwm-controller.pwm-system.svc.cluster.local;
+        proxy_ssl_name pwm-controller.pwm-system.svc.cluster.local;
+        proxy_ssl_server_name on;
+        proxy_ssl_verify on;
+        proxy_ssl_verify_depth 2;
+        proxy_ssl_trusted_certificate /srv/mcp-trust/pwm-controller-ca.pem;
+      '';
+      "~ ^/api/projects/[a-z0-9_-]+/role$".extraConfig = streamProxy + ''
+        set $workspace_host pwm-controller.pwm-system.svc.cluster.local;
+        proxy_pass https://$workspace_host:8443;
+        proxy_set_header Host pwm-controller.pwm-system.svc.cluster.local;
+        proxy_ssl_name pwm-controller.pwm-system.svc.cluster.local;
+        proxy_ssl_server_name on;
+        proxy_ssl_verify on;
+        proxy_ssl_verify_depth 2;
+        proxy_ssl_trusted_certificate /srv/mcp-trust/pwm-controller-ca.pem;
+      '';
+      "/".return = "404";
+    };
+  };
+
   # Access authenticates the shared origin; upstream services enforce their own authorization.
   services.nginx.virtualHosts."mcp.dbontr.me" = {
     listen = [{ addr = "127.0.0.1"; port = 8104; }];

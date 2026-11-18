@@ -38,6 +38,7 @@ type Program struct {
 	Autonomous      bool              `json:"autonomous,omitempty"`
 	LinkedRepositories []RepositoryPin `json:"linked_repositories,omitempty"`
 	PrepareOnly bool `json:"prepare_only,omitempty"`
+	VerifyOnly bool `json:"verify_only,omitempty"`
 	IncludeKnowledge bool `json:"include_knowledge,omitempty"`
 	Review bool `json:"review,omitempty"`
 	Checks          []string          `json:"checks"`
@@ -66,13 +67,13 @@ func validSourcePath(p string) bool {
 }
 func (p Program) validate() error {
 	if !validID(p.Project) || !repositoryName.MatchString(p.Repository) || !commitName.MatchString(p.Revision) ||
-		!commitName.MatchString(p.ExpectedHead) || p.Revision != p.ExpectedHead || !branchName.MatchString(p.BaseBranch) || strings.Contains(p.BaseBranch, "..") ||
+		(!p.VerifyOnly && (!commitName.MatchString(p.ExpectedHead) || p.Revision != p.ExpectedHead || !branchName.MatchString(p.BaseBranch))) || strings.Contains(p.BaseBranch, "..") ||
 		strings.Contains(p.BaseBranch, "//") || strings.HasSuffix(p.BaseBranch, ".lock") ||
 		strings.TrimSpace(p.Objective) == "" || len(p.Objective) > 4096 ||
 		!validID(p.ImagePoolID) || math.IsNaN(p.CPU) || math.IsInf(p.CPU,0) || p.CPU < 0.1 || p.CPU > 8 || p.MemoryMB < 256 || p.MemoryMB > 16384 ||
 		p.DurationMinutes < 10 || p.DurationMinutes > 180 ||
 		len(p.Checks) == 0 || len(p.Checks) > 8 || len(p.Changes) > 16 ||
-		len(p.ContextPaths) > 16 || len(p.AllowedPaths) > 16 || len(p.Title) == 0 || len(p.Title) > 256 || len(p.Description) > 8192 {
+		len(p.ContextPaths) > 16 || len(p.AllowedPaths) > 16 || (!p.VerifyOnly && len(p.Title) == 0) || len(p.Title) > 256 || len(p.Description) > 8192 {
 		return errors.New("invalid engineering program or resource limits")
 	}
 	if p.NodeID!=""&&!validID(p.NodeID) {return errors.New("invalid exact compute node")}
@@ -109,7 +110,12 @@ func (p Program) validate() error {
 			return errors.New("invalid editable path")
 		}
 	}
-	if len(p.Changes) == 0 && len(p.AllowedPaths) == 0 {
+	if p.VerifyOnly {
+		if !p.PrepareOnly || p.Autonomous || p.Review || p.IncludeKnowledge ||
+			len(p.Changes) != 0 || len(p.AllowedPaths) != 0 || len(p.LinkedRepositories) != 0 {
+			return errors.New("verification-only runs must not modify source, request models or publish")
+		}
+	} else if len(p.Changes) == 0 && len(p.AllowedPaths) == 0 {
 		return errors.New("automatic authoring requires a finite editable file list")
 	}
 	if p.Autonomous && (len(p.AllowedPaths) == 0 || len(p.Changes) != 0) {
@@ -197,6 +203,13 @@ func Compile(p Program) (Workflow, error) {
 		"duration_minutes": p.DurationMinutes, "hardware": p.Hardware, "min_gpu_memory_mb": p.MinGPUMemoryMB,
 		"architecture": p.Architecture, "node_id": p.NodeID})
 	add("checkout", "checkout", []string{"provision"}, map[string]any{"repository": p.Repository, "ref": p.Revision})
+	if p.VerifyOnly {
+		add("verify", "verify", []string{"checkout"}, map[string]any{"commands": p.Checks, "verification_only": true})
+		if err := Validate(w); err != nil {
+			return Workflow{}, fmt.Errorf("invalid compiled verification workflow: %w", err)
+		}
+		return w, nil
+	}
 	if p.Autonomous {
 		checkoutDependencies := []string{"checkout"}
 		for i, linked := range p.LinkedRepositories {
