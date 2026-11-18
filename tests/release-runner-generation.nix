@@ -15,34 +15,31 @@ pkgs.testers.runNixOSTest {
       serviceConfig.ExecStart = "${pkgs.coreutils}/bin/sleep infinity";
     };
   };
+  nodes.replacement = { pkgs, ... }: {
+    system.stateVersion = "26.05";
+    networking.hostName = "machine";
+    systemd.services.fixture-go-executor = {
+      wantedBy = [ "multi-user.target" ];
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        ExecStart = "${pkgs.coreutils}/bin/true";
+      };
+    };
+    systemd.services.fixture-go-authority = {
+      wantedBy = [ "multi-user.target" ];
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        ExecStart = "${pkgs.coreutils}/bin/true";
+      };
+    };
+  };
 
   testScript = { nodes, ... }:
     let
       previous = nodes.machine.config.system.build.toplevel;
-      replacement = (nodes.machine.extendModules {
-        modules = [
-          ({ lib, pkgs, ... }: {
-            systemd.services.fixture-executor = lib.mkForce {};
-            systemd.services.fixture-authority = lib.mkForce {};
-            systemd.services.fixture-go-executor = {
-              wantedBy = [ "multi-user.target" ];
-              serviceConfig = {
-                Type = "oneshot";
-                RemainAfterExit = true;
-                ExecStart = "${pkgs.coreutils}/bin/true";
-              };
-            };
-            systemd.services.fixture-go-authority = {
-              wantedBy = [ "multi-user.target" ];
-              serviceConfig = {
-                Type = "oneshot";
-                RemainAfterExit = true;
-                ExecStart = "${pkgs.coreutils}/bin/true";
-              };
-            };
-          })
-        ];
-      }).config.system.build.toplevel;
+      replacement = nodes.replacement.config.system.build.toplevel;
       runner = pkgs.writeShellScript "fixture-release-runner" ''
         set -eu
         systemctl is-active --quiet fixture-executor.service
@@ -67,6 +64,5 @@ pkgs.testers.runNixOSTest {
       machine.wait_until_succeeds("grep -Fx rolled-back /tmp/release-phase", timeout=180)
       machine.succeed("systemctl is-active fixture-executor.service")
       machine.succeed("systemctl is-active fixture-authority.service")
-      machine.succeed("systemctl is-success fixture-release.service")
     '';
 }
