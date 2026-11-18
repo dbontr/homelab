@@ -11,7 +11,7 @@ Projects are intentional units of work and knowledge, independent of their code 
 3. Allocate isolated workspaces with explicit CPU, memory, duration, image, permitted accelerators and project authorizations. SSH inspection-only hardware must not silently become a managed worker.
 4. Assign file-level write ownership if running cooperative development agents. Avoid overlapping edits and reconcile artifacts by digest and source revision.
 5. Execute the smallest correct source change; preserve repository contracts, security boundaries, data owners and backward-compatibility requirements.
-6. Verify with actual build/test/lint/static-analysis runs; identify what remains unexecuted. Treat workspace closure, save and publishing as independently verifiable operations.
+6. Verify with actual build/test/lint/static-analysis runs; identify what remains unexecuted. When hosted GitHub Actions minutes are exhausted, execute the matching checked-in checks locally in isolated approved compute, preserve exact-commit evidence and distinguish local passing results from required GitHub status checks. Treat workspace closure, save and publishing as independently verifiable operations.
 7. Persist material decisions, exact commits, observed tests, pending work and nonsecret audit references with `continuity_checkpoint` when the connected unified MCP supports it. Preserve the current `expected_revision`; do not claim exact context-window usage without host-provided evidence. On resumption, read `continuity_handoff` and verify source state before continuing. See [conversation-continuity.md](conversation-continuity.md).
 8. Submit an exact-commit draft for review; do not merge, publish, deploy or mutate live infrastructure without authorization.
 
