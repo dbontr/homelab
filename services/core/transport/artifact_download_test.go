@@ -3,6 +3,7 @@ package transport
 import (
  "crypto/sha256"
  "encoding/hex"
+ "encoding/json"
  "net/http"
  "net/http/httptest"
  "path/filepath"
@@ -23,7 +24,25 @@ func TestBrowserArtifactDownloadVerifiesCompleteBinary(t *testing.T){
  upstream:=httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){
   if r.URL.Path=="/mcp" {
    w.Header().Set("Content-Type","application/json")
-   _,_=w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"tools":[]}}`))
+   var incoming struct {Method string `json:"method"`;Params struct {Name string `json:"name"`;Arguments struct{Project string `json:"project_id"`;ID string `json:"artifact_id"`} `json:"arguments"`} `json:"params"`}
+   if err:=json.NewDecoder(r.Body).Decode(&incoming);err!=nil{t.Error(err);w.WriteHeader(http.StatusBadRequest);return}
+   if incoming.Method=="tools/list"{
+    _,_=w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"tools":[]}}`))
+    return
+   }
+   if incoming.Method!="tools/call"||incoming.Params.Name!="artifact_info"||
+    incoming.Params.Arguments.Project!=projectAccess||incoming.Params.Arguments.ID!=id{
+    _,_=w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"isError":true,"content":[{"type":"text","text":"denied"}]}}`))
+    return
+   }
+   _=json.NewEncoder(w).Encode(map[string]any{
+    "jsonrpc":"2.0","id":1,
+    "result":map[string]any{
+     "isError":false,
+     "structuredContent":map[string]any{"id":id,"project":projectAccess,"sha256":digest,"name":"photo.CR3","size":len(binary)},
+     "content":[]map[string]any{{"type":"text","text":"artifact metadata"}},
+    },
+   })
    return
   }
   requests++
@@ -64,7 +83,7 @@ func TestBrowserArtifactDownloadVerifiesCompleteBinary(t *testing.T){
  if got.Code==http.StatusOK||string(got.Body.Bytes())==string(binary){
   t.Fatalf("corrupt binary sent to browser: %d",got.Code)
  }
- if requests!=3{t.Fatalf("unexpected number of authenticated backend transfers: %d",requests)}
+ if requests!=2{t.Fatalf("unexpected number of authenticated backend transfers: %d",requests)}
 }
 
 func TestBrowserDownloadTargetCannotEscapeConfiguredBackend(t *testing.T){

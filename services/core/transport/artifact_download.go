@@ -1,7 +1,9 @@
 package transport
 
 import (
+ "context"
  "crypto/sha256"
+ "encoding/json"
  "encoding/hex"
  "errors"
  "fmt"
@@ -38,6 +40,30 @@ func workspaceArtifactURL(endpoint,project,artifact string)(string,error){
  return u.String(),nil
 }
 
+// Confirm exact artifact ownership and metadata through the same authorized MCP
+// controller before retrieving a binary from the controller's native API.
+func(s *Server)scopedArtifactMetadata(ctx context.Context,backend Backend,project,id string)(map[string]any,error){
+ params,_:=json.Marshal(map[string]any{
+  "name":"artifact_info",
+  "arguments":map[string]string{"project_id":project,"artifact_id":id},
+ })
+ var response any
+ if err:=s.forward(ctx,backend,rpcRequest{
+  JSONRPC:"2.0",ID:json.RawMessage("1"),Method:"tools/call",Params:params,
+ },&response);err!=nil{return nil,err}
+ raw,ok:=response.(map[string]any)
+ if !ok||raw["isError"]==true{return nil,errors.New("artifact not authorized")}
+ meta,ok:=raw["structuredContent"].(map[string]any)
+ if !ok||meta["id"]!=id||meta["project"]!=project{return nil,errors.New("artifact scope mismatch")}
+ digest,_:=meta["sha256"].(string)
+ name,_:=meta["name"].(string)
+ size,ok:=meta["size"].(float64)
+ if !visualArtifactSHA256.MatchString(digest)||!downloadArtifactName.MatchString(name)||!ok||size<1||size>float64(maxBrowserArtifactBytes){
+  return nil,errors.New("artifact metadata or size invalid")
+ }
+ return meta,nil
+}
+
 func (s *Server)uiDownloadProjectArtifact(w http.ResponseWriter,r *http.Request){
  project,id:=r.PathValue("project"),r.PathValue("artifact")
  if !consoleProjectID.MatchString(project)||!visualArtifactID.MatchString(id){
@@ -48,6 +74,9 @@ func (s *Server)uiDownloadProjectArtifact(w http.ResponseWriter,r *http.Request)
   if s.backend[i].Name=="workspace"{backend=&s.backend[i];break}
  }
  if backend==nil{writeError(w,http.StatusServiceUnavailable,"artifact download unavailable");return}
+  artifact,err:=s.scopedArtifactMetadata(r.Context(),*backend,project,id)
+  if err!=nil{writeError(w,http.StatusNotFound,"artifact not found or access denied");return}
+
  endpoint,err:=workspaceArtifactURL(backend.URL,project,id)
  if err!=nil{writeError(w,http.StatusServiceUnavailable,"artifact endpoint unavailable");return}
  req,err:=http.NewRequestWithContext(r.Context(),http.MethodGet,endpoint,nil)
@@ -79,15 +108,15 @@ func (s *Server)uiDownloadProjectArtifact(w http.ResponseWriter,r *http.Request)
   writeError(w,http.StatusBadGateway,"unsupported artifact response");return
  }
  digest:=response.Header.Get("X-Content-SHA256")
- if !visualArtifactSHA256.MatchString(digest){
+ if digest!=artifact["sha256"] {
   writeError(w,http.StatusBadGateway,"artifact checksum unavailable");return
  }
  _,disposition,err:=mime.ParseMediaType(response.Header.Get("Content-Disposition"))
  filename:=disposition["filename"]
- if err!=nil||!downloadArtifactName.MatchString(filename){
+ if err!=nil||!downloadArtifactName.MatchString(filename)||filename!=artifact["name"]{
   writeError(w,http.StatusBadGateway,"invalid artifact filename");return
  }
- if response.ContentLength>maxBrowserArtifactBytes{
+ if response.ContentLength>maxBrowserArtifactBytes||(response.ContentLength>=0&&float64(response.ContentLength)!=artifact["size"]){
   writeError(w,http.StatusRequestEntityTooLarge,"artifact exceeds browser download limit");return
  }
  // Validate the complete response before exposing a byte. Large CR3 files
@@ -98,7 +127,7 @@ func (s *Server)uiDownloadProjectArtifact(w http.ResponseWriter,r *http.Request)
  defer temp.Close()
  hash:=sha256.New()
  n,err:=io.Copy(io.MultiWriter(temp,hash),io.LimitReader(response.Body,maxBrowserArtifactBytes+1))
- if err!=nil||n>maxBrowserArtifactBytes||n<1||response.ContentLength>=0&&n!=response.ContentLength{
+ if err!=nil||n>maxBrowserArtifactBytes||n<1||float64(n)!=artifact["size"]||response.ContentLength>=0&&n!=response.ContentLength{
   writeError(w,http.StatusBadGateway,"incomplete or excessive artifact transfer");return
  }
  if hex.EncodeToString(hash.Sum(nil))!=digest{
