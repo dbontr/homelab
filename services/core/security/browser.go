@@ -129,7 +129,7 @@ func(b *BrowserPortal) ServeBrowserSocket(ctx context.Context,path string,groupI
  if err!=nil||!info.IsDir()||info.Mode().Perm()&0007!=0{return errors.New("browser socket directory is not private")}
  if err:=os.Chown(dir,-1,groupID);err!=nil{return err}
  if err:=os.Chmod(dir,0750);err!=nil{return err}
- if _,err:=os.Lstat(path);err==nil{return errors.New("browser socket path already exists")}else if !errors.Is(err,os.ErrNotExist){return err}
+ if err:=reclaimStaleBrowserSocket(path,groupID);err!=nil{return err}
  listener,err:=net.Listen("unix",path);if err!=nil{return err}
  defer listener.Close();defer os.Remove(path)
  if err:=os.Chown(path,-1,groupID);err!=nil{return err}
