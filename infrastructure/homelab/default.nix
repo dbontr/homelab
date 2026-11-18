@@ -2,6 +2,7 @@
 {
   imports = [
     ../../nixosModules/platform.nix
+    ../../nixosModules/engineering.nix
     ../../nixosModules/security.nix
     ../../nixosModules/executor.nix
     ../../nixosModules/console.nix
@@ -9,6 +10,7 @@
     ./shared.nix
     ./security-authority.nix
     ./domain-services.nix
+    ./engineering.nix
     ./cloudflare.nix
     ./mcp-ingress.nix
     ./orchestration.nix
