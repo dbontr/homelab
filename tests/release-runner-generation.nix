@@ -4,41 +4,55 @@ let
 in
 pkgs.testers.runNixOSTest {
   name = "release-generation-switch";
-  nodes.machine = { pkgs, ... }: {
-    system.stateVersion = "26.05";
-    system.switch.enable = true;
-    boot.loader.grub.enable = pkgs.lib.mkForce false;
-    boot.loader.systemd-boot.enable = pkgs.lib.mkForce false;
-    systemd.services.fixture-executor = {
-      wantedBy = [ "multi-user.target" ];
-      serviceConfig.ExecStart = "${pkgs.coreutils}/bin/sleep infinity";
-    };
-    systemd.services.fixture-authority = {
-      wantedBy = [ "multi-user.target" ];
-      serviceConfig.ExecStart = "${pkgs.coreutils}/bin/sleep infinity";
-    };
-  };
-  nodes.replacement = { pkgs, ... }: {
-    system.stateVersion = "26.05";
-    system.switch.enable = true;
-    boot.loader.grub.enable = pkgs.lib.mkForce false;
-    boot.loader.systemd-boot.enable = pkgs.lib.mkForce false;
-    networking.hostName = "machine";
-    systemd.services.fixture-go-executor = {
-      wantedBy = [ "multi-user.target" ];
-      serviceConfig = {
-        Type = "simple";
-        ExecStart = "${pkgs.coreutils}/bin/sleep infinity";
+  nodes.machine = { pkgs, ... }:
+    let
+      executor = pkgs.writeShellScript "fixture-rust-executor" ''
+        printf 'rust\n' > /run/fixture-executor-version
+        exec ${pkgs.coreutils}/bin/sleep infinity
+      '';
+      authority = pkgs.writeShellScript "fixture-rust-authority" ''
+        printf 'rust\n' > /run/fixture-authority-version
+        exec ${pkgs.coreutils}/bin/sleep infinity
+      '';
+    in {
+      system.stateVersion = "26.05";
+      system.switch.enable = true;
+      boot.loader.grub.enable = pkgs.lib.mkForce false;
+      boot.loader.systemd-boot.enable = pkgs.lib.mkForce false;
+      systemd.services.fixture-executor = {
+        wantedBy = [ "multi-user.target" ];
+        serviceConfig.ExecStart = executor;
+      };
+      systemd.services.fixture-authority = {
+        wantedBy = [ "multi-user.target" ];
+        serviceConfig.ExecStart = authority;
       };
     };
-    systemd.services.fixture-go-authority = {
-      wantedBy = [ "multi-user.target" ];
-      serviceConfig = {
-        Type = "simple";
-        ExecStart = "${pkgs.coreutils}/bin/sleep infinity";
+  nodes.replacement = { pkgs, ... }:
+    let
+      executor = pkgs.writeShellScript "fixture-go-executor" ''
+        printf 'go\n' > /run/fixture-executor-version
+        exec ${pkgs.coreutils}/bin/sleep infinity
+      '';
+      authority = pkgs.writeShellScript "fixture-go-authority" ''
+        printf 'go\n' > /run/fixture-authority-version
+        exec ${pkgs.coreutils}/bin/sleep infinity
+      '';
+    in {
+      system.stateVersion = "26.05";
+      networking.hostName = "machine";
+      system.switch.enable = true;
+      boot.loader.grub.enable = pkgs.lib.mkForce false;
+      boot.loader.systemd-boot.enable = pkgs.lib.mkForce false;
+      systemd.services.fixture-executor = {
+        wantedBy = [ "multi-user.target" ];
+        serviceConfig.ExecStart = executor;
+      };
+      systemd.services.fixture-authority = {
+        wantedBy = [ "multi-user.target" ];
+        serviceConfig.ExecStart = authority;
       };
     };
-  };
 
   testScript = { nodes, ... }:
     let
@@ -46,18 +60,34 @@ pkgs.testers.runNixOSTest {
       replacement = nodes.replacement.config.system.build.toplevel;
       runner = pkgs.writeShellScript "fixture-release-runner" ''
         set -eu
-        systemctl is-active --quiet fixture-executor.service
+        grep -Fx rust /run/fixture-executor-version
+        grep -Fx rust /run/fixture-authority-version
         "${replacement}/bin/switch-to-configuration" switch
-        systemctl --no-pager status fixture-go-authority.service fixture-go-executor.service || true
-        systemctl is-active --quiet fixture-go-authority.service
-        systemctl is-active --quiet fixture-go-executor.service
-        ! systemctl is-active --quiet fixture-executor.service
+        for i in $(seq 1 40); do
+          if systemctl is-active --quiet fixture-executor.service &&
+             systemctl is-active --quiet fixture-authority.service &&
+             grep -Fxq go /run/fixture-executor-version &&
+             grep -Fxq go /run/fixture-authority-version; then
+            break
+          fi
+          sleep 0.25
+        done
+        grep -Fx go /run/fixture-executor-version
+        grep -Fx go /run/fixture-authority-version
         printf 'replacement-active\n' >/tmp/release-phase
-        # A deliberately failed target-health decision must restore the old generation.
+        # Simulate failed target-health acceptance and restore previous units.
         "${previous}/bin/switch-to-configuration" switch
-        systemctl is-active --quiet fixture-executor.service
-        systemctl is-active --quiet fixture-authority.service
-        ! systemctl is-active --quiet fixture-go-authority.service
+        for i in $(seq 1 40); do
+          if systemctl is-active --quiet fixture-executor.service &&
+             systemctl is-active --quiet fixture-authority.service &&
+             grep -Fxq rust /run/fixture-executor-version &&
+             grep -Fxq rust /run/fixture-authority-version; then
+            break
+          fi
+          sleep 0.25
+        done
+        grep -Fx rust /run/fixture-executor-version
+        grep -Fx rust /run/fixture-authority-version
         printf 'rolled-back\n' >/tmp/release-phase
       '';
     in
@@ -65,15 +95,12 @@ pkgs.testers.runNixOSTest {
       machine.start()
       machine.wait_for_unit("fixture-executor.service")
       machine.wait_for_unit("fixture-authority.service")
+      machine.succeed("grep -Fx rust /run/fixture-executor-version")
+      machine.succeed("grep -Fx rust /run/fixture-authority-version")
       machine.succeed("systemd-run --no-block --collect --unit=fixture-release --property=Type=oneshot --property=TimeoutStartSec=3min --property=IgnoreOnIsolate=yes ${runner}")
-      machine.sleep(12)
-      print("RELEASE_JOURNAL_BEGIN")
-      print(machine.succeed("journalctl -u fixture-release.service -n 90 --no-pager --output=cat"))
-      print("RELEASE_JOURNAL_END")
-      print("GENERATION_SERVICES")
-      print(machine.succeed("systemctl is-active fixture-executor.service fixture-authority.service fixture-go-executor.service fixture-go-authority.service || true"))
-      machine.wait_until_succeeds("test -f /tmp/release-phase && grep -Fx rolled-back /tmp/release-phase", timeout=90)
-      machine.succeed("systemctl is-active fixture-executor.service")
-      machine.succeed("systemctl is-active fixture-authority.service")
+      machine.wait_until_succeeds("test -f /tmp/release-phase && grep -Fx rolled-back /tmp/release-phase", timeout=100)
+      machine.succeed("systemctl is-active fixture-executor.service fixture-authority.service")
+      machine.succeed("grep -Fx rust /run/fixture-executor-version")
+      machine.succeed("grep -Fx rust /run/fixture-authority-version")
     '';
 }
