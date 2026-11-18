@@ -237,7 +237,10 @@ check_admission() {
 helm -n "$namespace" get manifest "$release" > "$scratch/current.yaml"
 candidate_args=(--set-string "worker.image=$image")
 if [[ "$intent" == workload ]]; then
-  candidate_args=(--set-string "worker.allowedImages=$next_allowed")
+  # Helm --set-string splits on commas; the worker image policy is itself a
+  # comma-separated list. Supply it as one JSON values file instead.
+  jq -n --arg allowed "$next_allowed" '{worker:{allowedImages:$allowed}}' > "$scratch/image-values.json"
+  candidate_args=(--values "$scratch/image-values.json")
 fi
 helm template "$release" "$PWM_HELM_CHART" --namespace "$namespace" \
   -f "$scratch/values.json" \
