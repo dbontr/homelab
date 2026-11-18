@@ -193,44 +193,7 @@ if [[ "$mode" == complete || "$component" == homelab-console ]]; then
     printf '%s\n' 'The locked React console package did not build' >&2
     exit 1
   }
-  if [[ "$console_output" != /* || "$console_output" == *
-
-(
-  cd "$stage"
-  find bin console -type f -print0 |
-    sort -z |
-    xargs -0 -r sha256sum > SHA256SUMS
-  printf 'source_revision=%s\n' "$revision" > RELEASE
-  printf 'build_utc=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> RELEASE
-  if [[ "$mode" == component ]]; then
-    printf 'component=%s\n' "$component" >> RELEASE
-  fi
-)
-
-# Artifacts contain no runtime credentials. Allow isolated DynamicUser
-# services to execute source-built binaries without making releases writable.
-find "$stage/bin" "$stage/console" -type f -exec chmod 0444 {} +
-find "$stage/bin" -type f -exec chmod 0555 {} +
-find "$stage/bin" "$stage/console" -type d -exec chmod 0555 {} +
-chmod 0444 "$stage/RELEASE" "$stage/SHA256SUMS"
-chmod 0555 "$stage"
-# Fail if a build or verification step changed a tracked source file.
-# Build outputs belong in the release staging area or external caches.
-if [[ "$(git -C "$source_root" rev-parse --verify 'HEAD^{commit}')" != "$revision" ||
-      -n "$(git -C "$source_root" status --porcelain --untracked-files=all)" ]]; then
-  printf '%s\n' 'Pinned source checkout changed during release construction' >&2
-  exit 1
-fi
-bash "$source_root/scripts/verify-release.sh" "$stage"
-chmod -R u+w -- "$snapshot_parent"
-rm -rf -- "$snapshot_parent"
-source_root=""
-snapshot_parent=""
-mv -- "$stage" "$destination"
-stage=""
-printf 'Staged source-built release: %s\n' "$destination"
-printf 'No service was started, replaced or deployed.\n'
-\n'* ||
+  if [[ "$console_output" != /nix/store/* || "$console_output" == *" "* ||
         ! -d "$console_output" || -L "$console_output" ||
         ! -s "$console_output/index.html" ||
         ! -d "$console_output/assets" ]]; then
@@ -243,7 +206,6 @@ printf 'No service was started, replaced or deployed.\n'
     exit 1
   fi
 fi
-
 (
   cd "$stage"
   find bin console -type f -print0 |
