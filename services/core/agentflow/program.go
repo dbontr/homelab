@@ -19,6 +19,11 @@ var repositoryName = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1
 var commitName = regexp.MustCompile(`^[0-9a-f]{40}$`)
 var branchName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/-]{0,150}$`)
 
+type ArtifactInput struct {
+	ArtifactID string `json:"artifact_id"`
+	Path string `json:"path"`
+}
+
 type RepositoryPin struct {
 	Repository string `json:"repository"`
 	Revision string `json:"revision"`
@@ -41,6 +46,11 @@ type Program struct {
 	VerifyOnly bool `json:"verify_only,omitempty"`
 	IncludeKnowledge bool `json:"include_knowledge,omitempty"`
 	Review bool `json:"review,omitempty"`
+	VisualFeedback bool `json:"visual_feedback,omitempty"`
+	VirtualDisplay bool `json:"virtual_display,omitempty"`
+	VisualPaths []string `json:"visual_paths,omitempty"`
+	OutputPaths []string `json:"output_paths,omitempty"`
+	InputArtifacts []ArtifactInput `json:"input_artifacts,omitempty"`
 	Checks          []string          `json:"checks"`
 	ImagePoolID     string            `json:"image_pool_id"`
 	Architecture    string            `json:"architecture,omitempty"`
@@ -73,7 +83,7 @@ func (p Program) validate() error {
 		!validID(p.ImagePoolID) || math.IsNaN(p.CPU) || math.IsInf(p.CPU,0) || p.CPU < 0.1 || p.CPU > 8 || p.MemoryMB < 256 || p.MemoryMB > 16384 ||
 		p.DurationMinutes < 10 || p.DurationMinutes > 180 ||
 		len(p.Checks) == 0 || len(p.Checks) > 8 || len(p.Changes) > 16 ||
-		len(p.ContextPaths) > 16 || len(p.AllowedPaths) > 16 || (!p.VerifyOnly && len(p.Title) == 0) || len(p.Title) > 256 || len(p.Description) > 8192 {
+		len(p.ContextPaths) > 16 || len(p.AllowedPaths) > 16 || len(p.VisualPaths)>8 || len(p.OutputPaths)>16 || len(p.InputArtifacts)>8 || (!p.VerifyOnly && len(p.Title) == 0) || len(p.Title) > 256 || len(p.Description) > 8192 {
 		return errors.New("invalid engineering program or resource limits")
 	}
 	if p.NodeID!=""&&!validID(p.NodeID) {return errors.New("invalid exact compute node")}
@@ -109,6 +119,24 @@ func (p Program) validate() error {
 		if !validSourcePath(s) || (p.Autonomous && sensitiveSourcePath(s)) {
 			return errors.New("invalid editable path")
 		}
+	}
+	if p.VisualFeedback && (!p.Autonomous || (!p.VirtualDisplay && len(p.VisualPaths)==0)) { return errors.New("visual feedback requires autonomous authoring and an approved capture source") }
+	if p.VirtualDisplay && !p.VisualFeedback { return errors.New("virtual display requires visual feedback authorization") }
+	if len(p.VisualPaths)>0 && !p.VisualFeedback { return errors.New("visual paths require visual feedback authorization") }
+	seenVisual := map[string]bool{}
+	for _, name := range p.VisualPaths {
+		if !validSourcePath(name) || sensitiveSourcePath(name) || !strings.HasSuffix(strings.ToLower(name), ".png") || seenVisual[name] { return errors.New("invalid or duplicate visual output path") }
+		seenVisual[name]=true
+	}
+	seenImports:=map[string]bool{}
+	for _, item:=range p.InputArtifacts {
+		if !validID(item.ArtifactID)||!validSourcePath(item.Path)||sensitiveSourcePath(item.Path)||seenImports[item.Path] {return errors.New("invalid or duplicate imported artifact scope")}
+		seenImports[item.Path]=true
+	}
+	seenOutput:=map[string]bool{}
+	for _, name := range p.OutputPaths {
+		if !validSourcePath(name) || sensitiveSourcePath(name) || seenOutput[name] { return errors.New("invalid or duplicate deliverable path") }
+		seenOutput[name]=true
 	}
 	if p.VerifyOnly {
 		if !p.PrepareOnly || p.Autonomous || p.Review || p.IncludeKnowledge ||
@@ -148,6 +176,11 @@ type EngineeringInputs struct {
 	CPU float64 `json:"cpu"`
 	MemoryMB int `json:"memory_mb"`
 	Checks []string `json:"checks"`
+	VisualFeedback bool `json:"visual_feedback,omitempty"`
+	VirtualDisplay bool `json:"virtual_display,omitempty"`
+	VisualPaths []string `json:"visual_paths,omitempty"`
+	OutputPaths []string `json:"output_paths,omitempty"`
+	InputArtifacts []ArtifactInput `json:"input_artifacts,omitempty"`
 	AllowedPaths []string `json:"allowed_paths,omitempty"`
 	ChangeSHA256 map[string]string `json:"change_sha256,omitempty"`
 }
@@ -165,7 +198,7 @@ func engineeringInputs(p Program)(EngineeringInputs,error){
 		Linked:append([]RepositoryPin(nil),p.LinkedRepositories...),BaseBranch:p.BaseBranch,
 		ImagePoolID:p.ImagePoolID,Architecture:p.Architecture,NodeID:p.NodeID,
 		Hardware:hardware,MinGPUMemoryMB:p.MinGPUMemoryMB,CPU:p.CPU,MemoryMB:p.MemoryMB,
-		Checks:append([]string(nil),p.Checks...),AllowedPaths:append([]string(nil),p.AllowedPaths...),
+		Checks:append([]string(nil),p.Checks...),VisualFeedback:p.VisualFeedback,VirtualDisplay:p.VirtualDisplay,VisualPaths:append([]string(nil),p.VisualPaths...),OutputPaths:append([]string(nil),p.OutputPaths...),InputArtifacts:append([]ArtifactInput(nil),p.InputArtifacts...),AllowedPaths:append([]string(nil),p.AllowedPaths...),
 		ChangeSHA256:contentDigests,
 	},nil
 }
@@ -201,17 +234,23 @@ func Compile(p Program) (Workflow, error) {
 	}
 	add("provision", "provision", nil, map[string]any{"image_pool_id": p.ImagePoolID, "cpu": p.CPU, "memory_mb": p.MemoryMB,
 		"duration_minutes": p.DurationMinutes, "hardware": p.Hardware, "min_gpu_memory_mb": p.MinGPUMemoryMB,
-		"architecture": p.Architecture, "node_id": p.NodeID})
+		"architecture": p.Architecture, "node_id": p.NodeID, "display": p.VirtualDisplay})
 	add("checkout", "checkout", []string{"provision"}, map[string]any{"repository": p.Repository, "ref": p.Revision})
+	checkoutDeps:=[]string{"checkout"}
+	if len(p.InputArtifacts)>0 {
+		add("inputs","inputs",checkoutDeps,map[string]any{"artifacts":p.InputArtifacts})
+		checkoutDeps=[]string{"inputs"}
+	}
 	if p.VerifyOnly {
-		add("verify", "verify", []string{"checkout"}, map[string]any{"commands": p.Checks, "verification_only": true})
+		add("verify", "verify", checkoutDeps, map[string]any{"commands": p.Checks, "verification_only": true})
+		if len(p.OutputPaths)>0 { add("deliver", "deliver", []string{"verify"}, map[string]any{"paths":p.OutputPaths}) }
 		if err := Validate(w); err != nil {
 			return Workflow{}, fmt.Errorf("invalid compiled verification workflow: %w", err)
 		}
 		return w, nil
 	}
 	if p.Autonomous {
-		checkoutDependencies := []string{"checkout"}
+		checkoutDependencies := append([]string(nil),checkoutDeps...)
 		for i, linked := range p.LinkedRepositories {
 			id := fmt.Sprintf("checkout-link-%d", i+1)
 			add(id, "checkout", []string{"checkout"}, map[string]any{"repository": linked.Repository, "ref": linked.Revision})
@@ -220,6 +259,7 @@ func Compile(p Program) (Workflow, error) {
 		add("agent", "agent", checkoutDependencies, AgentBrief{
 			Objective: p.Objective, Repository: p.Repository, AllowedPaths: p.AllowedPaths,
 			Checks: p.Checks, ContextPaths: p.ContextPaths, LinkedRepositories: p.LinkedRepositories, IncludeKnowledge: p.IncludeKnowledge, Revision: p.Revision,
+			VisualFeedback:p.VisualFeedback,VirtualDisplay:p.VirtualDisplay,VisualPaths:p.VisualPaths,
 		})
 		w.Steps[len(w.Steps)-1].MaxAttempts = 5
 		add("verify", "verify", []string{"agent"}, map[string]any{"commands": p.Checks})
@@ -229,6 +269,7 @@ func Compile(p Program) (Workflow, error) {
 			next = "review"
 		}
 		add("export", "export", []string{next}, map[string]any{})
+		if len(p.OutputPaths)>0 { add("deliver", "deliver", []string{"export"}, map[string]any{"paths":p.OutputPaths}) }
 		if !p.PrepareOnly {
 			add("publish", "publish", []string{"export"}, map[string]any{"repository": p.Repository, "base_branch": p.BaseBranch, "expected_head": p.ExpectedHead, "title": p.Title, "body": p.Description})
 		}
@@ -237,7 +278,7 @@ func Compile(p Program) (Workflow, error) {
 		}
 		return w, nil
 	}
-	add("inspect", "inspect", []string{"checkout"}, map[string]any{"repository": p.Repository, "paths": p.ContextPaths})
+	add("inspect", "inspect", checkoutDeps, map[string]any{"repository": p.Repository, "paths": p.ContextPaths})
 	add("author", "author", []string{"inspect"}, map[string]any{"objective": p.Objective, "changes": p.Changes, "allowed_paths": p.AllowedPaths})
 	add("apply", "apply", []string{"author"}, map[string]any{})
 	add("verify", "verify", []string{"apply"}, map[string]any{"commands": p.Checks})
@@ -247,6 +288,7 @@ func Compile(p Program) (Workflow, error) {
 			next = "review"
 		}
 		add("export", "export", []string{next}, map[string]any{})
+	if len(p.OutputPaths)>0 { add("deliver", "deliver", []string{"export"}, map[string]any{"paths":p.OutputPaths}) }
 	if !p.PrepareOnly {
 		add("publish", "publish", []string{"export"}, map[string]any{"repository": p.Repository, "base_branch": p.BaseBranch, "expected_head": p.ExpectedHead, "title": p.Title, "body": p.Description})
 	}
@@ -283,7 +325,7 @@ func Summarize(w Workflow) RunSummary {
 	allComplete := true
 	for _, step := range w.Steps {
 		var visible json.RawMessage
-		if step.Kind == "provision" || step.Kind == "checkout" || step.Kind == "verify" || step.Kind == "review" || step.Kind == "export" || step.Kind == "publish" || step.Kind == "integration_verify" || step.Kind == "integration_publish" || step.Kind == "integration_cleanup" {
+		if step.Kind == "provision" || step.Kind == "checkout" || step.Kind == "inputs" || step.Kind == "verify" || step.Kind == "review" || step.Kind == "deliver" || step.Kind == "export" || step.Kind == "publish" || step.Kind == "integration_verify" || step.Kind == "integration_publish" || step.Kind == "integration_cleanup" {
 			visible = append(json.RawMessage(nil), step.Result...)
 		}
 		out.Steps = append(out.Steps, StepSummary{ID: step.ID, Kind: step.Kind, Status: step.Status, Attempts: step.Attempts, Error: step.LastError, Result: visible})

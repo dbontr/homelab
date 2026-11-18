@@ -34,7 +34,7 @@ func (s *Store) activeClaim(w Workflow, c Claim) (int, error) {
 // CheckpointAgent writes the exact committed transcript under the current
 // lease token. Cancelled or superseded workers cannot persist a decision.
 func (s *Store) CheckpointAgent(claim Claim, session AgentSession) error {
-	if claim.Kind != "agent" || session.Turns < 0 || session.Turns > maxAgentTurns || len(session.Events) > maxAgentTurns || len(session.Changed) > 16 || len(session.Knowledge)>8 || len(session.Diagnostics)>16 {
+	if claim.Kind != "agent" || session.Turns < 0 || session.Turns > maxAgentTurns || len(session.Events) > maxAgentTurns || len(session.Changed) > 16 || len(session.Knowledge)>8 || len(session.Diagnostics)>16 || len(session.Visuals)>maxVisualObservations {
 		return errors.New("invalid agent checkpoint")
 	}
 	for path, digest := range session.Changed {
@@ -42,6 +42,11 @@ func (s *Store) CheckpointAgent(claim Claim, session AgentSession) error {
 			return errors.New("invalid changed-source identity")
 		}
 	}
+	for _,visual:=range session.Visuals {
+  if !validID(visual.ArtifactID)||!hexDigest(visual.SHA256)||visual.Width<1||visual.Width>3840||visual.Height<1||visual.Height>2160||visual.Width*visual.Height>8000000||!validVisualAssessment(visual.Assessment){
+   return errors.New("invalid persisted visual artifact")
+  }
+ }
 	data, err := json.Marshal(session)
 	if err != nil || len(data) > 512<<10 {
 		return errors.New("agent transcript exceeds persistence budget")

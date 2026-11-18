@@ -60,6 +60,10 @@ func (e *Engine) Submit(p Program) (RunSummary, error) {
 	if p.Review {
 		if _, ok := e.Author.(ReviewAuthor); !ok { return RunSummary{}, errors.New("review provider not configured") }
 	}
+	if p.VisualFeedback {
+        if _,ok:=e.Author.(VisualReviewer);!ok {return RunSummary{},errors.New("visual feedback requires a configured vision model")}
+        if _,ok:=e.Compute.(ProjectPNGReader);!ok {return RunSummary{},errors.New("visual feedback requires a project image reader")}
+    }
 	if p.Autonomous {
 		if _, ok := e.Author.(DecisionAuthor); !ok {
 			return RunSummary{}, errors.New("autonomous decision provider not configured")
@@ -299,7 +303,7 @@ func (e *Engine) Dispatch(ctx context.Context, claim Claim) (json.RawMessage, er
 	switch kind {
 	case "provision":
 		params := map[string]any{"project_id": w.Project, "image_pool_id": args["image_pool_id"], "cpu": args["cpu"], "memory_mb": args["memory_mb"], "duration_minutes": args["duration_minutes"]}
-		for _,name:=range []string{"hardware","min_gpu_memory_mb","architecture","node_id"} {
+		for _,name:=range []string{"hardware","min_gpu_memory_mb","architecture","node_id","display"} {
 			if value,ok:=args[name];ok&&value!=nil {params[name]=value}
 		}
 		out, err = e.Compute.Call(ctx, "workspace_create", params)
@@ -324,6 +328,10 @@ func (e *Engine) Dispatch(ctx context.Context, claim Claim) (json.RawMessage, er
 		}
 	case "agent":
 		return e.runAgentTurn(ctx, claim, w)
+    case "inputs":
+        out,err=e.importInputs(ctx,w,args)
+    case "deliver":
+        out,err=e.deliverOutputs(ctx,w,args)
 	case "integration_import", "integration_verify", "integration_publish", "integration_cleanup":
 		out, err = e.integrationStep(ctx, claim, w, args)
 	case "inspect":
@@ -728,6 +736,7 @@ func (e *Engine) Dispatch(ctx context.Context, claim Claim) (json.RawMessage, er
 	if err != nil {
 		return nil, err
 	}
+	if kind=="verify" {if err:=e.verifyImmutableInputs(ctx,w);err!=nil{return nil,err}}
 	raw, err := json.Marshal(out)
 	if err != nil {
 		return nil, err

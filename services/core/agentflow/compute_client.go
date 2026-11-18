@@ -27,7 +27,7 @@ type ComputeClient struct {
 }
 var permittedComputeTools=map[string]bool{
  "workspace_create":true,"workspace_list":true,"workspace_call":true,
- "workspace_operation":true,"github_checkout_repository":true,
+ "workspace_operation":true,"workspace_capture_display":true,"artifact_view_image":true,"github_checkout_repository":true,
  "github_publish_artifacts":true,"artifact_info":true,
  "workspace_import_artifact":true,"workspace_destroy":true,"repository_memberships":true,
  "knowledge_context":true,"knowledge_search_contributions":true,"knowledge_contribute":true,"research_search":true,
@@ -126,12 +126,19 @@ func(c *ComputeClient)Call(ctx context.Context,tool string,arguments map[string]
   Result struct{
    IsError bool `json:"isError"`
    Structured map[string]any `json:"structuredContent"`
+   Content []struct { Type string `json:"type"`; MimeType string `json:"mimeType"`; Data string `json:"data"` } `json:"content"`
   } `json:"result"`
  }
  if err:=json.Unmarshal(raw,&result);err!=nil||result.JSONRPC!="2.0"||string(result.ID)!="1"||result.Error!=nil{
   return nil,errors.New("invalid compute RPC response")
  }
  if result.Result.IsError||result.Result.Structured==nil{return nil,errors.New("compute operation failed or was denied")}
+ if tool=="artifact_view_image" {
+  if len(result.Result.Content)<1 || result.Result.Content[0].Type!="image" || result.Result.Content[0].MimeType!="image/png" {
+   return nil,errors.New("compute did not return an authorized PNG image")
+  }
+  return map[string]any{"metadata":result.Result.Structured,"data_base64":result.Result.Content[0].Data},nil
+ }
  return result.Result.Structured,nil
 }
 

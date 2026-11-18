@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react"
+import { VisualRunForm } from "@/views/VisualRunForm"
 import { CheckCircle2, FileCode2, Play } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -130,11 +131,53 @@ function RunDetail({ id, revision }: { id: string; revision: number }) {
     <CardContent><ResourceState value={item}>{result => {
       const object = asRecord(result)
       const steps = list(object?.steps)
+      const agent = asRecord(object?.agent)
+      const observations = list(agent?.visuals)
+      const delivered = steps.find(item => text(item, "kind") === "deliver")
+      const deliverables = asRecord(asRecord(delivered?.result)?.outputs)
       return steps.length === 0 ? <EmptyState title="No execution steps were returned" /> :
-        <div className="space-y-2">{steps.map((step, i) => <div key={text(step, "id") || i} className="flex items-center justify-between border-b py-2">
+        <div className="space-y-3">{steps.map((step, i) => <div key={text(step, "id") || i} className="flex items-center justify-between border-b py-2">
           <span className="font-mono text-xs">{text(step, "kind", "id")}</span>
           <Badge variant={statusVariant(text(step, "status"))}>{text(step, "status") || "Unknown"}</Badge>
-        </div>)}</div>
+        </div>)}
+          {observations.length > 0 && <section className="space-y-2 border-t pt-4" aria-label="Visual review evidence">
+            <h3 className="font-medium">Visual review evidence</h3>
+            <p className="text-xs text-muted-foreground">Each image is an immutable project artifact, not a generated claim about appearance.</p>
+            {observations.map((image, i) => {
+              const assessment = asRecord(image.assessment)
+              const project = text(object ?? {}, "project")
+              const id = text(image, "artifact_id")
+              const preview = validProject(project) && /^[0-9a-f]{32}$/.test(id)
+                ? "/v1/engineering/projects/" + encodeURIComponent(project) + "/artifacts/" + id + "/image"
+                : ""
+              return <div key={text(image, "artifact_id") || i} className="space-y-2 rounded-md border p-3 text-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <code className="break-all text-xs">{text(image, "artifact_id")}</code>
+                  <Badge variant={text(assessment ?? {}, "status") === "acceptable" ? "outline" : "secondary"}>{text(assessment ?? {}, "status") || "Unknown"}</Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">{text(image, "width")} × {text(image, "height")} · SHA-256 {text(image, "sha256")}</p>
+                {preview && <img src={preview} alt={"Captured project rendering for visual review " + String(i + 1)} loading="lazy" className="max-h-[440px] w-full rounded-md border object-contain" />}
+                {preview && <a href={preview.replace(/\/image$/, "/download")} className="text-xs font-medium text-primary underline-offset-4 hover:underline">Download PNG</a>}
+                {Array.isArray(assessment?.issues) && <p className="text-xs">Issues: {assessment.issues.filter(v => typeof v === "string").join("; ")}</p>}
+                {Array.isArray(assessment?.suggestions) && <p className="text-xs">Suggested revisions: {assessment.suggestions.filter(v => typeof v === "string").join("; ")}</p>}
+              </div>
+            })}
+          </section>}
+          {deliverables && <section className="space-y-2 border-t pt-4" aria-label="Project deliverables">
+            <h3 className="font-medium">Verified deliverables</h3>
+            {Object.entries(deliverables).map(([name, info]) => {
+              const project = text(object ?? {}, "project")
+              const artifact = text(asRecord(info) ?? {}, "artifact_id")
+              const download = validProject(project) && /^[a-f0-9]{32}$/.test(artifact)
+                ? "/v1/engineering/projects/" + encodeURIComponent(project) + "/artifacts/" + artifact + "/download"
+                : ""
+              return <p key={name} className="flex flex-wrap items-center gap-2 break-all text-xs">
+                <strong>{name}</strong> — artifact <code>{artifact}</code>
+                {download && <a href={download} className="font-medium text-primary underline-offset-4 hover:underline">Download verified file</a>}
+              </p>
+            })}
+          </section>}
+        </div>
     }}</ResourceState></CardContent>
   </Card>
 }
@@ -144,6 +187,7 @@ export function Engineering({ revision, csrf, refresh }: { revision: number; csr
   const result = useApi<unknown>("/v1/engineering/runs", revision)
   return <div className="space-y-5">
     <VerifiedRunForm csrf={csrf} onSubmitted={refresh} />
+    <VisualRunForm csrf={csrf} onSubmitted={refresh} />
     <Card>
       <CardHeader><CardTitle>Engineering runs</CardTitle><CardDescription>Durable, project-scoped executions</CardDescription></CardHeader>
       <CardContent><ResourceState value={result}>{value => {
