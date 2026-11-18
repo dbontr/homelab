@@ -44,9 +44,17 @@ func guardRelease(ctx context.Context, ctrl *release.Controller, action, request
    if err != nil { return err }
    phase := "activating"
    if action == "revert" { phase = "reverting" }
-   if status.ID == id && status.Phase == phase {
-    if action == "activate" { return ctrl.ContinueAudited(ctx,action,id) }
-    return ctrl.Continue(ctx,action,id)
+   if status.ID == id {
+    if status.Phase == phase {
+     if action == "activate" { return ctrl.ContinueAudited(ctx,action,id) }
+     return ctrl.Continue(ctx,action,id)
+    }
+    // A completed, rolled-back or conflicting release must not keep the
+    // detached guardian alive or permit an audited request to be replayed.
+    if status.Phase == "rolled-back" || status.Phase == "rollback-failed" ||
+       (action == "activate" && (status.Phase == "active" || status.Phase == "reverting")) {
+     return errors.New("release journal no longer permits the requested transition")
+    }
    }
   case found:
    return errors.New("release audit does not permit an execution")
