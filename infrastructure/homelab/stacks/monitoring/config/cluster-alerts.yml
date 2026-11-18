@@ -22,3 +22,13 @@ groups:
           severity: warning
         annotations:
           summary: "Compute-node available memory below 8 percent on {{ $labels.node }}"
+      - alert: JanusBackupFilesystemCapacityLow
+        # The Janus /srv recovery paths are on its ext4 root filesystem.
+        # Alert before the filesystem reaches the encrypted retention floor.
+        expr: node_filesystem_avail_bytes{job="cluster-nodes",node="janus",mountpoint="/",fstype!="tmpfs"} < 42949672960
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Janus backup filesystem has less than 40 GiB available"
+          description: "Inspect retained encrypted snapshots and free capacity. Do not remove the preserved age-encrypted recovery archive."

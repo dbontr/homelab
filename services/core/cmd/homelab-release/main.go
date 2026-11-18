@@ -24,6 +24,12 @@ func configured()( *release.Controller,error){
  if err!=nil{return nil,err}
  var health []string
  if err:=json.Unmarshal(data,&health);err!=nil||len(health)==0{return nil,errors.New("invalid release health policy")}
+ socketFile:=os.Getenv("HOMELAB_RELEASE_HEALTH_SOCKETS_FILE")
+ if socketFile==""{return nil,errors.New("release TCP health policy required")}
+ socketData,err:=os.ReadFile(socketFile)
+ if err!=nil||len(socketData)>4096{return nil,errors.New("invalid release TCP health policy file")}
+ var healthSockets []string
+ if err:=json.Unmarshal(socketData,&healthSockets);err!=nil{return nil,errors.New("invalid release TCP health policy")}
  cfg:=release.Config{
   Host:host,FlakeDir:source,StateDir:state,TrustedSource:true,
   Nix:os.Getenv("HOMELAB_RELEASE_NIX"),
@@ -31,6 +37,7 @@ func configured()( *release.Controller,error){
   Git:os.Getenv("HOMELAB_RELEASE_GIT"),
   Systemctl:os.Getenv("HOMELAB_RELEASE_SYSTEMCTL"),
   HealthServices:health,
+  HealthSockets:healthSockets,
   Run:release.Exec,
   Current:func()(string,error){
    path,err:=filepath.EvalSymlinks("/nix/var/nix/profiles/system")

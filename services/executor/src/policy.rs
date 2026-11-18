@@ -3,6 +3,7 @@ use std::collections::BTreeSet;
 use std::env;
 use std::fs::OpenOptions;
 use std::io::Read;
+use std::net::{IpAddr, SocketAddr};
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Component, Path, PathBuf};
 
@@ -119,27 +120,30 @@ pub fn valid_service(value: &str) -> bool {
         && !FORBIDDEN_SERVICES.iter().any(|name| lower.contains(name))
 }
 
+// A health probe only observes a configured unit. The mutation allowlist
+// must not prevent checking the critical services a release must preserve.
 pub fn valid_health_service(value: &str) -> bool {
-    const CRITICAL: &[&str] = &[
-        "network",
-        "firewall",
-        "cloudflared",
-        "pihole",
-        "k3s",
-        "tailscale",
-        "docker",
-        "jellyfin",
-        "nginx",
-        "systemd-networkd",
-    ];
-    let lower = value.to_ascii_lowercase();
-    !value.is_empty()
+    value.len() > ".service".len()
         && value.len() <= 128
+        && value.ends_with(".service")
         && value.as_bytes()[0].is_ascii_alphanumeric()
         && value
             .bytes()
             .all(|c| c.is_ascii_alphanumeric() || b"@_.-".contains(&c))
-        && !CRITICAL.iter().any(|term| lower.contains(term))
+}
+
+// Probe destinations come only from immutable Nix policy. No DNS, public
+// addresses, arbitrary URL schemes, or user-supplied routing are accepted.
+pub fn valid_health_socket(value: &str) -> Option<SocketAddr> {
+    let socket: SocketAddr = value.parse().ok()?;
+    if socket.port() == 0 {
+        return None;
+    }
+    match socket.ip() {
+        IpAddr::V4(ip) if ip.is_private() || ip.is_loopback() => Some(socket),
+        IpAddr::V6(ip) if ip.is_loopback() || (ip.segments()[0] & 0xfe00) == 0xfc00 => Some(socket),
+        _ => None,
+    }
 }
 
 pub fn valid_kube_name(value: &str) -> bool {
@@ -882,6 +886,7 @@ pub struct Policy {
     pub nix_env: PathBuf,
     pub git: PathBuf,
     pub health: Vec<String>,
+    pub health_sockets: Vec<SocketAddr>,
     pub kubeconfig: Option<PathBuf>,
     pub kubectl: Option<PathBuf>,
 }
@@ -971,6 +976,22 @@ impl Policy {
         {
             return Err(Error::Configuration("invalid release health policy"));
         }
+        let socket_values: Vec<String> = serde_json::from_slice(&bounded_file(
+            &absolute("HOMELAB_EXECUTOR_HEALTH_SOCKETS_FILE")?,
+            4096,
+            false,
+        )?)
+        .map_err(|_| Error::Configuration("invalid release health socket policy"))?;
+        if socket_values.len() > 16 {
+            return Err(Error::Configuration("too many release health sockets"));
+        }
+        let health_sockets: Vec<SocketAddr> = socket_values
+            .iter()
+            .map(|value| valid_health_socket(value).ok_or(Error::Configuration("invalid release health socket")))
+            .collect::<Result<_, _>>()?;
+        if health_sockets.iter().collect::<BTreeSet<_>>().len() != health_sockets.len() {
+            return Err(Error::Configuration("duplicate release health socket"));
+        }
         Ok(Self {
             host,
             release_enabled: env::var("HOMELAB_EXECUTOR_RELEASE_ENABLE").ok().as_deref()
@@ -991,6 +1012,7 @@ impl Policy {
             nix_env: absolute("HOMELAB_EXECUTOR_NIX_ENV")?,
             git: absolute("HOMELAB_EXECUTOR_GIT")?,
             health,
+            health_sockets,
             kubeconfig,
             kubectl,
         })
@@ -1140,6 +1162,39 @@ impl Policy {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn release_socket_health_policy_rejects_public_or_ambiguous_destinations() {
+        for address in ["127.0.0.1:8104", "10.77.10.1:22", "10.77.30.1:53"] {
+            assert!(valid_health_socket(address).is_some(), "{address}");
+        }
+        for address in [
+            "0.0.0.0:22", "8.8.8.8:53", "example.com:443",
+            "10.77.30.1:0", "[::]:22", "http://127.0.0.1:8104",
+        ] {
+            assert!(valid_health_socket(address).is_none(), "{address}");
+        }
+    }
+
+    #[test]
+    fn release_health_can_check_critical_units_without_granting_mutation() {
+        for unit in [
+            "sshd.service",
+            "systemd-networkd.service",
+            "dnsmasq.service",
+            "cloudflared-saturn.service",
+            "k3s.service",
+        ] {
+            assert!(valid_health_service(unit), "health probe denied: {unit}");
+            assert!(!valid_service(unit), "critical unit gained mutation access: {unit}");
+        }
+        for unit in [
+            "", "sshd", "../sshd.service", "sshd.socket", "ssh d.service",
+            "sshd.service\\n", "-sshd.service",
+        ] {
+            assert!(!valid_health_service(unit), "invalid health unit: {unit}");
+        }
+    }
 
     #[test]
     fn catalog_mutations_require_exact_operator_resources() {
@@ -1504,6 +1559,7 @@ mod tests {
             nix_env: "/run/current-system/sw/bin/nix-env".into(),
             git: "/run/current-system/sw/bin/git".into(),
             health: vec!["homelab-platform.service".into()],
+            health_sockets: vec![],
             kubeconfig: None,
             kubectl: None,
         }

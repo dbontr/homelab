@@ -24,6 +24,8 @@ let
         passwordSecretName = cfg.offsite.passwordSecretName;
         backendSecretName = cfg.offsite.backendSecretName;
         sshSecretName = cfg.offsite.sshSecretName;
+        alertURL = cfg.offsite.alertURL;
+        alertSecretName = cfg.offsite.alertSecretName;
       };
       allowedHosts = cfg.allowedHosts;
       allowedOrigins = cfg.allowedOrigins;
@@ -306,6 +308,16 @@ in {
         default = "";
         description = "Preprovisioned backup-scoped SSH key and pinned known_hosts for SFTP Restic repositories.";
       };
+      alertURL = lib.mkOption {
+        type = lib.types.str;
+        default = "";
+        description = "HTTPS endpoint for encrypted backup failure and recovery notifications.";
+      };
+      alertSecretName = lib.mkOption {
+        type = lib.types.str;
+        default = "";
+        description = "Preprovisioned backup-alert Secret with a dedicated token key.";
+      };
     };
     publicURL = lib.mkOption {
       type = lib.types.str;
@@ -390,6 +402,11 @@ in {
         message = "Workspace scheduled backups require a Restic repository and an external password Secret.";
       }
       {
+        assertion = cfg.backupInterval == "" ||
+          (lib.hasPrefix "https://" cfg.offsite.alertURL && cfg.offsite.alertSecretName != "");
+        message = "Workspace scheduled backups require an HTTPS alert receiver and a separate token Secret.";
+      }
+      {
         assertion = !(lib.hasPrefix "sftp:" cfg.offsite.repository) || cfg.offsite.sshSecretName != "";
         message = "Workspace SFTP backups require an SSH Secret with a scoped identity and pinned known_hosts.";
       }
@@ -432,6 +449,7 @@ in {
         ''}
         ${lib.optionalString (cfg.backupInterval != "") ''
           kubectl -n pwm-system get secret ${lib.escapeShellArg cfg.offsite.passwordSecretName} >/dev/null
+          kubectl -n pwm-system get secret ${lib.escapeShellArg cfg.offsite.alertSecretName} >/dev/null
           ${lib.optionalString (lib.hasPrefix "sftp:" cfg.offsite.repository) ''
             kubectl -n pwm-system get secret ${lib.escapeShellArg cfg.offsite.sshSecretName} >/dev/null
           ''}

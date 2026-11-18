@@ -166,6 +166,11 @@ in
       default = [];
       description = "Non-empty service readiness list required for activation and rollback.";
     };
+    healthSockets = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [];
+      description = "Fixed private IP:port readiness sockets checked during activation and rollback; no hostnames or external endpoints.";
+    };
   };
   config = lib.mkIf cfg.enable {
     assertions = [
@@ -196,6 +201,11 @@ in
       {
         assertion = cfg.healthServices != [];
         message = "Independent NixOS releases require at least one health service.";
+      }
+      {
+        assertion = lib.length cfg.healthSockets <= 16 &&
+          lib.length (lib.unique cfg.healthSockets) == lib.length cfg.healthSockets;
+        message = "Release TCP health policy must be bounded and deduplicated.";
       }
       {
         assertion = !cfg.workspace.enable ||
@@ -242,6 +252,7 @@ in
       export HOMELAB_RELEASE_GIT=${lib.escapeShellArg ("${pkgs.git}/bin/git")}
       export HOMELAB_RELEASE_SYSTEMCTL=${lib.escapeShellArg ("${pkgs.systemd}/bin/systemctl")}
       export HOMELAB_RELEASE_HEALTH_FILE=${lib.escapeShellArg (pkgs.writeText "homelab-release-health.json" (builtins.toJSON cfg.healthServices))}
+      export HOMELAB_RELEASE_HEALTH_SOCKETS_FILE=${lib.escapeShellArg (pkgs.writeText "homelab-release-health-sockets.json" (builtins.toJSON cfg.healthSockets))}
       exec ${cfg.package}/bin/homelab-release "$@"
     '') (pkgs.writeShellScriptBin "homelab-audit-inspect" ''
       export HOMELAB_EXECUTOR_RELEASE_STATE=${lib.escapeShellArg cfg.stateDirectory}
@@ -265,6 +276,7 @@ in
         HOMELAB_EXECUTOR_SYSTEMCTL = "${pkgs.systemd}/bin/systemctl";
         HOMELAB_EXECUTOR_SERVICES_FILE = pkgs.writeText "homelab-executor-services.json" (builtins.toJSON cfg.allowedServices);
         HOMELAB_EXECUTOR_HEALTH_FILE = pkgs.writeText "homelab-executor-health.json" (builtins.toJSON cfg.healthServices);
+        HOMELAB_EXECUTOR_HEALTH_SOCKETS_FILE = pkgs.writeText "homelab-executor-health-sockets.json" (builtins.toJSON cfg.healthSockets);
       } // lib.optionalAttrs rustActuatorEnabled {
         HOMELAB_EXECUTOR_RUST_ACTUATOR = "${rustActuator}/bin/homelab-actuator";
         HOMELAB_EXECUTOR_RUST_SERVICES = serviceAllowlist;

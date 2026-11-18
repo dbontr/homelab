@@ -6,15 +6,23 @@ donor=$1
 receiver=$2
 image=$3
 digest=$4
-[[ $donor =~ ^[a-z][a-z0-9-]{0,62}$ && $receiver =~ ^[a-z][a-z0-9-]{0,62}$ && $donor != "$receiver" ]] || exit 2
+case "$donor" in janus|jupiter|mercury|venus) ;; *) exit 2 ;; esac
+case "$receiver" in janus|jupiter|mercury|venus) ;; *) exit 2 ;; esac
+[[ $donor != "$receiver" ]] || exit 2
 [[ $image =~ ^images[.]dbontr[.]internal/[a-z0-9._/-]+(:[a-z0-9._-]+|@sha256:[a-f0-9]{64})$ ]] || exit 2
 [[ $digest =~ ^sha256:[a-f0-9]{64}$ ]] || exit 2
+command -v timeout >/dev/null || exit 2
+remote() {
+  timeout 300 ssh -o BatchMode=yes -o StrictHostKeyChecking=yes \
+    -o IdentitiesOnly=yes -o ConnectTimeout=10 \
+    -o ServerAliveInterval=5 -o ServerAliveCountMax=2 "$@"
+}
 get_digest() {
-  ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes "$1" 'k3s ctr -n k8s.io images ls' |
+  remote "$1" 'k3s ctr -n k8s.io images ls' |
     awk -v wanted="$image" '$1==wanted {print $3; n++} END {if (n!=1) exit 1}'
 }
 complete() {
-  ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes "$1" 'k3s ctr -n k8s.io images check' |
+  remote "$1" 'k3s ctr -n k8s.io images check' |
     awk -v ref="$image" -v sha="$digest" '$1==ref && $3==sha && $4=="complete" {n++} END {if(n!=1) exit 1}'
 }
 current=$(get_digest "$donor") || { echo 'Donor image missing' >&2; exit 1; }
@@ -32,8 +40,8 @@ else
 fi
 if [[ $transferred == true ]]; then
   echo 'Transferring verified OCI content over host-key-verified SSH'
-  ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$donor" "k3s ctr -n k8s.io images export - '$image'" |
-    ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$receiver" 'k3s ctr -n k8s.io images import -'
+  remote "$donor" "k3s ctr -n k8s.io images export - '$image'" |
+    remote "$receiver" 'k3s ctr -n k8s.io images import -'
 fi
 current=$(get_digest "$receiver") || { echo 'Receiver image absent' >&2; exit 1; }
 [[ $current == "$digest" ]] && complete "$receiver" || { echo 'Receiver digest or content incomplete' >&2; exit 1; }
@@ -41,13 +49,11 @@ current=$(get_digest "$receiver") || { echo 'Receiver image absent' >&2; exit 1;
 # Direct containerd imports can omit the distribution-source labels Spegel needs.
 # Repair only missing labels after the verifier checks every OCI content digest.
 remote_jq='for j in /nix/store/*-jq-*/bin/jq; do test -x "$j" && export PATH="${j%/jq}:$PATH" && break; done;'
-ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes "$receiver" \
-  "$remote_jq bash -s -- --apply '$image' --confirm '$image'" < "$labels_script" || {
+remote "$receiver" "$remote_jq bash -s -- --apply '$image' --confirm '$image'" < "$labels_script" || {
   echo 'Receiver image source metadata could not be repaired' >&2
   exit 1
 }
-ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes "$receiver" \
-  "$remote_jq bash -s -- --check '$image'" < "$labels_script" || {
+remote "$receiver" "$remote_jq bash -s -- --check '$image'" < "$labels_script" || {
   echo 'Receiver image source metadata verification failed' >&2
   exit 1
 }
