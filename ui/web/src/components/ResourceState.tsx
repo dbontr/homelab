@@ -1,3 +1,4 @@
+import type { ReactNode } from "react"
 import { AlertCircle } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -8,7 +9,7 @@ export function ResourceState<T>({
   children,
 }: {
   value: Resource<T>
-  children: (data: T) => React.ReactNode
+  children: (data: T) => ReactNode
 }) {
   if (value.loading) {
     return <div aria-busy="true" aria-label="Loading data" className="space-y-3">
