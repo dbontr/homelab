@@ -78,6 +78,45 @@ jobs:
           provenance: mode=max
           sbom: true
 
+      - name: Verify restricted, offline project workspace
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          IMAGE: ghcr.io/${{ github.repository }}/${{ matrix.artifact }}
+          FLAVOR: ${{ matrix.name }}
+        run: |
+          set -euo pipefail
+          [[ "$DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]]
+          image="$IMAGE@$DIGEST"
+          docker pull "$image"
+          volume="homelab-toolchain-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${FLAVOR}"
+          docker volume create "$volume" >/dev/null
+          trap 'docker volume rm -f "$volume" >/dev/null || true' EXIT
+          docker run --rm --network none --read-only --user 65534:65534 \
+            --cap-drop ALL --security-opt no-new-privileges \
+            --tmpfs /tmp:rw,nosuid,size=64m \
+            --mount "type=volume,source=$volume,target=/workspace" \
+            --workdir /workspace --env HOME=/workspace --env FLAVOR="$FLAVOR" \
+            "$image" sh -ceu '
+              test "$(id -u)" -eq 65534
+              test -w /workspace
+              case "$FLAVOR" in
+                go)
+                  printf '%s\n' 'package main; import "fmt"; func main(){fmt.Println("go-qualified")}' > /workspace/main.go
+                  GOPROXY=off GOSUMDB=off GO111MODULE=off go build -o /workspace/qualified /workspace/main.go
+                  test "$(/workspace/qualified)" = go-qualified
+                  ;;
+                axiom)
+                  /usr/local/bin/verify-research-toolchains 1.91.1 4.34.0
+                  printf '%s\n' 'def homelabAccepted : Nat := 42' '#eval homelabAccepted' > /workspace/Qualified.lean
+                  lean /workspace/Qualified.lean | grep -Fxq 42
+                  printf '%s\n' 'pub fn accepted() -> usize { 42 }' > /workspace/qualified.rs
+                  rustc --crate-type lib --target wasm32-unknown-unknown /workspace/qualified.rs -o /workspace/libqualified.rlib
+                  test -s /workspace/libqualified.rlib
+                  ;;
+                *) exit 2 ;;
+              esac
+            '
+          printf 'Isolated runtime verified as uid 65534, read-only root, network disabled: %s@%s\n' "$IMAGE" "$DIGEST" >> "$GITHUB_STEP_SUMMARY"
       - name: Report immutable publication identity
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
