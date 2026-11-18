@@ -16,5 +16,7 @@
   services.homelabPlatform.engineeringSocket =
     "/run/homelab-engineeringd/engineering.sock";
 
+  services.homelabExecutor.healthServices = [ "homelab-engineeringd.service" ];
+
   systemd.services.homelab-engineeringd.after = [ "nginx.service" ];
 }
