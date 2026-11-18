@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"syscall"
+	"strings"
 )
 
 const migrationSnapshotReceipt = "authority-cutover.json"
@@ -124,8 +125,8 @@ func PrepareMigration(stateDir, snapshotDir, target string, preflight func(strin
 
 func pathWithin(base, path string) bool {
 	rel, err := filepath.Rel(base, path)
-	return err == nil && rel != "." && rel != ".." &&
-		!filepath.IsAbs(rel) && len(rel) >= 3 && rel[:3] != "../"
+	return err == nil && rel != "." && rel != ".." && !filepath.IsAbs(rel) &&
+		!strings.HasPrefix(rel, ".."+string(os.PathSeparator))
 }
 
 func writeMigrationFile(path string, value []byte) error {
