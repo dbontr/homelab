@@ -6,11 +6,11 @@ let
 in
 {
   options.services.homelabConsole = {
-    enable = lib.mkEnableOption "the unified Rust/Dioxus console";
+    enable = lib.mkEnableOption "the unified browser console";
     package = lib.mkOption {
       type = lib.types.nullOr lib.types.package;
       default = null;
-      description = "Built Dioxus web output containing index.html and the assets directory.";
+      description = "Built static web bundle containing index.html and the assets directory.";
     };
     replaceHomepage = lib.mkOption {
       type = lib.types.bool;

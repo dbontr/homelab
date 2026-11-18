@@ -9,12 +9,14 @@ on:
       - "ui/web/**"
       - "packages/console-web.nix"
       - "flake.nix"
+      - "nixosModules/console.nix"
   pull_request:
     paths:
       - ".github/workflows/web-console-qualification.yml"
       - "ui/web/**"
       - "packages/console-web.nix"
       - "flake.nix"
+      - "nixosModules/console.nix"
 
 permissions:
   contents: read
@@ -28,18 +30,23 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - name: Verify dependency lock and compile console
+      - name: Install locked dependencies and compile console
         working-directory: ui/web
         run: |
           set -euo pipefail
-          if [ ! -s package-lock.json ]; then
-            npm install --package-lock-only --ignore-scripts --no-audit --no-fund
-            printf 'HOMELAB_NPM_LOCK_START\n'
-            base64 -w 0 package-lock.json
-            printf '\nHOMELAB_NPM_LOCK_END\n'
-            echo "A reviewed dependency lockfile must be committed before qualification."
-            exit 78
-          fi
+          test -s package-lock.json
           npm ci --ignore-scripts --no-audit --no-fund
           npm run typecheck
           npm run build
+
+  nix-console:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+      - name: Build exact-source Nix web console package
+        run: nix build --no-link .#homelab-console-web

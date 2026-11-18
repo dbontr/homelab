@@ -6,7 +6,7 @@ The first-party browser client uses React, TypeScript, Tailwind CSS and shadcn/u
 
 Install a supported Node.js release and the exact dependency graph recorded in `package-lock.json`. Run `npm ci`, `npm run typecheck` and `npm run build`; the static bundle is placed in `dist/`.
 
-The npm lockfile must be generated against an approved npm registry, independently reviewed and committed before this client can be selected as a NixOS deployment artifact. Never use `npm install --force` or suppress TypeScript errors to qualify a release.
+The npm lockfile is source-controlled and determines the immutable dependency graph. The Nix package `.#homelab-console-web` builds the bundle with `importNpmLock` from the exact locked npm packages. An independently reviewed source revision is required for release. Never use `npm install --force` or suppress TypeScript errors to qualify a release.
 
 During development, `npm run dev` starts Vite on loopback. Access the Go API through the same protected origin in production. Local development proxying must not forward long-lived credentials into an untrusted browser.
 
