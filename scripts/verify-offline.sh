@@ -98,12 +98,13 @@ if ! command -v cargo >/dev/null 2>&1; then
   printf '%s\n' 'Rust Cargo is required to verify the console source.' >&2
   exit 1
 fi
+if ! command -v nix >/dev/null 2>&1; then
+  printf '%s\n' 'Nix is required to verify the locked React console release.' >&2
+  exit 1
+fi
 (
-  cd "$root/ui/console"
-  cargo fmt --all -- --check
-  cargo test --locked --offline
-  cargo check --locked --offline --target wasm32-unknown-unknown
-  cargo check --locked --offline --features embedded-app --target wasm32-unknown-unknown
+  cd "$root"
+  nix build --offline --no-write-lock-file --no-link .#homelab-console-web
 )
 (
   cd "$root/services/motivation"
