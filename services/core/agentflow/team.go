@@ -106,7 +106,7 @@ func validTeam(req TeamRequest)error{
  return nil
 }
 func (e *Engine) SubmitTeam(req TeamRequest)(TeamSummary,error){
- if e==nil||e.Store==nil||e.Compute==nil||!e.AllowedProjects[req.Base.Project]{
+ if e==nil||e.Store==nil||e.Compute==nil||!e.projectAllowed(req.Base.Project){
   return TeamSummary{},errors.New("cooperative project is not authorized")
  }
  if _,ok:=e.Author.(DecisionAuthor);!ok{return TeamSummary{},errors.New("autonomous model unavailable")}
@@ -206,7 +206,7 @@ func (s *Store) teamIDs()([]string,error){
 func (e *Engine) GetTeam(id string)(TeamSummary,error){
  if e==nil||e.Store==nil{return TeamSummary{},errors.New("engineering store unavailable")}
  record,err:=e.Store.readTeam(id);if err!=nil{return TeamSummary{},err}
- if !e.AllowedProjects[record.Project]{return TeamSummary{},errors.New("team project not authorized")}
+ if !e.projectAllowed(record.Project){return TeamSummary{},errors.New("team project not authorized")}
  team:=TeamSummary{ID:id,Project:record.Project,Repository:record.Repository,Revision:record.Revision,BaseBranch:record.BaseBranch,Status:Succeeded}
  seen:=map[string]string{}
  failed,cancelled,running,pending:=false,false,false,false
@@ -275,7 +275,7 @@ func (e *Engine) ListTeams()([]TeamSummary,error){
 }
 func (e *Engine) CancelTeam(id string)error{
  team,err:=e.Store.readTeam(id);if err!=nil{return err}
- if !e.AllowedProjects[team.Project]{return errors.New("team project not authorized")}
+ if !e.projectAllowed(team.Project){return errors.New("team project not authorized")}
  for _,member:=range team.Members{
   run,err:=e.Get(member.RunID);if err!=nil{return err}
   if run.Status!=Pending&&run.Status!=Running{continue}
