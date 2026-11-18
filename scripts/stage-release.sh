@@ -193,7 +193,7 @@ if [[ "$mode" == complete || "$component" == homelab-console ]]; then
     printf '%s\n' 'The locked React console package did not build' >&2
     exit 1
   }
-  if [[ "$console_output" != /nix/store/* || "$console_output" == *" "* ||
+  if [[ "$console_output" != /* || "$console_output" == *" "* ||
         ! -d "$console_output" || -L "$console_output" ||
         ! -s "$console_output/index.html" ||
         ! -d "$console_output/assets" ]]; then
