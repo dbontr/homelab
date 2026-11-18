@@ -3,6 +3,7 @@ package release
 import (
  "context"
  "errors"
+ "os"
  "strings"
  "testing"
  "time"
@@ -63,4 +64,13 @@ func TestIndependentReleaseRunnerCompletesRevert(t *testing.T) {
  if err:=ctrl.Continue(context.Background(),"revert",id);err!=nil{t.Fatal(err)}
  state,err=ctrl.Status()
  if err!=nil||state.Phase!="rolled-back"||runner.current!=priorSystem{t.Fatalf("reversion not verified: %+v %v",state,err)}
+}
+
+func TestUnauditedContinuationRejectsMissingAttempt(t *testing.T) {
+ ctrl,runner,id:=interruptedRelease(t)
+ if err:=os.Remove(ctrl.Config.StateDir+"/attempt-"+id+".json");err!=nil{t.Fatal(err)}
+ before:=len(runner.calls)
+ if err:=ctrl.Continue(context.Background(),"activate",id);err==nil{t.Fatal("missing attempt accepted without audited start")}
+ if len(runner.calls)!=before{t.Fatal("unaudited continuation changed host state")}
+ if _,err:=os.Stat(ctrl.Config.StateDir+"/attempt-"+id+".json");!os.IsNotExist(err){t.Fatal("unaudited continuation created an attempt")}
 }
