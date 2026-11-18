@@ -196,7 +196,10 @@ func(c *Controller) Stage(ctx context.Context,revision string)(Manifest,error){
   if !checkStorePath(system){return errors.New("Nix build did not return one valid store path")}
   id,err:=newID();if err!=nil{return err}
   staged=Manifest{ID:id,Host:c.Config.Host,Revision:revision,System:system,Created:time.Now().UTC()}
-  return c.atomic("stage-"+id+".json",staged)
+  if err:=c.atomic("stage-"+id+".json",staged);err!=nil{return err}
+  // A distinct, durable receipt prevents old implementation stages from
+  // crossing the security-authority boundary without requalification.
+  return c.atomic("stage-ready-"+id+".json",staged)
  })
  return staged,err
 }
@@ -262,14 +265,31 @@ func(c *Controller) rollback(ctx context.Context,j Journal)error{
 func(c *Controller) Activate(ctx context.Context,id string)error{
  return c.locked(func()error{
   m,err:=c.loadStage(id);if err!=nil{return err}
+  var ready Manifest
+  if err:=c.read("stage-ready-"+id+".json",&ready);err!=nil{
+   return fmt.Errorf("stage lacks Go authority receipt: %w",err)
+  }
+  if ready.ID!=m.ID||ready.Host!=m.Host||ready.Revision!=m.Revision||
+     ready.System!=m.System||!ready.Created.Equal(m.Created){
+   return errors.New("stage authority receipt does not match immutable manifest")
+  }
+  var attempted Journal
+  if err:=c.read("attempt-"+id+".json",&attempted);err==nil{
+   return errors.New("staged release already attempted")
+  }else if !errors.Is(err,os.ErrNotExist){
+   return fmt.Errorf("release attempt record cannot be verified: %w",err)
+  }
   var previous Journal
-  if err:=c.read("journal.json",&previous);err==nil&&(previous.Phase=="activating"||previous.Phase=="reverting"||previous.Phase=="rollback-failed"){
+  if err:=c.read("journal.json",&previous);err==nil&&(previous.ID==id||previous.Phase=="activating"||previous.Phase=="reverting"||previous.Phase=="rollback-failed"){
    return errors.New("previous activation must be recovered first")
   }else if err!=nil&&!errors.Is(err,os.ErrNotExist){return err}
   current,err:=c.Config.Current()
   if err!=nil||!checkStorePath(current){return errors.New("current NixOS generation cannot be verified")}
   if current==m.System{return errors.New("generation already active")}
   txn:=Journal{Phase:"activating",ID:id,Previous:current,Target:m.System,Time:time.Now().UTC()}
+  // Persist the attempt before an operation that could switch the host.
+  // A later journal replacement or restart cannot restore this capability.
+  if err:=c.atomic("attempt-"+id+".json",txn);err!=nil{return err}
   if err:=c.atomic("journal.json",txn);err!=nil{return err}
   // Do not use the caller's cancellation for rollback. A cancelled user
   // request must not leave an unverified generation active.

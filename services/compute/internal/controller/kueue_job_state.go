@@ -56,7 +56,7 @@ func (db *Database) QueueKueueJob(project, requestID, command, image string, cpu
 		id, now := randomHex(16), stamp()
 		if err:=db.execLocked("INSERT INTO jobs(id,project,command,image,cpu,memory_mb,status,created,updated) VALUES(?,?,?,?,?,?,'kueue_queued',?,?)",
 			id,project,command,image,cpu,memory,now,now);err!=nil{return err}
-		if err:=db.execLocked("INSERT INTO kueue_jobs(job,project,request_id,remote_name,created,updated) VALUES(?,?,?,?,?,?)",
+		if err:=db.execLocked("INSERT INTO kueue_jobs(job,project,request_id,remote_name,create_attempted,created,updated) VALUES(?,?,?,?,0,?,?)",
 			id,project,requestID,"pwm-"+id,now,now);err!=nil{return err}
 		out=map[string]any{"id":id,"status":"queued","backend":"kueue","request_id":requestID}
 		return nil

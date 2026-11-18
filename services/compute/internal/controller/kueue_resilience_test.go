@@ -325,4 +325,21 @@ func TestKueueLegacyMigrationFencesUnknownCreateHistory(t *testing.T) {
 	}
 	fake.mu.Lock(); created := fake.created; fake.mu.Unlock()
 	if created != 0 { t.Fatalf("migration duplicated %d uncertain remote Jobs", created) }
+	// Existing records remain fenced while requests created after migration
+	// must start without a recorded outbound Kubernetes submission.
+	fresh, err := reopened.QueueKueueJob("research", "fresh-after-migration", "echo fresh", testBatchImage, 0.25, 128)
+	if err != nil { t.Fatal(err) }
+	freshID := asString(fresh["id"])
+	pending, err = reopened.pendingKueueJobs()
+	if err != nil { t.Fatal(err) }
+	var row map[string]any
+	for _, item := range pending {
+		if asString(item["id"]) == freshID { row = item; break }
+	}
+	if row == nil || asInt(row["create_attempted"]) != 0 {
+		t.Fatalf("fresh job was marked as submitted before Kubernetes create: %v", row)
+	}
+	if err := srv.Kueue.reconcile(context.Background(), reopened, row); err != nil { t.Fatal(err) }
+	fake.mu.Lock(); created = fake.created; fake.mu.Unlock()
+	if created != 1 { t.Fatalf("fresh request created %d Kubernetes jobs, want one", created) }
 }

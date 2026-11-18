@@ -245,3 +245,30 @@ func TestPrivateReleaseReadinessSocketChecks(t *testing.T){
   t.Fatal("closed protected service socket passed readiness")
  }
 }
+
+func TestReleaseStageAttemptCannotReplayAcrossOtherDeployments(t *testing.T) {
+ runner:=&fakeReleaseRunner{}
+ ctrl:=releaseTestController(t,runner)
+ first,err:=ctrl.Stage(context.Background(),testRevision);if err!=nil{t.Fatal(err)}
+ if err:=ctrl.Activate(context.Background(),first.ID);err!=nil{t.Fatal(err)}
+ if err:=ctrl.Revert(context.Background(),first.ID);err!=nil{t.Fatal(err)}
+ second,err:=ctrl.Stage(context.Background(),testRevision);if err!=nil{t.Fatal(err)}
+ if err:=ctrl.Activate(context.Background(),second.ID);err!=nil{t.Fatal(err)}
+ if err:=ctrl.Revert(context.Background(),second.ID);err!=nil{t.Fatal(err)}
+ restarted,err:=New(ctrl.Config);if err!=nil{t.Fatal(err)}
+ count:=len(runner.calls)
+ if err:=restarted.Activate(context.Background(),first.ID);err==nil||!strings.Contains(err.Error(),"already attempted"){
+   t.Fatalf("reused stage passed durable attempt fencing: %v",err)
+ }
+ if len(runner.calls)!=count{t.Fatal("replayed stage initiated a host operation")}
+}
+
+func TestGoReleaseRejectsStageWithoutMatchingAuthorityReceipt(t *testing.T) {
+ runner:=&fakeReleaseRunner{}
+ ctrl:=releaseTestController(t,runner)
+ stage,err:=ctrl.Stage(context.Background(),testRevision);if err!=nil{t.Fatal(err)}
+ if err:=os.Remove(filepath.Join(ctrl.Config.StateDir,"stage-ready-"+stage.ID+".json"));err!=nil{t.Fatal(err)}
+ if err:=ctrl.Activate(context.Background(),stage.ID);err==nil||!strings.Contains(err.Error(),"authority receipt"){
+  t.Fatalf("legacy or corrupt stage admitted: %v",err)
+ }
+}
