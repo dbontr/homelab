@@ -6,7 +6,8 @@
     # project editor grant. The controller's owner token is not permitted.
     computeURL = "http://127.0.0.1:8106/mcp";
     computeTokenFile = "/srv/homelab/secrets/engineering-compute-editor.token";
-    allowedProjects = [ "axiom-engine" ];
+    grantScopedProjects = true;
+    allowedProjects = [];
     nativeVerification = false;
   };
 
