@@ -32,15 +32,19 @@ COPY services/compute/scripts/verify-research-toolchains.sh /usr/local/bin/verif
 RUN chmod 0555 /usr/local/bin/verify-research-toolchains \
     && /usr/local/bin/verify-research-toolchains 1.91.1 4.34.0
 
-RUN groupadd --gid 10001 builder \
-    && useradd --uid 10001 --gid builder --create-home --shell /usr/sbin/nologin builder \
-    && mkdir -p /workspace \
-    && chown builder:builder /workspace
+# Workers run as 65534 with a writable /workspace volume and a read-only
+# image filesystem. Rust caches and tools must not depend on a root-owned home.
+RUN mkdir -p /workspace/.cargo /workspace/.cache \
+    && chown -R 65534:65534 /workspace
 
-ENV HOME=/home/builder \
-    CARGO_HOME=/home/builder/.cargo
+ENV HOME=/workspace \
+    CARGO_HOME=/workspace/.cargo \
+    XDG_CACHE_HOME=/workspace/.cache \
+    RUSTUP_TOOLCHAIN=1.91.1
 WORKDIR /workspace
-USER 10001:10001
+USER 65534:65534
 
-RUN /usr/local/bin/verify-research-toolchains 1.91.1 4.34.0
+RUN test "$(id -u)" = 65534 \
+    && test -w "$HOME" \
+    && /usr/local/bin/verify-research-toolchains 1.91.1 4.34.0
 CMD ["sleep", "infinity"]

@@ -12,16 +12,19 @@ RUN test "$(go env GOVERSION)" = "go1.27.3" \
     && test "$(go env GOOS)" = "linux" \
     && test "$(go env GOARCH)" = "amd64"
 
-RUN groupadd --gid 10001 builder \
-    && useradd --uid 10001 --gid builder --create-home --shell /usr/sbin/nologin builder \
-    && mkdir -p /workspace \
-    && chown builder:builder /workspace
+# The Workspaces controller enforces uid/gid 65534 and mounts a writable
+# project volume at /workspace while keeping the image filesystem read-only.
+RUN mkdir -p /workspace/go /workspace/.cache/go-build \
+    && chown -R 65534:65534 /workspace
 
-ENV HOME=/home/builder \
-    GOPATH=/home/builder/go \
-    GOCACHE=/home/builder/.cache/go-build
+ENV HOME=/workspace \
+    GOPATH=/workspace/go \
+    GOCACHE=/workspace/.cache/go-build \
+    XDG_CACHE_HOME=/workspace/.cache
 
 WORKDIR /workspace
-USER 10001:10001
-RUN test "$(go env GOVERSION)" = "go1.27.3"
+USER 65534:65534
+RUN test "$(id -u)" = 65534 \
+    && test -w "$HOME" \
+    && test "$(go env GOVERSION)" = "go1.27.3"
 CMD ["sleep", "infinity"]
