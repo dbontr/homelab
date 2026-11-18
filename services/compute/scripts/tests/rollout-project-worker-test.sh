@@ -18,6 +18,7 @@ cat > "$scratch/values.json" <<'JSON'
   "worker":{
     "enabled":true,
     "image":"docker.io/library/project-workspace-worker:cuda-exec-756b88c",
+    "allowedImages":"debian:bookworm-slim",
     "name":"worker-046910e8ae58-janus",
     "projectID":"aup-zu3-pynq",
     "instanceID":"p-046910e8ae58-janus",
@@ -40,7 +41,7 @@ cat > "$scratch/live.json" <<'JSON'
       "name":"worker",
       "image":"docker.io/library/project-workspace-worker:cuda-exec-756b88c",
       "args":["serve","--node=worker-046910e8ae58-janus","--project=aup-zu3-pynq","--namespace=pwm-046910e8ae58-janus"],
-      "env":[{"name":"PWM_WORKER_TOKEN","valueFrom":{"secretKeyRef":{"name":"pwm-worker-046910e8ae58-janus-credentials"}}}]
+      "env":[{"name":"PWM_WORKER_TOKEN","valueFrom":{"secretKeyRef":{"name":"pwm-worker-046910e8ae58-janus-credentials"}}},{"name":"PWM_ALLOWED_IMAGES","value":"debian:bookworm-slim"}]
     }],
     "volumes":[{"name":"ca","secret":{"secretName":"pwm-controller-ca"}}]
   }}},
@@ -61,6 +62,9 @@ spec:
       containers:
         - name: worker
           image: "docker.io/library/project-workspace-worker:cuda-exec-756b88c"
+          env:
+            - name: PWM_ALLOWED_IMAGES
+              value: "debian:bookworm-slim"
 
 YAML
 sed "s#image: \"$old\"#image: \"$digest\"#" \
@@ -119,12 +123,26 @@ case "$args" in
   *' get deployments '*) cat "$MOCK_ROLLOUT/deployments.json" ;;
   *' get deployment '*)
     if [[ -f "$MOCK_ROLLOUT/applied" ]]; then
-      cat "$MOCK_ROLLOUT/after.json"
+      if [[ -f "$MOCK_ROLLOUT/compiler-mode" ]]; then
+        cat "$MOCK_ROLLOUT/after-compiler.json"
+      else
+        cat "$MOCK_ROLLOUT/after.json"
+      fi
     else
       cat "$MOCK_ROLLOUT/live.json"
     fi ;;
   *' get nodes '*) cat "$MOCK_ROLLOUT/nodes.json" ;;
   *' get pods,jobs '*) cat "$MOCK_ROLLOUT/resources.json" ;;
+  *' get networkpolicy '*) printf '{"spec":{"podSelector":{},"policyTypes":["Ingress","Egress"],"ingress":[],"egress":[]}}\n' ;;
+  *' get node '*) printf 'True' ;;
+  *' create -f - '*) cat > "$MOCK_ROLLOUT/probe-pod.yaml"; printf 'compiler-image-probe-fixed' ;;
+  *' wait '*) [[ ! -f "$MOCK_ROLLOUT/probe-fail" ]] ;;
+  *' get pod/'*)
+    jq -n --arg image "$MOCK_COMPILER_IMAGE"       '{spec:{containers:[{image:$image}]},status:{phase:"Succeeded",containerStatuses:[{imageID:$image,state:{terminated:{exitCode:0}}}]}}' ;;
+  *' get events '*) printf '{"items":[{"reason":"Pulled"}]}\n' ;;
+  *' logs '*) printf 'compiler-image-probe-ok\n' ;;
+  *' delete pod '*) touch "$MOCK_ROLLOUT/probe-cleaned" ;;
+  *' describe pod/'*) printf 'mocked pod describe\n' ;;
   *' get svc '*)
     printf '10.43.0.10' ;;
   *' get secret '*)
@@ -328,4 +346,83 @@ grep -q '^rollback$' "$scratch/trace" || fail 'Post-upgrade outage did not reque
 [[ -f "$scratch/paused" ]] || fail 'Failed migration incorrectly resumed scheduling'
 [[ ! -f "$scratch/applied" ]] || fail 'Rollback did not restore the prior deployment'
 
-printf 'Worker rollout admission and post-upgrade recovery verified\n'
+# The source policy admits one immutable compiler image to one project only.
+compiler=ghcr.io/dbontr/homelab/engineering-go@sha256:f33edc74b06fa39246ec30a7b3bf13d48b97d7590424d4ecd7aa6882d5b0558e
+export MOCK_COMPILER_IMAGE="$compiler"
+rm -f "$scratch/paused" "$scratch/applied" "$scratch/api-down" "$scratch/probe-fail"
+if bash "$script" plan "$release" --allow-image "$compiler" > "$scratch/output" 2>&1; then
+  fail 'A compiler image was admitted to a project outside its source policy'
+fi
+if bash "$script" plan "$release" --allow-image 'golang:1.27.3' > "$scratch/output" 2>&1; then
+  fail 'Mutable compiler image was admitted'
+fi
+if bash "$script" apply "$release" --allow-image "$compiler" > "$scratch/output" 2>&1; then
+  fail 'Compiler admission without release confirmation was accepted'
+fi
+
+# Use the independent Homelab project identity, worker and namespace.
+for file in values.json live.json after.json current.yaml workers.json; do
+  sed -i \
+    -e 's/046910e8ae58/fe67735ab7b7/g' \
+    -e 's/aup-zu3-pynq/homelab-platform/g' \
+    -e 's/janus/mercury/g' "$scratch/$file"
+done
+sed -i \
+  -e 's/046910e8ae58/fe67735ab7b7/g' \
+  -e 's/aup-zu3-pynq/homelab-platform/g' \
+  -e 's/janus/mercury/g' "$scratch/bin/curl"
+compiler_release=pwm-project-fe67735ab7b7-mercury
+compiler_allowed="debian:bookworm-slim,$compiler"
+awk -v to="$compiler_allowed" '
+  $0 == "            - name: PWM_ALLOWED_IMAGES" {
+    print
+    if (getline != 1) exit 3
+    print "              value: \"" to "\""
+    next
+  }
+  {print}
+' "$scratch/current.yaml" > "$scratch/candidate.yaml"
+jq --arg allowed "$compiler_allowed" '
+  .spec.template.spec.containers[0].env |=
+    map(if .name == "PWM_ALLOWED_IMAGES" then .value = $allowed else . end)
+' "$scratch/live.json" > "$scratch/after-compiler.json"
+jq --arg image "$compiler" '
+  .[0].capabilities.images = ["debian:bookworm-slim",$image]
+' "$scratch/workers.json" > "$scratch/with-images.json"
+mv "$scratch/with-images.json" "$scratch/workers.json"
+touch "$scratch/compiler-mode"
+
+before_plan=$(grep -cx upgrade "$scratch/trace" || true)
+bash "$script" plan "$compiler_release" --allow-image "$compiler" > "$scratch/output"
+grep -q '^PLAN ONLY:' "$scratch/output" || fail 'Scoped compiler admission plan failed'
+after_plan=$(grep -cx upgrade "$scratch/trace" || true)
+[[ "$after_plan" == "$before_plan" ]] || fail 'Compiler admission plan attempted a Helm mutation'
+cp "$scratch/candidate.yaml" "$scratch/valid-compiler.yaml"
+printf 'unexpected: authority-policy-drift\n' >> "$scratch/candidate.yaml"
+if bash "$script" plan "$compiler_release" --allow-image "$compiler" > "$scratch/output" 2>&1; then
+  fail 'Compiler image admission accepted unrelated manifest drift'
+fi
+mv "$scratch/valid-compiler.yaml" "$scratch/candidate.yaml"
+
+bash "$script" apply "$compiler_release" --allow-image "$compiler" \
+  --confirm "$compiler_release" > "$scratch/output"
+grep -q '^ACCEPTED:' "$scratch/output" || fail 'Scoped compiler admission did not finish'
+[[ ! -f "$scratch/paused" ]] || fail 'Worker remained paused following successful compiler admission'
+[[ -f "$scratch/probe-cleaned" ]] || fail 'Compiler Pod cleanup was not confirmed'
+grep -Fq "$compiler" "$scratch/probe-pod.yaml" || fail 'Compiler probe did not use the pinned image'
+grep -Fq 'readOnlyRootFilesystem: true' "$scratch/probe-pod.yaml" ||
+  fail 'Compiler probe had a writable root filesystem'
+grep -Fq 'automountServiceAccountToken: false' "$scratch/probe-pod.yaml" ||
+  fail 'Compiler probe mounted a service account token'
+rm -f "$scratch/applied" "$scratch/probe-cleaned"
+touch "$scratch/probe-fail"
+if bash "$script" apply "$compiler_release" --allow-image "$compiler" \
+  --confirm "$compiler_release" > "$scratch/output" 2>&1; then
+  fail 'Failed Kubernetes pull/execution probe was accepted'
+fi
+[[ -f "$scratch/paused" ]] || fail 'Failed probe incorrectly resumed scheduling'
+[[ ! -f "$scratch/applied" ]] || fail 'Failed probe did not restore the original Helm revision'
+grep -xq rollback "$scratch/trace" || fail 'Failed probe did not request rollback'
+[[ -f "$scratch/probe-cleaned" ]] || fail 'Failed probe left an unconfirmed test Pod'
+
+printf 'Worker and compiler admission, image-pull and rollback fixtures verified\n'

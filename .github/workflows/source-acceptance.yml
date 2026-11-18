@@ -205,6 +205,7 @@ jobs:
         run: |
           set -euo pipefail
           bash -n services/compute/scripts/rollout-project-worker.sh
+          bash -n services/compute/scripts/verify-project-compiler-image.sh
           bash -n services/compute/scripts/rollout-project-fleet.sh
           bash -n services/compute/scripts/tests/rollout-project-worker-test.sh
           bash services/compute/scripts/tests/rollout-project-worker-test.sh
