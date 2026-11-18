@@ -16,21 +16,20 @@ func TestDetachedReleaseDispatchUsesFixedUnitAndArguments(t *testing.T){
   Runner:"/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-release/bin/homelab-release-runner",
   Run:func(_ context.Context,cmd string,args ...string)error{
    calls++
-   if !strings.HasSuffix(cmd,"/systemd-run")||len(args)!=9 {t.Fatalf("unexpected detached command: %s %v",cmd,args)}
-   if args[0]!="--no-block"||args[1]!="--collect"||args[2]!="--unit=homelab-release-"+id||
-    args[3]!="--property=Type=oneshot"||args[4]!="--property=TimeoutStartSec=20min"||
-    args[5]!="--property=Restart=no"||args[7]!="guard-activate"||
-    args[8]!=id {t.Fatalf("wrong detached release arguments: %v",args)}
+   if !strings.HasSuffix(cmd,"/systemd-run")||len(args)!=10{
+    t.Fatalf("unexpected detached command: %s %v",cmd,args)
+   }
+   if args[0]!="--no-block"||args[1]!="--collect"||
+    args[2]!="--unit=homelab-release-"+id||
+    args[3]!="--property=Type=oneshot"||
+    args[4]!="--property=TimeoutStartSec=20min"||
+    args[5]!="--property=Restart=no"||
+    args[6]!="/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-release/bin/homelab-release-runner"||
+    args[7]!="guard-activate"||args[8]!=id||args[9]!=stage{
+    t.Fatalf("wrong detached release arguments: %v",args)
+   }
    return nil
   },
- }
- // The staged release ID is passed as the tenth argument; it cannot be used
- // to select an executable or supply additional systemd options.
- d.Run=func(_ context.Context,cmd string,args ...string)error {
-  calls++
-  if len(args)!=10 || args[6]!=d.Runner || args[7]!="guard-activate"||
-   args[8]!=id || args[9]!=stage {t.Fatalf("unexpected dispatch: %v",args)}
-  return nil
  }
  if err:=d.Dispatch(context.Background(),"infrastructure__release_activate",id,stage);err!=nil{t.Fatal(err)}
  if calls!=1{t.Fatalf("dispatch count %d",calls)}
