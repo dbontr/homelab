@@ -39,14 +39,6 @@
     lokiURL = "http://127.0.0.1:3100";
   };
 
-  # Serve the source-controlled React UI on an independent loopback endpoint.
-  # The public Homepage remains active until owner-reviewed browser acceptance.
-  services.homelabConsole = {
-    enable = true;
-    package = import ../../packages/console-web.nix { inherit pkgs; };
-    replaceHomepage = false;
-  };
-
   homelab.native.downloads.enable = true;
   homelab.native.applications.media.enable = true;
   homelab.native.applications.seerr.enable = true;
