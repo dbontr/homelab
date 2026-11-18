@@ -30,6 +30,21 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  self-hosted-release-integrity:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Qualify exact-source offline release packaging and rejection paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n scripts/stage-release.sh
+          bash -n scripts/verify-release.sh
+          bash -n scripts/tests/stage-component-test.sh
+          bash scripts/tests/stage-component-test.sh
+          bash scripts/tests/verify-release-test.sh
+
   go-domains:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
