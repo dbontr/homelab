@@ -110,3 +110,33 @@ func TestGuardianResumesAuthorizedInterruptedTransition(t *testing.T){
  state,err:=ctrl.Status()
  if err!=nil||state.Phase!="active"{t.Fatalf("interrupted release not completed: %+v %v",state,err)}
 }
+
+func TestGuardianCompletesAuditedExecutorHandoffWithoutAttempt(t *testing.T) {
+ ctrl,current,id:=guardianFixture(t)
+ requestID:=strings.Repeat("f",32)
+ authorizedGuardianAudit(t,ctrl,id,requestID,"started")
+ txn:=release.Journal{Phase:"activating",ID:id,Previous:guardianOld,Target:guardianTarget,Time:time.Now().UTC()}
+ raw,err:=json.Marshal(txn)
+ if err!=nil{t.Fatal(err)}
+ if err:=os.WriteFile(filepath.Join(ctrl.Config.StateDir,"journal.json"),raw,0600);err!=nil{t.Fatal(err)}
+ if err:=guardRelease(context.Background(),ctrl,"activate",requestID,id);err!=nil{t.Fatal(err)}
+ journal,err:=ctrl.Status()
+ if err!=nil||journal.Phase!="active"||*current!=guardianTarget{t.Fatalf("audited handoff not active: %+v %v",journal,err)}
+ var attempted release.Journal
+ data,err:=os.ReadFile(filepath.Join(ctrl.Config.StateDir,"attempt-"+id+".json"))
+ if err!=nil||json.Unmarshal(data,&attempted)!=nil||attempted!=txn{t.Fatal("audited handoff omitted matching durable attempt")}
+ if err:=guardRelease(context.Background(),ctrl,"activate",requestID,id);err==nil{t.Fatal("audited handoff replay succeeded")}
+}
+
+func TestGuardianRejectsAuditedHandoffWithConflictingStage(t *testing.T) {
+ ctrl,current,id:=guardianFixture(t)
+ requestID:=strings.Repeat("a",32)
+ authorizedGuardianAudit(t,ctrl,id,requestID,"started")
+ txn:=release.Journal{Phase:"activating",ID:id,Previous:guardianOld,Target:guardianOld,Time:time.Now().UTC()}
+ raw,err:=json.Marshal(txn)
+ if err!=nil{t.Fatal(err)}
+ if err:=os.WriteFile(filepath.Join(ctrl.Config.StateDir,"journal.json"),raw,0600);err!=nil{t.Fatal(err)}
+ if err:=guardRelease(context.Background(),ctrl,"activate",requestID,id);err==nil{t.Fatal("conflicting stage accepted")}
+ if *current!=guardianOld{t.Fatal("conflicting stage changed generation")}
+ if _,err:=os.Stat(filepath.Join(ctrl.Config.StateDir,"attempt-"+id+".json"));!os.IsNotExist(err){t.Fatal("conflicting stage recorded an attempt")}
+}
