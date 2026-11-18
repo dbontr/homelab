@@ -50,3 +50,15 @@ jobs:
             experimental-features = nix-command flakes
       - name: Build exact-source Nix web console package
         run: nix build --no-link .#homelab-console-web
+      - name: Evaluate all five host systems and Go architecture
+        run: |
+          set -euo pipefail
+          for host in saturn jupiter venus mercury janus; do
+            nix eval --raw ".#nixosConfigurations.${host}.config.system.build.toplevel.drvPath" >/dev/null
+          done
+          test "$(nix eval --raw .#nixosConfigurations.saturn.config.services.homelabSecurity.implementation)" = go
+          test "$(nix eval --raw .#nixosConfigurations.saturn.config.services.homelabExecutor.implementation)" = go
+          test "$(nix eval --json .#nixosConfigurations.saturn.config.services.homelabExecutor.useRustActuator)" = false
+          test "$(nix eval --json .#nixosConfigurations.saturn.config.services.homelabEngineering.enable)" = true
+          nix eval --json .#nixosConfigurations.saturn.config.services.homelabExecutor.workspace.projects | jq -e 'index("axiom-engine") != null'
+
