@@ -2,14 +2,14 @@
 
 Homelab is a self-hosted, adaptive personal capability system. It increases the owner's intellectual independence and useful work output while removing low-value administrative burden. Its architecture and priorities evolve with the owner's goals. See [philosophy](docs/philosophy.md) and [skills](skills/README.md).
 
-The system is maintained in one repository but runs as independently operable services. The Rust/Dioxus UI, single aggregated MCP endpoint, and optional external API are separate presentation and integration surfaces. None owns the domain databases, background jobs, or privileged execution state. Nix declares their deployment and credentials.
+The system is maintained in one repository but runs as independently operable services. The React/TypeScript console, single aggregated MCP endpoint, and optional external API are separate presentation and integration surfaces. None owns the domain databases, background jobs, or privileged execution state. Nix declares their deployment and credentials.
 
 ## Source layout
 
 - `skills/` contains portable Development, Writing, Teaching and Ideas skills for consistent assistant behavior and project workflows.
 
-- `services/` contains the domain service implementations and private contracts. `services/core/` contains the application runtime; `services/compute/`, `services/learning/`, and `services/health/` are independently buildable modules. `services/motivation/` is an opt-in, private Rust service with its own personal intervention history. Each service retains its own persistent state.
-- `ui/` contains the Rust/Dioxus console and its independent browser interface.
+- `services/` contains the domain service implementations and private contracts. `services/core/` contains the application runtime; `services/compute/`, `services/learning/`, and `services/health/` are independently buildable modules. `services/motivation/` currently contains an opt-in private native service whose records remain independently owned during the Go service migration. Each service retains its own persistent state.
+- `ui/web/` contains the React/TypeScript console, Tailwind styles and source-owned shadcn/ui components. `ui/console/` remains available as the deployed Dioxus client until verified retirement.
 - `mcp/` contains the independently startable, single aggregated MCP listener.
 - `api/` contains the independently startable, optionally writable native HTTP API listener.
 - `infrastructure/` declares the hosts, networking, K3s, storage, media applications and operational environment.
@@ -27,7 +27,7 @@ See [interface boundaries](docs/interface-boundaries.md) for service ownership, 
 
 ## Console
 
-The Rust/Dioxus browser client is in [`ui/console`](ui/console). It uses shadcn/ui neutral design tokens and consumes authenticated native API endpoints for monitoring, workspace inspection, task and recipe workflows, health, teaching, calendar and planning. It does not ship React or embed privileged MCP credentials. See [identity-directed motivation](docs/motivation.md), [console architecture](docs/console.md), [observability](docs/observability.md), [books](docs/books.md) and [self-hosted releases](docs/self-hosted-release.md).
+The React/TypeScript browser client is in [`ui/web`](ui/web). It uses shadcn/ui components and consumes authenticated native API endpoints for monitoring, workspace inspection, engineering, project records, tasks, recipes, health, learning and planning. No browser bundle contains a privileged MCP credential. See [identity-directed motivation](docs/motivation.md), [console architecture](docs/console.md), [observability](docs/observability.md), [books](docs/books.md) and [self-hosted releases](docs/self-hosted-release.md).
 
 ## Development
 
@@ -42,7 +42,7 @@ go vet ./...
 go build ./cmd/homelab-platform
 ```
 
-The self-hosted `scripts/stage-release.sh` builds the integrated Go services, including the independent engineering daemon, and a Dioxus web bundle into a new, checksummed release directory without changing running services. The internal Kubernetes compute implementation includes a rootless registry image builder and a locally callable `services/compute/scripts/build-toolchain-image.sh` for Go/Rust/WASM toolchain images. NixOS operators can evaluate enrolled hosts and build the `homelab-platform` package from the root flake. Source development never activates a generation. Runtime credentials, personal state and media bytes are not stored in Git.
+The self-hosted release system stages immutable Go services, including the independent engineering daemon, and an independently qualified browser bundle into a checksummed release directory without changing running services. The React bundle requires a committed npm lockfile and an accepted reproducible build before it can replace the existing browser package. The internal Kubernetes compute implementation includes a rootless registry image builder and a locally callable `services/compute/scripts/build-toolchain-image.sh` for Go/Rust/WASM toolchain images. NixOS operators can evaluate enrolled hosts and build the `homelab-platform` package from the root flake. Source development never activates a generation. The Go security authority and executor are selected through a protected source release only after Go migration receipts, independent authentication tests, audit reconciliation and rollback verification. Runtime credentials, personal state and media bytes are not stored in Git.
 
 ## Operating boundaries
 
