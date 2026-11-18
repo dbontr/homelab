@@ -392,10 +392,71 @@ jq --arg image "$compiler" '
 mv "$scratch/with-images.json" "$scratch/workers.json"
 touch "$scratch/compiler-mode"
 
-before_plan=$(wc -l < "$scratch/trace")
+before_plan=$(grep -cx '^upgrade
+cp "$scratch/candidate.yaml" "$scratch/valid-compiler.yaml"
+printf 'unexpected: authority-policy-drift\n' >> "$scratch/candidate.yaml"
+if bash "$script" plan "$compiler_release" --allow-image "$compiler" > "$scratch/output" 2>&1; then
+  fail 'Compiler image admission accepted unrelated manifest drift'
+fi
+mv "$scratch/valid-compiler.yaml" "$scratch/candidate.yaml"
+
+bash "$script" apply "$compiler_release" --allow-image "$compiler" \
+  --confirm "$compiler_release" > "$scratch/output"
+grep -q '^ACCEPTED:' "$scratch/output" || fail 'Scoped compiler admission did not finish'
+[[ ! -f "$scratch/paused" ]] || fail 'Worker remained paused following successful compiler admission'
+[[ -f "$scratch/probe-cleaned" ]] || fail 'Compiler Pod cleanup was not confirmed'
+grep -Fq "$compiler" "$scratch/probe-pod.yaml" || fail 'Compiler probe did not use the pinned image'
+grep -Fq 'readOnlyRootFilesystem: true' "$scratch/probe-pod.yaml" ||
+  fail 'Compiler probe had a writable root filesystem'
+grep -Fq 'automountServiceAccountToken: false' "$scratch/probe-pod.yaml" ||
+  fail 'Compiler probe mounted a service account token'
+rm -f "$scratch/applied" "$scratch/probe-cleaned"
+touch "$scratch/probe-fail"
+if bash "$script" apply "$compiler_release" --allow-image "$compiler" \
+  --confirm "$compiler_release" > "$scratch/output" 2>&1; then
+  fail 'Failed Kubernetes pull/execution probe was accepted'
+fi
+[[ -f "$scratch/paused" ]] || fail 'Failed probe incorrectly resumed scheduling'
+[[ ! -f "$scratch/applied" ]] || fail 'Failed probe did not restore the original Helm revision'
+grep -q '^rollback$' "$scratch/trace" || fail 'Failed probe did not request rollback'
+[[ -f "$scratch/probe-cleaned" ]] || fail 'Failed probe left an unconfirmed test Pod'
+
+printf 'Worker and compiler admission, image-pull and rollback fixtures verified\n'
+ "$scratch/trace" || true)
 bash "$script" plan "$compiler_release" --allow-image "$compiler" > "$scratch/output"
 grep -q '^PLAN ONLY:' "$scratch/output" || fail 'Scoped compiler admission plan failed'
-[[ $(wc -l < "$scratch/trace") == "$before_plan" ]] ||
+after_plan=$(grep -cx '^upgrade
+cp "$scratch/candidate.yaml" "$scratch/valid-compiler.yaml"
+printf 'unexpected: authority-policy-drift\n' >> "$scratch/candidate.yaml"
+if bash "$script" plan "$compiler_release" --allow-image "$compiler" > "$scratch/output" 2>&1; then
+  fail 'Compiler image admission accepted unrelated manifest drift'
+fi
+mv "$scratch/valid-compiler.yaml" "$scratch/candidate.yaml"
+
+bash "$script" apply "$compiler_release" --allow-image "$compiler" \
+  --confirm "$compiler_release" > "$scratch/output"
+grep -q '^ACCEPTED:' "$scratch/output" || fail 'Scoped compiler admission did not finish'
+[[ ! -f "$scratch/paused" ]] || fail 'Worker remained paused following successful compiler admission'
+[[ -f "$scratch/probe-cleaned" ]] || fail 'Compiler Pod cleanup was not confirmed'
+grep -Fq "$compiler" "$scratch/probe-pod.yaml" || fail 'Compiler probe did not use the pinned image'
+grep -Fq 'readOnlyRootFilesystem: true' "$scratch/probe-pod.yaml" ||
+  fail 'Compiler probe had a writable root filesystem'
+grep -Fq 'automountServiceAccountToken: false' "$scratch/probe-pod.yaml" ||
+  fail 'Compiler probe mounted a service account token'
+rm -f "$scratch/applied" "$scratch/probe-cleaned"
+touch "$scratch/probe-fail"
+if bash "$script" apply "$compiler_release" --allow-image "$compiler" \
+  --confirm "$compiler_release" > "$scratch/output" 2>&1; then
+  fail 'Failed Kubernetes pull/execution probe was accepted'
+fi
+[[ -f "$scratch/paused" ]] || fail 'Failed probe incorrectly resumed scheduling'
+[[ ! -f "$scratch/applied" ]] || fail 'Failed probe did not restore the original Helm revision'
+grep -q '^rollback$' "$scratch/trace" || fail 'Failed probe did not request rollback'
+[[ -f "$scratch/probe-cleaned" ]] || fail 'Failed probe left an unconfirmed test Pod'
+
+printf 'Worker and compiler admission, image-pull and rollback fixtures verified\n'
+ "$scratch/trace" || true)
+[[ "$after_plan" == "$before_plan" ]] ||
   fail 'Compiler admission plan attempted a Helm mutation'
 cp "$scratch/candidate.yaml" "$scratch/valid-compiler.yaml"
 printf 'unexpected: authority-policy-drift\n' >> "$scratch/candidate.yaml"
