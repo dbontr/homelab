@@ -145,12 +145,18 @@ function RunDetail({ id, revision }: { id: string; revision: number }) {
             <p className="text-xs text-muted-foreground">Each image is an immutable project artifact, not a generated claim about appearance.</p>
             {observations.map((image, i) => {
               const assessment = asRecord(image.assessment)
+              const project = text(object ?? {}, "project")
+              const id = text(image, "artifact_id")
+              const preview = validProject(project) && /^[0-9a-f]{32}$/.test(id)
+                ? "/v1/engineering/projects/" + encodeURIComponent(project) + "/artifacts/" + id + "/image"
+                : ""
               return <div key={text(image, "artifact_id") || i} className="space-y-2 rounded-md border p-3 text-sm">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <code className="break-all text-xs">{text(image, "artifact_id")}</code>
                   <Badge variant={text(assessment ?? {}, "status") === "acceptable" ? "outline" : "secondary"}>{text(assessment ?? {}, "status") || "Unknown"}</Badge>
                 </div>
                 <p className="text-xs text-muted-foreground">{text(image, "width")} × {text(image, "height")} · SHA-256 {text(image, "sha256")}</p>
+                {preview && <img src={preview} alt={"Captured project rendering for visual review " + String(i + 1)} loading="lazy" className="max-h-[440px] w-full rounded-md border object-contain" />}
                 {Array.isArray(assessment?.issues) && <p className="text-xs">Issues: {assessment.issues.filter(v => typeof v === "string").join("; ")}</p>}
                 {Array.isArray(assessment?.suggestions) && <p className="text-xs">Suggested revisions: {assessment.suggestions.filter(v => typeof v === "string").join("; ")}</p>}
               </div>

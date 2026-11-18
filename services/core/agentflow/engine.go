@@ -736,6 +736,7 @@ func (e *Engine) Dispatch(ctx context.Context, claim Claim) (json.RawMessage, er
 	if err != nil {
 		return nil, err
 	}
+	if kind=="verify" {if err:=e.verifyImmutableInputs(ctx,w);err!=nil{return nil,err}}
 	raw, err := json.Marshal(out)
 	if err != nil {
 		return nil, err

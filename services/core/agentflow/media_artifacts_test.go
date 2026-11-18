@@ -88,3 +88,19 @@ func TestImportedPhotoSourceIsBoundToWorkflow(t *testing.T){
  bad.InputArtifacts=[]ArtifactInput{{ArtifactID:strings.Repeat("a",32),Path:".env"}}
  if err:=bad.validate();err==nil{t.Fatal("credential import path accepted")}
 }
+
+func TestImportedOriginalRemainsImmutableAfterVerification(t *testing.T){
+ initial:=strings.Repeat("b",64)
+ fake:=&mediaComputeMock{id:strings.Repeat("a",32),sha:initial}
+ engine:=&Engine{Compute:fake}
+ w:=mediaWorkflow()
+ receipt,_:=json.Marshal(map[string]any{"inputs":map[string]any{
+  "photos/photo.CR3":map[string]any{"artifact_id":fake.id,"sha256":initial,"size":1024},
+ }})
+ w.Steps=append(w.Steps,Step{ID:"inputs",Kind:"inputs",Status:Succeeded,Result:receipt})
+ if err:=engine.verifyImmutableInputs(context.Background(),w);err!=nil{t.Fatal(err)}
+ fake.sha=strings.Repeat("c",64)
+ if err:=engine.verifyImmutableInputs(context.Background(),w);err==nil{
+  t.Fatal("verification accepted a modified RAW original")
+ }
+}

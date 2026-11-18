@@ -51,3 +51,36 @@ func(e *Engine) importInputs(ctx context.Context,w Workflow,args map[string]any)
  }
  return map[string]any{"inputs":records},nil
 }
+
+// verifyImmutableInputs preserves every imported original across all commands,
+// not only when it is selected as an output. A derivative cannot silently
+// replace the project artifact used as its source.
+func(e *Engine)verifyImmutableInputs(ctx context.Context,w Workflow) error {
+ hasInputs:=false
+ for _,step:=range w.Steps{if step.ID=="inputs"{hasInputs=true;break}}
+ if !hasInputs{return nil}
+ imported,err:=resultObject(w,"inputs")
+ if err!=nil{return err}
+ entries:=obj(imported["inputs"])
+ if len(entries)==0||len(entries)>8{return errors.New("input artifact receipt is invalid")}
+ checkout,err:=resultObject(w,"checkout")
+ if err!=nil{return err}
+ repo:=str(checkout["repository"])
+ if !repositoryName.MatchString(repo){return errors.New("input repository identity invalid")}
+ for name,raw:=range entries{
+  record:=obj(raw)
+  digest:=str(record["sha256"])
+  if !validSourcePath(name)||sensitiveSourcePath(name)||!hexDigest(digest){
+   return errors.New("invalid imported source identity")
+  }
+  target:=path.Join(repoRoot(repo),name)
+  result,err:=e.workspaceAction(ctx,w,"command",map[string]any{"command":"sha256sum -- "+shellQuote(target)})
+  if err!=nil{return err}
+  code,confirmed:=result["exit_code"].(float64)
+  fields:=strings.Fields(str(result["stdout"]))
+  if !confirmed||code!=0||len(fields)<2||fields[0]!=digest{
+   return fmt.Errorf("imported original %s was altered",name)
+  }
+ }
+ return nil
+}
