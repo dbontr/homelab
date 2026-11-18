@@ -98,8 +98,14 @@ records its project-scoped artifact ID and size. JPEG/PNG previews are
 not substitutes for the RAW original and edit history.
 
 For larger photos or RAW files, use the existing authenticated binary
-artifact upload and download routes; small MCP inline attachments have
-much lower size limits. Storage limits and backups remain governed by
+artifact upload routes. The native Engineering console also provides a
+project-scoped browser download endpoint for confirmed artifacts up to
+256 MiB. It retrieves the entire binary from the configured protected
+Compute endpoint, verifies its SHA-256 before returning any bytes, and
+provides a private attachment response without giving the browser an
+upstream controller credential. Larger files use the Compute controller's
+existing authenticated artifact download service. Small MCP inline
+attachments have much lower size limits. Storage limits and backups remain governed by
 Compute. A file cannot be shared through a project that does not
 authorize the caller.
 

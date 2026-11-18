@@ -157,6 +157,7 @@ function RunDetail({ id, revision }: { id: string; revision: number }) {
                 </div>
                 <p className="text-xs text-muted-foreground">{text(image, "width")} × {text(image, "height")} · SHA-256 {text(image, "sha256")}</p>
                 {preview && <img src={preview} alt={"Captured project rendering for visual review " + String(i + 1)} loading="lazy" className="max-h-[440px] w-full rounded-md border object-contain" />}
+                {preview && <a href={preview.replace(/\/image$/, "/download")} className="text-xs font-medium text-primary underline-offset-4 hover:underline">Download PNG</a>}
                 {Array.isArray(assessment?.issues) && <p className="text-xs">Issues: {assessment.issues.filter(v => typeof v === "string").join("; ")}</p>}
                 {Array.isArray(assessment?.suggestions) && <p className="text-xs">Suggested revisions: {assessment.suggestions.filter(v => typeof v === "string").join("; ")}</p>}
               </div>
@@ -164,9 +165,17 @@ function RunDetail({ id, revision }: { id: string; revision: number }) {
           </section>}
           {deliverables && <section className="space-y-2 border-t pt-4" aria-label="Project deliverables">
             <h3 className="font-medium">Verified deliverables</h3>
-            {Object.entries(deliverables).map(([name, info]) => <p key={name} className="break-all text-xs">
-              <strong>{name}</strong> — artifact <code>{text(asRecord(info) ?? {}, "artifact_id")}</code>
-            </p>)}
+            {Object.entries(deliverables).map(([name, info]) => {
+              const project = text(object ?? {}, "project")
+              const artifact = text(asRecord(info) ?? {}, "artifact_id")
+              const download = validProject(project) && /^[a-f0-9]{32}$/.test(artifact)
+                ? "/v1/engineering/projects/" + encodeURIComponent(project) + "/artifacts/" + artifact + "/download"
+                : ""
+              return <p key={name} className="flex flex-wrap items-center gap-2 break-all text-xs">
+                <strong>{name}</strong> — artifact <code>{artifact}</code>
+                {download && <a href={download} className="font-medium text-primary underline-offset-4 hover:underline">Download verified file</a>}
+              </p>
+            })}
           </section>}
         </div>
     }}</ResourceState></CardContent>
