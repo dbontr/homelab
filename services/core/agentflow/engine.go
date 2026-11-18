@@ -64,7 +64,7 @@ func (e *Engine) Submit(p Program) (RunSummary, error) {
 		if _, ok := e.Author.(DecisionAuthor); !ok {
 			return RunSummary{}, errors.New("autonomous decision provider not configured")
 		}
-	} else if len(p.Changes) == 0 && e.Author == nil {
+	} else if !p.VerifyOnly && len(p.Changes) == 0 && e.Author == nil {
 		return RunSummary{}, errors.New("automatic authoring provider not configured")
 	}
 	w, err := Compile(p)
@@ -424,6 +424,26 @@ func (e *Engine) Dispatch(ctx context.Context, claim Claim) (json.RawMessage, er
 		repo := str(checkout["repository"])
 		if !repositoryName.MatchString(repo) {
 			return nil, errors.New("invalid checkout repository")
+		}
+		if args["verification_only"] == true {
+			reports := make([]map[string]any, 0, len(commands))
+			for _, entry := range commands {
+				command := str(entry)
+				result, callErr := e.verificationCommand(ctx, w, repo, command)
+				if callErr != nil {
+					return nil, callErr
+				}
+				code, confirmed := result["exit_code"].(float64)
+				if !confirmed || code != 0 {
+					return nil, errors.New("verification-only command did not pass")
+				}
+				reports = append(reports, map[string]any{"command": command, "exit_code": code})
+			}
+			if w.Inputs == nil || !commitName.MatchString(w.Inputs.Primary.Revision) {
+				return nil, errors.New("verification source revision unavailable")
+			}
+			out = map[string]any{"passed": true, "checks": reports, "source_revision": w.Inputs.Primary.Revision, "attempts": 1}
+			break
 		}
 		if w.Agent != nil {
 			if !w.Agent.Completed || len(w.Agent.Changed) == 0 {
