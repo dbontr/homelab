@@ -118,10 +118,34 @@ func(a *RemoteReleaseAgent)executeWithID(ctx context.Context,requestID,operation
   if response.ConfirmationID!=""{return fmt.Errorf("owner confirmation required: %s",response.ConfirmationID)}
   return errors.New("independent authorization denied release operation")
  }
- if response.AuditID!=requestID||response.State!="completed"{
-  return errors.New("release executor returned an unrelated or unverified execution receipt")
+ if response.AuditID!=requestID||(response.State!="completed" && response.State!="accepted"){
+  return errors.New("release executor returned an unrelated execution receipt")
  }
+ if response.State=="accepted"{return a.waitForRelease(ctx,operation,id)}
  return nil
+}
+
+// A detached release may restart its own transport before recording health.
+// Only the protected host journal can establish final deployment success.
+func(a *RemoteReleaseAgent)waitForRelease(ctx context.Context,operation,id string)error{
+ waitCtx,cancel:=context.WithTimeout(ctx,18*time.Minute)
+ defer cancel()
+ ticker:=time.NewTicker(2*time.Second)
+ defer ticker.Stop()
+ for {
+  observed,err:=a.Observe(waitCtx)
+  if err==nil&&observed.ID==id{
+   if operation=="infrastructure__release_activate"&&observed.Phase=="active"{return nil}
+   if operation=="infrastructure__release_revert"&&observed.Phase=="rolled-back"{return nil}
+   if observed.Phase=="rolled-back"||observed.Phase=="rollback-failed"{
+    return errors.New("protected release did not complete successfully")
+   }
+  }
+  select {
+  case <-waitCtx.Done():return fmt.Errorf("release completion cannot be verified: %w",waitCtx.Err())
+  case <-ticker.C:
+  }
+ }
 }
 
 func(a *RemoteReleaseAgent)Activate(ctx context.Context,id string)error{return a.execute(ctx,"infrastructure__release_activate",id)}

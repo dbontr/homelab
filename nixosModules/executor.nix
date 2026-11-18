@@ -10,6 +10,19 @@ let
     (namespace: names: map (name: "${namespace}/${name}") names)
     cfg.kubernetes.namespaces);
   deploymentAllowlist = pkgs.writeText "homelab-rust-deployment-policy" ((lib.concatStringsSep "\n" deploymentNames) + "\n");
+  releaseRunner = pkgs.writeShellScriptBin "homelab-release-runner" ''
+    export HOMELAB_RELEASE_HOST=${lib.escapeShellArg config.networking.hostName}
+    export HOMELAB_RELEASE_SOURCE=${lib.escapeShellArg cfg.sourceDirectory}
+    export HOMELAB_RELEASE_STATE=${lib.escapeShellArg cfg.stateDirectory}
+    export HOMELAB_RELEASE_NIX=${lib.escapeShellArg ("${pkgs.nix}/bin/nix")}
+    export HOMELAB_RELEASE_NIX_ENV=${lib.escapeShellArg ("${pkgs.nix}/bin/nix-env")}
+    export HOMELAB_RELEASE_GIT=${lib.escapeShellArg ("${pkgs.git}/bin/git")}
+    export HOMELAB_RELEASE_SYSTEMCTL=${lib.escapeShellArg ("${pkgs.systemd}/bin/systemctl")}
+    export HOMELAB_RELEASE_HEALTH_FILE=${lib.escapeShellArg (pkgs.writeText "homelab-release-runner-health.json" (builtins.toJSON cfg.healthServices))}
+    export HOMELAB_RELEASE_HEALTH_SOCKETS_FILE=${lib.escapeShellArg (pkgs.writeText "homelab-release-runner-health-sockets.json" (builtins.toJSON cfg.healthSockets))}
+    export HOMELAB_RELEASE_AUDIT_FILE=${lib.escapeShellArg "${cfg.stateDirectory}/executor-actions.jsonl"}
+    exec ${cfg.package}/bin/homelab-release "$@"
+  '';
 in
 {
   options.services.homelabExecutor = {
@@ -277,6 +290,9 @@ in
         HOMELAB_EXECUTOR_SERVICES_FILE = pkgs.writeText "homelab-executor-services.json" (builtins.toJSON cfg.allowedServices);
         HOMELAB_EXECUTOR_HEALTH_FILE = pkgs.writeText "homelab-executor-health.json" (builtins.toJSON cfg.healthServices);
         HOMELAB_EXECUTOR_HEALTH_SOCKETS_FILE = pkgs.writeText "homelab-executor-health-sockets.json" (builtins.toJSON cfg.healthSockets);
+      } // lib.optionalAttrs (cfg.allowReleaseActivation && cfg.implementation == "go") {
+        HOMELAB_EXECUTOR_SYSTEMD_RUN = "${pkgs.systemd}/bin/systemd-run";
+        HOMELAB_EXECUTOR_RELEASE_RUNNER = "${releaseRunner}/bin/homelab-release-runner";
       } // lib.optionalAttrs rustActuatorEnabled {
         HOMELAB_EXECUTOR_RUST_ACTUATOR = "${rustActuator}/bin/homelab-actuator";
         HOMELAB_EXECUTOR_RUST_SERVICES = serviceAllowlist;

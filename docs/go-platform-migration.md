@@ -20,6 +20,14 @@ A protected cutover must:
 6. Execute the independently authorized switch with explicit acknowledgement that in-memory owner sessions will terminate. Verify both new services' exclusive state leases, Cloudflare-signed identity, failure-denial paths, audit receipts and protected health checks. Do not use NanoKVM root to bypass the release authority.
 7. Run separately authorized rollback verification. Keep the previous implementation available only for recovery until state compatibility and production behavior are certified.
 
+## Executor-independent release execution
+
+The authenticated executor is not the process that performs the NixOS switch. The Go executor dispatches a fixed, detached `homelab-release-runner` through systemd and records acceptance in its private audit journal. The runner verifies the exact owner-approved operation, host, request identity, canonical arguments digest and immutable staged manifest before starting the protected release controller. Its systemd unit must survive both executor replacement and target isolation. A submitted or accepted dispatch is not a successful release: only the host's terminal `active` journal, security checks and live service readiness establish completion.
+
+For a cutover initiated by an existing Rust executor, the operator must prepare the immutable Go runner from the reviewed source and launch its **audit-gated guardian** as an independent transient unit for the exact release ID and request ID before confirming the corresponding protected Rust executor operation. The guardian remains inert until it observes the exact independently authorized `started` audit entry. It resumes an interrupted switch only after the immutable stage receipt, attempt and transaction journal agree; this is not permission to invoke `nixos-rebuild switch` directly. Do not accept a generic root shell, old owner session, mismatched release ID or archived state receipt as a substitute for owner authorization.
+
+A release-stage ID is single-use. A failed or interrupted transition must be reconciled against the actual installed generation. The trusted operator recovery command is `homelab-releasectl recover` only when the independent executor is not holding the release-state lease, and only when the source-owned journal requires recovery. Never overwrite retained TOTP replay, vault or credential state with an older snapshot.
+
 Production Compute workloads, Projects database, artifact volumes and Kubernetes hardware reservations must remain unchanged throughout.
 
 ## Browser qualification

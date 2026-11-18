@@ -101,6 +101,14 @@ func main(){
   Current:func()(string,error){return filepath.EvalSymlinks("/nix/var/nix/profiles/system")},
  })
  if err!=nil{log.Fatal("invalid release policy: ",err)}
+ var dispatch privileged.ReleaseDispatcher
+ if runnerPath:=os.Getenv("HOMELAB_EXECUTOR_RELEASE_RUNNER");runnerPath!="" {
+  dispatch=privileged.SystemdReleaseDispatcher{
+   SystemdRun:required("HOMELAB_EXECUTOR_SYSTEMD_RUN"),
+   Runner:runnerPath,
+   Run:privileged.FixedRun,
+  }
+ }
  var kubernetes *privileged.KubernetesPolicy
  if file:=os.Getenv("HOMELAB_EXECUTOR_KUBERNETES_POLICY_FILE");file!=""{
   raw,err:=os.ReadFile(file)
@@ -153,7 +161,7 @@ func main(){
  }
  e,err:=privileged.New(privileged.Config{
   Host:host,Systemctl:systemctl,AllowedServices:services,AllowRelease:os.Getenv("HOMELAB_EXECUTOR_RELEASE_ENABLE")=="true",
-  Kubernetes:kubernetes,Workspace:workspace,Auth:client,Run:runner,Releases:releases,Audit:audit,
+  Kubernetes:kubernetes,Workspace:workspace,Auth:client,Run:runner,Releases:releases,ReleaseDispatch:dispatch,Audit:audit,
  })
  if err!=nil{log.Fatal(err)}
  group,err:=user.LookupGroup("homelab-executor-client");if err!=nil{log.Fatal(err)}
