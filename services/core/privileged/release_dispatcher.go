@@ -37,6 +37,7 @@ func (d SystemdReleaseDispatcher) Dispatch(ctx context.Context,operation,request
   "--property=Type=oneshot",
   "--property=TimeoutStartSec=20min",
   "--property=Restart=no",
+  "--property=IgnoreOnIsolate=yes",
   d.Runner,action,requestID,releaseID)
 }
 
