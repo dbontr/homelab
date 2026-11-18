@@ -27,17 +27,15 @@ pkgs.testers.runNixOSTest {
     systemd.services.fixture-go-executor = {
       wantedBy = [ "multi-user.target" ];
       serviceConfig = {
-        Type = "oneshot";
-        RemainAfterExit = true;
-        ExecStart = "${pkgs.coreutils}/bin/true";
+        Type = "simple";
+        ExecStart = "${pkgs.coreutils}/bin/sleep infinity";
       };
     };
     systemd.services.fixture-go-authority = {
       wantedBy = [ "multi-user.target" ];
       serviceConfig = {
-        Type = "oneshot";
-        RemainAfterExit = true;
-        ExecStart = "${pkgs.coreutils}/bin/true";
+        Type = "simple";
+        ExecStart = "${pkgs.coreutils}/bin/sleep infinity";
       };
     };
   };
@@ -50,6 +48,7 @@ pkgs.testers.runNixOSTest {
         set -eu
         systemctl is-active --quiet fixture-executor.service
         "${replacement}/bin/switch-to-configuration" switch
+        systemctl --no-pager status fixture-go-authority.service fixture-go-executor.service || true
         systemctl is-active --quiet fixture-go-authority.service
         systemctl is-active --quiet fixture-go-executor.service
         ! systemctl is-active --quiet fixture-executor.service
