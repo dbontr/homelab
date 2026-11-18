@@ -53,6 +53,7 @@ type Config struct{
  Auth Authorizer
  Run Run
  Releases Actuator
+ ReleaseDispatch ReleaseDispatcher
  Audit *AuditJournal
 }
 
@@ -295,9 +296,17 @@ func (e *Executor) ExecuteWithID(ctx context.Context,requestID,operation,target 
             Operation:operation,Target:target,Arguments:canonical,Tickets:decision.CredentialTickets,
         })
 	case "infrastructure__release_activate":
-		err = e.cfg.Releases.Activate(ctx, fields["release_id"].(string))
-	case "infrastructure__release_revert":
-		err = e.cfg.Releases.Revert(ctx, fields["release_id"].(string))
+        if e.cfg.ReleaseDispatch!=nil {
+            err=e.cfg.ReleaseDispatch.Dispatch(ctx,operation,auditID,fields["release_id"].(string))
+        }else{
+            err=e.cfg.Releases.Activate(ctx,fields["release_id"].(string))
+        }
+    case "infrastructure__release_revert":
+        if e.cfg.ReleaseDispatch!=nil {
+            err=e.cfg.ReleaseDispatch.Dispatch(ctx,operation,auditID,fields["release_id"].(string))
+        }else{
+            err=e.cfg.Releases.Revert(ctx,fields["release_id"].(string))
+        }
 	case "cluster__deployment_restart", "cluster__deployment_scale":
 		var command string
 		var argv []string
@@ -311,10 +320,10 @@ func (e *Executor) ExecuteWithID(ctx context.Context,requestID,operation,target 
 	// scheduler completion, or a finished Workspace operation.
 	state := ExecutionAccepted
 	outcome := "accepted"
-	if operation == "infrastructure__release_activate" || operation == "infrastructure__release_revert" {
-		state = ExecutionCompleted
-		outcome = "succeeded"
-	}
+	if (operation == "infrastructure__release_activate" || operation == "infrastructure__release_revert") && e.cfg.ReleaseDispatch==nil {
+        state = ExecutionCompleted
+        outcome = "succeeded"
+    }
 	if err != nil {
 		// A command can have applied its side effect before reporting failure.
 		// The caller must reconcile this attempt before retrying.
