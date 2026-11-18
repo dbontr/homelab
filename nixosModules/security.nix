@@ -315,9 +315,9 @@ in
         StateDirectory = [ "homelab-securityd" ];
         StateDirectoryMode = "0700";
         RuntimeDirectory = [ "homelab-securityd" ];
-        # Clients need path traversal; the owner socket remains mode 0600.
-        # The public directory entry grants no read or write access.
-        RuntimeDirectoryMode = "0751";
+        # The Go authority changes the runtime directory group to its
+        # restricted client group. Public traversal is not permitted.
+        RuntimeDirectoryMode = "0750";
         LoadCredential = [
           "password:${cfg.passwordVerifierFile}"
           "totp:${cfg.totpSecretFile}"
@@ -336,6 +336,10 @@ in
         ExecStart = if cfg.implementation == "rust"
           then "${rustPackage}/bin/securityd"
           else "${cfg.package}/bin/homelab-securityd";
+        # The single-writer unit owns this exact browser socket. Remove its
+        # pathname after the process exits so a successor does not inherit an
+        # orphaned listener from an interrupted generation switch.
+        ExecStopPost = "${pkgs.coreutils}/bin/rm -f /run/homelab-security-browser/browser.sock";
         Restart = "on-failure";
         RestartSec = "5s";
         UMask = "0077";
