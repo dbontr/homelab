@@ -353,19 +353,34 @@ in
     };
     # This unit is not started automatically. It requires the active executor
     # to stop and release its state lease before recovery can begin.
-    systemd.services.homelab-executor-recovery = lib.mkIf
-      (cfg.implementation == "rust" && cfg.allowReleaseActivation) {
+    # Operator-triggered only: the active executor must surrender its state
+    # lease before either implementation can inspect or reconcile the journal.
+    systemd.services.homelab-executor-recovery = lib.mkIf cfg.allowReleaseActivation {
       description = "Recover interrupted NixOS generation from the private release journal";
       conflicts = [ "homelab-executord.service" ];
       after = [ "homelab-executord.service" ];
-      environment = config.systemd.services.homelab-executord.environment;
+      environment = if cfg.implementation == "rust"
+        then config.systemd.services.homelab-executord.environment
+        else {
+          HOMELAB_RELEASE_HOST = config.networking.hostName;
+          HOMELAB_RELEASE_SOURCE = cfg.sourceDirectory;
+          HOMELAB_RELEASE_STATE = cfg.stateDirectory;
+          HOMELAB_RELEASE_NIX = "${pkgs.nix}/bin/nix";
+          HOMELAB_RELEASE_NIX_ENV = "${pkgs.nix}/bin/nix-env";
+          HOMELAB_RELEASE_GIT = "${pkgs.git}/bin/git";
+          HOMELAB_RELEASE_SYSTEMCTL = "${pkgs.systemd}/bin/systemctl";
+          HOMELAB_RELEASE_HEALTH_FILE = pkgs.writeText "homelab-release-recovery-health.json"
+            (builtins.toJSON cfg.healthServices);
+        };
       serviceConfig = {
         Type = "oneshot";
         User = "root";
         Group = "root";
         StateDirectory = "homelab-releases";
         StateDirectoryMode = "0700";
-        ExecStart = "${rustPackage}/bin/recovery recover";
+        ExecStart = if cfg.implementation == "rust"
+          then "${rustPackage}/bin/recovery recover"
+          else "${cfg.package}/bin/homelab-release recover";
         UMask = "0077";
         NoNewPrivileges = false;
         PrivateTmp = true;
