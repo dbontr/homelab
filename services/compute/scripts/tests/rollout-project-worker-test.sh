@@ -422,11 +422,7 @@ if bash "$script" apply "$compiler_release" --allow-image "$compiler" \
 fi
 [[ -f "$scratch/paused" ]] || fail 'Failed probe incorrectly resumed scheduling'
 [[ ! -f "$scratch/applied" ]] || fail 'Failed probe did not restore the original Helm revision'
-grep -q '^rollback
-[[ -f "$scratch/probe-cleaned" ]] || fail 'Failed probe left an unconfirmed test Pod'
-
-printf 'Worker and compiler admission, image-pull and rollback fixtures verified\n'
- "$scratch/trace" || fail 'Failed probe did not request rollback'
+grep -q '^rollback$' "$scratch/trace" || fail 'Failed probe did not request rollback'
 [[ -f "$scratch/probe-cleaned" ]] || fail 'Failed probe left an unconfirmed test Pod'
 
 printf 'Worker and compiler admission, image-pull and rollback fixtures verified\n'
