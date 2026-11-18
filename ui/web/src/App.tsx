@@ -2,7 +2,7 @@ import { useEffect, useState } from "react"
 import {
   Activity, BookOpen, Brain, CalendarDays, CircleUserRound, Cpu,
   FolderKanban, HeartPulse, LayoutDashboard, Library, ListTodo,
-  MonitorCog, Moon, RefreshCcw, ScrollText, Server, Settings2,
+  MonitorCog, Moon, RefreshCcw, ScrollText, Server,
   ShieldCheck, Sun, Workflow, Wrench, Menu, X, Utensils,
   AlarmClock, ClipboardList, NotebookPen,
 } from "lucide-react"
