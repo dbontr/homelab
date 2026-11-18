@@ -721,7 +721,7 @@ mod tests {
         let second = "b".repeat(48);
         assert!(!stage_was_attempted(&root, &first).unwrap());
         fs::write(root.join(format!("attempt-{first}.json")), b"{}").unwrap();
-        fs::write(root.join("journal.json"), format!("{{\\"id\\":\\"{second}\\"}}")).unwrap();
+        fs::write(root.join("journal.json"), second.as_bytes()).unwrap();
         assert!(stage_was_attempted(&root, &first).unwrap());
         assert!(!stage_was_attempted(&root, &second).unwrap());
         assert!(stage_was_attempted(&root, "not-a-release-id").is_err());
