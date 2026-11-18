@@ -278,5 +278,45 @@
     "source_url": "https://www.gnuradio.org/",
     "description": "Software-defined radio and digital signal processing workflows.",
     "license_notes": "Verify the upstream license and dependencies. Pin the exact release and checksums in an operator-approved environment."
+  },
+  {
+    "id": "darktable",
+    "name": "darktable",
+    "version": "project-pinned",
+    "platform": "linux-container",
+    "distribution": "oci",
+    "source_url": "https://www.darktable.org/install/",
+    "description": "Nondestructive RAW photo editing with XMP sidecars and GUI access through an isolated display.",
+    "license_notes": "Check upstream license and dependencies. Pin an approved exact runtime version and verify the executable on a project worker. CR3 support depends on the camera model and current RAW decoder."
+  },
+  {
+    "id": "darktable-cli",
+    "name": "darktable-cli",
+    "version": "project-pinned",
+    "platform": "linux-container",
+    "distribution": "oci",
+    "source_url": "https://darktable-org.github.io/dtdocs/en/special-topics/program-invocation/darktable-cli/",
+    "description": "Headless RAW/XMP to JPEG, PNG, TIFF and other approved photo exports in reproducible workspace jobs.",
+    "license_notes": "Check upstream license and dependencies. Pin an approved exact runtime version and verify the executable on a project worker."
+  },
+  {
+    "id": "playwright",
+    "name": "Playwright browser automation",
+    "version": "project-pinned",
+    "platform": "linux-container",
+    "distribution": "oci",
+    "source_url": "https://playwright.dev/docs/screenshots",
+    "description": "Browser screenshot and responsive layout verification in an isolated compute workspace.",
+    "license_notes": "Check upstream license and dependencies. Pin an approved exact runtime version and verify the executable on a project worker. Browser network egress and screenshot destinations require project-scoped restrictions."
+  },
+  {
+    "id": "imagemagick",
+    "name": "ImageMagick",
+    "version": "distribution-pinned",
+    "platform": "linux-container",
+    "distribution": "apt",
+    "source_url": "https://imagemagick.org/",
+    "description": "Raster image conversion, composite previews and image diagnostics in isolated workspaces.",
+    "license_notes": "Check upstream license and dependencies. Pin an approved exact runtime version and verify the executable on a project worker."
   }
 ]

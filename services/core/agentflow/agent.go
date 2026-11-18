@@ -28,6 +28,9 @@ type AgentBrief struct {
 	LinkedRepositories []RepositoryPin `json:"linked_repositories,omitempty"`
 	IncludeKnowledge bool `json:"include_knowledge,omitempty"`
 	Revision string `json:"revision,omitempty"`
+	VisualFeedback bool `json:"visual_feedback,omitempty"`
+	VirtualDisplay bool `json:"virtual_display,omitempty"`
+	VisualPaths []string `json:"visual_paths,omitempty"`
 }
 
 type PatchHunk struct {
@@ -83,6 +86,8 @@ type AgentSession struct {
 	Summary      string            `json:"summary,omitempty"`
 	Knowledge []KnowledgeProposal `json:"knowledge,omitempty"`
 	Diagnostics []CheckDiagnostic `json:"diagnostics,omitempty"`
+	Visuals []VisualObservation `json:"visuals,omitempty"`
+	VisualReady bool `json:"visual_ready,omitempty"`
 }
 
 type AgentEventProgress struct {
@@ -100,6 +105,8 @@ type AgentProgress struct {
 	Summary      string   `json:"summary,omitempty"`
 	Knowledge []KnowledgePreview `json:"knowledge,omitempty"`
 	Diagnostics []CheckDiagnostic `json:"diagnostics,omitempty"`
+	Visuals []VisualObservation `json:"visuals,omitempty"`
+	VisualReady bool `json:"visual_ready,omitempty"`
 	Events []AgentEventProgress `json:"events,omitempty"`
 }
 
@@ -110,6 +117,8 @@ func publicAgentProgress(state *AgentSession) *AgentProgress {
 	progress := &AgentProgress{Plan: append([]string(nil), state.Plan...), Turns: state.Turns, Completed: state.Completed, Summary: state.Summary}
 	for _,proposal:=range state.Knowledge{ progress.Knowledge=append(progress.Knowledge,KnowledgePreview{ID:proposal.ID,Kind:proposal.Kind,Title:proposal.Title,Status:proposal.Status}) }
 	progress.Diagnostics=append(progress.Diagnostics,state.Diagnostics...)
+	progress.Visuals=append(progress.Visuals,state.Visuals...)
+	progress.VisualReady=state.VisualReady
 	for _,item:=range state.Events {progress.Events=append(progress.Events,AgentEventProgress{Action:item.Action,Target:item.Target,Reason:item.Reason})}
 	for path := range state.Changed {
 		progress.ChangedPaths = append(progress.ChangedPaths, path)
@@ -231,6 +240,13 @@ func (a AgentAction) validate(brief AgentBrief) error {
 		} else if len(a.Content) == 0 {
 			return errors.New("created file must contain source")
 		}
+	case "observe":
+		if !brief.VisualFeedback { return errors.New("visual feedback is not enabled for this run") }
+		if a.Path=="" {if !brief.VirtualDisplay {return errors.New("virtual display is not enabled for this run")} } else {
+			approved:=false
+			for _, name:=range brief.VisualPaths {if name==a.Path {approved=true;break}}
+			if !approved||!validSourcePath(a.Path)||sensitiveSourcePath(a.Path) {return errors.New("visual path is outside approved output scope")}
+		}
 	case "check":
 		permitted := false
 		for _, check := range brief.Checks {
@@ -329,7 +345,7 @@ func (e *Engine) runAgentTurn(ctx context.Context, claim Claim, w Workflow) (jso
 	if state.Turns >= maxAgentTurns {
 		return nil, errors.New("autonomous decision budget exhausted")
 	}
-	if state.Pending != nil && state.Pending.Action.Action == "check" {
+	if state.Pending != nil && (state.Pending.Action.Action == "check" || state.Pending.Action.Action == "observe") {
 		return nil, fmt.Errorf("%w: check completion uncertain after interrupted execution", ErrAgentRejected)
 	}
 	if state.Pending == nil {
@@ -347,6 +363,7 @@ func (e *Engine) runAgentTurn(ctx context.Context, claim Claim, w Workflow) (jso
 					missing = true
 				}
 			}
+			if brief.VisualFeedback && !state.VisualReady { missing = true }
 			if missing {
 				state.Events = append(state.Events, AgentEvent{Action: "finish", Reason: decision.Reason, Observation: "Completion requires at least one approved edit and all owner checks after the last edit"})
 				state.Turns++
@@ -528,6 +545,8 @@ func (e *Engine) executeAgentAction(ctx context.Context, w Workflow, brief Agent
 			return "", err
 		}
 		return "File contents confirmed at the target digest", nil
+	case "observe":
+		return e.observeWorkspace(ctx,w,brief,state,action)
 	case "check":
 		// A pending check must not be replayed after a crash: an approved command
 		// can have effects that are not reversible or externally observable.
@@ -553,6 +572,7 @@ func (e *Engine) executeAgentAction(ctx context.Context, w Workflow, brief Agent
 				return "", errors.New("agent cannot finish until all approved checks pass after its last edit")
 			}
 		}
+		if brief.VisualFeedback && !state.VisualReady {return "",errors.New("completion requires satisfactory visual review after the last edit")}
 		if len(action.Summary) == 0 {
 			return "", errors.New("completion summary required")
 		}
@@ -597,6 +617,7 @@ func (e *Engine) executeAgentWrite(ctx context.Context, w Workflow, brief AgentB
 	}
 	state.Changed[action.Path] = pending.AfterSHA256
 	state.ChecksPassed = map[string]bool{}
+	state.VisualReady=false
 	return nil
 }
 

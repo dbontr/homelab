@@ -196,3 +196,8 @@
 - [FreeCAD project](https://www.freecad.org/) — FreeCAD project. Used for: mechanical CAD program identity and GUI requirements.
 - [GNU Radio project](https://www.gnuradio.org/) — GNU Radio project. Used for: digital signal processing program identity.
 - [Kubernetes image pull policies](https://kubernetes.io/docs/concepts/containers/images/) — Kubernetes project. Used for: distinguishing catalog approval from confirmed image pull and worker eligibility.
+- [Darktable CLI](https://darktable-org.github.io/dtdocs/en/special-topics/program-invocation/darktable-cli/) — darktable project. Used for: nondestructive CR3/XMP batch export commands and output format selection.
+- [Darktable sidecar files](https://docs.darktable.org/usermanual/development/en/overview/sidecar-files/sidecar/) — darktable project. Used for: RAW preservation, XMP history stack and DTDATA sidecar handling.
+- [Darktable supported formats](https://darktable-org.github.io/dtdocs/en/overview/supported-file-formats/) — darktable project. Used for: CR3 recognition and camera-specific RAW decoder limitations.
+- [Playwright screenshots](https://playwright.dev/docs/screenshots) — Playwright project. Used for: viewport and full-page browser screenshot generation in isolated workspaces.
+- [ImageMagick project](https://imagemagick.org/) — ImageMagick Studio. Used for: optional image processing and raster preview tools.
