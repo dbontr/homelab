@@ -1,0 +1,282 @@
+[
+  {
+    "id": "amd-vivado-2022-2",
+    "name": "AMD Vivado Design Suite",
+    "version": "2022.2",
+    "platform": "linux-container",
+    "distribution": "oci",
+    "source_url": "https://www.amd.com/en/support/downloads/adaptive-socs-and-fpgas/development-tools/2022-2.html",
+    "description": "FPGA synthesis, implementation, IP integration and timing analysis.",
+    "license_notes": "Vendor-authenticated installation and license acceptance required; confirm device/IP entitlements. Do not redistribute installers, binaries, or license material."
+  },
+  {
+    "id": "amd-vivado-2024-1",
+    "name": "AMD Vivado Design Suite",
+    "version": "2024.1",
+    "platform": "linux-container",
+    "distribution": "oci",
+    "source_url": "https://www.amd.com/en/support/downloads/adaptive-socs-and-fpgas/development-tools/2024-1.html",
+    "description": "FPGA synthesis, implementation, IP integration and timing analysis.",
+    "license_notes": "Vendor-authenticated installation and license acceptance required; confirm device/IP entitlements. Do not redistribute installers, binaries, or license material."
+  },
+  {
+    "id": "amd-vivado-2025-2",
+    "name": "AMD Vivado Design Suite",
+    "version": "2025.2",
+    "platform": "linux-container",
+    "distribution": "oci",
+    "source_url": "https://www.amd.com/en/support/downloads/adaptive-socs-and-fpgas/development-tools/2025-2.html",
+    "description": "FPGA synthesis, implementation, IP integration and timing analysis.",
+    "license_notes": "Vendor-authenticated installation and license acceptance required; confirm device/IP entitlements. Do not redistribute installers, binaries, or license material."
+  },
+  {
+    "id": "amd-vitis-2025-2",
+    "name": "AMD Vitis",
+    "version": "2025.2",
+    "platform": "linux-container",
+    "distribution": "oci",
+    "source_url": "https://www.amd.com/en/support/downloads/adaptive-socs-and-fpgas/development-tools/2025-2.html",
+    "description": "Embedded software and hardware acceleration development for AMD adaptive computing.",
+    "license_notes": "Vendor-authenticated installation and license acceptance required; confirm device/IP entitlements. Do not redistribute installers, binaries, or license material."
+  },
+  {
+    "id": "go-1-27",
+    "name": "Go",
+    "version": "1.27.x",
+    "platform": "linux-container",
+    "distribution": "oci",
+    "source_url": "https://go.dev/dl/",
+    "description": "Go compiler, standard library and tooling for version-pinned builds.",
+    "license_notes": "Verify the upstream license and dependencies. Pin the exact release and checksums in an operator-approved environment."
+  },
+  {
+    "id": "rust-toolchain",
+    "name": "Rust and Cargo",
+    "version": "project-pinned",
+    "platform": "linux-container",
+    "distribution": "oci",
+    "source_url": "https://rust-lang.org/install",
+    "description": "Rust compiler, Cargo, rustfmt and Clippy; release selected per project.",
+    "license_notes": "Verify the upstream license and dependencies. Pin the exact release and checksums in an operator-approved environment."
+  },
+  {
+    "id": "gcc-cpp",
+    "name": "GNU C and C++",
+    "version": "distribution-pinned",
+    "platform": "linux-container",
+    "distribution": "apt",
+    "source_url": "https://gcc.gnu.org/",
+    "description": "GNU compilers, linker and standard C++ toolchain.",
+    "license_notes": "Verify the upstream license and dependencies. Pin the exact release and checksums in an operator-approved environment."
+  },
+  {
+    "id": "llvm-clang",
+    "name": "LLVM and Clang",
+    "version": "distribution-pinned",
+    "platform": "linux-container",
+    "distribution": "apt",
+    "source_url": "https://llvm.org/",
+    "description": "C/C++ compilation, analysis and LLVM tooling.",
+    "license_notes": "Verify the upstream license and dependencies. Pin the exact release and checksums in an operator-approved environment."
+  },
+  {
+    "id": "python-3",
+    "name": "Python",
+    "version": "3.x",
+    "platform": "linux-container",
+    "distribution": "oci",
+    "source_url": "https://www.python.org/downloads/",
+    "description": "Python interpreter and virtual environment tooling.",
+    "license_notes": "Verify the upstream license and dependencies. Pin the interpreter and package lockfiles in an operator-approved environment."
+  },
+  {
+    "id": "julia-1-13",
+    "name": "Julia",
+    "version": "1.13.x",
+    "platform": "linux-container",
+    "distribution": "oci",
+    "source_url": "https://julialang.org/downloads/",
+    "description": "Numerical computing, scientific programming and numerical optimization.",
+    "license_notes": "Verify the upstream license and dependencies. Pin the exact release and checksums in an operator-approved environment."
+  },
+  {
+    "id": "lean4-lake",
+    "name": "Lean 4 and Lake",
+    "version": "project-pinned",
+    "platform": "linux-container",
+    "distribution": "oci",
+    "source_url": "https://lean-lang.org/doc/reference/latest/Build-Tools-and-Distribution/Lake/",
+    "description": "Formal proof checking, theorem development and Lake package builds.",
+    "license_notes": "Verify the upstream license and dependencies. Pin the exact release and checksums in an operator-approved environment."
+  },
+  {
+    "id": "cmake-ninja",
+    "name": "CMake and Ninja",
+    "version": "distribution-pinned",
+    "platform": "linux-container",
+    "distribution": "apt",
+    "source_url": "https://cmake.org/",
+    "description": "Portable native-language build configuration and fast incremental builds.",
+    "license_notes": "Verify the upstream license and dependencies. Pin the exact release and checksums in an operator-approved environment."
+  },
+  {
+    "id": "ghdl",
+    "name": "GHDL",
+    "version": "distribution-pinned",
+    "platform": "linux-container",
+    "distribution": "apt",
+    "source_url": "https://ghdl.github.io/ghdl/",
+    "description": "VHDL compilation, simulation and synthesis flows.",
+    "license_notes": "Verify the upstream license and dependencies. Pin the exact release and checksums in an operator-approved environment."
+  },
+  {
+    "id": "verilator",
+    "name": "Verilator",
+    "version": "distribution-pinned",
+    "platform": "linux-container",
+    "distribution": "apt",
+    "source_url": "https://verilator.org/",
+    "description": "SystemVerilog and Verilog simulation and linting.",
+    "license_notes": "Verify the upstream license and dependencies. Pin the exact release and checksums in an operator-approved environment."
+  },
+  {
+    "id": "iverilog",
+    "name": "Icarus Verilog",
+    "version": "distribution-pinned",
+    "platform": "linux-container",
+    "distribution": "apt",
+    "source_url": "https://steveicarus.github.io/iverilog/",
+    "description": "Verilog compilation and simulation.",
+    "license_notes": "Verify the upstream license and dependencies. Pin the exact release and checksums in an operator-approved environment."
+  },
+  {
+    "id": "yosys",
+    "name": "Yosys",
+    "version": "distribution-pinned",
+    "platform": "linux-container",
+    "distribution": "apt",
+    "source_url": "https://yosyshq.net/yosys/",
+    "description": "Open-source logic synthesis and HDL flows.",
+    "license_notes": "Verify the upstream license and dependencies. Pin the exact release and checksums in an operator-approved environment."
+  },
+  {
+    "id": "openroad",
+    "name": "OpenROAD",
+    "version": "project-pinned",
+    "platform": "linux-container",
+    "distribution": "oci",
+    "source_url": "https://theopenroadproject.org/",
+    "description": "Digital ASIC physical design and place-and-route.",
+    "license_notes": "Verify the upstream license and dependencies. Pin the exact release and checksums in an operator-approved environment."
+  },
+  {
+    "id": "ngspice",
+    "name": "ngspice",
+    "version": "distribution-pinned",
+    "platform": "linux-container",
+    "distribution": "apt",
+    "source_url": "https://ngspice.sourceforge.io/",
+    "description": "Batch circuit simulation using SPICE netlists.",
+    "license_notes": "Verify the upstream license and dependencies. Pin the exact release and checksums in an operator-approved environment."
+  },
+  {
+    "id": "ltspice-windows",
+    "name": "LTspice",
+    "version": "26.x",
+    "platform": "windows-native",
+    "distribution": "native",
+    "source_url": "https://www.analog.com/en/resources/design-tools-and-calculators/ltspice-simulator.html",
+    "description": "Circuit schematic entry and transient, AC and noise simulation.",
+    "license_notes": "Vendor terms and a separately authorized Windows execution adapter are required. Not available on Linux workers."
+  },
+  {
+    "id": "ltspice-macos",
+    "name": "LTspice",
+    "version": "26.x",
+    "platform": "macos-native",
+    "distribution": "native",
+    "source_url": "https://www.analog.com/en/resources/design-tools-and-calculators/ltspice-simulator.html",
+    "description": "Circuit schematic entry and transient, AC and noise simulation.",
+    "license_notes": "Vendor terms and a separately authorized macOS execution adapter are required. Not available on Linux workers."
+  },
+  {
+    "id": "kicad",
+    "name": "KiCad",
+    "version": "project-pinned",
+    "platform": "linux-container",
+    "distribution": "oci",
+    "source_url": "https://www.kicad.org/",
+    "description": "Schematic capture, PCB layout and electronic design automation; interactive UI requires a supported graphical session.",
+    "license_notes": "Verify the upstream license and dependencies. Pin the exact release and checksums in an operator-approved environment."
+  },
+  {
+    "id": "openocd",
+    "name": "OpenOCD",
+    "version": "distribution-pinned",
+    "platform": "linux-container",
+    "distribution": "apt",
+    "source_url": "https://openocd.org/",
+    "description": "JTAG and on-chip debugging; physical adapters require a separate hardware lease.",
+    "license_notes": "Verify the upstream license and dependencies. Pin the exact release and checksums in an operator-approved environment."
+  },
+  {
+    "id": "gnu-octave",
+    "name": "GNU Octave",
+    "version": "distribution-pinned",
+    "platform": "linux-container",
+    "distribution": "apt",
+    "source_url": "https://octave.org/",
+    "description": "Matrix-oriented scientific computation and numerical analysis.",
+    "license_notes": "Verify the upstream license and dependencies. Pin the exact release and checksums in an operator-approved environment."
+  },
+  {
+    "id": "sagemath",
+    "name": "SageMath",
+    "version": "project-pinned",
+    "platform": "linux-container",
+    "distribution": "oci",
+    "source_url": "https://www.sagemath.org/",
+    "description": "Computer algebra and mathematical research.",
+    "license_notes": "Verify the upstream license and dependencies. Pin the exact release and checksums in an operator-approved environment."
+  },
+  {
+    "id": "jupyterlab",
+    "name": "JupyterLab",
+    "version": "project-pinned",
+    "platform": "linux-container",
+    "distribution": "oci",
+    "source_url": "https://jupyter.org/",
+    "description": "Interactive notebooks and scientific programming; remote UI access requires isolated authenticated routing.",
+    "license_notes": "Verify the upstream license and dependencies. Pin the exact release and checksums in an operator-approved environment."
+  },
+  {
+    "id": "nvidia-cuda",
+    "name": "NVIDIA CUDA Toolkit",
+    "version": "project-pinned",
+    "platform": "linux-container",
+    "distribution": "oci",
+    "source_url": "https://developer.nvidia.com/cuda-toolkit",
+    "description": "GPU compiler, libraries and profiling tools; requires a separately approved GPU lease and driver compatibility.",
+    "license_notes": "Check NVIDIA redistribution terms and the host driver compatibility before approval; no CUDA image grants a GPU lease."
+  },
+  {
+    "id": "freecad",
+    "name": "FreeCAD",
+    "version": "project-pinned",
+    "platform": "linux-container",
+    "distribution": "oci",
+    "source_url": "https://www.freecad.org/",
+    "description": "Parametric mechanical CAD; interactive use requires an approved graphical session.",
+    "license_notes": "Verify the upstream license and dependencies. Pin the exact release and checksums in an operator-approved environment."
+  },
+  {
+    "id": "gnuradio",
+    "name": "GNU Radio",
+    "version": "distribution-pinned",
+    "platform": "linux-container",
+    "distribution": "apt",
+    "source_url": "https://www.gnuradio.org/",
+    "description": "Software-defined radio and digital signal processing workflows.",
+    "license_notes": "Verify the upstream license and dependencies. Pin the exact release and checksums in an operator-approved environment."
+  }
+]
