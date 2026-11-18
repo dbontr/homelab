@@ -71,6 +71,66 @@ may claim native LTspice availability without a separately approved platform
 and adapter. Use ngspice for native Linux batch SPICE workflows while native
 graphical execution is unavailable.
 
+## Publisher account and licensed installer access
+
+The application catalog includes MATLAB R2026b and a Minecraft: Java Edition
+reference installation. These are **requests**, not available Compute programs.
+Neither record authorizes installation, logs into a publisher, or makes
+licensed binaries available to a project. MATLAB needs a MathWorks account
+for the installer and an appropriate license and toolbox entitlements for
+execution. The Minecraft entry is for an owner-licensed reference game;
+research projects may implement their own mechanics but must not copy or
+redistribute proprietary game code, assets, or account material.
+
+There are two distinct credential uses:
+
+1. **Acquisition:** the owner authenticates directly with MathWorks, AMD,
+   Microsoft, or another publisher to access the official installer. Browser
+   login is interactive and remains in an operator-controlled session.
+2. **Runtime:** a licensed application may need a separate activation, license
+   server, or approved account session. Only a dedicated, least-privileged
+   runtime identity or explicitly approved lease may be made available to
+   that application.
+
+Homelab already owns an encrypted credential vault in the independent security
+authority. Its owner-only CLI supports `homelab-admin credential-add PROVIDER`,
+`credential-list`, `credential-rotate`, and `credential-delete`. The owner
+enters credential material on a trusted terminal using a private prompt;
+ChatGPT, the general MCP gateway, source control, CI and workers must never
+receive account passwords, browser cookies, refresh tokens or installer keys.
+Providers with a documented, compatible OAuth authorization-code or device
+flow may be enrolled through the existing protected OAuth broker after the
+operator configures exact official endpoints, client identity and scopes.
+
+**A generic credential record is not a working vendor login adapter.**
+MathWorks, AMD and Microsoft's interactive sign-in and licensing workflows
+must each undergo provider-specific policy review; do not guess OAuth support,
+automate passwords against undocumented endpoints, export browser sessions, or
+redeem protected credentials in an untrusted worker. Until a reviewed adapter
+exists, acquisition uses a private owner-controlled browser and a verified
+import of downloaded files. Never invoke a service-credential ticket merely
+to send a secret to a caller-selected URL.
+
+An installer must be accepted independently of account authentication:
+
+- Read the official publisher's download page and terms from the catalog.
+- The owner signs in directly to that publisher and selects the entitled
+  product, release and target operating system.
+- Acquire the installer into private operator-controlled storage; verify its
+  source and SHA-256, preserve a private acquisition receipt, and scan the
+  artifact before installation.
+- Require a separately approved installation or runtime adapter with the
+  correct software license, network constraints, Compute image digest, worker
+  eligibility and project/hardware permissions.
+- Keep acquisition credentials and licensing state outside the OCI layer,
+  BuildKit cache, workspace files, command line, Project artifacts and logs.
+  Revoke temporary access after use.
+
+This distinction applies equally to publisher portals used only to obtain
+installers and to applications that authenticate when launched. See
+`docs/privileged-sessions.md` and `docs/security.md` for the existing
+encrypted-vault, OAuth and exact-operation credential-grant contracts.
+
 ## Console behavior
 
 The React Software Library uses the existing authenticated `/v1/software`
