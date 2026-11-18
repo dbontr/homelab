@@ -44,7 +44,10 @@ func guardRelease(ctx context.Context, ctrl *release.Controller, action, request
    if err != nil { return err }
    phase := "activating"
    if action == "revert" { phase = "reverting" }
-   if status.ID == id && status.Phase == phase { return ctrl.Continue(ctx,action,id) }
+   if status.ID == id && status.Phase == phase {
+    if action == "activate" { return ctrl.ContinueAudited(ctx,action,id) }
+    return ctrl.Continue(ctx,action,id)
+   }
   case found:
    return errors.New("release audit does not permit an execution")
   }
