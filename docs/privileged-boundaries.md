@@ -1,8 +1,8 @@
 # Privileged operations and custody boundaries
 
-Privileged authority is not conferred by an MCP tool, browser session, source workspace, HTTP request, or the presence of a service account. A dedicated owner security service approves exact actions. A separate host executor verifies approval and resource scope before running any privileged operation.
+Managed privileged authority is not conferred by an MCP tool, browser session, source workspace, HTTP request, or the presence of a service account. The independent owner Security service approves exact web, MCP, API, and remote worker requests. The Go host executor checks identity, resource scope, and policy before applying any managed privileged action. An authenticated root login on Saturn's physical console is an independent operating-system administrator and does not require an MCP owner session.
 
-The optional local Rust engineering sandbox has no authorization to switch
+The isolated Go engineering sandbox has no authorization to switch
 NixOS generations or access host credentials. Native hardware identity
 validation is separately selected by a compute worker under its Go-owned lease
 and the immutable operator device policy. These two facilities do not inherit
@@ -13,20 +13,20 @@ the privileged executor's administrative authority.
 | Process or subsystem | Canonical implementation | Credential and authority boundary |
 | --- | --- | --- |
 | MCP and HTTP API | `mcp/`, `api/`, `services/core/privileged/client.go` | Unprivileged entrypoints. Submit typed requests to the executor socket. Never receive owner passwords, TOTP secrets, vault encryption keys, kubeconfig, or unrestricted root tokens. |
-| Owner security authority | `services/security-authority/`; compatibility code `services/core/security/` | Owns password/TOTP checks, revocable sessions, signed owner validation, one-use destructive confirmations, and encrypted credential records. Owner-only browser and administrative paths remain separate from gateway and mTLS clients. |
-| Host privileged executor | `services/executor/`; compatibility code `services/core/privileged/` | Owns authorization checks, resource policy, protected audit, private service credentials, and host-only privileged effects. Its Unix client group has no owner-login socket access. |
-| Restricted command runner | `services/actuator/` | Accepts enumerated systemd and Kubernetes verbs, canonical resource identifiers and immutable operator allowlists. Does not expose a shell, arbitrary binary path, or filesystem mutation API. |
-| Host NixOS release controller | `services/executor/src/release.rs`; compatibility code `services/core/release/` | Builds from clean exact revisions, owns the host release journal, switches approved NixOS generations, verifies health, and restores the previous generation after failure. |
+| Owner security authority | `services/core/security/`, `services/core/cmd/homelab-securityd/` | Owns password/TOTP checks, revocable sessions, signed owner validation, one-use destructive confirmations, and encrypted credential records. Owner-only browser and administrative paths remain separate from gateway and mTLS clients. |
+| Host privileged executor | `services/core/privileged/`, `services/core/cmd/homelab-executord/` | Owns authorization checks, resource policy, protected audit, private service credentials, and host-only privileged effects. Its Unix client group has no owner-login socket access. |
+| Restricted command runner | `services/core/privileged/actuator.go` | Accepts enumerated systemd and Kubernetes verbs, canonical resource identifiers and immutable operator allowlists. Does not expose a shell, arbitrary binary path, or filesystem mutation API. |
+| Host NixOS release controller | `services/core/release/`, `services/core/cmd/homelab-release/` | Builds from clean exact revisions, owns the host release journal, switches approved NixOS generations, verifies health, and restores the previous generation after failure. |
 | Fleet release coordinator | `services/core/release/remote_agent.go`, `nixosModules/fleet.nix` | Coordinates remote stages and activations through certificate-authenticated host executors. It does not replace a host executor's local policy, approval, or audit. |
 | Compute and hardware workers | `services/compute/`, `nixosModules/engineering.nix` | Perform delegated workspace and device operations under their own scoped leases and credentials. Their enrollment does not imply host administrative authority. |
-| Out-of-band recovery | `services/executor/src/bin/recovery.rs`, `services/executor/src/bin/audit-inspect.rs` | Root-only host console, mutually exclusive with the active executor's state lease. External KVM access remains independent of application authorization. |
+| Out-of-band recovery | Physical NanoKVM root terminal; `services/core/cmd/homelab-release/console.go` | Independent local OS administration of NixOS, systemd, Kubernetes, storage, and networking. The console release path verifies local `seat0`, uses an audited, one-use receipt, and does not impersonate a remote owner. Native root recovery remains possible when the managed service is unavailable. |
 
 ## Accepted executor mutations
 
 | Operation family | Resource check | Privileged effect |
 | --- | --- | --- |
-| `infrastructure__service_start/stop/reload/restart` | Exact host and Nix-allowlisted noncritical systemd unit | Fixed Rust actuator service verb |
-| `cluster__deployment_restart/scale` | Exact host, namespace and deployment; bounded replica count and optional Kubernetes resource-version precondition | Fixed Rust actuator Kubernetes verb |
+| `infrastructure__service_start/stop/reload/restart` | Exact host and Nix-allowlisted noncritical systemd unit | Fixed Go actuator service verb |
+| `cluster__deployment_restart/scale` | Exact host, namespace and deployment; bounded replica count and optional Kubernetes resource-version precondition | Fixed Go actuator Kubernetes verb |
 | `infrastructure__workspace_create/stop/build_environment/revoke_worker` | Exact host, independently configured project, worker and image-pool identities; bounded CPU, memory, accelerator and display claims | Fixed Workspace MCP tool with credential read only after approval |
 | `infrastructure__workspace_register_image/register_software` | Exact host, image-pool and software identities, approved immutable image digest or approved package list | Register approved OCI images or software through the executor's protected controller credential |
 | `infrastructure__workspace_propose_program/review_program/update_entry` | Exact host and allowlisted program, image or software identity; status transition and revision fencing; source URL and pool association validation | Submit or review software catalog records through the same protected controller credential |
@@ -51,7 +51,7 @@ The security service owns `/run/homelab-securityd/client.sock` and the inaccessi
 
 The security listener separates authorizing clients (`remote.allowedClientDNS`) from credential-only TLS identities (`remote.credentialClientDNS`). The lists are disjoint and contain no more than sixteen canonical DNS identities in total. Only authorizing clients can request `/v1/authorize` or `/v1/preview`. A credential grant must name an authorizer identity and an exact permitted operation and target; an optional canonical-arguments digest narrows it further. After a consuming owner authorization, the authority returns a one-use, 60-second ticket only to that verified executor. The executor redeems it through `POST /v1/service-credentials/{alias}` with the original canonical request. The authority binds the ticket to the owner session, certificate identity, operation, target, argument digest and credential revision, and consumes it before returning any secret bytes. Credential-only identities cannot mint tickets or read credentials from an alias alone. Neither role can change its identity through an HTTP header.
 
-The security service holds `.securityd.lock` for its lifetime. The executor holds `/var/lib/homelab-releases/.executord.lock` while serving requests. A separate release journal lock serializes staging and activation. Both Go and Rust implementations use the same owner lease, so a failed cutover cannot produce two managed writers. A service restart invalidates in-memory approvals. An unfinished audit-start record or an indeterminate result after dispatch remains unresolved and requires owner reconciliation rather than being treated as a failed or safely retriable operation.
+The security service holds `.securityd.lock` for its lifetime. The executor holds `/var/lib/homelab-releases/.executord.lock` while serving requests. A separate release journal lock serializes staging and activation. Go service instances use the same owner lease, so a failed cutover cannot produce two managed writers. A service restart invalidates in-memory approvals. An unfinished audit-start record or an indeterminate result after dispatch remains unresolved and requires owner reconciliation rather than being treated as a failed or safely retriable operation.
 
 ## Security state migration
 
@@ -121,8 +121,7 @@ argument digest until the attempt has been reconciled. An independent request
 with a different digest is not automatically denied. The journal also rejects
 duplicate audit IDs and contradictory terminal transitions.
 
-Only a trusted root console may reconcile an attempt. Stop the active Go or
-Rust executor and verify that it released its process-lifetime state lease.
+Only a trusted root console may reconcile an attempt. Stop the active Go executor and verify that it released its process-lifetime state lease.
 Inspect the relevant host objects through an independent local channel.
 Never mark an operation `not_applied` merely because the caller timed out or
 a status response was lost. If the result remains uncertain, keep the attempt
@@ -153,4 +152,4 @@ privileged effects until independent recovery.
 
 ## Source and release boundaries
 
-`nixosModules/security.nix` and `nixosModules/executor.nix` select exactly one implementation per managed service. Go remains the default. Source completion does not authorize state migration, privileged deployment, network-edge changes, credential rotation or host generation activation. The Cargo dependency locks, negative authorization checks, state-copy preflights and isolated cutover and rollback acceptance are separate release requirements.
+`nixosModules/security.nix` and `nixosModules/executor.nix` select exactly one implementation per managed service. Go remains the default. Source completion does not authorize state migration, privileged deployment, network-edge changes, credential rotation or host generation activation. Go module locks, negative authorization checks, state-copy preflights, and isolated release and recovery acceptance remain separate requirements.
