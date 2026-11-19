@@ -71,11 +71,30 @@ inside a trusted parent directory. The preparation command:
   random nonce and the fingerprint of the current selection marker. Failed
   preparation removes its newly created incomplete snapshot.
 
-For a Go rollback, use `--target go`, point
-`HOMELAB_SECURITY_GO_PREFLIGHT` to an absolute, protected, reviewed
-`homelab-security-preflight` executable, and prepare against the
-**current Rust-written state**. Both Rust and Go preflights must accept the
-same copy before a Go receipt is issued.
+For a Go cutover, use the source-owned `homelab-security-migrate`
+binary from the reviewed Go generation. Set `HOMELAB_SECURITY_GO_PREFLIGHT`
+to the resolved absolute path of that generation's
+`homelab-security-preflight` executable. While the existing authority is
+stopped and its state lease is free, invoke:
+
+```sh
+homelab-security-migrate prepare --target go \
+  --state-dir /var/lib/homelab-securityd \
+  --snapshot-dir /path/to/private/unique-snapshot
+```
+
+The Go preparer obtains the shared security-state lease, reads the exact
+current replay record and encrypted vault without changing either file,
+prepares an independently owned snapshot, and requires both the previous
+authority's protected compatibility preflight and the reviewed Go preflight
+to accept the same copy. Provide the independent executable through
+`HOMELAB_SECURITY_COMPAT_PREFLIGHT`; it must be distinct from the Go
+preflight and must be a trusted, non-writable regular executable.
+Only then does the preparer emit the version-one parent-bound receipt. A live writer, changed replay state, invalid protected
+file, or failed preflight prevents receipt issuance. The operator supplies
+the resulting receipt to the protected credential location only under an
+independently authorized release. The original authority remains available
+for a guarded rollback until live Go acceptance is complete.
 
 The security daemon never reads plaintext secrets from the snapshot. The
 snapshot contains encrypted credentials and authentication replay metadata;
