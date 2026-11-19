@@ -1,14 +1,17 @@
 ARG RUST_BASE_IMAGE
 ARG GO_BASE_IMAGE
-FROM ${RUST_BASE_IMAGE} AS build
+FROM ${RUST_BASE_IMAGE} AS toolchain
+FROM ${GO_BASE_IMAGE} AS build
 WORKDIR /src
-COPY services/sandbox/src ./src
+COPY services/sandbox/go.mod ./go.mod
+COPY services/sandbox/main.go ./main.go
 RUN mkdir -p /out \
-    && rustc --edition=2021 -D warnings -C opt-level=2 src/main.rs -o /out/homelab-engineering-sandbox
+    && GOWORK=off GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local CGO_ENABLED=0 \
+       go build -trimpath -buildvcs=false -o /out/homelab-engineering-sandbox .
 
 FROM ${GO_BASE_IMAGE}
-COPY --from=build /usr/local/cargo /usr/local/cargo
-COPY --from=build /usr/local/rustup /usr/local/rustup
+COPY --from=toolchain /usr/local/cargo /usr/local/cargo
+COPY --from=toolchain /usr/local/rustup /usr/local/rustup
 ENV RUSTUP_HOME=/usr/local/rustup \
     CARGO_HOME=/usr/local/cargo \
     PATH=/usr/local/cargo/bin:/usr/local/go/bin:/usr/local/bin:/usr/bin:/bin

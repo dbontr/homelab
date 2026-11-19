@@ -10,7 +10,7 @@ on:
       - "mcp/**"
       - "api/**"
       - "infrastructure/**"
-      - "ui/console/**"
+      - "ui/web/**"
       - "nixosModules/**"
       - "packages/**"
       - "flake.nix"
@@ -59,6 +59,7 @@ jobs:
           - "services/health"
           - "services/motivation"
           - "services/native-hardware"
+          - "services/sandbox"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -108,45 +109,6 @@ jobs:
           set -euo pipefail
           go test -race -count=1 ./...
           go vet ./...
-
-  rust-components:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 45
-    strategy:
-      fail-fast: false
-      matrix:
-        manifest:
-          - services/security-authority/Cargo.toml
-          - services/executor/Cargo.toml
-          - services/motivation/Cargo.toml
-          - ui/console/Cargo.toml
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
-          targets: wasm32-unknown-unknown
-      - name: Check locked Rust source
-        run: |
-          set -o pipefail
-          manifest="${{ matrix.manifest }}"
-          root="$(dirname "$manifest")"
-          test -s "$root/Cargo.lock"
-          cargo fmt --manifest-path "$manifest" --all -- --check 2>&1 | tee "$RUNNER_TEMP/cargo-format.log"
-          if [ "$root" = "ui/console" ]; then
-            cargo check --locked --manifest-path "$manifest" --target wasm32-unknown-unknown 2>&1 | tee "$RUNNER_TEMP/cargo-check.log"
-          else
-            cargo test --locked --all-targets --manifest-path "$manifest" 2>&1 | tee "$RUNNER_TEMP/cargo-test.log"
-            cargo clippy --locked --all-targets --manifest-path "$manifest" -- -D warnings 2>&1 | tee "$RUNNER_TEMP/cargo-clippy.log"
-          fi
-      - name: Preserve Rust diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: rust-${{ strategy.job-index }}-diagnostics
-          path: ${{ runner.temp }}/cargo-*.log
-          if-no-files-found: warn
-          retention-days: 7
 
   nix-evaluation:
     runs-on: ubuntu-24.04

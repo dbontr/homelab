@@ -13,7 +13,7 @@ import (
 
 func rustAuthorityFixture(t *testing.T, name string) []byte {
 	t.Helper()
-	path := filepath.Join("..", "..", "security-authority", "tests", "fixtures", name)
+	path := filepath.Join("testdata", name)
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)

@@ -39,11 +39,6 @@ if command -v nix >/dev/null 2>&1; then
       exit 1
     fi
   done
-  actuator="$(nix eval --json .#nixosConfigurations.saturn.config.services.homelabExecutor.useRustActuator)"
-  if [[ "$actuator" != false ]]; then
-    echo "Go migration must not depend on the Rust actuator" >&2
-    exit 1
-  fi
   nix flake check --offline --no-build
 else
   echo "NixOS evaluation skipped: nix not installed" >&2

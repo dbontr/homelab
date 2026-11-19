@@ -1,8 +1,8 @@
 # Engineering verification boundary
 
-The Rust verifier has two execution contracts. Go remains responsible for
-engineering planning, user-authorized project scope, workspace leases,
-source edits, verification receipts, and draft publication.
+The Go verifier has two execution contracts. The Engineering service owns
+project authorization, workspace leases, source edits, revision-bound
+verification receipts, and draft publication.
 
 ## Local sandbox
 
@@ -57,6 +57,6 @@ by OCI digest in the worker's `verificationImage` configuration. The
 engineering daemon selects native verification through the independent
 `nativeVerification` option. Both options default to disabled.
 
-The image, Go adapter and Rust code require isolated compilation, negative
+The image and Go verification boundary require isolated compilation, negative
 authorization testing, CNI enforcement checks and end-to-end acceptance
 before any operational release.

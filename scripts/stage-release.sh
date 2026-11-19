@@ -7,7 +7,6 @@ export GOWORK=off
 export GOTOOLCHAIN=local
 export GOPROXY=off
 export GOSUMDB=off
-export CARGO_NET_OFFLINE=true
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 mode=complete
@@ -49,11 +48,11 @@ for tool in git sha256sum find sort mktemp; do
   command -v "$tool" >/dev/null || { printf 'Missing build tool: %s\n' "$tool" >&2; exit 1; }
 done
 if [[ "$mode" == complete ]]; then
-  required_tools=(go cargo nix)
+  required_tools=(go nix)
 elif [[ "$component" == homelab-console ]]; then
   required_tools=(nix)
 elif [[ "$component" == homelab-motivation ]]; then
-  required_tools=(cargo)
+  required_tools=(go)
 else
   required_tools=(go)
 fi
@@ -120,9 +119,8 @@ elif [[ "$component" == homelab-console ]]; then
 elif [[ "$component" == homelab-motivation ]]; then
   (
     cd "$source_root/services/motivation"
-    cargo fmt --all -- --check
-    cargo test --locked --offline
-    cargo clippy --locked --offline --all-targets -- -D warnings
+    go test ./...
+    go vet ./...
   )
 else
   (
@@ -145,14 +143,7 @@ build_go() {
 }
 
 build_motivation() {
-  local target="$stage/.motivation-target"
-  printf '%s\n' 'Building homelab-motivation'
-  (
-    cd "$source_root/services/motivation"
-    CARGO_TARGET_DIR="$target" cargo build --locked --offline --release
-  )
-  install -m 0700 "$target/release/homelab-motivation" "$stage/bin/homelab-motivation"
-  rm -rf -- "$target"
+  build_go services/motivation ./cmd/homelab-motivation homelab-motivation
 }
 
 if [[ "$mode" == complete ]]; then

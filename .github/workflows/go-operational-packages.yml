@@ -38,11 +38,12 @@ jobs:
             .#homelab-identity \
             .#homelab-platform \
             .#homelab-motivation \
-            .#homelab-native-hardware
+            .#homelab-native-hardware \
+            .#homelab-engineering-sandbox
       - name: Verify executable outputs
         run: |
           set -euo pipefail
-          for name in homelab-security homelab-executor homelab-engineering homelab-identity homelab-platform homelab-motivation homelab-native-hardware; do
+          for name in homelab-security homelab-executor homelab-engineering homelab-identity homelab-platform homelab-motivation homelab-native-hardware homelab-engineering-sandbox; do
             result="$(nix path-info ".#${name}")"
             test -d "${result}/bin"
             test -n "$(find "${result}/bin" -maxdepth 1 -type f -o -type l | head -1)"

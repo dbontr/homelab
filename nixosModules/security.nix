@@ -2,15 +2,14 @@
 let
   cfg = config.services.homelabSecurity;
   package = import ../packages/security.nix { inherit pkgs; };
-  rustPackage = import ../packages/security-authority.nix { inherit pkgs; };
 in
 {
   options.services.homelabSecurity = {
     enable = lib.mkEnableOption "independent password and TOTP privileged-session service";
     implementation = lib.mkOption {
-      type = lib.types.enum [ "go" "rust" ];
+      type = lib.types.enum [ "go" ];
       default = "go";
-      description = "Single authoritative security daemon implementation; Rust requires a locked, verified release.";
+      description = "Independent Go security authority service.";
     };
     migration.receiptFile = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
@@ -184,10 +183,6 @@ in
 
   config = lib.mkIf cfg.enable {
     assertions = [
-      { assertion = cfg.implementation != "rust" || builtins.pathExists ../services/security-authority/Cargo.lock;
-        message = "Rust security authority requires a checked-in Cargo.lock before it can be selected."; }
-      { assertion = cfg.implementation != "rust" || cfg.migration.receiptFile != null;
-        message = "Selecting the Rust security authority requires a separately approved migration receipt."; }
       { assertion = cfg.migration.receiptFile == null ||
           (lib.hasPrefix "/" cfg.migration.receiptFile &&
            !(lib.hasPrefix "/nix/store/" cfg.migration.receiptFile) &&
@@ -260,7 +255,7 @@ in
         '';
       };
     };
-    environment.systemPackages = [ cfg.package ] ++ lib.optional (cfg.implementation == "rust") rustPackage;
+    environment.systemPackages = [ cfg.package ];
     # Browser ingress needs traversal by nginx without exposing the owner socket directory.
     systemd.tmpfiles.rules = lib.optionals cfg.browser.enable [
       "d /run/homelab-security-browser 0750 homelab-security homelab-security-browser -"
@@ -333,9 +328,7 @@ in
           "access-jwks:${cfg.access.jwksFile}"
           "access-owner:${cfg.access.ownerEmailFile}"
         ];
-        ExecStart = if cfg.implementation == "rust"
-          then "${rustPackage}/bin/securityd"
-          else "${cfg.package}/bin/homelab-securityd";
+        ExecStart = "${cfg.package}/bin/homelab-securityd";
         # The single-writer unit owns this exact browser socket. Remove its
         # pathname after the process exits so a successor does not inherit an
         # orphaned listener from an interrupted generation switch.

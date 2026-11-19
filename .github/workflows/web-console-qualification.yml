@@ -62,7 +62,6 @@ jobs:
           done
           test "$(nix eval --raw .#nixosConfigurations.saturn.config.services.homelabSecurity.implementation)" = go
           test "$(nix eval --raw .#nixosConfigurations.saturn.config.services.homelabExecutor.implementation)" = go
-          test "$(nix eval --json .#nixosConfigurations.saturn.config.services.homelabExecutor.useRustActuator)" = false
           test "$(nix eval --json .#nixosConfigurations.saturn.config.services.homelabEngineering.enable)" = true
           nix eval --json .#nixosConfigurations.saturn.config.services.homelabExecutor.workspace.projects | jq -e 'index("axiom-engine") != null'
       - name: Verify exact-project compiler image admission

@@ -24,23 +24,17 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-go@v5
         with:
-          components: rustfmt, clippy
-      - name: Fetch locked Rust dependencies
-        working-directory: services/executor
-        run: cargo fetch --locked
-      - name: Run Rust executor tests independently of formatting
-        working-directory: services/executor
+          go-version: '1.27.3'
+      - name: Verify privileged Go executor and security services
+        working-directory: services/core
         env:
-          CARGO_BUILD_JOBS: '2'
-        run: cargo test --locked --offline --all-targets
-      - name: Check Rust executor Clippy
-        if: always()
-        working-directory: services/executor
-        env:
-          CARGO_BUILD_JOBS: '2'
-        run: cargo clippy --locked --offline --all-targets -- -D warnings
+          GOWORK: 'off'
+        run: |
+          set -euo pipefail
+          go test -count=1 ./...
+          go vet ./...
 
   five-host-evaluation:
     runs-on: ubuntu-24.04

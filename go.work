@@ -8,4 +8,5 @@ use (
   ./services/health
   ./services/motivation
   ./services/native-hardware
+  ./services/sandbox
 )

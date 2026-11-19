@@ -2,14 +2,6 @@
 let
   cfg = config.services.homelabExecutor;
   package = import ../packages/executor.nix { inherit pkgs; };
-  rustPackage = import ../packages/executor-authority.nix { inherit pkgs; };
-  rustActuatorEnabled = cfg.useRustActuator || cfg.implementation == "rust";
-  rustActuator = import ../packages/actuator.nix { inherit pkgs; };
-  serviceAllowlist = pkgs.writeText "homelab-rust-service-policy" ((lib.concatStringsSep "\n" cfg.allowedServices) + "\n");
-  deploymentNames = lib.concatLists (lib.mapAttrsToList
-    (namespace: names: map (name: "${namespace}/${name}") names)
-    cfg.kubernetes.namespaces);
-  deploymentAllowlist = pkgs.writeText "homelab-rust-deployment-policy" ((lib.concatStringsSep "\n" deploymentNames) + "\n");
   authority = config.services.homelabSecurity;
   releaseRunner = pkgs.writeShellScriptBin "homelab-release-runner" ''
     export HOMELAB_RELEASE_RUNNER_SELF="$0"
@@ -45,9 +37,9 @@ in
   options.services.homelabExecutor = {
     enable = lib.mkEnableOption "restricted independent local executor";
     implementation = lib.mkOption {
-      type = lib.types.enum [ "go" "rust" ];
+      type = lib.types.enum [ "go" ];
       default = "go";
-      description = "Select the independently accepted privileged executor implementation.";
+      description = "Independent Go privileged executor implementation.";
     };
     package = lib.mkOption {
       type = lib.types.package;
@@ -181,11 +173,6 @@ in
         description = "Maximum allowed replica count for a single deployment scale action.";
       };
     };
-    useRustActuator = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Execute only exact allowlisted systemd and Kubernetes actions through the isolated Rust command runner.";
-    };
     allowedServices = lib.mkOption {
       type = lib.types.listOf lib.types.str;
       default = [];
@@ -204,8 +191,6 @@ in
   };
   config = lib.mkIf cfg.enable {
     assertions = [
-      { assertion = cfg.implementation != "rust" || builtins.pathExists ../services/executor/Cargo.lock;
-        message = "Rust executor requires a checked-in reviewed Cargo.lock."; }
       {
         assertion = cfg.authorization.remote.enable ||
           (config.services.homelabSecurity.enable &&
@@ -286,8 +271,8 @@ in
       exec ${cfg.package}/bin/homelab-release "$@"
     '') (pkgs.writeShellScriptBin "homelab-audit-inspect" ''
       export HOMELAB_EXECUTOR_RELEASE_STATE=${lib.escapeShellArg cfg.stateDirectory}
-      exec ${if cfg.implementation == "rust" then "${rustPackage}/bin/audit-inspect" else "${cfg.package}/bin/homelab-audit-recovery"} "$@"
-    '') ] ++ lib.optional (cfg.implementation == "rust") rustPackage;
+      exec ${cfg.package}/bin/homelab-audit-recovery "$@"
+    '') ];
     systemd.services.homelab-executord = {
       description = "Restricted local infrastructure executor";
       wantedBy = [ "multi-user.target" ];
@@ -310,11 +295,6 @@ in
       } // lib.optionalAttrs (cfg.allowReleaseActivation && cfg.implementation == "go") {
         HOMELAB_EXECUTOR_SYSTEMD_RUN = "${pkgs.systemd}/bin/systemd-run";
         HOMELAB_EXECUTOR_RELEASE_RUNNER = "${releaseRunner}/bin/homelab-release-runner";
-      } // lib.optionalAttrs rustActuatorEnabled {
-        HOMELAB_EXECUTOR_RUST_ACTUATOR = "${rustActuator}/bin/homelab-actuator";
-        HOMELAB_EXECUTOR_RUST_SERVICES = serviceAllowlist;
-        HOMELAB_EXECUTOR_RUST_KUBERNETES = deploymentAllowlist;
-        HOMELAB_EXECUTOR_RUST_MAX_REPLICAS = toString cfg.kubernetes.maxReplicas;
       } // lib.optionalAttrs cfg.authorization.remote.enable {
         HOMELAB_EXECUTOR_AUTH_ENDPOINT = cfg.authorization.remote.endpoint;
         HOMELAB_EXECUTOR_AUTH_SERVER_NAME = cfg.authorization.remote.serverName;
@@ -360,9 +340,7 @@ in
         StateDirectoryMode = "0700";
         RuntimeDirectory = "homelab-executord";
         RuntimeDirectoryMode = "0750";
-        ExecStart = if cfg.implementation == "rust"
-          then "${rustPackage}/bin/executord"
-          else "${cfg.package}/bin/homelab-executord";
+        ExecStart = "${cfg.package}/bin/homelab-executord";
         LoadCredential = lib.optionals cfg.authorization.remote.enable [
           "auth-cert:${cfg.authorization.remote.certificateFile}"
           "auth-key:${cfg.authorization.remote.keyFile}"
@@ -428,9 +406,7 @@ in
       description = "Recover interrupted NixOS generation from the private release journal";
       conflicts = [ "homelab-executord.service" ];
       after = [ "homelab-executord.service" ];
-      environment = if cfg.implementation == "rust"
-        then config.systemd.services.homelab-executord.environment
-        else {
+      environment = {
           HOMELAB_RELEASE_HOST = config.networking.hostName;
           HOMELAB_RELEASE_SOURCE = cfg.sourceDirectory;
           HOMELAB_RELEASE_STATE = cfg.stateDirectory;
@@ -447,9 +423,7 @@ in
         Group = "root";
         StateDirectory = "homelab-releases";
         StateDirectoryMode = "0700";
-        ExecStart = if cfg.implementation == "rust"
-          then "${rustPackage}/bin/recovery recover"
-          else "${cfg.package}/bin/homelab-release recover";
+        ExecStart = "${cfg.package}/bin/homelab-release recover";
         UMask = "0077";
         NoNewPrivileges = false;
         PrivateTmp = true;
