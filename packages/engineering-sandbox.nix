@@ -1,34 +1,23 @@
 { pkgs }:
-pkgs.stdenv.mkDerivation {
+pkgs.buildGoModule {
   pname = "homelab-engineering-sandbox";
   version = "0.1.0";
   src = ../services/sandbox;
-  nativeBuildInputs = [ pkgs.rustc pkgs.makeWrapper ];
-  buildPhase = ''
-    runHook preBuild
-    rustc --edition=2021 -D warnings -C opt-level=2 src/main.rs -o homelab-engineering-sandbox
-    runHook postBuild
-  '';
+  vendorHash = null;
   doCheck = true;
-  checkPhase = ''
-    runHook preCheck
-    rustc --edition=2021 -D warnings --test src/main.rs -o sandbox-tests
-    ./sandbox-tests
-    runHook postCheck
-  '';
-  installPhase = ''
-    runHook preInstall
-    install -Dm755 homelab-engineering-sandbox "$out/bin/homelab-engineering-sandbox"
-    wrapProgram "$out/bin/homelab-engineering-sandbox" \
-      --set HOMELAB_SANDBOX_GIT "${pkgs.git}/bin/git" \
-      --set HOMELAB_SANDBOX_BWRAP "${pkgs.bubblewrap}/bin/bwrap" \
-      --set HOMELAB_SANDBOX_CARGO "${pkgs.cargo}/bin/cargo" \
-      --set HOMELAB_SANDBOX_GO "${pkgs.go}/bin/go" \
-      --set HOMELAB_SANDBOX_NIX "${pkgs.nix}/bin/nix"
-    runHook postInstall
+  subPackages = [ "." ];
+  ldflags = [
+    "-X main.gitBinary=${pkgs.git}/bin/git"
+    "-X main.bubblewrapBinary=${pkgs.bubblewrap}/bin/bwrap"
+    "-X main.goBinary=${pkgs.go}/bin/go"
+    "-X main.nixBinary=${pkgs.nix}/bin/nix"
+  ];
+  postInstall = ''
+    mv "$out/bin/sandbox" "$out/bin/homelab-engineering-sandbox"
+    test -x "$out/bin/homelab-engineering-sandbox"
   '';
   meta = with pkgs.lib; {
-    description = "Revision-bound isolated local build/test execution";
+    description = "Revision-bound and network-isolated Go engineering verifier";
     platforms = platforms.linux;
     mainProgram = "homelab-engineering-sandbox";
   };
