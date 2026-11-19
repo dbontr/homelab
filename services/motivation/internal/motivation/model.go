@@ -1,6 +1,7 @@
 package motivation
 
 import (
+	"encoding/json"
 	"errors"
 	"strings"
 	"unicode"
@@ -74,6 +75,16 @@ type Intervention struct {
 	CreatedAt uint64 `json:"created_at"`
 	Feedback *Feedback `json:"feedback"`
 	Cancelled bool `json:"cancelled"`
+}
+
+// Older persisted events omit trigger; the original serde default is session_start.
+// An explicitly invalid trigger must not silently inherit the default.
+func (event *Intervention) UnmarshalJSON(data []byte) error {
+	type wire Intervention
+	decoded := wire{Trigger: "session_start"}
+	if err := json.Unmarshal(data, &decoded); err != nil { return err }
+	*event = Intervention(decoded)
+	return nil
 }
 
 type Checkin struct {
