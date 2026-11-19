@@ -6,4 +6,5 @@ use (
   ./services/compute
   ./services/learning
   ./services/health
+  ./services/native-hardware
 )
