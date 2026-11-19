@@ -49,6 +49,23 @@ func (s *Server) invoke(ctx context.Context,name string,args json.RawMessage,id 
   if err:=json.Unmarshal(raw,&value);err!=nil{return toolError("invalid fleet reply")}
   return result(value)
  }
+ if name=="infrastructure__release_stage" {
+  if s.executorClient==nil{return toolError("independent privileged executor not configured")}
+  var fields map[string]json.RawMessage
+  if err:=json.Unmarshal(args,&fields);err!=nil||len(fields)!=2{
+   return toolError("release staging requires exact host and revision")
+  }
+  var input struct{
+   Host string `json:"host"`
+   Revision string `json:"revision"`
+  }
+  if err:=json.Unmarshal(args,&input);err!=nil{
+   return toolError("invalid release staging arguments")
+  }
+  value,err:=s.executorClient.Stage(ctx,input.Host,input.Revision)
+  if err!=nil{return toolError("protected release staging unavailable; inspect the release journal before retrying")}
+  return result(value)
+ }
  if privilegedExecutorTool(name) {
   if s.executorClient==nil{return toolError("independent privileged executor not configured")}
   var fields map[string]json.RawMessage

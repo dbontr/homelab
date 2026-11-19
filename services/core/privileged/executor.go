@@ -346,6 +346,7 @@ func (e *Executor) ExecuteWithID(ctx context.Context,requestID,operation,target 
 
 func(e *Executor) Handler()http.Handler{
  mux:=http.NewServeMux()
+ e.registerReleaseStage(mux)
  mux.HandleFunc("POST /v1/execute",func(w http.ResponseWriter,r *http.Request){
   w.Header().Set("Cache-Control","no-store")
   w.Header().Set("X-Content-Type-Options","nosniff")
@@ -383,7 +384,7 @@ func(e *Executor) ServeSocket(ctx context.Context,path string,groupID int)error{
  defer listener.Close();defer os.Remove(path)
  if err:=os.Chown(path,-1,groupID);err!=nil{return err}
  if err:=os.Chmod(path,0660);err!=nil{return err}
- server:=&http.Server{Handler:e.Handler(),ReadHeaderTimeout:5*time.Second,ReadTimeout:15*time.Second,WriteTimeout:180*time.Second}
+ server:=&http.Server{Handler:e.Handler(),ReadHeaderTimeout:5*time.Second,ReadTimeout:15*time.Second,WriteTimeout:2*time.Hour}
  stopped:=make(chan struct{})
  go func(){select{case <-ctx.Done():_=server.Close();case <-stopped:}}()
  err=server.Serve(listener);close(stopped)

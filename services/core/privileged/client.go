@@ -13,6 +13,8 @@ import (
  "time"
 
  "github.com/dbontr/homelab-new/system/security"
+ "github.com/dbontr/homelab-new/system/release"
+ "strings"
 )
 
 type Client struct{
@@ -66,6 +68,50 @@ func(c *Client) ExecuteWithID(
   }
  } else if value.State!=""||value.AuditID!=""||value.Replayed {
   return ExecutionResult{},errors.New("executor returned a contradictory authorization decision")
+ }
+ return value,nil
+}
+
+type StageResult struct {
+ security.Authorization
+ Manifest *release.Manifest `json:"manifest,omitempty"`
+}
+
+// Stage performs a signed, host-scoped build without activating a generation.
+// A transport error is ambiguous; callers must inspect the release journal
+// before submitting a fresh stage request.
+func(c *Client)Stage(ctx context.Context,host,revision string)(StageResult,error){
+ if c==nil||host==""||len(revision)!=40||revision!=strings.ToLower(revision){
+  return StageResult{},errors.New("invalid release stage target or revision")
+ }
+ if _,err:=hex.DecodeString(revision);err!=nil{
+  return StageResult{},errors.New("invalid release stage revision")
+ }
+ body,err:=json.Marshal(map[string]string{"host":host,"revision":revision})
+ if err!=nil{return StageResult{},err}
+ req,err:=http.NewRequestWithContext(ctx,http.MethodPost,"http://unix/v1/release/stage",bytes.NewReader(body))
+ if err!=nil{return StageResult{},err}
+ req.Header.Set("Content-Type","application/json")
+ req.Header.Set("Cf-Access-Jwt-Assertion",security.AccessAssertion(ctx))
+ client:=&http.Client{Transport:c.http.Transport,Timeout:2*time.Hour}
+ response,err:=client.Do(req)
+ if err!=nil{return StageResult{},err}
+ defer response.Body.Close()
+ if response.StatusCode!=http.StatusOK{return StageResult{},errors.New("executor refused release staging")}
+ data,err:=io.ReadAll(io.LimitReader(response.Body,8193))
+ if err!=nil||len(data)>8192{return StageResult{},errors.New("invalid release staging reply")}
+ var value StageResult
+ if err:=json.Unmarshal(data,&value);err!=nil{return StageResult{},err}
+ if value.Allowed {
+  if value.Manifest==nil||value.Manifest.Host!=host||value.Manifest.Revision!=revision||
+   len(value.Manifest.ID)!=48||!strings.HasPrefix(value.Manifest.System,"/nix/store/"){
+   return StageResult{},errors.New("executor returned an unrelated release manifest")
+  }
+  if _,err:=hex.DecodeString(value.Manifest.ID);err!=nil||value.Manifest.ID!=strings.ToLower(value.Manifest.ID){
+   return StageResult{},errors.New("executor returned an invalid release identity")
+  }
+ }else if value.Manifest!=nil {
+  return StageResult{},errors.New("executor returned a contradictory staging decision")
  }
  return value,nil
 }

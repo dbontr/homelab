@@ -132,12 +132,26 @@ async fn remote_execute(
     }
     execute(state, headers, raw).await
 }
+// The protected Unix socket uses the same signed-owner staging policy as
+// the certificate-authenticated coordinator. It cannot grant activation.
+async fn local_stage(
+    State(executor): State<Arc<Executor>>,
+    headers: HeaderMap,
+    raw: Bytes,
+) -> Response {
+    stage_response(executor, headers, raw).await
+}
+
 async fn remote_stage(
     axum::Extension(_peer): axum::Extension<VerifiedCoordinator>,
     State(executor): State<Arc<Executor>>,
     headers: HeaderMap,
     raw: Bytes,
 ) -> Response {
+    stage_response(executor, headers, raw).await
+}
+
+async fn stage_response(executor: Arc<Executor>, headers: HeaderMap, raw: Bytes) -> Response {
     let Ok(owner) = assertion(&headers) else {
         return (StatusCode::FORBIDDEN, "signed owner assertion required").into_response();
     };
@@ -206,6 +220,7 @@ async fn remote_audit_status(
 pub fn gateway_router(executor: Arc<Executor>) -> Router {
     Router::new()
         .route("/v1/execute", post(execute))
+        .route("/v1/release/stage", post(local_stage))
         .layer(DefaultBodyLimit::max(MAX_BODY))
         .layer(middleware::from_fn(private_headers))
         .with_state(executor)
