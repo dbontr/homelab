@@ -35,11 +35,12 @@ jobs:
             .#homelab-executor \
             .#homelab-engineering \
             .#homelab-platform \
-            .#homelab-motivation
+            .#homelab-motivation \
+            .#homelab-engineering-sandbox
       - name: Verify executable outputs
         run: |
           set -euo pipefail
-          for name in homelab-security homelab-executor homelab-engineering homelab-platform homelab-motivation; do
+          for name in homelab-security homelab-executor homelab-engineering homelab-platform homelab-motivation homelab-engineering-sandbox; do
             result="$(nix path-info ".#${name}")"
             test -d "${result}/bin"
             test -n "$(find "${result}/bin" -maxdepth 1 -type f -o -type l | head -1)"
