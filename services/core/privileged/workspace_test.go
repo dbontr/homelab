@@ -173,14 +173,14 @@ func TestPrivilegedBatchRoutingEnforcesProjectDigestBoundsAndOwnerDecision(t *te
  policy.ImageReferences=[]string{image}
  if err:=policy.validate();err!=nil{t.Fatal(err)}
  valid:=map[string]any{"host":"saturn","project_id":"research","command":"go test ./...",
-  "image":image,"cpu":float64(1),"memory_mb":float64(1024),"job_request_id":key}
+  "image":image,"cpu":json.Number("1"),"memory_mb":json.Number("1024"),"job_request_id":key}
  invalid:=[]map[string]any{}
  for _,change:=range []func(map[string]any){
   func(m map[string]any){m["project_id"]="other"},
   func(m map[string]any){m["image"]="ghcr.io/other/tool@sha256:"+strings.Repeat("a",64)},
-  func(m map[string]any){m["cpu"]=float64(3)},
-  func(m map[string]any){m["memory_mb"]=float64(4097)},
-  func(m map[string]any){m["memory_mb"]=float64(128.5)},
+  func(m map[string]any){m["cpu"]=json.Number("3")},
+  func(m map[string]any){m["memory_mb"]=json.Number("4097")},
+  func(m map[string]any){m["memory_mb"]=json.Number("128.5")},
   func(m map[string]any){m["job_request_id"]=strings.Repeat("F",32)},
   func(m map[string]any){m["command"]=" "},
   func(m map[string]any){m["unexpected"]="data"},
