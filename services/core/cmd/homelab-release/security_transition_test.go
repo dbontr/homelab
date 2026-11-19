@@ -77,7 +77,7 @@ func TestFailedMigrationRestartsStillSelectedSecurityAuthority(t *testing.T){
  }
 }
 
-func TestFailedAuthorityStopNeverAttemptsNewCaptureOrRecovery(t *testing.T){
+func TestFailedAuthorityStopRestoresWithoutAttemptingCapture(t *testing.T){
  stopFailure:=errors.New("service refused to stop")
  calls:=[]string{}
  err:=transitionCaptureWithRecovery(
@@ -85,7 +85,7 @@ func TestFailedAuthorityStopNeverAttemptsNewCaptureOrRecovery(t *testing.T){
   func()error{calls=append(calls,"capture");return nil},
   func()error{calls=append(calls,"restore");return nil},
  )
- if !errors.Is(err,stopFailure)||strings.Join(calls,",")!="stop"{
+ if !errors.Is(err,stopFailure)||strings.Join(calls,",")!="stop,restore"{
   t.Fatalf("failed stop altered authority custody: %v, %v",err,calls)
  }
 }
