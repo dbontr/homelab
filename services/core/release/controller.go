@@ -333,15 +333,15 @@ func(c *Controller) preparationFailed(ctx context.Context,txn Journal,failure er
   running,readErr:=filepath.EvalSymlinks("/run/current-system")
   sourceSelected=readErr==nil&&running==txn.Previous
  }
- if sourceSelected&&c.health(ctx)==nil{
+ cleanup,cancel:=context.WithTimeout(context.Background(),90*time.Second)
+ defer cancel()
+ if sourceSelected&&c.health(cleanup)==nil{
   txn.Phase="rolled-back"
   if err:=c.atomic("journal.json",txn);err!=nil{
    return fmt.Errorf("security preparation failed: %v; cannot persist recovery: %w",failure,err)
   }
   return fmt.Errorf("security preparation failed; previous generation remains healthy: %w",failure)
  }
- cleanup,cancel:=context.WithTimeout(context.Background(),90*time.Second)
- defer cancel()
  if err:=c.rollback(cleanup,txn);err!=nil{
   return fmt.Errorf("security preparation failed: %v; rollback failed: %w",failure,err)
  }
