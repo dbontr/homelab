@@ -58,7 +58,7 @@ func configured()( *release.Controller,error){
 // modifying the same generation journal while the privileged daemon owns it.
 func acquireReleaseLease(state,operation string)(*statelease.Lease,error){
  switch operation {
- case "status","guard-activate","guard-revert","guard-resume","console-activate","console-guard-activate","console-reconcile":return nil,nil
+ case "status","guard-activate","guard-revert","guard-resume","console-stage","console-activate","console-guard-activate","console-reconcile":return nil,nil
  case "stage","activate","revert","recover":
   return statelease.Acquire(state,"executord")
  default:return nil,errors.New("unknown release operation")
@@ -75,12 +75,12 @@ func authorizeReleaseCLI(trusted bool,operation string)error{
 func run(args []string)error{
  if os.Geteuid()!=0{return errors.New("release management requires a local administrator")}
  ctrl,err:=configured();if err!=nil{return err}
- if len(args)==0{return errors.New("expected stage, activate, revert, recover, status, or guard operation")}
+ if len(args)==0{return errors.New("expected stage, console-stage, console-activate, activate, revert, recover, status, or guard operation")}
  lease,err:=acquireReleaseLease(ctrl.Config.StateDir,args[0])
  if err!=nil{return fmt.Errorf("exclusive release-state access unavailable: %w",err)}
  if lease!=nil{defer lease.Close()}
  duration:=15*time.Minute
- if args[0]=="stage"{duration=2*time.Hour}
+ if args[0]=="stage"||args[0]=="console-stage"{duration=2*time.Hour}
  if args[0]=="status"{duration=10*time.Second}
  ctx,cancel:=context.WithTimeout(context.Background(),duration)
  defer cancel()
@@ -93,6 +93,11 @@ func run(args []string)error{
   })
   if err!=nil{return err}
   return json.NewEncoder(os.Stdout).Encode(record)
+ case "console-stage":
+  if len(args)!=2{return errors.New("console staging requires exact source commit")}
+  if _,_,err:=consoleSession();err!=nil{return err}
+  manifest,err:=ctrl.Stage(ctx,args[1]);if err!=nil{return err}
+  return json.NewEncoder(os.Stdout).Encode(manifest)
  case "console-activate":
   if len(args)!=2{return errors.New("console activation requires exact staged release ID")}
   return consoleActivate(ctrl,args[1])
