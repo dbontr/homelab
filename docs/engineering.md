@@ -35,6 +35,30 @@ to update the project list. The separate project worker, image and repository
 policies still apply. Admin operations, image admission, and NixOS releases
 remain behind the independent owner security authority.
 
+For the Helm-managed Compute controller, the NixOS
+`services.workspaceMcp.oidc` option does not configure the deployed controller.
+The exact machine issuer, audience and public JWKS are defined in
+`infrastructure/homelab/workspace/controller-oidc-values.yaml`. The trusted
+operator must first confirm the issuer's HTTPS JWKS is reachable from the
+controller network. Preserve the current `pwm-controller` Helm image digest,
+controller `pwm-controller-state` PVC, `Recreate` rollout strategy,
+node placement, credential Secrets, and the installed release's other values.
+Capture a consistent SQLite and artifact snapshot before replacing the stateful
+controller. Render and compare the entire candidate manifest to the installed
+manifest and run `helm upgrade --dry-run=server --hide-secret` with
+`--reset-then-reuse-values`, `--set controller.enabled=true`,
+`--set worker.enabled=false`, and this overlay before an owner-approved
+Helm upgrade. Do not activate a newly rendered controller image by implication.
+
+The administrator must separately give
+`oidc:https://identity.dbontr.me#homelab-engineering` the `editor` role on
+`homelab-platform` through the controller's authenticated project-grant API,
+with the exact previous role as a revision precondition. Neither the Go issuer
+nor the Engineering daemon may use the controller administrator credential.
+Confirm the resulting principal, non-administrator status, and exact project
+role through the daemon's normal startup probes. A Helm values change alone
+does not provision the grant or admit a compiler image to Compute workers.
+
 The protected release requires a provisioned and checked project-editor
 credential, an exact clean source revision, and the isolated Engineering
 acceptance evidence before activation. A missing credential is not repaired

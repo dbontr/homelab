@@ -1,0 +1,10 @@
+# OIDC trust for the existing Helm-managed Compute controller on Saturn.
+# Apply as an overlay to the retained pwm-controller Helm release; do not
+# replace its OCI image digest, pvc, scheduling, backup, or worker settings.
+# First verify JWKS is accessible from the controller's network namespace.
+# Render/diff and perform a server dry-run before an owner-approved upgrade.
+controller:
+  oidc:
+    issuer: "https://identity.dbontr.me"
+    audience: "homelab-compute"
+    jwksURL: "https://identity.dbontr.me/.well-known/jwks.json"
