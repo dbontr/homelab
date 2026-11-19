@@ -29,7 +29,33 @@ Credential installation only satisfies the release preflight dependency. It does
 
 A detached Saturn NixOS trial must validate the candidate's generated `homelab-securityd.service` and `homelab-executord.service` `LoadCredential` sources before changing any units. `scripts/saturn-detached-activation.sh` checks root ownership, nonempty regular files, final-path symlink rejection, and restrictive permissions in both the initiating console and the detached runner. Missing protected Compute credentials therefore block trial activation without touching the existing executor. The check inspects file metadata only and never copies credential bytes or opens a new owner session. It does not substitute for a signed owner authorization or the guarded release-state lease.
 
-The trusted release CLI requires exclusive release-state ownership for staging, activation, reversion and recovery, so it cannot mutate release state while the privileged executor is running. Read-only status inspection remains available. Manual recovery requires an out-of-band administrator to stop the executor first.
+The release CLI requires exclusive executor-state ownership for staging and ordinary
+recovery. An attached root login on the host's local virtual terminal has a separate
+console activation path. This path does not acquire or replace the running executor's
+process lease. A detached guardian uses the same staged manifest, health checks,
+NixOS generation journal and rollback logic as remote activation.
+
+From the root login on the host's local console, invoke the installed release runner
+with an exact, already-staged release ID:
+
+```sh
+homelab-release-runner console-activate <48-character-staged-release-id>
+```
+
+The runner checks the local `seat0` login, records a one-use console authority
+receipt in the root-owned release directory, and starts a transient systemd unit.
+Inspect its returned unit name with `journalctl -u`, then confirm that
+`homelab-release-runner status` reports the expected release as `active`.
+A request accepted for detached execution is not evidence of activation.
+
+Web, MCP, API and remote executor requests still require signed owner
+authentication. A remote root shell, SSH pseudoterminal, forwarded process
+or user-space console cannot claim local-console authority. The console
+mechanism does not issue browser sessions or change remote permission policy.
+
+Read-only release status remains available. Staging requires the executor's
+exclusive state lease; stop the executor briefly only when an operator
+must stage or perform a manual recovery, and restore it afterward.
 
 The complete release includes separately executable `homelab-mcp` and `homelab-api` adapters. Building them does not enable their optional NixOS listeners or alter running services. The web UI is built from `ui/web` and requires neither external listener.
 
