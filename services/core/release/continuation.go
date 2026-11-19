@@ -68,9 +68,11 @@ func (c *Controller) continueTransition(ctx context.Context, action, id string, 
   // to that unit and remains alive when the executor service is replaced.
   if action == "activate" {
    var switchErr error
-   // A continuation may begin after the target generation was already
-   // selected. Reprepare only when the previous generation is still active.
-   if current==txn.Previous && c.Config.BeforeSwitch!=nil {
+   // The previous executor may have been replaced after selecting the
+   // target generation but before the new authority was admitted. The
+   // audited guardian must prepare a current-state receipt even when the
+   // NixOS system profile already names the target.
+   if c.Config.BeforeSwitch!=nil {
     switchErr=c.Config.BeforeSwitch(ctx,txn.Previous,txn.Target)
    }
    if switchErr == nil { switchErr=c.set(ctx,txn.Target) }
