@@ -1,6 +1,7 @@
 # References
 
 - [loginctl](https://www.freedesktop.org/software/systemd/man/latest/loginctl.html) — systemd project. Used for: validating root logins on the local seat before issuing console release authority.
+- [Nixpkgs Go module builder](https://github.com/NixOS/nixpkgs/blob/da6dc0e7b26060f2f71ce3ef7088fb56ee44fa36/pkgs/build-support/go/module.nix) — NixOS project. Used for: reproducible Go 1.27.3 module builds with the required SQLite C toolchain in the Saturn console package.
 - [Go MIME media type parser](https://pkg.go.dev/mime#ParseMediaType) — Go standard library. Used for: validating form media types without rejecting conforming charset parameters on protected browser requests.
 
 - [Go hash/fnv package](https://pkg.go.dev/hash/fnv) — Go project. Used for: preserving fixed-size native hardware custody keys across the Go device validator and persisted lease records.

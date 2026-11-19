@@ -56,5 +56,6 @@
     bash curl wget git vim nano tmux htop btop jq xmlstarlet rsync
     pciutils usbutils ethtool smartmontools nvme-cli
     docker-compose k3s kubectl colmena
+    (import ../../../packages/compute-console.nix { inherit pkgs; })
   ];
 }
