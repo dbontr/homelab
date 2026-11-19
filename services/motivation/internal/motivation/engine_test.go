@@ -234,3 +234,23 @@ func TestStateValidationRejectsUnsafeSequence(t *testing.T){
 		t.Fatalf("wrong conflict kind: %v",err)
 	}
 }
+
+func TestLegacyInterventionTriggerDefaultsWithoutForgivingInvalidValues(t *testing.T) {
+	record:=defaultRecord()
+	record.NextID=2
+	raw:=`{"profile":{"revision":0,"enabled":false,"cadence_minutes":240,
+	 "holdout_weekday_utc":null,"goal_id":"","identity":"","outcome":"",
+	 "next_step":"","intensity":"guided","daily_limit":4,
+	 "quiet_start_utc_hour":0,"quiet_end_utc_hour":0},
+	 "interventions":[{"id":1,"strategy":"outcome","message":"Observe",
+	 "created_at":100,"feedback":null}],"next_id":2}`
+	if err:=decodeState([]byte(raw),&record);err!=nil{t.Fatal(err)}
+	if err:=validState(record);err!=nil{t.Fatal(err)}
+	if record.Interventions[0].Trigger!="session_start"{
+		t.Fatal("missing legacy trigger did not receive the Rust serde default")
+	}
+	record=defaultRecord()
+	explicit:=strings.Replace(raw,`"strategy":"outcome"`,`"strategy":"outcome","trigger":""`,1)
+	if err:=decodeState([]byte(explicit),&record);err!=nil{t.Fatal(err)}
+	if err:=validState(record);err==nil{t.Fatal("invalid explicit trigger accepted")}
+}
