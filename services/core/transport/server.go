@@ -111,6 +111,7 @@ func(s *Server) Handler()http.Handler{
  mux.HandleFunc("GET /v1/engineering/projects/{project}/jobs",s.uiWorkspaceProjectView)
  mux.HandleFunc("GET /v1/engineering/projects/{project}/workspaces",s.uiWorkspaceProjectView)
  mux.HandleFunc("GET /v1/engineering/projects/{project}/artifacts",s.uiWorkspaceProjectView)
+ mux.HandleFunc("GET /v1/engineering/projects/{project}/artifacts/{artifact}/download",s.uiProjectArtifactDownload)
  mux.HandleFunc("GET /v1/engineering/projects/{project}/context",s.uiWorkspaceProjectView)
  mux.HandleFunc("GET /v1/engineering/projects/{project}/repositories",s.uiWorkspaceProjectView)
  mux.HandleFunc("GET /v1/engineering/projects/{project}/research-sources",s.uiWorkspaceProjectView)
