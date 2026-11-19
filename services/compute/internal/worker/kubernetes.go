@@ -588,7 +588,7 @@ func (k *Kubernetes) Command(ctx context.Context, id, command string, input io.R
 		args = append(args, "-i")
 	}
 	args = append(args, "pod/"+kubePodName(id), "-c", "workspace", "--", "sh", "-c", command)
-	commandCtx, cancel := context.WithTimeout(ctx, 120*time.Second)
+	commandCtx, cancel := context.WithTimeout(ctx, workspaceCommandTimeout)
 	defer cancel()
 	out, stderr, status, err := k.call(commandCtx, 2<<20, input, args...)
 	if err != nil {
