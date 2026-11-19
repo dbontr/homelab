@@ -10,6 +10,7 @@
     ./shared.nix
     ./security-authority.nix
     ./domain-services.nix
+    ./identity.nix
     ./engineering.nix
     ./cloudflare.nix
     ./mcp-ingress.nix
