@@ -80,6 +80,8 @@ type auditRecord struct {
 	Principal    string    `json:"principal"`
 	Role         string    `json:"role"`
 	ExpectedRole string    `json:"expected_role"`
+	Repository string `json:"repository,omitempty"`
+	ExpectedRef string `json:"expected_ref,omitempty"`
 	Outcome      string    `json:"outcome"`
 	ImageID      string    `json:"image_id,omitempty"`
 	ImageRef     string    `json:"image_ref,omitempty"`
@@ -196,6 +198,52 @@ func grant(args []string) error {
 	})
 }
 
+
+// unlinkRepository is intentionally not exposed over MCP or the network.
+// The physical console must prove an exact revision of a dispensable link.
+func unlinkRepository(args []string) error {
+ if len(args)!=5{return errors.New("usage: project-workspace-console unlink-repository DB_PATH PROJECT REPOSITORY EXPECTED_ROLE EXPECTED_REF")}
+ tty,session,err:=localConsole()
+ if err!=nil{return err}
+ dbPath,project,repository,role,ref:=args[0],args[1],args[2],args[3],args[4]
+ if !filepath.IsAbs(dbPath){return errors.New("absolute controller database path required")}
+ info,err:=os.Lstat(dbPath)
+ if err!=nil||!info.Mode().IsRegular(){return errors.New("existing regular controller database required")}
+ db,err:=controller.OpenDatabase(dbPath)
+ if err!=nil{return err}
+ defer db.Close()
+ var nonce [16]byte
+ if _,err:=rand.Read(nonce[:]);err!=nil{return err}
+ record:=auditRecord{
+  ID:hex.EncodeToString(nonce[:]),Authority:"local-root-console",
+  Session:session,TTY:tty,Project:project,Repository:repository,
+  ExpectedRole:role,ExpectedRef:ref,Outcome:"requested",Action:"project:unlink-repository",
+  Created:time.Now().UTC(),
+ }
+ if err:=auditFile("intent",record);err!=nil{return fmt.Errorf("console unlink not applied: %w",err)}
+ _,applyErr:=db.UnlinkRepositoryExact(project,repository,role,ref)
+ if applyErr==nil{
+  rows,readErr:=db.RepositoryMemberships(project)
+  if readErr!=nil{applyErr=readErr}else{
+   for _,row:=range rows{
+    if row["repository"]==repository{applyErr=errors.New("repository unlink readback mismatch");break}
+   }
+  }
+  if applyErr==nil{db.AuditAccess("local-root-console",project,"console:repository-unlink",true)}
+ }
+ record.Created=time.Now().UTC()
+ record.Outcome="completed"
+ if applyErr!=nil{record.Outcome="failed"}
+ if err:=auditFile("result",record);err!=nil{
+  return fmt.Errorf("repository unlink outcome requires reconciliation, request %s: %w",record.ID,err)
+ }
+ if applyErr!=nil{return fmt.Errorf("repository unlink %s failed: %w",record.ID,applyErr)}
+ return json.NewEncoder(os.Stdout).Encode(map[string]string{
+  "request_id":record.ID,"authority":record.Authority,"project":project,
+  "repository":repository,"previous_role":role,"previous_ref":ref,"status":"unlinked",
+ })
+}
+
 var pinnedImage = regexp.MustCompile(`^[a-z0-9][a-z0-9.-]*/[a-z0-9._/-]+@sha256:[a-f0-9]{64}$`)
 
 func registerImage(args []string) error {
@@ -265,7 +313,7 @@ func registerImage(args []string) error {
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: project-workspace-console grant|register-image ...")
+		fmt.Fprintln(os.Stderr, "usage: project-workspace-console grant|register-image|unlink-repository ...")
 		os.Exit(2)
 	}
 	var err error
@@ -274,6 +322,8 @@ func main() {
 		err = grant(os.Args[2:])
 	case "register-image":
 		err = registerImage(os.Args[2:])
+	case "unlink-repository":
+		err = unlinkRepository(os.Args[2:])
 	default:
 		fmt.Fprintln(os.Stderr, "unknown console operation")
 		os.Exit(2)
