@@ -420,7 +420,7 @@ func (k *Kubernetes) workspacePod(id, image string, cpu float64, memory int, dis
 			}},
 			"volumes": []any{
 				map[string]any{"name": "workspace", "persistentVolumeClaim": map[string]any{"claimName": kubeClaimName(id)}},
-				map[string]any{"name": "scratch", "emptyDir": map[string]any{"sizeLimit": "64Mi"}},
+				map[string]any{"name": "scratch", "emptyDir": map[string]any{"sizeLimit": "4Gi"}},
 			},
 		},
 	}
@@ -667,7 +667,7 @@ func (k *Kubernetes) jobManifest(job Job, worker string) map[string]any {
 					"securityContext": restrictedSecurity(),
 					"volumeMounts":    []any{map[string]any{"name": "scratch", "mountPath": "/tmp"}},
 				}},
-				"volumes": []any{map[string]any{"name": "scratch", "emptyDir": map[string]any{"sizeLimit": "64Mi"}}},
+				"volumes": []any{map[string]any{"name": "scratch", "emptyDir": map[string]any{"sizeLimit": "4Gi"}}},
 			}},
 		},
 	}
