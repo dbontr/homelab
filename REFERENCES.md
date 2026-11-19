@@ -1,6 +1,5 @@
 # References
 
-- [systemd-run](https://www.freedesktop.org/software/systemd/man/latest/systemd-run.html) — systemd project. Used for: detached local-console release guardian units with journal custody and bounded execution.
 - [loginctl](https://www.freedesktop.org/software/systemd/man/latest/loginctl.html) — systemd project. Used for: validating root logins on the local seat before issuing console release authority.
 - [Go MIME media type parser](https://pkg.go.dev/mime#ParseMediaType) — Go standard library. Used for: validating form media types without rejecting conforming charset parameters on protected browser requests.
 
@@ -83,7 +82,7 @@
 - [RFC 6238: TOTP — Time-Based One-Time Password Algorithm](https://www.rfc-editor.org/rfc/rfc6238) — IETF. Used for: thirty-second HMAC-SHA1 one-time codes and authenticator verification in the owner security service.
 - [RFC 4226: HOTP — An HMAC-Based One-Time Password Algorithm](https://www.rfc-editor.org/rfc/rfc4226) — IETF. Used for: dynamic truncation and six-digit authenticator codes.
 - [systemd.exec manual](https://www.freedesktop.org/software/systemd/man/latest/systemd.exec.html) — systemd project. Used for: independent service users, private RSA signing and client-secret LoadCredential custody, protected state and runtime directories, and service sandboxing.
-- [systemd-run transient units](https://www.freedesktop.org/software/systemd/man/latest/systemd-run.html) — systemd project. Used for: independently supervised, time-bounded release tasks that continue after replacement of the invoking executor service.
+- [systemd-run transient units](https://www.freedesktop.org/software/systemd/man/latest/systemd-run.html) — systemd project. Used for: independently supervised, time-bounded release and local-console guardian tasks that continue after replacement of the invoking executor service.
 - [systemd-ask-password manual](https://www.freedesktop.org/software/systemd/man/latest/systemd-ask-password.html) — systemd project. Used for: local interactive owner-secret entry without command-line arguments.
 - [RFC 8018: PKCS #5 Password-Based Cryptography Specification, Version 2.1](https://www.rfc-editor.org/rfc/rfc8018) — IETF. Used for: PBKDF2-HMAC-SHA256 owner passphrase verification.
 - [MCP Streamable HTTP Transport — Security and Endpoint](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports) — Model Context Protocol. Used for: incoming Origin validation and authenticated Streamable HTTP requests.
