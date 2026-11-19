@@ -64,7 +64,6 @@ in
   services.homelabExecutor = {
     enable = true;
     implementation = "go";
-    useRustActuator = false;
     allowReleaseActivation = true;
     sourceDirectory = "/srv/homelab-main-build";
     workspace = {
