@@ -8,6 +8,7 @@ import (
  "os"
  "path/filepath"
  "strings"
+ "sync/atomic"
  "testing"
 
  "github.com/dbontr/homelab-new/system/security"
@@ -145,9 +146,9 @@ func TestPrivilegedBatchRoutingEnforcesProjectDigestBoundsAndOwnerDecision(t *te
  image:="ghcr.io/example/build@sha256:"+strings.Repeat("a",64)
  key:=strings.Repeat("b",32)
  job:=strings.Repeat("c",32)
- seen:=0
+ var seen atomic.Int32
  policy,done:=testWorkspacePolicy(t,http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){
-  seen++
+  current:=seen.Add(1)
   var call struct{
    Method string `json:"method"`
    Params struct{Name string `json:"name"`;Arguments map[string]any `json:"arguments"`} `json:"params"`
@@ -158,12 +159,12 @@ func TestPrivilegedBatchRoutingEnforcesProjectDigestBoundsAndOwnerDecision(t *te
   if call.Params.Arguments["host"]!=nil||call.Params.Arguments["project_id"]!="research"{
    t.Fatal("batch request escaped its project boundary")
   }
-  if seen==1&&(call.Params.Name!="submit_compute_job"||
+  if current==1&&(call.Params.Name!="submit_compute_job"||
    call.Params.Arguments["request_id"]!=key||call.Params.Arguments["backend"]!="kueue"||
    call.Params.Arguments["image"]!=image){
    t.Fatal("invalid protected batch job submission",call)
   }
-  if seen==2&&(call.Params.Name!="compute_job_cancel"||call.Params.Arguments["job_id"]!=job){
+  if current==2&&(call.Params.Name!="compute_job_cancel"||call.Params.Arguments["job_id"]!=job){
    t.Fatal("invalid protected batch cancellation",call)
   }
   w.Header().Set("Content-Type","application/json")
@@ -193,7 +194,7 @@ func TestPrivilegedBatchRoutingEnforcesProjectDigestBoundsAndOwnerDecision(t *te
    t.Fatal("unapproved batch request reached controller",m)
   }
  }
- if seen!=0{t.Fatal("invalid batch requests reached controller")}
+ if seen.Load()!=0{t.Fatal("invalid batch requests reached controller")}
  auth:=&fakeAuth{decision:security.Authorization{Reason:"owner confirmation required"}}
  exec,err:=New(Config{Audit:testExecutorAudit(t),Host:"saturn",
   Systemctl:"/usr/bin/systemctl",Auth:auth,Releases:&fakeRelease{},Workspace:policy,
@@ -201,18 +202,18 @@ func TestPrivilegedBatchRoutingEnforcesProjectDigestBoundsAndOwnerDecision(t *te
  if err!=nil{t.Fatal(err)}
  raw,err:=json.Marshal(valid);if err!=nil{t.Fatal(err)}
  decision,err:=exec.ExecuteWithID(context.Background(),key,"compute__submit_batch_job","saturn",raw)
- if err!=nil||decision.Allowed||seen!=0||auth.calls!=1{
+ if err!=nil||decision.Allowed||seen.Load()!=0||auth.calls!=1{
   t.Fatal("unconfirmed batch reached controller",decision,err)
  }
  auth.decision=security.Authorization{Allowed:true}
  decision,err=exec.ExecuteWithID(context.Background(),key,"compute__submit_batch_job","saturn",raw)
- if err!=nil||!decision.Allowed||seen!=1||auth.calls!=2{
+ if err!=nil||!decision.Allowed||seen.Load()!=1||auth.calls!=2{
   t.Fatal("approved batch not submitted through project policy",decision,err)
  }
  cancel:=map[string]any{"host":"saturn","project_id":"research","job_id":job}
  raw,err=json.Marshal(cancel);if err!=nil{t.Fatal(err)}
  decision,err=exec.ExecuteWithID(context.Background(),job,"compute__cancel_batch_job","saturn",raw)
- if err!=nil||!decision.Allowed||seen!=2{
+ if err!=nil||!decision.Allowed||seen.Load()!=2{
   t.Fatal("approved batch cancellation not delegated",decision,err)
  }
 }
