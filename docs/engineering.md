@@ -11,10 +11,17 @@ forwards only `/mcp`, `/api/whoami` and exact project-role lookups. Nginx
 verifies the controller's certificate against the local pinned CA; the listener
 is not published through Cloudflare or another network interface.
 
-Engineering loads a dedicated Compute editor identity from
+Engineering loads a dedicated Compute editor identity either from
 `/srv/homelab/secrets/engineering-compute-editor.token` using systemd
-`LoadCredential`. Do not use the controller's administrator token or owner
-session for unattended engineering. The startup probe rejects missing credentials,
+`LoadCredential`, or by exchanging a separate machine-client credential
+with an operator-configured OAuth 2.0 provider. The machine-client secret is
+also provided with systemd `LoadCredential`; the issued short-lived JWT is
+kept in process memory and refreshed before its expiry. The provider must
+issue an RS256-signed access token with the exact Compute OIDC issuer,
+audience, and subject configured in the controller. An administrator must
+first grant that `oidc:issuer#subject` identity the Compute editor role.
+Do not use the controller's administrator token or owner session for
+unattended engineering. The startup probe rejects missing credentials,
 administrator identities and invalid roles. `grantScopedProjects = true`
 causes every incoming project operation, status request and continuation to
 consult the controller's *current* editor grant. An unavailable identity
@@ -118,7 +125,7 @@ Every engineering run records an immutable `inputs` manifest with the complete r
 
 ## Configuration
 
-The NixOS service is `services.homelabEngineering`. Its module is exported from the root flake. It is disabled by default and needs an exact compute MCP endpoint, a service-scoped compute token file, and a finite list of permitted project IDs. Source-model integration is optional; without it, runs must contain complete owner-supplied `changes`.
+The NixOS service is `services.homelabEngineering`. Its module is exported from the root flake. It is disabled by default and needs an exact compute MCP endpoint, one service-scoped credential source (a protected bearer-token file or an HTTPS OAuth machine-client credential), and either a finite list of permitted project IDs or `grantScopedProjects = true`. OAuth mode configures `oidc.tokenURL`, `oidc.clientID`, `oidc.clientSecretFile`, and optionally `oidc.scope` and `oidc.resource`. The Compute controller must independently configure `PWM_OIDC_ISSUER`, `PWM_OIDC_AUDIENCE`, and `PWM_OIDC_JWKS_URL`; a successful machine-token exchange without a current project editor grant is insufficient. Source-model integration is optional; without it, runs must contain complete owner-supplied `changes`.
 
 The model client accepts a configured `/v1/chat/completions` endpoint over HTTPS or loopback HTTP. An optional bearer credential is loaded by the independent daemon from a protected file. The model adapter is deliberately separate from the gateway's authorization and the privileged executor.
 
