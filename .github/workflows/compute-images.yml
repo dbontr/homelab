@@ -3,7 +3,7 @@ name: Publish Compute OCI images
 on:
   push:
     branches:
-      - feature/rust-native-execution-boundaries
+      - main
     paths:
       - ".github/workflows/compute-images.yml"
       - "services/compute/go.mod"
