@@ -258,7 +258,7 @@ in
       }
     ];
     users.groups.homelab-executor-client = {};
-    environment.systemPackages = [ cfg.package (pkgs.writeShellScriptBin "homelab-releasectl" ''
+    environment.systemPackages = [ cfg.package releaseRunner (pkgs.writeShellScriptBin "homelab-releasectl" ''
       export HOMELAB_RELEASE_HOST=${lib.escapeShellArg config.networking.hostName}
       export HOMELAB_RELEASE_SOURCE=${lib.escapeShellArg cfg.sourceDirectory}
       export HOMELAB_RELEASE_STATE=${lib.escapeShellArg cfg.stateDirectory}
