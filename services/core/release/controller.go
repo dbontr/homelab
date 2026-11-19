@@ -223,8 +223,17 @@ func(c *Controller) loadStage(id string)(Manifest,error){
 func(c *Controller)VerifyStaged(id string)error{
  if !idPattern.MatchString(id){return errors.New("invalid release ID")}
  return c.locked(func()error{
-  _,err:=c.loadStage(id)
-  return err
+  stage,err:=c.loadStage(id)
+  if err!=nil{return err}
+  var ready Manifest
+  if err:=c.read("stage-ready-"+id+".json",&ready);err!=nil{
+   return fmt.Errorf("stage authority receipt unavailable: %w",err)
+  }
+  if ready.ID!=stage.ID||ready.Host!=stage.Host||ready.Revision!=stage.Revision||
+   ready.System!=stage.System||!ready.Created.Equal(stage.Created){
+   return errors.New("stage authority receipt differs from immutable manifest")
+  }
+  return nil
  })
 }
 
