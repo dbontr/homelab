@@ -75,17 +75,8 @@
         homelab-security = import ./packages/security.nix {
           pkgs = nixpkgs.legacyPackages.${defaultSystem};
         };
-        homelab-security-authority = import ./packages/security-authority.nix {
-          pkgs = nixpkgs.legacyPackages.${defaultSystem};
-        };
 
         homelab-executor = import ./packages/executor.nix {
-          pkgs = nixpkgs.legacyPackages.${defaultSystem};
-        };
-        homelab-executor-authority = import ./packages/executor-authority.nix {
-          pkgs = nixpkgs.legacyPackages.${defaultSystem};
-        };
-        homelab-actuator = import ./packages/actuator.nix {
           pkgs = nixpkgs.legacyPackages.${defaultSystem};
         };
         homelab-native-hardware = import ./packages/hardware-native.nix {
