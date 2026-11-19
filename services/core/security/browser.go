@@ -42,6 +42,10 @@ var browserPage=template.Must(template.New("owner").Parse(`<!doctype html><html 
 :root{font-family:system-ui,sans-serif;color-scheme:dark;background:#101218;color:#edf0f4}body{margin:0 auto;max-width:42rem;padding:2rem 1rem}section{background:#1c2029;border:1px solid #373e49;border-radius:.75rem;padding:1.25rem;margin:1rem 0}p{line-height:1.5}label{display:block;margin:.8rem 0 .3rem}input{box-sizing:border-box;width:100%;padding:.7rem;background:#101218;border:1px solid #596171;border-radius:.35rem;color:white}button{background:#e8ecf3;color:#0b1019;border:0;border-radius:.4rem;padding:.7rem 1rem;margin-top:.9rem;font:inherit;cursor:pointer}small{color:#aeb6c4}code{overflow-wrap:anywhere}.error{color:#ffb4ae}.pending{border-top:1px solid #424855;margin-top:1rem;padding-top:1rem}
 </style></head><body><main><h1>Homelab administration</h1><p>Enter your credentials on this trusted page. They are never sent through ChatGPT or an MCP tool.</p>
 {{if .Message}}<p class="error" role="status">{{.Message}}</p>{{end}}
+{{if .RequestID}}<section><h2>Request-scoped administration</h2><p>Reference code: <code>{{.ReferenceCode}}</code></p><p>This code identifies the request. It is not an access token or permission grant.</p>
+{{if and .RequestCompleted .Session.Active}}<p role="status">Owner request approved. Return to your application; each operation remains independently authorized.</p>
+{{else if .Session.Active}}<form method="post" action="/request/{{.RequestID}}/approve"><input type="hidden" name="csrf" value="{{.CSRF}}"><button type="submit">Approve this request</button></form>
+{{else}}<form method="post" action="/request/{{.RequestID}}/login"><input type="hidden" name="csrf" value="{{.CSRF}}"><label for="request-password">Administrative password</label><input id="request-password" name="password" type="password" autocomplete="off" required><label for="request-totp">Authenticator code</label><input id="request-totp" name="totp" inputmode="numeric" pattern="[0-9]{6}" autocomplete="one-time-code" required><button type="submit">Authenticate and approve request</button></form>{{end}}</section>{{end}}
 {{if .Session.Active}}
 <section><h2>Administrative session active</h2><p>Idle expiry: {{.Session.IdleExpiresAt.Format "2006-01-02 15:04:05 MST"}}</p><p>Absolute expiry: {{.Session.AbsoluteExpiresAt.Format "2006-01-02 15:04:05 MST"}}</p>
 <form method="post" action="/close"><input type="hidden" name="csrf" value="{{.CSRF}}"><button type="submit">Close administrative session</button></form></section>
@@ -67,16 +71,34 @@ func(b *BrowserPortal) take(token string)bool{
  expires,ok:=b.csrf[token];delete(b.csrf,token)
  return ok&&time.Now().Before(expires)
 }
-func(b *BrowserPortal) render(w http.ResponseWriter,code int,message,principal string){
+func(b *BrowserPortal) render(w http.ResponseWriter,code int,message,principal string) {
+ b.renderRequest(w,code,message,principal,"")
+}
+
+func(b *BrowserPortal) renderRequest(w http.ResponseWriter,code int,message,principal,requestID string){
+ var completed bool
+ if requestID!="" {
+  var found bool
+  completed,found=b.manager.OwnerRequestStatusFor(principal,requestID)
+  if !found {http.NotFound(w,nil);return}
+ }
  token,err:=b.token()
  if err!=nil{http.Error(w,"authentication temporarily unavailable",http.StatusServiceUnavailable);return}
- data:=struct{Session SessionStatus;Pending []PendingConfirmation;CSRF,Message string}{
-  Session:b.manager.StatusFor(principal),Pending:b.manager.PendingFor(principal),CSRF:token,Message:message,
+ data:=struct{
+  Session SessionStatus
+  Pending []PendingConfirmation
+  CSRF,Message,RequestID,ReferenceCode string
+  RequestCompleted bool
+ }{
+  Session:b.manager.StatusFor(principal),Pending:b.manager.PendingFor(principal),
+  CSRF:token,Message:message,RequestID:requestID,RequestCompleted:completed,
  }
+ if requestID!=""{data.ReferenceCode=requestID[:12]}
  w.Header().Set("Content-Type","text/html; charset=utf-8")
  w.WriteHeader(code)
  if err:=browserPage.Execute(w,data);err!=nil{log.Print("security portal response error")}
 }
+
 func(b *BrowserPortal) ServeHTTP(w http.ResponseWriter,r *http.Request){
  w.Header().Set("Cache-Control","no-store")
  w.Header().Set("Pragma","no-cache")
