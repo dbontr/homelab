@@ -1,7 +1,7 @@
 { config, lib, ... }:
 {
   services.homelabEngineering = {
-    enable = true;
+    enable = false;
     computeURL = "http://127.0.0.1:8106/mcp";
     computeTokenFile = null;
     oidc = {
