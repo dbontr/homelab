@@ -1,0 +1,17 @@
+{
+  "issuer": "https://auth.example.invalid",
+  "email": "operator@example.invalid",
+  "audience": "homelab-access",
+  "principal": "https://auth.example.invalid#owner-1#operator@example.invalid",
+  "jwks": {
+    "keys": [{
+      "kty": "RSA",
+      "kid": "fixture",
+      "alg": "RS256",
+      "use": "sig",
+      "n": "rv0wU3wdU8QHDPpQp5e3uMw-9ouyTHswCuxs11ekbpmIdYCIeGrNJMI4Ij280OgpiF0c9bCR7gwz8Wb8k8Pfd-K37K-3FnbwJjrTtmb3-0PZrn1255yXFKiFFSOkXmesHILc4dTMkME8KU6NTAiil5HSZ0xio_2yTgzAE1yk4gsLgsW5PsXf8wFv4TQavP9HL07bd1dtELedremuTDH8A3jWUGhJDHadI-hf9AE_C6Akudt4xTFF3R6c5kjXSjI0398aNE5AOlKb7jyMBuYjYiT74Tm-d0ELAHk_iOhmpJWBqLYMo_1LfCE_XVxTfnnfZb3Lhqh2ReIzuAFB8QvU9w",
+      "e": "AQAB"
+    }]
+  },
+  "token": "eyJhbGciOiJSUzI1NiIsImtpZCI6ImZpeHR1cmUiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJodHRwczovL2F1dGguZXhhbXBsZS5pbnZhbGlkIiwiZW1haWwiOiJvcGVyYXRvckBleGFtcGxlLmludmFsaWQiLCJzdWIiOiJvd25lci0xIiwiaWF0IjoxNzcwMDAwMDAwLCJuYmYiOjE3NzAwMDAwMDAsImV4cCI6MTc3MDAwMzYwMCwiYXVkIjpbImhvbWVsYWItYWNjZXNzIl19.pyqdKfpab-827wpXR3YnRijkTKmYNLlA_xnQidp6KOsTb7l8V0Jmkhq3f-cEoNQtR5iAn7Dof2MQPST1_YQoVnfw7HTFynPwFq8cffNPdZwuC72rmLkpgx7R2YEUqtDmkxdvyKkB-ET7Q1s1PCUuPquwq2z-bAbcp0n10Cy4vUSnLleD7vtBbizlSCIOQDyAsyP_SA6SbtM4LwdrJ8mLvwLIDjcbSlfnlxh4-Ou2J_OHEGiS0sfN9slb2PVoW6gZ40-fb1T0hZ-O5JF9A0btUhtPZbDj-rosvabpmIny-Rb-MZiqWJ6AGUlumTdM9uDpfL8hvmBLjJgfVezC9Xrt5g"
+}
