@@ -259,9 +259,12 @@ func (t *securityTransition) capture(ctx context.Context,fromSystem,toSystem,tar
  goPreflight:=filepath.Join(goSystem,"sw/bin/homelab-security-preflight")
  rustPreflight:=filepath.Join(rustSystem,"sw/bin/security-preflight")
  migrator:=filepath.Join(goSystem,"sw/bin/homelab-security-migrate")
- for _,name:=range []string{goPreflight,rustPreflight,migrator}{
-  info,err:=os.Stat(name)
-  if err!=nil||!info.Mode().IsRegular()||info.Mode().Perm()&0111==0{return errors.New("immutable authority preflight or Go migrator unavailable")}
+ for _,name:=range []*string{&goPreflight,&rustPreflight,&migrator}{
+  resolved,err:=resolveRegularExecutable(*name)
+  if err!=nil||!strings.HasPrefix(resolved,"/nix/store/"){
+   return errors.New("immutable authority preflight or Go migrator unavailable")
+  }
+  *name=resolved
  }
  nonce:=make([]byte,12)
  if _,err:=rand.Read(nonce);err!=nil{return err}
@@ -338,4 +341,20 @@ func installSecurityReceipt(path string,receipt []byte)error{
  if err!=nil{return err}
  defer d.Close()
  return d.Sync()
+}
+
+
+// NixOS generation sw/bin entries are symlinks into immutable package outputs.
+// The independent migration verifier uses Lstat and intentionally rejects
+// symlinks, so hand it the resolved package executable, not the system profile
+// symlink. Never relax the verifier's non-writable regular-file checks.
+func resolveRegularExecutable(name string)(string,error){
+ resolved,err:=filepath.EvalSymlinks(name)
+ if err!=nil{return "",err}
+ info,err:=os.Lstat(resolved)
+ if err!=nil||!info.Mode().IsRegular()||info.Mode().Perm()&0111==0||
+  info.Mode().Perm()&0022!=0{
+  return "",errors.New("resolved authority binary is not a trusted regular executable")
+ }
+ return resolved,nil
 }
