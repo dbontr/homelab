@@ -5,8 +5,9 @@ on:
     paths:
       - ".github/workflows/go-operational-packages.yml"
       - "services/core/**"
-      - "services/compute/**"
+      - "services/motivation/**"
       - "services/native-hardware/**"
+      - "services/compute/**"
       - "packages/**"
       - "infrastructure/**"
       - "nixosModules/**"
@@ -35,11 +36,12 @@ jobs:
             .#homelab-executor \
             .#homelab-engineering \
             .#homelab-platform \
+            .#homelab-motivation \
             .#homelab-native-hardware
       - name: Verify executable outputs
         run: |
           set -euo pipefail
-          for name in homelab-security homelab-executor homelab-engineering homelab-platform homelab-native-hardware; do
+          for name in homelab-security homelab-executor homelab-engineering homelab-platform homelab-motivation homelab-native-hardware; do
             result="$(nix path-info ".#${name}")"
             test -d "${result}/bin"
             test -n "$(find "${result}/bin" -maxdepth 1 -type f -o -type l | head -1)"

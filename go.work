@@ -6,5 +6,6 @@ use (
   ./services/compute
   ./services/learning
   ./services/health
+  ./services/motivation
   ./services/native-hardware
 )
