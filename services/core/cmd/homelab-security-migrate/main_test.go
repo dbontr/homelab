@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-func newMigrationCLITest(t *testing.T, rejectCompat bool) (string, string, string, string) {
+func newMigrationCLITest(t *testing.T, rejectCompat bool) (string, string, string, []byte) {
 	t.Helper()
 	root := t.TempDir()
 	state := filepath.Join(root, "state")
