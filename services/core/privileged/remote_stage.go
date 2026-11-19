@@ -68,7 +68,8 @@ func(e *Executor)registerReleaseStage(mux *http.ServeMux){
   }
   manifest,err:=stager.Stage(ctx,input.Revision)
   valid:=err==nil&&manifest.Host==input.Host&&manifest.Revision==input.Revision&&releaseJournalID(manifest.ID)
-  outcome:="failed"
+  // A failed build may already have written a stage manifest.
+  outcome:="indeterminate"
   if valid{outcome="succeeded"}
   if err:=e.cfg.Audit.Record(auditID,operation,input.Host,argumentDigest,outcome);err!=nil{
    // The started entry is intentionally retained: completion is unknown.
