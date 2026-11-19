@@ -13,7 +13,6 @@ import (
  "encoding/hex"
  "encoding/json"
  "errors"
- "io"
  "math/big"
  "net/http"
  "net/url"
@@ -139,5 +138,3 @@ func(s *issuer)token(w http.ResponseWriter,r *http.Request){
  })
 }
 
-// Compile-time API proof that the handler uses only standard net/http endpoints.
-var _ = io.EOF
