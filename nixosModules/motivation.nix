@@ -6,7 +6,7 @@ in {
     enable = lib.mkEnableOption "the private owner-directed motivation service";
     package = lib.mkOption {
       type = lib.types.package;
-      description = "Immutable, verified Rust motivation service package with the homelab-motivation executable.";
+      description = "Immutable, verified Go motivation service package with the homelab-motivation executable.";
     };
     listenAddress = lib.mkOption {
       type = lib.types.str;

@@ -4,7 +4,7 @@
 
 Motivation is a private service for cultivating enduring intellectual engagement around authentic, owner-chosen objectives. It emphasizes meaningful outcomes, rigorous inquiry and the voluntary pursuit of difficult work. It does not claim to manufacture passion.
 
-The owner defines a desired identity, an outcome worth pursuing, a next step, and an optional personal goal reference. A model or scheduler cannot silently rewrite these commitments. The Rust service is the sole writer of its own private state.
+The owner defines a desired identity, an outcome worth pursuing, a next step, and an optional personal goal reference. A model or scheduler cannot silently rewrite these commitments. The Go motivation service is the sole writer of its own private state.
 
 ## Interventions
 
@@ -20,17 +20,17 @@ Pausing and profile revisions cancel unresolved prompts without fabricating feed
 
 Intervention feedback records engagement, progress and well-being linked to the exact strategy. Independent check-ins record minutes of intellectual work, voluntary initiation, fascination, well-being, optional evidence reference and whether the record occurred on a scheduled intervention-free day.
 
-The Rust service computes 28-day aggregates. These are owner self-reports, not verified task completion, demonstrated learning or causal proof of a psychological intervention. Holdout days and voluntary initiation are exploratory measures, not a randomized trial. An optional reference to a Learning or research record does not give the motivation service access to that record or authority to modify it.
+The Go service computes 28-day aggregates. These are owner self-reports, not verified task completion, demonstrated learning or causal proof of a psychological intervention. Holdout days and voluntary initiation are exploratory measures, not a randomized trial. An optional reference to a Learning or research record does not give the motivation service access to that record or authority to modify it.
 
 ## Service independence
 
-Source is in services/motivation. The private Rust process owns the profile, scheduler, state lock and all intervention records. The Go core presents eight fixed routes through its existing owner-session and CSRF controls. The Rust/Dioxus view presents those routes. The unified MCP offers status, metrics, requested suggestions and pause without allowing the model to change the aspirational identity or submit purported self-reports.
+Source is in services/motivation. The private Go process owns the profile, scheduler, state lock and all intervention records. Its ten protected HTTP routes are available only on loopback through a service-specific bearer credential. The Go platform separately enforces owner-session and CSRF controls at its user-facing boundary. The React interface consumes the authorized platform routes. The unified MCP offers status, metrics, requested suggestions and pause without allowing the model to change the aspirational identity or submit purported self-reports.
 
-The optional NixOS service module provides process isolation, a private state directory, credential loading and loopback transport. The service is disabled by default. Its package must be an immutable verified Rust build supplied explicitly; Cargo.lock and build verification are required before activation.
+The optional NixOS service module provides process isolation, a private state directory, credential loading and loopback transport. The service is disabled by default. Its package must be an immutable, independently verified Go build supplied explicitly. A source-pinned NixOS generation and a preserved single-writer state lease are required before activation.
 
 ## Verification
 
-Run Rust formatting, unit tests, Clippy, HTTP integration tests, core Go tests, Dioxus WASM build, NixOS evaluation and isolated recovery checks. Validate revoked permissions, request limits, authentication, state continuity, exclusive file ownership, quiet hours and holdouts. Code availability is not production acceptance.
+Run Go formatting, race-enabled unit and HTTP integration tests, core Go acceptance, NixOS evaluation, immutable Go package builds and isolated rollback/state import checks. Validate revoked permissions, request limits, authentication, state continuity, exclusive file ownership, quiet hours and holdouts. Code availability is not production acceptance.
 
 The owner can additionally start a 10–240 minute focus commitment on the profile's current concrete step. The service records start and end times, self-reported completion or deliberate early exit, and an optional reflection. An early exit ordinarily requests a short reason, with an immediate exit option that requires none. Goal revisions supersede active commitments without recording a false failure. Elapsed focus intervals are capped at the declared duration in summary statistics and must not be interpreted as independently verified work.
 

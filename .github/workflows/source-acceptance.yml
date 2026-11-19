@@ -57,6 +57,7 @@ jobs:
           - "services/compute"
           - "services/learning"
           - "services/health"
+          - "services/motivation"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
