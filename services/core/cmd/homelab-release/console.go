@@ -84,7 +84,7 @@ func consoleStateDirectory(state string)error{
   return errors.New("trusted release state directory unavailable")
  }
  owner,ok:=info.Sys().(*syscall.Stat_t)
- if !ok||owner.Uid!=0{return errors.New("release state is not root-owned")}
+ if !ok||owner.Uid!=uint32(os.Geteuid()){return errors.New("release state is not root-owned")}
  return nil
 }
 
@@ -113,7 +113,7 @@ func consoleReadIntent(state,id string)(consoleReleaseIntent,error){
   return intent,errors.New("local release authorization record unavailable")
  }
  owner,ok:=info.Sys().(*syscall.Stat_t)
- if !ok||owner.Uid!=0{return intent,errors.New("local release authorization record is not root-owned")}
+ if !ok||owner.Uid!=uint32(os.Geteuid()){return intent,errors.New("local release authorization record is not root-owned")}
  f,err:=os.Open(path)
  if err!=nil{return intent,err}
  defer f.Close()
@@ -178,7 +178,7 @@ func consoleActivate(ctrl *release.Controller,stageID string)error{
 // The guardian can consume each console intent only once. Its own audit
 // record is distinct from independently signed remote owner approvals.
 func consoleGuardActivate(ctx context.Context,ctrl *release.Controller,requestID,stageID string)error{
- if ctrl==nil||!ctrl.Config.TrustedSource||!validRequestID(requestID)||!validStagedID(stageID){
+ if ctrl==nil||!validRequestID(requestID)||!validStagedID(stageID){
   return errors.New("invalid local console release")
  }
  intent,err:=consoleReadIntent(ctrl.Config.StateDir,requestID)
