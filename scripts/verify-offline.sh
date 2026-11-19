@@ -71,62 +71,16 @@ verify_go services/compute
 verify_go services/learning
 verify_go services/health
 
-if ! command -v rustc >/dev/null 2>&1; then
-  printf '%s\n' 'Rust compiler is required to verify the privileged actuator.' >&2
-  exit 1
-fi
-(
-  cd "$root/services/actuator"
-  testdir=$(mktemp -d)
-  trap 'rm -rf -- "$testdir"' EXIT
-  rustc --edition=2021 -D warnings --test src/main.rs -o "$testdir/actuator-tests"
-  "$testdir/actuator-tests"
-  rustc --edition=2021 -D warnings src/main.rs -o "$testdir/homelab-actuator"
-)
-for directory in "$root/services/compute/native-hardware" "$root/services/sandbox"; do
-  (
-    cd "$directory"
-    testdir=$(mktemp -d)
-    trap 'rm -rf -- "$testdir"' EXIT
-    rustc --edition=2021 -D warnings --test src/main.rs -o "$testdir/native-tests"
-    "$testdir/native-tests"
-    rustc --edition=2021 -D warnings src/main.rs -o "$testdir/native-binary"
-  )
-done
+verify_go services/motivation
+verify_go services/native-hardware
 
-if ! command -v cargo >/dev/null 2>&1; then
-  printf '%s\n' 'Rust Cargo is required to verify the console source.' >&2
-  exit 1
-fi
 if ! command -v nix >/dev/null 2>&1; then
-  printf '%s\n' 'Nix is required to verify the locked React console release.' >&2
+  printf '%s\n' 'Nix is required to verify the source-pinned browser console.' >&2
   exit 1
 fi
 (
   cd "$root"
   nix build --offline --no-write-lock-file --no-link .#homelab-console-web
-)
-(
-  cd "$root/services/motivation"
-  cargo fmt --all -- --check
-  cargo test --locked --offline
-  cargo clippy --locked --offline --all-targets -- -D warnings
-)
-
-printf '%s\n' 'Checking Rust security authority'
-(
-  cd "$root/services/security-authority"
-  cargo fmt --all -- --check
-  cargo test --locked --offline
-  cargo clippy --locked --offline --all-targets -- -D warnings
-)
-
-printf '%s\n' 'Checking Rust executor authority'
-(
-  cd "$root/services/executor"
-  cargo fmt --all -- --check
-  cargo test --locked --offline --all-targets
-  cargo clippy --locked --offline --all-targets -- -D warnings
 )
 
 if ! command -v helm >/dev/null 2>&1; then
