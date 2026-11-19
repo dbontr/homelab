@@ -134,6 +134,29 @@ Compute toolchain environments can be built locally with:
 
 Use `--push` only when an operator has configured an approved registry, narrow package-write credential and verified image digest. Rootless BuildKit Kubernetes jobs are separately opt-in in the compute implementation. Publishing an image does not enroll it into a worker or activate a Kubernetes release.
 
+## Physical-console journal reconciliation
+
+An independently authenticated `seat0` root login can reconcile an
+out-of-band NixOS recovery with the protected release journal:
+
+```sh
+homelab-release-runner console-reconcile EXACT_40_CHARACTER_COMMIT
+```
+
+The command does not activate, revert, or restart a generation. It requires
+matching running and persistent NixOS system profiles, a clean root-owned
+source checkout at the exact commit, an offline build that reproduces the
+installed generation, and successful required health checks. It refuses
+unsettled releases and repeat adoption. The command is unavailable to SSH
+pseudoterminals, the MCP, API clients, and distributed workers.
+
+Reconciliation saves the prior journal in a private adoption record and
+records the observed generation as active without inventing an owner
+approval or activation receipt. An adopted generation has no recorded
+rollback target: it cannot be reverted using the protected release ID.
+Perform any later rollback through a separately qualified native-console
+or owner-approved release procedure.
+
 ## Coordinated host releases
 
 The `release.FleetCoordinator` orders declared host operations by explicit release ID. It activates compute hosts serially and permits at most one control-plane host, in the final position. On failure it requests reversal of previously completed host generations in reverse order. A failed host is marked as needing inspection because its state may be unknown. An incomplete rollback is reported rather than concealed. Each host's independent release service must perform actual authorization, health checks and durable journaling.

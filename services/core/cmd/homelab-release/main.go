@@ -58,7 +58,7 @@ func configured()( *release.Controller,error){
 // modifying the same generation journal while the privileged daemon owns it.
 func acquireReleaseLease(state,operation string)(*statelease.Lease,error){
  switch operation {
- case "status","guard-activate","guard-revert","guard-resume","console-activate","console-guard-activate":return nil,nil
+ case "status","guard-activate","guard-revert","guard-resume","console-activate","console-guard-activate","console-reconcile":return nil,nil
  case "stage","activate","revert","recover":
   return statelease.Acquire(state,"executord")
  default:return nil,errors.New("unknown release operation")
@@ -85,6 +85,14 @@ func run(args []string)error{
  ctx,cancel:=context.WithTimeout(context.Background(),duration)
  defer cancel()
  switch args[0]{
+ case "console-reconcile":
+  if len(args)!=2{return errors.New("console reconciliation requires exact source commit")}
+  if _,_,err:=consoleSession();err!=nil{return err}
+  record,err:=ctrl.ReconcileConsole(ctx,args[1],func()(string,error){
+   return filepath.EvalSymlinks("/run/current-system")
+  })
+  if err!=nil{return err}
+  return json.NewEncoder(os.Stdout).Encode(record)
  case "console-activate":
   if len(args)!=2{return errors.New("console activation requires exact staged release ID")}
   return consoleActivate(ctrl,args[1])
