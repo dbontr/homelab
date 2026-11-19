@@ -69,7 +69,9 @@
 - [Seerr API: Create New Request](https://docs.seerr.dev/api/create-new-request/) — Seerr project. Used for: media request payloads and supported movie/TV media types.
 - [Seerr OpenAPI](https://github.com/seerr-team/seerr/blob/develop/seerr-api.yml) — Seerr project. Used for: authenticated media search, request listing, and API key headers.
 - [RFC 7636: Proof Key for Code Exchange by OAuth Public Clients](https://www.rfc-editor.org/rfc/rfc7636) — IETF. Used for: OAuth authorization-code PKCE and one-time state.
-- [RFC 6749: The OAuth 2.0 Authorization Framework](https://www.rfc-editor.org/rfc/rfc6749) — IETF. Used for: public-client authorization-code flows, protected refresh-token exchanges, and optional refresh-token rotation.
+- [RFC 8707: Resource Indicators for OAuth 2.0](https://www.rfc-editor.org/rfc/rfc8707) — IETF. Used for: binding unattended Engineering credentials to the intended Compute resource.
+- [Authelia OpenID Connect Clients](https://www.authelia.com/configuration/identity-providers/openid-connect/clients/) — Authelia. Used for: configuring short-lived, RSA-signed machine access tokens with the client-credentials flow and private machine-client authentication.
+- [RFC 6749: The OAuth 2.0 Authorization Framework](https://www.rfc-editor.org/rfc/rfc6749) — IETF. Used for: public-client authorization-code flows, protected refresh-token exchanges, machine-to-machine client-credentials tokens, and optional refresh-token rotation.
 - [RFC 2104: HMAC: Keyed-Hashing for Message Authentication](https://www.rfc-editor.org/rfc/rfc2104) — IETF. Used for: operation-bound approval grants.
 - [NIST SP 800-38D: Recommendation for Block Cipher Modes of Operation — Galois/Counter Mode (GCM)](https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication800-38d.pdf) — NIST. Used for: authenticated encryption of locally stored provider credentials.
 - [RFC 6238: TOTP — Time-Based One-Time Password Algorithm](https://www.rfc-editor.org/rfc/rfc6238) — IETF. Used for: thirty-second HMAC-SHA1 one-time codes and authenticator verification in the owner security service.
