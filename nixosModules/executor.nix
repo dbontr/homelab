@@ -12,6 +12,8 @@ let
   deploymentAllowlist = pkgs.writeText "homelab-rust-deployment-policy" ((lib.concatStringsSep "\n" deploymentNames) + "\n");
   authority = config.services.homelabSecurity;
   releaseRunner = pkgs.writeShellScriptBin "homelab-release-runner" ''
+    export HOMELAB_RELEASE_RUNNER_SELF="$0"
+    export HOMELAB_RELEASE_SYSTEMD_RUN=${lib.escapeShellArg ("${pkgs.systemd}/bin/systemd-run")}
     export HOMELAB_RELEASE_HOST=${lib.escapeShellArg config.networking.hostName}
     export HOMELAB_RELEASE_SOURCE=${lib.escapeShellArg cfg.sourceDirectory}
     export HOMELAB_RELEASE_STATE=${lib.escapeShellArg cfg.stateDirectory}
