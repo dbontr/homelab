@@ -67,7 +67,13 @@ func (c *Controller) continueTransition(ctx context.Context, action, id string, 
   // A separate systemd unit owns the remaining switch. This context belongs
   // to that unit and remains alive when the executor service is replaced.
   if action == "activate" {
-   switchErr := c.set(ctx, txn.Target)
+   var switchErr error
+   // A continuation may begin after the target generation was already
+   // selected. Reprepare only when the previous generation is still active.
+   if current==txn.Previous && c.Config.BeforeSwitch!=nil {
+    switchErr=c.Config.BeforeSwitch(ctx,txn.Previous,txn.Target)
+   }
+   if switchErr == nil { switchErr=c.set(ctx,txn.Target) }
    if switchErr == nil { switchErr = c.health(ctx) }
    if switchErr == nil {
     txn.Phase = "active"
