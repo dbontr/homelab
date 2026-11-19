@@ -10,6 +10,7 @@ let
     (namespace: names: map (name: "${namespace}/${name}") names)
     cfg.kubernetes.namespaces);
   deploymentAllowlist = pkgs.writeText "homelab-rust-deployment-policy" ((lib.concatStringsSep "\n" deploymentNames) + "\n");
+  authority = config.services.homelabSecurity;
   releaseRunner = pkgs.writeShellScriptBin "homelab-release-runner" ''
     export HOMELAB_RELEASE_HOST=${lib.escapeShellArg config.networking.hostName}
     export HOMELAB_RELEASE_SOURCE=${lib.escapeShellArg cfg.sourceDirectory}
@@ -21,6 +22,20 @@ let
     export HOMELAB_RELEASE_HEALTH_FILE=${lib.escapeShellArg (pkgs.writeText "homelab-release-runner-health.json" (builtins.toJSON cfg.healthServices))}
     export HOMELAB_RELEASE_HEALTH_SOCKETS_FILE=${lib.escapeShellArg (pkgs.writeText "homelab-release-runner-health-sockets.json" (builtins.toJSON cfg.healthSockets))}
     export HOMELAB_RELEASE_AUDIT_FILE=${lib.escapeShellArg "${cfg.stateDirectory}/executor-actions.jsonl"}
+    ${lib.optionalString (authority.enable && authority.migration.receiptFile != null) ''
+      export HOMELAB_RELEASE_SECURITY_TRANSITION=1
+      export HOMELAB_RELEASE_SECURITY_STATE=/var/lib/homelab-securityd
+      export HOMELAB_RELEASE_SECURITY_SNAPSHOT_PARENT=/var/lib/homelab-security-cutovers
+      export HOMELAB_RELEASE_SECURITY_SECRETS=${lib.escapeShellArg (builtins.dirOf authority.passwordVerifierFile)}
+      export HOMELAB_RELEASE_SECURITY_ACCESS_OWNER=${lib.escapeShellArg authority.access.ownerEmailFile}
+      export HOMELAB_RELEASE_SECURITY_POLICY=${lib.escapeShellArg config.systemd.services.homelab-securityd.environment.HOMELAB_SECURITY_POLICY_FILE}
+      export HOMELAB_RELEASE_SECURITY_ISSUER=${lib.escapeShellArg authority.access.issuer}
+      export HOMELAB_RELEASE_SECURITY_GATEWAY_AUD=${lib.escapeShellArg authority.access.gatewayAudience}
+      export HOMELAB_RELEASE_SECURITY_BROWSER_AUD=${lib.escapeShellArg authority.browser.audience}
+      export HOMELAB_RELEASE_SECURITY_BROWSER_ORIGIN=${lib.escapeShellArg "https://${authority.browser.hostname}"}
+      export HOMELAB_RELEASE_RUNUSER=${lib.escapeShellArg "${pkgs.util-linux}/bin/runuser"}
+      export HOMELAB_RELEASE_ENV=${lib.escapeShellArg "${pkgs.coreutils}/bin/env"}
+    ''}
     exec ${cfg.package}/bin/homelab-release "$@"
   '';
 in
