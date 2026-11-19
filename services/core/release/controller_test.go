@@ -44,6 +44,7 @@ func(f *fakeReleaseRunner) run(_ context.Context,name string,args ...string)(str
  cmd:=name+" "+strings.Join(args," ")
  f.calls=append(f.calls,cmd)
  switch{
+ case strings.Contains(cmd,"rev-parse --verify"):return testRevision+"\n",nil
  case strings.Contains(cmd,"rev-parse HEAD"):return testRevision+"\n",nil
  case strings.Contains(cmd,"status --porcelain"):
   if f.dirty{return " M flake.nix\n",nil}
@@ -105,6 +106,54 @@ func TestReleaseStagesOnlyCleanExactOfflineGeneration(t *testing.T){
  if _,err:=ctrl.loadStage("../evil");err==nil{t.Fatal("path traversal accepted")}
 }
 
+func TestStageVerificationRequiresMatchingAuthorityReceipt(t *testing.T){
+ runner:=&fakeReleaseRunner{}
+ ctrl:=releaseTestController(t,runner)
+ stage,err:=ctrl.Stage(context.Background(),testRevision)
+ if err!=nil{t.Fatal(err)}
+ if err:=ctrl.VerifyStaged(stage.ID);err!=nil{t.Fatalf("valid stage rejected: %v",err)}
+ receipt:="stage-ready-"+stage.ID+".json"
+ if err:=os.Remove(filepath.Join(ctrl.Config.StateDir,receipt));err!=nil{t.Fatal(err)}
+ if err:=ctrl.VerifyStaged(stage.ID);err==nil||!strings.Contains(err.Error(),"authority receipt"){
+  t.Fatalf("stage without authority receipt passed verification: %v",err)
+ }
+ mismatched:=stage
+ mismatched.System=priorSystem
+ if err:=ctrl.atomic(receipt,mismatched);err!=nil{t.Fatal(err)}
+ if err:=ctrl.VerifyStaged(stage.ID);err==nil||!strings.Contains(err.Error(),"differs"){
+  t.Fatalf("mismatched authority receipt passed verification: %v",err)
+ }
+}
+
+func TestAuditedStageRequalificationRequiresExactNixBuild(t *testing.T){
+ runner:=&fakeReleaseRunner{}
+ ctrl:=releaseTestController(t,runner)
+ stage,err:=ctrl.Stage(context.Background(),testRevision)
+ if err!=nil{t.Fatal(err)}
+ if err:=ctrl.verifyImmutableStageBuild(context.Background(),stage);err!=nil{
+  t.Fatalf("immutable signed source rejected: %v",err)
+ }
+ stage.System=priorSystem
+ if err:=ctrl.verifyImmutableStageBuild(context.Background(),stage);err==nil||
+  !strings.Contains(err.Error(),"does not match rebuilt"){
+  t.Fatalf("mismatched staged system accepted: %v",err)
+ }
+}
+
+func TestUntrustedContinuationCannotRequalifyLegacyStage(t *testing.T){
+ runner:=&fakeReleaseRunner{}
+ ctrl:=releaseTestController(t,runner)
+ stage,err:=ctrl.Stage(context.Background(),testRevision)
+ if err!=nil{t.Fatal(err)}
+ if err:=os.Remove(filepath.Join(ctrl.Config.StateDir,"stage-ready-"+stage.ID+".json"));err!=nil{t.Fatal(err)}
+ txn:=Journal{ID:stage.ID,Phase:"activating",Previous:priorSystem,Target:builtSystem,Time:time.Now().UTC()}
+ if err:=ctrl.atomic("journal.json",txn);err!=nil{t.Fatal(err)}
+ if err:=ctrl.ContinueAudited(context.Background(),"activate",stage.ID);err==nil||
+  !strings.Contains(err.Error(),"authority receipt"){
+  t.Fatalf("untrusted staged handoff accepted: %v",err)
+ }
+}
+
 func TestReleaseActivationRecordsAndChecksHealth(t *testing.T){
  runner:=&fakeReleaseRunner{}
  ctrl:=releaseTestController(t,runner)
@@ -128,6 +177,24 @@ func TestReleaseWaitsForDependentServicesBeforeAdmission(t *testing.T){
  if runner.transientHealthFailures!=0{t.Fatal("not all readiness attempts were consumed")}
  journal,err:=ctrl.Status()
  if err!=nil||journal.Phase!="active"{t.Fatalf("startup failed release: %+v %v",journal,err)}
+}
+
+func TestContinuedReleaseWaitsForDependentServices(t *testing.T){
+ runner:=&fakeReleaseRunner{}
+ ctrl:=releaseTestController(t,runner)
+ stage,err:=ctrl.Stage(context.Background(),testRevision)
+ if err!=nil{t.Fatal(err)}
+ txn:=Journal{Phase:"activating",ID:stage.ID,Previous:priorSystem,Target:builtSystem,Time:time.Now().UTC()}
+ if err:=ctrl.atomic("journal.json",txn);err!=nil{t.Fatal(err)}
+ if err:=ctrl.atomic("attempt-"+stage.ID+".json",txn);err!=nil{t.Fatal(err)}
+ runner.transientHealthFailures=2
+ if err:=ctrl.Continue(context.Background(),"activate",stage.ID);err!=nil{
+  t.Fatalf("continued service startup interrupted: %v",err)
+ }
+ status,err:=ctrl.Status()
+ if err!=nil||status.Phase!="active"||runner.transientHealthFailures!=0{
+  t.Fatalf("recovered release was not admitted: %+v, %v",status,err)
+ }
 }
 
 func TestReleaseReadinessDeadlineRejectsUnhealthyService(t *testing.T){

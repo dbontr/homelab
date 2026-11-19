@@ -2,6 +2,7 @@ package main
 
 import (
  "os"
+ "path/filepath"
  "strings"
  "testing"
  "errors"
@@ -112,4 +113,19 @@ func TestSuccessfulAuthorityHandoffDoesNotRestartPreviousService(t *testing.T){
   func()error{called=true;return nil},
  )
  if err!=nil||called{t.Fatalf("successful migration restarted retired authority: %v",err)}
+}
+
+
+func TestResolveNixExecutableSymlinkBeforeIndependentPreflight(t *testing.T){
+ root:=t.TempDir()
+ binary:=filepath.Join(root,"homelab-security-preflight")
+ link:=filepath.Join(root,"generation-preflight")
+ if err:=os.WriteFile(binary,[]byte("#!/bin/sh\nexit 0\n"),0500);err!=nil{t.Fatal(err)}
+ if err:=os.Chmod(binary,0500);err!=nil{t.Fatal(err)}
+ if err:=os.Symlink(binary,link);err!=nil{t.Fatal(err)}
+ resolved,err:=resolveRegularExecutable(link)
+ if err!=nil||resolved!=binary {t.Fatalf("immutable Nix symlink was not resolved: %q %v",resolved,err)}
+ if err:=os.Chmod(binary,0777);err!=nil{t.Fatal(err)}
+ if _,err:=resolveRegularExecutable(link);err==nil{t.Fatal("writable preflight executable accepted")}
+ if _,err:=resolveRegularExecutable(filepath.Join(root,"missing"));err==nil{t.Fatal("missing preflight accepted")}
 }
