@@ -46,6 +46,7 @@ func TestTransitionRequiresExactStaticOperatorEnvironment(t *testing.T){
 func TestProtectedTransitionReceiptRejectsUntrustedCustody(t *testing.T){
  dir:=t.TempDir()
  if err:=os.WriteFile(dir+"/unsafe",[]byte("{}"),0644);err!=nil{t.Fatal(err)}
+ if err:=os.Chmod(dir+"/unsafe",0644);err!=nil{t.Fatal(err)}
  if _,err:=transitionFile(dir+"/unsafe",1024);err==nil{
   t.Fatal("world-readable protected credential admitted")
  }
