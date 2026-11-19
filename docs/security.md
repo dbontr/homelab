@@ -21,10 +21,13 @@ NanoKVM, is a separate host administrator. It has normal root authority to
 repair, build, deploy, restart, and configure NixOS, systemd, Kubernetes,
 storage, and networking even when Homelab Security or MCP is unavailable.
 These physical-console operations do not require a Homelab browser owner
-session. Prefer the audited local-console release runner for a source-pinned
-generation change. When the managed release path fails, native root
-administration remains available for recovery. Record the source revision,
-exact target, operation outcome, and restoration of declarative configuration.
+session. The `homelab-release-runner console-stage` and `console-activate`
+commands operate under a locally verified root login, without an Executor
+owner session or an Executor restart merely to stage. They preserve clean,
+source-pinned builds, a protected journal lock, a one-use activation receipt,
+health verification and auditable outcomes. When the managed release path
+fails, native root administration remains available for recovery. Record the
+source revision, exact target, operation outcome and declarative configuration.
 
 The owner decides when routine development can move entirely to Homelab's
 managed Engineering, Compute, and MCP interfaces. Local root authority never
