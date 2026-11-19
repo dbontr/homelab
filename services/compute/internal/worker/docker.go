@@ -35,7 +35,12 @@ type Runner struct {
 	MaxArtifact        int64
 }
 
-// Compiler and test commands need bounded cold-cache time while staying below\n// the controller\x27s seven-minute initial operation lease. Other file and\n// administrative actions retain their shorter timeouts.\nconst workspaceCommandTimeout = 5 * time.Minute\n\nvar workspaceID = regexp.MustCompile(`^[0-9a-f]{32}$`)
+// Compiler and test commands need bounded cold-cache time while staying below
+// the controller's seven-minute initial operation lease. Other file and
+// administrative actions retain their shorter timeouts.
+const workspaceCommandTimeout = 5 * time.Minute
+
+var workspaceID = regexp.MustCompile(`^[0-9a-f]{32}$`)
 var imageName = regexp.MustCompile(`^(?:[a-z0-9][a-z0-9.-]*(?::[0-9]{2,5})?(?:/[a-z0-9][a-z0-9._-]*){0,3}/)?pwm-env-[a-z][a-z0-9-]+:v[1-9][0-9]*$`)
 
 func NewRunner(devices []Device) *Runner {
