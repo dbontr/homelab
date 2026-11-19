@@ -139,3 +139,80 @@ func TestWorkspaceBridgeAcceptsToolResultWithoutExplicitIsError(t *testing.T) {
         t.Fatalf("valid MCP tool result was rejected: %v", err)
     }
 }
+
+
+func TestPrivilegedBatchRoutingEnforcesProjectDigestBoundsAndOwnerDecision(t *testing.T){
+ image:="ghcr.io/example/build@sha256:"+strings.Repeat("a",64)
+ key:=strings.Repeat("b",32)
+ job:=strings.Repeat("c",32)
+ seen:=0
+ policy,done:=testWorkspacePolicy(t,http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){
+  seen++
+  var call struct{
+   Method string `json:"method"`
+   Params struct{Name string `json:"name"`;Arguments map[string]any `json:"arguments"`} `json:"params"`
+  }
+  if err:=json.NewDecoder(r.Body).Decode(&call);err!=nil||call.Method!="tools/call"{
+   t.Fatal("invalid authenticated batch RPC",err)
+  }
+  if call.Params.Arguments["host"]!=nil||call.Params.Arguments["project_id"]!="research"{
+   t.Fatal("batch request escaped its project boundary")
+  }
+  if seen==1&&(call.Params.Name!="submit_compute_job"||
+   call.Params.Arguments["request_id"]!=key||call.Params.Arguments["backend"]!="kueue"||
+   call.Params.Arguments["image"]!=image){
+   t.Fatal("invalid protected batch job submission",call)
+  }
+  if seen==2&&(call.Params.Name!="compute_job_cancel"||call.Params.Arguments["job_id"]!=job){
+   t.Fatal("invalid protected batch cancellation",call)
+  }
+  w.Header().Set("Content-Type","application/json")
+  _,_=w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"isError":false,"content":[]}}`))
+ }))
+ defer done()
+ policy.ImageReferences=[]string{image}
+ if err:=policy.validate();err!=nil{t.Fatal(err)}
+ valid:=map[string]any{"host":"saturn","project_id":"research","command":"go test ./...",
+  "image":image,"cpu":float64(1),"memory_mb":float64(1024),"job_request_id":key}
+ invalid:=[]map[string]any{}
+ for _,change:=range []func(map[string]any){
+  func(m map[string]any){m["project_id"]="other"},
+  func(m map[string]any){m["image"]="ghcr.io/other/tool@sha256:"+strings.Repeat("a",64)},
+  func(m map[string]any){m["cpu"]=float64(3)},
+  func(m map[string]any){m["memory_mb"]=float64(4097)},
+  func(m map[string]any){m["memory_mb"]=float64(128.5)},
+  func(m map[string]any){m["job_request_id"]=strings.Repeat("F",32)},
+  func(m map[string]any){m["command"]=" "},
+  func(m map[string]any){m["unexpected"]="data"},
+ }{
+  m:=make(map[string]any,len(valid));for k,v:=range valid{m[k]=v}
+  change(m);invalid=append(invalid,m)
+ }
+ for _,m:=range invalid{
+  if err:=policy.Call(context.Background(),"compute__submit_batch_job",m);err==nil{
+   t.Fatal("unapproved batch request reached controller",m)
+  }
+ }
+ if seen!=0{t.Fatal("invalid batch requests reached controller")}
+ auth:=&fakeAuth{decision:security.Authorization{Reason:"owner confirmation required"}}
+ exec,err:=New(Config{Audit:testExecutorAudit(t),Host:"saturn",
+  Systemctl:"/usr/bin/systemctl",Auth:auth,Releases:&fakeRelease{},Workspace:policy,
+  Run:func(context.Context,string,...string)error{t.Fatal("batch escaped to shell");return nil}})
+ if err!=nil{t.Fatal(err)}
+ raw,err:=json.Marshal(valid);if err!=nil{t.Fatal(err)}
+ decision,err:=exec.ExecuteWithID(context.Background(),key,"compute__submit_batch_job","saturn",raw)
+ if err!=nil||decision.Allowed||seen!=0||auth.calls!=1{
+  t.Fatal("unconfirmed batch reached controller",decision,err)
+ }
+ auth.decision=security.Authorization{Allowed:true}
+ decision,err=exec.ExecuteWithID(context.Background(),key,"compute__submit_batch_job","saturn",raw)
+ if err!=nil||!decision.Allowed||seen!=1||auth.calls!=2{
+  t.Fatal("approved batch not submitted through project policy",decision,err)
+ }
+ cancel:=map[string]any{"host":"saturn","project_id":"research","job_id":job}
+ raw,err=json.Marshal(cancel);if err!=nil{t.Fatal(err)}
+ decision,err=exec.ExecuteWithID(context.Background(),job,"compute__cancel_batch_job","saturn",raw)
+ if err!=nil||!decision.Allowed||seen!=2{
+  t.Fatal("approved batch cancellation not delegated",decision,err)
+ }
+}
