@@ -118,7 +118,8 @@ func(b *BrowserPortal) trustedBrowserForm(r *http.Request)bool{
  mediaType,_,err:=mime.ParseMediaType(r.Header.Get("Content-Type"))
  if err!=nil||mediaType!="application/x-www-form-urlencoded"{return false}
  origin,site:=r.Header.Get("Origin"),r.Header.Get("Sec-Fetch-Site")
- if site!=""&&site!="same-origin"{return false}
+ // An exact HTTPS Origin takes precedence. Fetch Metadata may reflect a
+ // cross-site identity-provider redirect; it is a fallback when Origin is absent.
  if origin!=""{return origin==b.origin}
  return site=="same-origin"
 }
