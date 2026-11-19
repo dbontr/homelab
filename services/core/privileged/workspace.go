@@ -123,20 +123,21 @@ func(p *WorkspacePolicy)batchArgs(operation string,fields map[string]any)(string
   key,keyOK:=fields["job_request_id"].(string)
   command,commandOK:=fields["command"].(string)
   image,imageOK:=fields["image"].(string)
-  cpu,cpuOK:=fields["cpu"].(float64)
-  memory,memoryOK:=fields["memory_mb"].(float64)
+  cpuValue,cpuOK:=fields["cpu"].(json.Number)
+  memoryValue,memoryOK:=fields["memory_mb"].(json.Number)
+  cpu,cpuErr:=cpuValue.Float64()
+  memory,memoryErr:=memoryValue.Int64()
   if len(fields)!=7||!keyOK||!ValidExecutionRequestID(key)||
    !commandOK||strings.TrimSpace(command)==""||len(command)>4096||
    strings.ContainsAny(command,"\x00\r")||!imageOK||
    !validWorkspaceImageReference(image)||!containsID(p.ImageReferences,image)||
-   !cpuOK||math.IsNaN(cpu)||math.IsInf(cpu,0)||cpu<0.1||cpu>2||
-   !memoryOK||math.IsNaN(memory)||math.IsInf(memory,0)||
-   memory<64||memory>4096||math.Trunc(memory)!=memory {
+   !cpuOK||cpuErr!=nil||math.IsNaN(cpu)||math.IsInf(cpu,0)||cpu<0.1||cpu>2||
+   !memoryOK||memoryErr!=nil||memory<64||memory>4096 {
    return "",nil,errors.New("batch request outside owner resource policy")
   }
   return "submit_compute_job",map[string]any{
    "project_id":project,"command":command,"image":image,"cpu":cpu,
-   "memory_mb":int(memory),"backend":"kueue","request_id":key,
+   "memory_mb":memory,"backend":"kueue","request_id":key,
   },nil
  case "compute__cancel_batch_job":
   jobID,ok:=fields["job_id"].(string)
