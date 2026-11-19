@@ -71,6 +71,34 @@ func TestKubernetesNamespaceAndWorkloadPolicy(t *testing.T) {
 	}
 }
 
+func TestKubernetesWorkspaceScratchSupportsCompilerCaches(t *testing.T) {
+ k, _ := testKubernetes(t)
+ pod := k.workspacePod(strings.Repeat("a", 32), "ghcr.io/dbontr/homelab/engineering-go@sha256:f33edc74b06fa39246ec30a7b3bf13d48b97d7590424d4ecd7aa6882d5b0558e", 1, 2048, false, 0, 0, nil)
+ volumes := kubeObject(pod, "spec")["volumes"].([]any)
+ found := false
+ for _, item := range volumes {
+  volume := item.(map[string]any)
+  if volume["name"] != "scratch" { continue }
+  found = true
+  empty := volume["emptyDir"].(map[string]any)
+  if empty["sizeLimit"] != "2Gi" {
+   t.Fatalf("cold compiler scratch capacity is unsafe: %v",empty)
+  }
+ }
+ if !found { t.Fatal("isolated compiler scratch volume missing") }
+ containers := kubeObject(pod, "spec")["containers"].([]any)
+ mounts := containers[0].(map[string]any)["volumeMounts"].([]any)
+ hasTmp := false
+ for _, item := range mounts {
+  mount := item.(map[string]any)
+  if mount["name"] == "scratch" && mount["mountPath"] == "/tmp" { hasTmp = true }
+ }
+ if !hasTmp { t.Fatal("compiler temporary directory is outside bounded scratch") }
+ if kubeObject(pod, "spec")["automountServiceAccountToken"] != false {
+  t.Fatal("compiler workspace inherited Kubernetes credentials")
+ }
+}
+
 func TestKubernetesWorkspaceLifecycleUsesAPI(t *testing.T) {
 	k, trace := testKubernetes(t)
 	r := NewRunner(nil)
