@@ -390,7 +390,7 @@ func (k *Kubernetes) addGPURuntimeClass(spec map[string]any, resources map[strin
 	}
 }
 
-func (k *Kubernetes) workspacePod(id, image string, cpu float64, memory int, display bool, width, height int, devices map[string]string) map[string]any {
+// Go/Lean/C/C++ compilers populate /tmp with substantial build caches.\n// Bound scratch separately from persistent workspace storage so cold builds\n// are not evicted at the previous 64-MiB limit.\nconst workspaceScratchSizeLimit = "2Gi"\n\nfunc (k *Kubernetes) workspacePod(id, image string, cpu float64, memory int, display bool, width, height int, devices map[string]string) map[string]any {
 	command := "exec sleep 2147483647"
 	env := []map[string]string{{"name": "HOME", "value": "/workspace"}}
 	if display {
@@ -420,7 +420,7 @@ func (k *Kubernetes) workspacePod(id, image string, cpu float64, memory int, dis
 			}},
 			"volumes": []any{
 				map[string]any{"name": "workspace", "persistentVolumeClaim": map[string]any{"claimName": kubeClaimName(id)}},
-				map[string]any{"name": "scratch", "emptyDir": map[string]any{"sizeLimit": "64Mi"}},
+				map[string]any{"name": "scratch", "emptyDir": map[string]any{"sizeLimit": workspaceScratchSizeLimit}},
 			},
 		},
 	}
