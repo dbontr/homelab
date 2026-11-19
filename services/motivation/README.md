@@ -1,6 +1,6 @@
 # Motivation service
 
-This independent Rust service owns the aspirational profile, situation-specific intervention selection, a private scheduled inbox and longitudinal engagement observations. It is not an MCP listener, external API gateway or device administrator.
+This independent Go service owns the aspirational profile, situation-specific intervention selection, a private scheduled inbox and longitudinal engagement observations. It is not an MCP listener, external API gateway or device administrator.
 
 ## Configuration
 
@@ -35,4 +35,4 @@ The Go core is a narrow credential-holding transport client, configured with HOM
 
 ## Build and acceptance
 
-Generate a Cargo.lock with the approved toolchain. Verify formatting with cargo fmt --all --check, tests with cargo test --locked, and Clippy with cargo clippy --locked --all-targets -- -D warnings. Verify the Go bridge and Dioxus browser bundle. The NixOS module requires a separately provided immutable package and enables no service by default. Test restart, recovery, credentials, rate limits and state continuity before any authorized deployment.
+Verify the Go service with Go 1.27.3 using `GOWORK=off go test ./...` and `go vet ./...`. Verify the Go bridge and the source-pinned React browser bundle. The NixOS module requires a separately provided immutable package and enables no service by default. Test restart, recovery, credentials, rate limits and state continuity before any authorized deployment.
