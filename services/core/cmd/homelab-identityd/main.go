@@ -16,6 +16,7 @@ import (
  "time"
 
  "github.com/dbontr/homelab-new/system/machineidentity"
+ "github.com/dbontr/homelab-new/system/security"
 )
 
 func credential(path string,limit int64)([]byte,error){
@@ -24,10 +25,13 @@ func credential(path string,limit int64)([]byte,error){
  if err!=nil{return nil,errors.New("protected credential unavailable")}
  defer f.Close()
  stat,err:=f.Stat()
- if err!=nil||!stat.Mode().IsRegular()||stat.Mode().Perm()&0077!=0||
-  stat.Size()<32||stat.Size()>limit{return nil,errors.New("unsafe credential file")}
- if inode,ok:=stat.Sys().(*syscall.Stat_t);!ok||inode.Nlink!=1{
-  return nil,errors.New("credential file must have a single link")
+ if err!=nil||!stat.Mode().IsRegular()||stat.Size()<32||stat.Size()>limit{
+  return nil,errors.New("unsafe credential file")
+ }
+ inode,ok:=stat.Sys().(*syscall.Stat_t)
+ if !ok||inode.Nlink!=1{return nil,errors.New("credential file must have a single link")}
+ if !security.PrivateCredentialFileAllowed(path,stat.Mode(),inode.Uid){
+  return nil,errors.New("unsafe credential file")
  }
  return io.ReadAll(io.LimitReader(f,limit+1))
 }
