@@ -59,6 +59,7 @@ jobs:
           - "services/health"
           - "services/motivation"
           - "services/native-hardware"
+          - "services/sandbox"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
