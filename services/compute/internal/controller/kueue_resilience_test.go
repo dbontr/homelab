@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+ "encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -351,6 +352,12 @@ func TestBatchJobCanonicalWholeCoreQuantity(t *testing.T){
   "command":"printf canonical","cpu":1.0,"memory_mb":256,
  }
  job:=batchKubernetesJob(row)
+ // The API response decodes Go slices as JSON arrays.
+ raw,err:=json.Marshal(job)
+ if err!=nil{t.Fatal(err)}
+ var decoded map[string]any
+ if err:=json.Unmarshal(raw,&decoded);err!=nil{t.Fatal(err)}
+ job=decoded
  decodeAnyObject(job["metadata"])["uid"]="canonical-uid"
  pod:=decodeAnyObject(decodeAnyObject(decodeAnyObject(job["spec"])["template"])["spec"])
  containers:=pod["containers"].([]any)
