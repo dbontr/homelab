@@ -45,6 +45,12 @@ func configured()( *release.Controller,error){
    return path,nil
   },
  }
+ transition,err:=securityTransitionFromEnv()
+ if err!=nil{return nil,err}
+ if transition!=nil{
+  cfg.BeforeSwitch=transition.beforeSwitch
+  cfg.BeforeRollback=transition.beforeRollback
+ }
  return release.New(cfg)
 }
 
