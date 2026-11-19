@@ -47,6 +47,9 @@
         homelab-console-web = import ./packages/console-web.nix {
           pkgs = nixpkgs.legacyPackages.${defaultSystem};
         };
+        homelab-identity = import ./packages/identity.nix {
+          pkgs = nixpkgs.legacyPackages.${defaultSystem};
+        };
         homelab-engineering = import ./packages/engineering.nix {
           pkgs = nixpkgs.legacyPackages.${defaultSystem};
         };
