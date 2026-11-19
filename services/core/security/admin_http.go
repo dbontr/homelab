@@ -154,6 +154,18 @@ func (a *AdminSessions) ClientHandler() http.Handler {
   principal,ok:=authenticated(w,r);if !ok{return}
   respondJSON(w,200,a.StatusFor(principal))
  })
+ mux.HandleFunc("POST /v1/login-requests",func(w http.ResponseWriter,r *http.Request){
+  principal,ok:=authenticated(w,r);if !ok{return}
+  var input map[string]any
+  if err:=readJSON(r,&input);err!=nil||len(input)!=0{
+   http.Error(w,"invalid owner request",http.StatusBadRequest)
+   return
+  }
+  request,err:=a.OpenOwnerRequestFor(principal)
+  if err!=nil{http.Error(w,"owner request unavailable",http.StatusServiceUnavailable);return}
+  log.Print("security audit owner_request issued")
+  respondJSON(w,http.StatusOK,request)
+ })
  mux.HandleFunc("DELETE /v1/session",func(w http.ResponseWriter,r *http.Request){
   principal,ok:=authenticated(w,r);if !ok{return}
   if !a.RevokeFor(principal){http.Error(w,"owner session unavailable",http.StatusForbidden);return}
