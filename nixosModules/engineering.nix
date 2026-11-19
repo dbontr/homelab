@@ -20,6 +20,13 @@ in {
       default = null;
       description = "Private compute-service credential available only to the engineering daemon.";
     };
+    oidc = {
+      tokenURL = lib.mkOption { type = lib.types.str; default = ""; description = "Exact HTTPS OAuth 2.0 client-credentials token endpoint for the restricted Engineering principal."; };
+      clientID = lib.mkOption { type = lib.types.str; default = ""; description = "Machine client identifier without embedded secret material."; };
+      clientSecretFile = lib.mkOption { type = lib.types.nullOr lib.types.str; default = null; description = "Protected OAuth machine client secret provided as a systemd credential."; };
+      scope = lib.mkOption { type = lib.types.str; default = ""; description = "Provider-defined scope requested for the non-admin Compute editor principal."; };
+      resource = lib.mkOption { type = lib.types.str; default = ""; description = "Optional OAuth resource indicator bound to the Compute controller."; };
+    };
     computeVaultAlias = lib.mkOption { type = lib.types.str; default = ""; description = "Vault alias for the non-administrator compute editor token."; };
     vault = {
       endpoint = lib.mkOption { type = lib.types.nullOr lib.types.str; default = null; description = "Private mTLS credential authority origin."; };
@@ -72,8 +79,16 @@ in {
       }
       {
         assertion = cfg.computeURL != "" &&
-          ((cfg.computeTokenFile != null) != (cfg.computeVaultAlias != ""));
+          ((cfg.computeTokenFile != null) != (cfg.oidc.tokenURL != ""));
         message = "Engineering requires exactly one protected compute editor credential source.";
+      }
+      {
+        assertion =
+          (cfg.oidc.tokenURL == "" && cfg.oidc.clientID == "" &&
+           cfg.oidc.clientSecretFile == null && cfg.oidc.scope == "" && cfg.oidc.resource == "") ||
+          (cfg.oidc.tokenURL != "" && cfg.oidc.clientID != "" &&
+           cfg.oidc.clientSecretFile != null);
+        message = "OAuth Engineering requires an exact machine client ID, protected secret file and token endpoint.";
       }
       {
         assertion =
@@ -124,6 +139,13 @@ in {
         HOMELAB_COMPUTE_URL = cfg.computeURL;
       } // lib.optionalAttrs (cfg.computeTokenFile != null) {
         HOMELAB_COMPUTE_TOKEN_FILE = "/run/credentials/homelab-engineeringd.service/compute-token";
+      } // lib.optionalAttrs (cfg.oidc.tokenURL != "") {
+        HOMELAB_ENGINEERING_OIDC_TOKEN_URL = cfg.oidc.tokenURL;
+        HOMELAB_ENGINEERING_OIDC_CLIENT_ID = cfg.oidc.clientID;
+        HOMELAB_ENGINEERING_OIDC_SECRET_FILE =
+          "/run/credentials/homelab-engineeringd.service/compute-oidc-secret";
+        HOMELAB_ENGINEERING_OIDC_SCOPE = cfg.oidc.scope;
+        HOMELAB_ENGINEERING_OIDC_RESOURCE = cfg.oidc.resource;
       } // lib.optionalAttrs (cfg.computeVaultAlias != "") {
         HOMELAB_ENGINEERING_COMPUTE_VAULT_ALIAS = cfg.computeVaultAlias;
       } // lib.optionalAttrs (cfg.vault.endpoint != null) {
@@ -150,6 +172,7 @@ in {
         RuntimeDirectory = "homelab-engineeringd";
         RuntimeDirectoryMode = "0750";
         LoadCredential = lib.optional (cfg.computeTokenFile != null) "compute-token:${cfg.computeTokenFile}"
+          ++ lib.optional (cfg.oidc.clientSecretFile != null) "compute-oidc-secret:${cfg.oidc.clientSecretFile}"
           ++ lib.optional (cfg.model.tokenFile != null) "model-token:${cfg.model.tokenFile}"
           ++ lib.optionals (cfg.vault.endpoint != null) [
             "vault-ca:${cfg.vault.caFile}"
