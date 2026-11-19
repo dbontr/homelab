@@ -82,12 +82,17 @@ func run(args []string)error{
   if len(args)!=2{return errors.New("stage requires an exact source commit")}
   manifest,err:=ctrl.Stage(ctx,args[1]);if err!=nil{return err}
   return json.NewEncoder(os.Stdout).Encode(manifest)
- case "activate":
-  if len(args)!=2{return errors.New("activate requires an exact staged release ID")}
-  if err:=ctrl.Activate(ctx,args[1]);err!=nil{return err}
-  return json.NewEncoder(os.Stdout).Encode(map[string]string{"status":"active","release":args[1]})
- case "revert":
-  if len(args)!=2{return errors.New("revert requires the active staged release ID")}
+ case "activate","revert":
+  // Trusted production releases use an independently signed, one-use owner
+  // authorization. A root shell alone never qualifies a generation switch.
+  if ctrl.Config.TrustedSource {
+   return errors.New("protected releases require the audited detached guardian")
+  }
+  if len(args)!=2{return errors.New("release operation requires an exact staged release ID")}
+  if args[0]=="activate" {
+   if err:=ctrl.Activate(ctx,args[1]);err!=nil{return err}
+   return json.NewEncoder(os.Stdout).Encode(map[string]string{"status":"active","release":args[1]})
+  }
   return ctrl.Revert(ctx,args[1])
  case "guard-activate","guard-revert":
   if len(args)!=3{return errors.New("protected release runner requires a request ID and staged release ID")}
