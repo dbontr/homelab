@@ -35,7 +35,7 @@ type Runner struct {
 	MaxArtifact        int64
 }
 
-var workspaceID = regexp.MustCompile(`^[0-9a-f]{32}$`)
+// Compiler and test commands need bounded cold-cache time while staying below\n// the controller\x27s seven-minute initial operation lease. Other file and\n// administrative actions retain their shorter timeouts.\nconst workspaceCommandTimeout = 5 * time.Minute\n\nvar workspaceID = regexp.MustCompile(`^[0-9a-f]{32}$`)
 var imageName = regexp.MustCompile(`^(?:[a-z0-9][a-z0-9.-]*(?::[0-9]{2,5})?(?:/[a-z0-9][a-z0-9._-]*){0,3}/)?pwm-env-[a-z][a-z0-9-]+:v[1-9][0-9]*$`)
 
 func NewRunner(devices []Device) *Runner {
@@ -347,7 +347,7 @@ func (r *Runner) Command(ctx context.Context, id, command string, stdin io.Reade
 	if stdin != nil {
 		args = []string{"exec", "-i", n, "sh", "-c", command}
 	}
-	out, errout, status, err := r.docker(ctx, 120*time.Second, stdin, args...)
+	out, errout, status, err := r.docker(ctx, workspaceCommandTimeout, stdin, args...)
 	if err != nil {
 		return nil, err
 	}
