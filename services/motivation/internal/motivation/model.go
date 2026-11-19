@@ -2,7 +2,6 @@ package motivation
 
 import (
 	"errors"
-	"math"
 	"strings"
 	"unicode"
 )
@@ -264,11 +263,11 @@ func hasControls(s string)bool {
 	return false
 }
 func nextRevision(n uint64)(uint64,error){
-	if n==math.MaxUint64{return 0,InvalidError("profile revision exhausted")}
+	if n==^uint64(0){return 0,InvalidError("profile revision exhausted")}
 	return n+1,nil
 }
 func nextIdentity(n uint64)(uint64,error){
-	if n==math.MaxUint64{return 0,InvalidError("identity exhausted")}
+	if n==^uint64(0){return 0,InvalidError("identity exhausted")}
 	return n+1,nil
 }
 var errNoState=errors.New("motivation state not found")
