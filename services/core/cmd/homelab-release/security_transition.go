@@ -133,7 +133,7 @@ func (t *securityTransition) prepare(ctx context.Context,fromSystem,toSystem str
  return transitionCaptureWithRecovery(
   func()error{return t.stopCurrentAuthority(ctx)},
   func()error{return t.capture(ctx,fromSystem,toSystem,targetImpl,receiptPath)},
-  func()error{return t.restartSourceAuthority(ctx,fromSystem)},
+  func()error{return t.restartSourceAuthority(context.Background(),fromSystem)},
  )
 }
 
