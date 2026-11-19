@@ -1,5 +1,5 @@
 { pkgs }:
-pkgs.buildGoModule {
+pkgs.buildGo127Module {
   pname = "homelab-compute-console";
   version = "0.1.0";
   src = ../services/compute;
