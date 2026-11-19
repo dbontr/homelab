@@ -320,3 +320,31 @@ Compute credentials must be project-scoped, and GitHub permissions must not be b
 The local workflow store admits at most 1,000 run records. This prevents unbounded linear scans and response growth while the service has no archival workflow. Before this ceiling is reached, implement explicit owner-authorized terminal-run archival with revision checks and auditable retention policy. Do not delete active or uncertain runs automatically.
 
 The isolated Go package and engineering daemon can be built and tested without a live fleet. Running the test suite with race detection validates local state and simulated backend contracts, not the compatibility of the installed controller, Kubernetes workers, GitHub credentials, or console. Runtime acceptance must establish those separately.
+
+## Machine identity
+
+Engineering authenticates to Compute as the non-administrator principal
+`oidc:https://identity.dbontr.me#homelab-engineering`. Its independent Go
+identity service accepts OAuth2 `client_credentials` for one configured
+client. Access tokens are RS256 JWTs valid for five minutes, scoped to the
+`homelab-compute` audience. Only the public verification key is served at
+`https://identity.dbontr.me/.well-known/jwks.json`. The token endpoint is
+`https://identity.dbontr.me/oauth2/token`. Neither endpoint authenticates
+owner or administrator sessions.
+
+Saturn must have two independently protected credential files before
+activation: a 3072-bit RSA private key at
+`/srv/homelab/secrets/security/engineering-machine-signing.pem` and a
+64-character hexadecimal client secret without a trailing newline at
+`/srv/homelab/secrets/engineering-oidc-client-secret`. Both files must
+be regular, mode 0600 and root-owned. The NixOS services obtain their
+private copies through systemd `LoadCredential`, without putting key
+material into unit environment variables or Git history.
+
+The Compute owner must independently grant only this OIDC principal the
+`editor` role for `homelab-platform`. All other projects remain denied.
+Activation requires a signed protected release, successful JWT and JWKS
+validation, verification that Engineering is not a controller
+administrator, and an end-to-end project compile/test with inspectable
+artifact provenance. Revoking the client secret denies new tokens;
+issued tokens expire after at most five minutes.

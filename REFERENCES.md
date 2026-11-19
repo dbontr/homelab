@@ -73,12 +73,12 @@
 - [RFC 7636: Proof Key for Code Exchange by OAuth Public Clients](https://www.rfc-editor.org/rfc/rfc7636) — IETF. Used for: OAuth authorization-code PKCE and one-time state.
 - [RFC 8707: Resource Indicators for OAuth 2.0](https://www.rfc-editor.org/rfc/rfc8707) — IETF. Used for: binding unattended Engineering credentials to the intended Compute resource.
 - [Authelia OpenID Connect Clients](https://www.authelia.com/configuration/identity-providers/openid-connect/clients/) — Authelia. Used for: configuring short-lived, RSA-signed machine access tokens with the client-credentials flow and private machine-client authentication.
-- [RFC 6749: The OAuth 2.0 Authorization Framework](https://www.rfc-editor.org/rfc/rfc6749) — IETF. Used for: public-client authorization-code flows, protected refresh-token exchanges, machine-to-machine client-credentials tokens, and optional refresh-token rotation.
+- [RFC 6749: The OAuth 2.0 Authorization Framework](https://www.rfc-editor.org/rfc/rfc6749) — IETF. Used for: public-client authorization-code flows, protected refresh-token exchanges, machine-to-machine client-credentials tokens with HTTP Basic client authentication, and optional refresh-token rotation.
 - [RFC 2104: HMAC: Keyed-Hashing for Message Authentication](https://www.rfc-editor.org/rfc/rfc2104) — IETF. Used for: operation-bound approval grants.
 - [NIST SP 800-38D: Recommendation for Block Cipher Modes of Operation — Galois/Counter Mode (GCM)](https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication800-38d.pdf) — NIST. Used for: authenticated encryption of locally stored provider credentials.
 - [RFC 6238: TOTP — Time-Based One-Time Password Algorithm](https://www.rfc-editor.org/rfc/rfc6238) — IETF. Used for: thirty-second HMAC-SHA1 one-time codes and authenticator verification in the owner security service.
 - [RFC 4226: HOTP — An HMAC-Based One-Time Password Algorithm](https://www.rfc-editor.org/rfc/rfc4226) — IETF. Used for: dynamic truncation and six-digit authenticator codes.
-- [systemd.exec manual](https://www.freedesktop.org/software/systemd/man/latest/systemd.exec.html) — systemd project. Used for: independent service users, credentials loading, protected state and runtime directories, and service sandboxing.
+- [systemd.exec manual](https://www.freedesktop.org/software/systemd/man/latest/systemd.exec.html) — systemd project. Used for: independent service users, private RSA signing and client-secret LoadCredential custody, protected state and runtime directories, and service sandboxing.
 - [systemd-run transient units](https://www.freedesktop.org/software/systemd/man/latest/systemd-run.html) — systemd project. Used for: independently supervised, time-bounded release tasks that continue after replacement of the invoking executor service.
 - [systemd-ask-password manual](https://www.freedesktop.org/software/systemd/man/latest/systemd-ask-password.html) — systemd project. Used for: local interactive owner-secret entry without command-line arguments.
 - [RFC 8018: PKCS #5 Password-Based Cryptography Specification, Version 2.1](https://www.rfc-editor.org/rfc/rfc8018) — IETF. Used for: PBKDF2-HMAC-SHA256 owner passphrase verification.
@@ -100,9 +100,8 @@
 - [OpenAI Plugins UI Reference](https://developers.openai.com/plugins/reference) — OpenAI. Used for: opening a vetted owner authentication URL from a ChatGPT component without exposing credentials through tool inputs.
 - [MCP Elicitation — URL Mode](https://modelcontextprotocol.io/specification/2025-11-25/client/elicitation) — MCP project. Used for: treating password and second-factor entry as a trusted out-of-band browser interaction rather than client-side form elicitation.
 - [Cloudflare Tunnel Origin Access Settings](https://developers.cloudflare.com/tunnel/reference/origin-parameters/) — Cloudflare. Used for: validating the dedicated Cloudflare Access JWT audience before proxying owner authentication traffic.
-- [RFC 7519: JSON Web Token](https://www.rfc-editor.org/rfc/rfc7519) — IETF. Used for: signed owner identity claims, audience, issuer and expiration validation.
+- [RFC 7519: JSON Web Token](https://www.rfc-editor.org/rfc/rfc7519) — IETF. Used for: signed owner and short-lived machine identity claims, including audience, issuer, subject and expiration validation.
 - [RFC 7518: JSON Web Algorithms](https://www.rfc-editor.org/rfc/rfc7518) — IETF. Used for: RS256 verification with pinned RSA signing keys.
-- [RFC 7517: JSON Web Key](https://www.rfc-editor.org/rfc/rfc7517) — IETF. Used for: locally provisioned Cloudflare Access JWKS key validation.
 - [Cloudflare Access application tokens](https://developers.cloudflare.com/cloudflare-one/identity/authorization-cookie/validating-json/) — Cloudflare. Used for: application-audience JWT verification at the independent security boundary.
 - [Cloudflare Access session management](https://developers.cloudflare.com/cloudflare-one/access-controls/access-settings/session-management/) — Cloudflare. Used for: ending a user's browser Access session through the application-domain logout endpoint.
 - [MDN Referrer-Policy](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Referrer-Policy) — MDN Web Docs. Used for: same-origin owner form submissions and preventing cross-origin referrer disclosure.
@@ -211,3 +210,5 @@
 - [GitHub Packages](https://docs.github.com/en/packages) — GitHub Docs. Used for: scoped artifact publication and OCI package lifecycle in the Development skill.
 - [GitHub Actions](https://docs.github.com/en/actions) — GitHub Docs. Used for: workflow parity, runner usage and quota-aware local acceptance.
 - [GitHub Wikis](https://docs.github.com/en/communities/documenting-your-project-with-wikis) — GitHub Docs. Used for: separation of maintained wiki guidance from versioned release policy.
+
+- [RFC 8017: PKCS #1](https://www.rfc-editor.org/rfc/rfc8017) — IETF. Used for: RSASSA-PKCS1-v1_5 RSA-SHA256 signing and verification of machine access tokens.

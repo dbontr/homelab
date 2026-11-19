@@ -35,6 +35,12 @@ let
         };
       }
       {
+        # This public endpoint carries only JWKS and client-secret protected
+        # machine-token requests. The Go listener is bound to loopback.
+        hostname = "identity.dbontr.me";
+        service = "http://127.0.0.1:8182";
+      }
+      {
         hostname = "mcp.dbontr.me";
         service = "http://127.0.0.1:8104";
         originRequest.access = {
