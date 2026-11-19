@@ -228,6 +228,25 @@ func(c *Controller)VerifyStaged(id string)error{
  })
 }
 
+// waitForHealth permits bounded service startup after NixOS switches the
+// generation. Every required service and private socket must become ready;
+// expiry fails the release closed and retains normal rollback behavior.
+func(c *Controller) waitForHealth(ctx context.Context)error{
+ readyCtx,cancel:=context.WithTimeout(ctx,45*time.Second)
+ defer cancel()
+ ticker:=time.NewTicker(time.Second)
+ defer ticker.Stop()
+ for {
+  err:=c.health(readyCtx)
+  if err==nil{return nil}
+  select {
+  case <-readyCtx.Done():
+   return fmt.Errorf("required release services did not become ready: %w",err)
+  case <-ticker.C:
+  }
+ }
+}
+
 func(c *Controller) health(ctx context.Context)error{
  for _,svc:=range c.Config.HealthServices{
   out,err:=c.Config.Run(ctx,c.Config.Systemctl,"is-active",svc)
@@ -310,7 +329,7 @@ func(c *Controller) Activate(ctx context.Context,id string)error{
    if switchErr!=nil{return c.preparationFailed(ctx,txn,switchErr)}
   }
   if switchErr==nil{switchErr=c.set(ctx,m.System)}
-  if switchErr==nil{switchErr=c.health(ctx)}
+  if switchErr==nil{switchErr=c.waitForHealth(ctx)}
   if switchErr!=nil{
    cleanup,cancel:=context.WithTimeout(context.Background(),90*time.Second);defer cancel()
    rollbackErr:=c.rollback(cleanup,txn)
