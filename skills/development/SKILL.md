@@ -448,10 +448,9 @@ the verified owner identity, not an unverified ChatGPT conversation ID.
 A still-valid session may be shared by the same authenticated owner
 across chats; it does not circumvent exact operation/resource policy,
 signed-identity checks, expiring destructive confirmations, or the
-independent Rust executor. Reconcile uncertain outcomes before retrying,
-and preserve the executor's audit identity. NanoKVM provides a distinct
-local administrative authority, not a forged remote assertion. Its
-console actions must remain recorded and bound to an exact target.
+independent Go executor. Reconcile uncertain outcomes before retrying,
+and preserve the executor's audit identity. NanoKVM retains independent local root administration, not a forged
+remote owner assertion. Keep its changes auditable and source-bound.
 
 ## Skill utility implementation
 
