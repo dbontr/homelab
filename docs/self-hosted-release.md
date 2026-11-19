@@ -4,7 +4,7 @@ The repository is the source of truth for the domain Go services, independent En
 
 ## Release staging
 
-Use an operator-controlled host with the Go toolchains required by the four Go modules, Rust, Cargo, the WebAssembly target and a pinned Nix toolchain available. The output directory must be new, and its parent must already exist.
+Use an operator-controlled host with the pinned Go toolchains, React build inputs, and Nix toolchain available. The output directory must be new, and its parent must already exist.
 
 `bash scripts/stage-release.sh /srv/releases/homelab/<unique-release-id>`
 
@@ -12,7 +12,7 @@ To stage one component without rebuilding unrelated services, use
 `bash scripts/stage-release.sh --component homelab-api /srv/releases/homelab/<unique-component-release-id>`.
 The accepted component names are the fourteen Go executable names in the full release, plus `homelab-console`. Each component release contains one executable or the console assets, with the same exact-source provenance, checksum verification, non-writable artifact rules and no activation. Component staging runs Go tests and vet for its owning module, or a locked Nix build of the React console. It does not claim whole-fleet compatibility or authorize a deployment.
 
-The independent **Rust release controller** also inspects the generated security and executor `LoadCredential` sources during staged-release verification and immediately before activation. An absent or unsafe source rejects the request *before* any release journal enters `activating` and before the NixOS profile or services are changed. The checks inspect metadata and unit text only; they do not read protected credential values. Rollback and emergency recovery are deliberately not blocked by this activation-only readiness requirement.
+The independent **Go release controller** also inspects the generated security and executor `LoadCredential` sources during staged-release verification and immediately before activation. An absent or unsafe source rejects the request *before* any release journal enters `activating` and before the NixOS profile or services are changed. The checks inspect metadata and unit text only; they do not read protected credential values. Rollback and emergency recovery are deliberately not blocked by this activation-only readiness requirement.
 
 ### Protected Compute credential provisioning
 
@@ -53,13 +53,21 @@ authentication. A remote root shell, SSH pseudoterminal, forwarded process
 or user-space console cannot claim local-console authority. The console
 mechanism does not issue browser sessions or change remote permission policy.
 
+The physical root operator also retains native NixOS, systemd, Kubernetes,
+and filesystem administration when the managed release machinery is not
+available. This independent bootstrap and recovery authority requires no
+Homelab browser session. Such interventions are host-local, must preserve
+private credential and state custody, and must be recorded with the source
+revision and observed outcome. Reconcile each change with the declarative
+configuration. They never authorize an equivalent remote MCP or API call.
+
 Read-only release status remains available. Staging requires the executor's
 exclusive state lease; stop the executor briefly only when an operator
 must stage or perform a manual recovery, and restore it afterward.
 
 The complete release includes separately executable `homelab-mcp` and `homelab-api` adapters. Building them does not enable their optional NixOS listeners or alter running services. The web UI is built from `ui/web` and requires neither external listener.
 
-The staging script requires a clean, exact 40-character Git source revision and an operator-owned, non-symlink release parent that is not group or world writable. Before building, it runs `scripts/verify-offline.sh --all`, including module tests, Rust checks, Helm rendering, fleet NixOS evaluations and local package builds. It builds thirteen Go executables from cached source dependencies, packages the Nix-built React web assets, and writes `SHA256SUMS` and `RELEASE`. The independent `scripts/verify-release.sh` then checks the release envelope, declared binary set, exact source revision, and digest of every asset before the temporary directory is atomically published. It does not alter NixOS generations, start services, publish images, stop the existing homepage, or touch application databases.
+The staging script requires a clean, exact 40-character Git source revision and an operator-owned, non-symlink release parent that is not group or world writable. Before building, it runs `scripts/verify-offline.sh --all`, including Go module tests, browser checks, Helm rendering, fleet NixOS evaluations and local package builds. It builds thirteen Go executables from cached source dependencies, packages the Nix-built React web assets, and writes `SHA256SUMS` and `RELEASE`. The independent `scripts/verify-release.sh` then checks the release envelope, declared binary set, exact source revision, and digest of every asset before the temporary directory is atomically published. It does not alter NixOS generations, start services, publish images, stop the existing homepage, or touch application databases.
 
 Before publication, staging gives binary files read/execute permission and static files read permission for isolated service accounts, while removing write permission from the release tree. The release parent and all its ancestors must permit traversal by the intended service users and remain under operator-controlled write custody.
 
