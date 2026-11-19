@@ -9,6 +9,7 @@ import (
  "net"
  "net/http"
  "net/url"
+ "mime"
  "os"
  "path/filepath"
  "strings"
@@ -109,6 +110,19 @@ func browserRequestRoute(path string)(id,action string,ok bool) {
  return parts[0],parts[1],true
 }
 
+// trustedBrowserForm accepts browser forms only when their source is the
+// configured HTTPS origin. Fetch Metadata supplies a same-origin fallback for
+// privacy-preserving browsers that omit Origin on a POST. The handler also
+// requires a cryptographically verified owner and a one-use CSRF token.
+func(b *BrowserPortal) trustedBrowserForm(r *http.Request)bool{
+ mediaType,_,err:=mime.ParseMediaType(r.Header.Get("Content-Type"))
+ if err!=nil||mediaType!="application/x-www-form-urlencoded"{return false}
+ origin,site:=r.Header.Get("Origin"),r.Header.Get("Sec-Fetch-Site")
+ if site!=""&&site!="same-origin"{return false}
+ if origin!=""{return origin==b.origin}
+ return site=="same-origin"
+}
+
 func(b *BrowserPortal) ServeHTTP(w http.ResponseWriter,r *http.Request){
  w.Header().Set("Cache-Control","no-store")
  w.Header().Set("Pragma","no-cache")
@@ -130,9 +144,8 @@ func(b *BrowserPortal) ServeHTTP(w http.ResponseWriter,r *http.Request){
   http.NotFound(w,r);return
  }
  // Require same-origin form submission and a single-use CSRF value.
- if r.Header.Get("Origin")!=b.origin||
-  (r.Header.Get("Sec-Fetch-Site")!=""&&r.Header.Get("Sec-Fetch-Site")!="same-origin")||
-  r.Header.Get("Content-Type")!="application/x-www-form-urlencoded" {
+ if !b.trustedBrowserForm(r) {
+  log.Print("security audit owner_form rejected")
   http.Error(w,"untrusted request",http.StatusForbidden);return
  }
  r.Body=http.MaxBytesReader(w,r.Body,4096)
