@@ -140,7 +140,12 @@ func (t *securityTransition) prepare(ctx context.Context,fromSystem,toSystem str
 // A transition may fail after quiescing the old writer. Retain the original
 // error and independently verify that its still-selected generation is usable.
 func transitionCaptureWithRecovery(stop,capture,restore func()error)error{
- if err:=stop();err!=nil{return err}
+ if err:=stop();err!=nil{
+  if recoveryErr:=restore();recoveryErr!=nil{
+   return errors.Join(err,fmt.Errorf("previous security authority recovery failed: %w",recoveryErr))
+  }
+  return err
+ }
  if err:=capture();err!=nil{
   if recoveryErr:=restore();recoveryErr!=nil{
    return errors.Join(err,fmt.Errorf("previous security authority recovery failed: %w",recoveryErr))
