@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"syscall"
 	"strings"
+	"syscall"
 )
 
 const migrationSnapshotReceipt = "authority-cutover.json"
@@ -96,11 +96,11 @@ func PrepareMigration(stateDir, snapshotDir, target string, preflight func(strin
 		return err
 	}
 	receipt := migrationReceipt{
-		Version: 1,
-		Target: target,
+		Version:            1,
+		Target:             target,
 		AuthenticatorSHA256: migrationSHA(auth),
 		ParentMarkerSHA256: parentHash,
-		Nonce: hex.EncodeToString(nonce),
+		Nonce:              hex.EncodeToString(nonce),
 	}
 	if hasVault {
 		digest := migrationSHA(vault)
