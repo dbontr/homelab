@@ -8,7 +8,6 @@ import (
  "regexp"
  "strings"
  "testing"
- "time"
 )
 
 func TestOwnerRequestRequiresSignedGatewayPrincipalAndCurrentOwnerSession(t *testing.T) {
