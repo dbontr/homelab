@@ -92,7 +92,7 @@ func (c *Controller) continueTransition(ctx context.Context, action, id string, 
     if switchErr!=nil{return c.preparationFailed(ctx,txn,switchErr)}
    }
    if switchErr == nil { switchErr=c.set(ctx,txn.Target) }
-   if switchErr == nil { switchErr = c.health(ctx) }
+   if switchErr == nil { switchErr = c.waitForHealth(ctx) }
    if switchErr == nil {
     txn.Phase = "active"
     return c.atomic("journal.json", txn)
