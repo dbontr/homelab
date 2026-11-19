@@ -74,6 +74,7 @@ func (c *Controller) continueTransition(ctx context.Context, action, id string, 
    // NixOS system profile already names the target.
    if c.Config.BeforeSwitch!=nil {
     switchErr=c.Config.BeforeSwitch(ctx,txn.Previous,txn.Target)
+    if switchErr!=nil{return c.preparationFailed(ctx,txn,switchErr)}
    }
    if switchErr == nil { switchErr=c.set(ctx,txn.Target) }
    if switchErr == nil { switchErr = c.health(ctx) }
