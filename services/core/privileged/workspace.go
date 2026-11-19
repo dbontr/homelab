@@ -6,6 +6,7 @@ import (
  "encoding/json"
  "errors"
  "io"
+ "math"
  "net/http"
  "net/url"
  "os"
@@ -107,6 +108,47 @@ func(p *WorkspacePolicy)validate()error{
  return nil
 }
 
+
+
+// batchArgs admits only project-scoped Kueue Jobs with an operator-approved
+// immutable image and the execution identity supplied by the trusted gateway.
+func(p *WorkspacePolicy)batchArgs(operation string,fields map[string]any)(string,map[string]any,error){
+ if p==nil{return "",nil,errors.New("batch execution is disabled")}
+ project,_:=fields["project_id"].(string)
+ if !workspaceResourceID.MatchString(project)||!containsID(p.Projects,project){
+  return "",nil,errors.New("batch project outside owner policy")
+ }
+ switch operation{
+ case "compute__submit_batch_job":
+  key,keyOK:=fields["job_request_id"].(string)
+  command,commandOK:=fields["command"].(string)
+  image,imageOK:=fields["image"].(string)
+  cpu,cpuOK:=fields["cpu"].(float64)
+  memory,memoryOK:=fields["memory_mb"].(float64)
+  if len(fields)!=7||!keyOK||!ValidExecutionRequestID(key)||
+   !commandOK||strings.TrimSpace(command)==""||len(command)>4096||
+   strings.ContainsAny(command,"\x00\r")||!imageOK||
+   !validWorkspaceImageReference(image)||!containsID(p.ImageReferences,image)||
+   !cpuOK||math.IsNaN(cpu)||math.IsInf(cpu,0)||cpu<0.1||cpu>2||
+   !memoryOK||math.IsNaN(memory)||math.IsInf(memory,0)||
+   memory<64||memory>4096||math.Trunc(memory)!=memory {
+   return "",nil,errors.New("batch request outside owner resource policy")
+  }
+  return "submit_compute_job",map[string]any{
+   "project_id":project,"command":command,"image":image,"cpu":cpu,
+   "memory_mb":int(memory),"backend":"kueue","request_id":key,
+  },nil
+ case "compute__cancel_batch_job":
+  jobID,ok:=fields["job_id"].(string)
+  if len(fields)!=3||!ok||!ValidExecutionRequestID(jobID){
+   return "",nil,errors.New("invalid owned batch job identity")
+  }
+  return "compute_job_cancel",map[string]any{"project_id":project,"job_id":jobID},nil
+ default:
+  return "",nil,errors.New("unregistered batch operation")
+ }
+}
+
 func(p *WorkspacePolicy)operationArgs(operation string,fields map[string]any)(string,map[string]any,error){
  if p==nil{return "",nil,errors.New("Workspace administration is disabled")}
  value:=func(name string)string{
@@ -115,6 +157,8 @@ func(p *WorkspacePolicy)operationArgs(operation string,fields map[string]any)(st
   return field
  }
  switch operation{
+ case "compute__submit_batch_job","compute__cancel_batch_job":
+  return p.batchArgs(operation,fields)
  case "infrastructure__workspace_register_image", "infrastructure__workspace_propose_program",
   "infrastructure__workspace_review_program", "infrastructure__workspace_update_entry":
   return p.catalogArgs(operation,fields)
