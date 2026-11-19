@@ -45,20 +45,10 @@
 - [Linux flock(2)](https://man7.org/linux/man-pages/man2/flock.2.html) — Linux man-pages project. Used for: nonblocking, process-lifetime advisory locks on state resources before opening service stores.
 - [Linux open(2)](https://man7.org/linux/man-pages/man2/open.2.html) — Linux man-pages project. Used for: O_NOFOLLOW descriptor-bound reads of protected credentials and O_EXCL admission records for cooperating hardware workers.
 - [bytes crate: Bytes::from_owner](https://docs.rs/bytes/latest/bytes/struct.Bytes.html#method.from_owner) — bytes project. Used for: retaining a zeroizing owner of remote credential response buffers until the last HTTP body reference is released.
-- [Rust Standard Library: Command](https://doc.rust-lang.org/std/process/struct.Command.html) — Rust project. Used for: shell-free, explicit-argument privileged command dispatch in the Rust actuator.
-- [RustCrypto PBKDF2](https://docs.rs/pbkdf2/0.12.2/pbkdf2/) — RustCrypto project. Used for: verifying the owner PBKDF2-HMAC-SHA256 credential record in Rust.
-- [RustCrypto HMAC](https://docs.rs/hmac/0.12.1/hmac/) — RustCrypto project. Used for: six-digit HMAC-SHA1 TOTP verification.
-- [RustCrypto AES-GCM](https://docs.rs/aes-gcm/0.10.3/aes_gcm/) — RustCrypto project. Used for: Go-compatible encrypted credential custody in Rust.
-- [Serde JSON](https://docs.rs/serde_json/latest/serde_json/) — Serde project. Used for: canonical request parsing, duplicate-key rejection and arbitrary-precision values in the Rust authority.
 - [RFC 8259: The JavaScript Object Notation (JSON) Data Interchange Format](https://www.rfc-editor.org/rfc/rfc8259) — IETF. Used for: interoperable migration receipts with unique, exact field names and explicit JSON object structure.
-- [jsonwebtoken 9.3.1](https://docs.rs/crate/jsonwebtoken/9.3.1) — Rust jsonwebtoken project. Used for: RS256 owner assertion verification against pinned JWKS in the Rust security authority.
-- [fs2](https://docs.rs/fs2/latest/fs2/) — Rust community crate. Used for: exclusive Linux state-directory locks during authority migration and process-lifetime motivation-state ownership.
 - [Axum](https://docs.rs/axum/0.8.6/axum/) — Tokio project. Used for: bounded HTTP owner, gateway, browser, and remote authorization routes over isolated transports.
 - [Tokio](https://docs.rs/tokio/1.47.1/tokio/) — Tokio project. Used for: owned Unix sockets, remote TLS streams, asynchronous OAuth requests, and controlled service shutdown.
-- [Rustls](https://docs.rs/rustls/0.23.0/rustls/) — Rustls project. Used for: TLS 1.3 client authentication and certificate-chain verification in the independent authority.
 - [Reqwest](https://docs.rs/reqwest/0.12.23/reqwest/) — Reqwest project. Used for: bounded allowlisted OAuth token and device authorization requests.
-- [Nixpkgs Rust packaging](https://github.com/NixOS/nixpkgs/blob/master/doc/languages-frameworks/rust.section.md) — NixOS project. Used for: reproducible buildRustPackage and cargoLock dependency custody.
-- [Rust Standard Library: PermissionsExt](https://doc.rust-lang.org/std/os/unix/fs/trait.PermissionsExt.html) — Rust project. Used for: rejecting writable Nix policy files in the Rust actuator.
 - [Go archive/zip Package](https://pkg.go.dev/archive/zip) — Go project. Used for: portable recipe bundle generation and bounded ZIP entry reading.
 - [Model Context Protocol Specification](https://modelcontextprotocol.io/specification/2025-06-18) — MCP project; 2025-06-18. Used for: stateless JSON-RPC transport, tool discovery, and tool calls.
 - [Cloudflare Access Managed OAuth](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/managed-oauth/) — Cloudflare. Used for: protected MCP OAuth client enrollment, token issuance, and signed owner identity at the origin.
@@ -90,9 +80,6 @@
 - [OWASP API Security Top 10](https://owasp.org/API-Security/editions/2023/en/0x11-t10/) — OWASP. Used for: function-level authorization, bounded downstream responses and unsafe external API consumption.
 - [shadcn/ui](https://github.com/shadcn-ui/ui) — shadcn/ui project. Used for: source-controlled React button, card, badge, input, table, alert, skeleton and textarea primitives in the shadcn/ui-based web console.
 - [shadcn/ui Theming](https://ui.shadcn.com/docs/theming) — shadcn/ui project. Used for: shadcn/ui neutral light/dark theme tokens and component styling in the React browser console.
-- [Dioxus 0.7 Documentation](https://dioxuslabs.com/learn/0.7/) — Dioxus project. Used for: Rust RSX components, WASM rendering and future desktop packaging.
-- [Dioxus v0.7.10 Release](https://github.com/DioxusLabs/dioxus/releases/tag/v0.7.10) — Dioxus project. Used for: pinned, checksummed WebAssembly console bundling.
-- [wasm-bindgen v0.2.130 Release](https://github.com/wasm-bindgen/wasm-bindgen/releases/tag/0.2.130) — wasm-bindgen project. Used for: pinned JavaScript binding generation matching the compiled console.
 - [actions/upload-artifact](https://github.com/actions/upload-artifact) — GitHub Actions project. Used for: storing source-bound static console bundles as inspectable CI artifacts.
 - [actions/download-artifact](https://github.com/actions/download-artifact) — GitHub Actions project. Used for: consuming source-bound console artifacts in a separated, permission-scoped publication job.
 - [MCP Apps specification (2026-01-26)](https://github.com/modelcontextprotocol/ext-apps/blob/main/specification/2026-01-26/apps.mdx) — Model Context Protocol project. Used for: embedded view lifecycle, JSON-RPC tool messages, UI resource MIME types and host iframe security contracts.
@@ -100,7 +87,6 @@
 - [Web Blob API](https://developer.mozilla.org/en-US/docs/Web/API/Blob) — MDN Web Docs. Used for: browser-local, credential-free original-file downloads after Learning verifies source bytes.
 - [URL.createObjectURL()](https://developer.mozilla.org/en-US/docs/Web/API/URL/createObjectURL_static) — MDN Web Docs. Used for: bounded download links created from verified Learning original files.
 - [URL.revokeObjectURL()](https://developer.mozilla.org/en-US/docs/Web/API/URL/revokeObjectURL_static) — MDN Web Docs. Used for: release of previously generated browser download object URLs.
-- [Dioxus 0.7 Handling User Input](https://dioxuslabs.com/learn/0.7/essentials/basics/event_handlers/) — Dioxus project. Used for: browser file selection, `FileData` metadata and asynchronous image reads in the Rust recipe editor.
 - [OpenAI Plugins UI Reference](https://developers.openai.com/plugins/reference) — OpenAI. Used for: opening a vetted owner authentication URL from a ChatGPT component without exposing credentials through tool inputs.
 - [MCP Elicitation — URL Mode](https://modelcontextprotocol.io/specification/2025-11-25/client/elicitation) — MCP project. Used for: treating password and second-factor entry as a trusted out-of-band browser interaction rather than client-side form elicitation.
 - [Cloudflare Tunnel Origin Access Settings](https://developers.cloudflare.com/tunnel/reference/origin-parameters/) — Cloudflare. Used for: validating the dedicated Cloudflare Access JWT audience before proxying owner authentication traffic.
@@ -110,7 +96,6 @@
 - [Cloudflare Access session management](https://developers.cloudflare.com/cloudflare-one/access-controls/access-settings/session-management/) — Cloudflare. Used for: ending a user's browser Access session through the application-domain logout endpoint.
 - [MDN Referrer-Policy](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Referrer-Policy) — MDN Web Docs. Used for: same-origin owner form submissions and preventing cross-origin referrer disclosure.
 - [OWASP Session Management Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html) — OWASP. Used for: short-lived browser sessions, HttpOnly/Secure/SameSite cookies, credential separation and session invalidation.
-- [Dioxus Styling and Assets](https://dioxuslabs.com/learn/0.7/essentials/ui/styling/) — Dioxus project. Used for: RSX, CSS assets and native SVG controls in the Rust console.
 - [RFC 9110: HTTP Semantics, If-Match](https://www.rfc-editor.org/rfc/rfc9110#section-13.1.1) — IETF. Used for: revision-qualified deletion of first-party recipe records.
 - [SQLite FTS5 BM25 Ranking](https://www.sqlite.org/fts5.html#the_bm25_function) — SQLite project. Used for: relevance-based ordering of project-authorized source-linked research passages.
 - [SQLite Write-Ahead Logging](https://www.sqlite.org/wal.html) — SQLite project. Used for: durable controller-local project knowledge and metadata with concurrent reads.
@@ -126,7 +111,6 @@
 - [LogQL](https://grafana.com/docs/loki/latest/query/) — Grafana Labs. Used for: constrained journal selection and literal-safe log search.
 - [BuildKit rootless deployment](https://github.com/moby/buildkit/blob/master/docs/rootless.md) — Moby BuildKit maintainers. Used for: project-scoped OCI image builds without exposing a host Docker socket.
 - [OCI Image Specification](https://github.com/opencontainers/image-spec) — Open Containers Initiative. Used for: digest-qualified image identities in the registry build pipeline.
-- [Dioxus 0.7 Deployment](https://dioxuslabs.com/learn/0.7/guides/deploy/) — Dioxus project. Used for: packaging static Rust/WASM console assets for an independent native release.
 - [Open Library Search API](https://openlibrary.org/dev/docs/api/search) — Open Library/Internet Archive. Used for: bounded on-demand work discovery, stable work identifiers, authors and publication metadata.
 - [Open Library API Usage Guidelines](https://openlibrary.org/developers/api) — Open Library/Internet Archive. Used for: identified human-initiated requests, conservative one-request-per-second pacing, rate limits, short-lived search caching and bounded book availability lookup.
 
@@ -141,7 +125,6 @@
 - [Go format package](https://pkg.go.dev/go/format) — Go project. Used for: deterministic syntax-aware formatting of approved Go source with revision-checked writes.
 - [gopls Command-line Interface](https://go.dev/gopls/command-line) — Go tools project. Used for: optional read-only Go symbol navigation in isolated compute workspaces; command-line interface is experimental.
 - [Language Server Protocol Specification](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/) — Microsoft and LSP community. Used for: language-aware definition, reference and hover navigation semantics.
-- [Dioxus 0.7 RSX](https://dioxuslabs.com/learn/0.7/tutorial/rsx/) — Dioxus project. Used for: interactive Rust/WASM engineering forms and dependency graph components.
 - [USDA FoodData Central API Guide](https://fdc.nal.usda.gov/api-guide/) — USDA Agricultural Research Service. Used for: API-key protected food lookups, Food Details schema, and reviewed FDC identifiers.
 - [USDA FoodData Central Foundation Foods Documentation](https://fdc.nal.usda.gov/Foundation_Foods_Documentation/) — USDA Agricultural Research Service. Used for: source-reported nutrients per 100 grams, Atwater energy identifiers, and explicit missing-nutrient treatment.
 - [Open Library Read API](https://openlibrary.org/dev/docs/api/read) — Open Library. Used for: provider-owned online reading and borrowing availability lookup by exact ISBN and documented result status.
@@ -153,16 +136,12 @@
 - [GitLab commits API](https://docs.gitlab.com/api/commits/) — GitLab. Used for: resolving exact Git repository revisions and distinguishing file-guarded writes from whole-branch commit operations.
 - [GitLab repositories API](https://docs.gitlab.com/api/repositories/) — GitLab. Used for: pinned Git archive downloads and project-scoped repository snapshots.
 - [GitLab personal access tokens](https://docs.gitlab.com/user/profile/personal_access_tokens/) — GitLab. Used for: user-scoped API credentials, expiration and scope review.
-- [The Rust Programming Language: Understanding Ownership](https://doc.rust-lang.org/book/ch04-00-understanding-ownership.html) — Rust project. Used for: ownership and borrowing guarantees when selecting Rust for memory-sensitive service implementations.
-- [Hyper 1 HTTP/1 Connection API](https://docs.rs/hyper/1.7.0/hyper/client/conn/http1/) — Hyper project. Used for: fixed-path authorization requests over verified Unix and TLS streams in the independent Rust executor.
 - [Tokio Process API](https://docs.rs/tokio/1.47.1/tokio/process/index.html) — Tokio project. Used for: shell-free bounded privileged subprocesses and termination during cancellation or timeouts.
-- [Rust Standard Library: CommandExt::process_group](https://doc.rust-lang.org/std/os/unix/process/trait.CommandExt.html#tymethod.process_group) — Rust project. Used for: separate Linux process groups for restricted actuator and NixOS release commands.
 - [RFC 3339: Date and Time on the Internet](https://www.rfc-editor.org/rfc/rfc3339) — IETF. Used for: bounded, explicit expiration of pinned service credential grants and audit timestamps.
 - [Linux sysfs device model](https://docs.kernel.org/driver-api/driver-model/overview.html) — Linux kernel documentation. Used for: independently validating actual USB device ancestry before passthrough.
 - [util-linux lsblk](https://man7.org/linux/man-pages/man8/lsblk.8.html) — util-linux project. Used for: conservative whole-disk, holder and mounted-partition checks before USB access.
 - [Axum Documentation](https://docs.rs/axum/latest/axum/) — Tokio/Axum project. Used for: the owner-authenticated, loopback-only motivation service HTTP interface.
 - [Finite-time Analysis of the Multiarmed Bandit Problem](https://homes.di.unimi.it/~cesabian/Pubblicazioni/ml-02.pdf) — Auer, Cesa-Bianchi and Fischer, 2002. Used for: an exploratory upper-confidence-bound strategy selector over self-reported results.
-- [gloo-timers Documentation](https://docs.rs/gloo-timers/latest/gloo_timers/) — Rust/WASM Gloo maintainers. Used for: bounded in-app refresh of the scheduled motivation inbox while the console view is active.
 - [Bubblewrap project](https://github.com/containers/bubblewrap) — Bubblewrap maintainers. Used for: Linux mount namespace, network isolation, parent-death process control and read-only sandbox bindings.
 - [Git rev-parse](https://git-scm.com/docs/git-rev-parse) — Git project. Used for: verifying the workspace's expected source revision before permitted build/test execution.
 - [React Documentation](https://react.dev/reference/react) — React project. Used for: function components, state and effect lifecycle in the first-party TypeScript web console.
