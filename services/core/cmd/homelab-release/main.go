@@ -58,7 +58,7 @@ func configured()( *release.Controller,error){
 // modifying the same generation journal while the privileged daemon owns it.
 func acquireReleaseLease(state,operation string)(*statelease.Lease,error){
  switch operation {
- case "status","guard-activate","guard-revert","guard-resume":return nil,nil
+ case "status","guard-activate","guard-revert","guard-resume","console-activate","console-guard-activate":return nil,nil
  case "stage","activate","revert","recover":
   return statelease.Acquire(state,"executord")
  default:return nil,errors.New("unknown release operation")
@@ -85,6 +85,12 @@ func run(args []string)error{
  ctx,cancel:=context.WithTimeout(context.Background(),duration)
  defer cancel()
  switch args[0]{
+ case "console-activate":
+  if len(args)!=2{return errors.New("console activation requires exact staged release ID")}
+  return consoleActivate(ctrl,args[1])
+ case "console-guard-activate":
+  if len(args)!=3{return errors.New("console guardian requires authorization ID and staged release ID")}
+  return consoleGuardActivate(ctx,ctrl,args[1],args[2])
  case "stage":
   if len(args)!=2{return errors.New("stage requires an exact source commit")}
   manifest,err:=ctrl.Stage(ctx,args[1]);if err!=nil{return err}
