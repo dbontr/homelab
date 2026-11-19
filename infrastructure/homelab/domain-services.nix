@@ -33,10 +33,10 @@
     tokenFile = "/srv/homelab/secrets/homelab-motivation.token";
   };
 
-  # Keep Homepage public until the browser console passes authenticated acceptance.
+  # Serve the authenticated first-party console on the private home origin.
   services.homelabConsole = {
     enable = true;
-    replaceHomepage = false;
+    replaceHomepage = true;
     package = import ../../packages/console-web.nix { inherit pkgs; };
   };
 
