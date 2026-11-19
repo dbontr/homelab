@@ -14,13 +14,31 @@ Authenticated sessions have a 120-minute inactivity limit and an absolute 12-hou
 
 Privileged operations fail closed when independent owner security is not configured. The gateway cannot issue administrator approval grants or forward privileged backend calls. A separate executor validates owner identity, operation policy, target, confirmation and audit custody before using a privileged credential. An authenticated session alone cannot grant an MCP caller unrestricted backend access.
 
+## Out-of-band root administration
+
+An authenticated root login on Saturn's local `seat0` terminal, reached through
+NanoKVM, is a separate host administrator. It has normal root authority to
+repair, build, deploy, restart, and configure NixOS, systemd, Kubernetes,
+storage, and networking even when Homelab Security or MCP is unavailable.
+These physical-console operations do not require a Homelab browser owner
+session. Prefer the audited local-console release runner for a source-pinned
+generation change. When the managed release path fails, native root
+administration remains available for recovery. Record the source revision,
+exact target, operation outcome, and restoration of declarative configuration.
+
+The owner decides when routine development can move entirely to Homelab's
+managed Engineering, Compute, and MCP interfaces. Local root authority never
+becomes a bearer token, remote owner session, or permission for an MCP worker.
+Web, MCP, API, and distributed requests retain the independent owner
+authentication, exact-operation policy, and confirmation requirements.
+
 ## Authentication and software accounts
 
 Do not send passwords, recovery codes, API keys, product license credentials, or vendor login cookies through ChatGPT messages, tool parameters, project artifacts, shell history, or Git. Enter them directly into the relevant provider's trusted login page, or into an authorized local credential-entry interface when one is implemented.
 
 The independent security service offers a protected OAuth authorization-code + PKCE enrollment path for allowlisted public clients. It does not proxy provider passwords through ChatGPT or the primary MCP. Where a provider has no supported public-client OAuth flow, the owner may enroll a vendor-provided credential through the separately authenticated owner-only vault interface; the target executor must still enforce its resource-specific scope. Provider-specific login protocols cannot be inferred from the existence of this broker.
 
-Cloudflare Access authenticates external browser ingress. The Dioxus console verifies Access identity again in the Go platform using pinned signing keys, an exact audience and a protected owner email; browser mutations require Origin and CSRF checks. The independent Rust authority still requires password and TOTP for privileged administration, with separate destructive confirmation. Cloudflare identity alone never grants executor privileges. Cloudflare management is not exposed as a general-purpose tool in the primary MCP. Native Seerr and calendar credentials are read from systemd LoadCredential files. Private ICS sharing links are credentials and must never be committed to Git.
+Cloudflare Access authenticates external browser ingress. The React console verifies Access identity again in the Go platform using pinned signing keys, an exact audience and a protected owner email; browser mutations require Origin and CSRF checks. The independent Go security authority still requires password and TOTP for privileged administration, with separate destructive confirmation. Cloudflare identity alone never grants executor privileges. Cloudflare management is not exposed as a general-purpose tool in the primary MCP. Native Seerr and calendar credentials are read from systemd LoadCredential files. Private ICS sharing links are credentials and must never be committed to Git.
 
 ## Privileged execution evidence
 
@@ -32,7 +50,7 @@ The independent security daemon holds a process-lifetime, nonblocking Linux file
 
 ## Operational separation
 
-The primary assistant can request authorized application operations. The development and deployment pipeline is a separate principal and never inherits the primary MCP's token. Changes to network routing, firewall, machine identity, K3s admission, or host software need operator confirmation and independent service-level authorization.
+The primary assistant can request authorized application operations. The development and deployment pipeline is a separate principal and never inherits the primary MCP's token. Requests through web, MCP, API, or remote executors to change network routing, firewall, machine identity, K3s admission, or host software require independent owner authorization. Direct changes from the authenticated physical root console are out-of-band host administration, not gateway requests.
 
 Media data and all runtime credentials remain outside Git. The absence of automatic backups is an explicit operational risk; repository reproducibility cannot reconstruct missing personal data.
 
