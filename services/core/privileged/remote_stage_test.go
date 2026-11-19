@@ -74,3 +74,30 @@ func TestStageHandlerRejectsUnverifiedTLSAndUnauthorizedStage(t *testing.T){
   t.Fatalf("release staging bypassed audit storage: %d",response.Code)
  }
 }
+
+func TestLocalStageRequiresOwnerAuthorizationAndAudit(t *testing.T) {
+ revision:=strings.Repeat("c",40)
+ auth:=&testStageAuth{}
+ stage:=&testStageActuator{}
+ audit,err:=OpenAuditJournal(filepath.Join(privateAuditDir(t),"local-audit.jsonl"))
+ if err!=nil{t.Fatal(err)}
+ executor:=&Executor{cfg:Config{Host:"jupiter",AllowRelease:true,Auth:auth,Releases:stage,Audit:audit}}
+ body:=`{"host":"jupiter","revision":"`+revision+`"}`
+ issue:=func(signed bool) *httptest.ResponseRecorder {
+  t.Helper()
+  req:=httptest.NewRequest(http.MethodPost,"/v1/release/stage",strings.NewReader(body))
+  if signed{req.Header.Set("Cf-Access-Jwt-Assertion","signed-owner")}
+  res:=httptest.NewRecorder()
+  executor.Handler().ServeHTTP(res,req)
+  return res
+ }
+ if res:=issue(false);res.Code!=403||auth.calls!=0||stage.calls!=0{t.Fatalf("unsigned local staging: %d",res.Code)}
+ if res:=issue(true);res.Code!=200||auth.calls!=1||stage.calls!=0{t.Fatalf("denied local staging: %d",res.Code)}
+ auth.allowed=true
+ res:=issue(true)
+ if res.Code!=200||stage.calls!=1||auth.calls!=2{t.Fatalf("approved local staging: %d",res.Code)}
+ var output struct{Allowed bool;Manifest release.Manifest}
+ if err:=json.Unmarshal(res.Body.Bytes(),&output);err!=nil||!output.Allowed||output.Manifest.Revision!=revision{t.Fatalf("invalid staged manifest: %v",err)}
+ executor.cfg.Audit=nil
+ if res:=issue(true);res.Code!=503||stage.calls!=1{t.Fatalf("local staging without audit: %d",res.Code)}
+}
