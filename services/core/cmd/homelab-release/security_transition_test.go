@@ -4,6 +4,7 @@ import (
  "os"
  "strings"
  "testing"
+ "errors"
 )
 
 func TestSecurityUnitSelectionRequiresProtectedReceipt(t *testing.T){
@@ -61,4 +62,53 @@ func TestSecurityUnitRejectsMisleadingExecutableSuffix(t *testing.T){
    t.Fatalf("unrecognized security executable accepted: %s",strings.TrimSpace(suffix))
   }
  }
+}
+
+func TestFailedMigrationRestartsStillSelectedSecurityAuthority(t *testing.T){
+ failed:=errors.New("current-state migration rejected")
+ calls:=[]string{}
+ err:=transitionCaptureWithRecovery(
+  func()error{calls=append(calls,"stop");return nil},
+  func()error{calls=append(calls,"capture");return failed},
+  func()error{calls=append(calls,"restore");return nil},
+ )
+ if !errors.Is(err,failed)||strings.Join(calls,",")!="stop,capture,restore"{
+  t.Fatalf("failed capture did not restore old authority: %v, calls %v",err,calls)
+ }
+}
+
+func TestFailedAuthorityStopNeverAttemptsNewCaptureOrRecovery(t *testing.T){
+ stopFailure:=errors.New("service refused to stop")
+ calls:=[]string{}
+ err:=transitionCaptureWithRecovery(
+  func()error{calls=append(calls,"stop");return stopFailure},
+  func()error{calls=append(calls,"capture");return nil},
+  func()error{calls=append(calls,"restore");return nil},
+ )
+ if !errors.Is(err,stopFailure)||strings.Join(calls,",")!="stop"{
+  t.Fatalf("failed stop altered authority custody: %v, %v",err,calls)
+ }
+}
+
+func TestFailedRecoveryRetainsBothErrors(t *testing.T){
+ captureFailure:=errors.New("migration receipt unavailable")
+ restoreFailure:=errors.New("prior authority failed health check")
+ err:=transitionCaptureWithRecovery(
+  func()error{return nil},
+  func()error{return captureFailure},
+  func()error{return restoreFailure},
+ )
+ if !errors.Is(err,captureFailure)||!errors.Is(err,restoreFailure){
+  t.Fatalf("recovery lost the failure evidence: %v",err)
+ }
+}
+
+func TestSuccessfulAuthorityHandoffDoesNotRestartPreviousService(t *testing.T){
+ called:=false
+ err:=transitionCaptureWithRecovery(
+  func()error{return nil},
+  func()error{return nil},
+  func()error{called=true;return nil},
+ )
+ if err!=nil||called{t.Fatalf("successful migration restarted retired authority: %v",err)}
 }
