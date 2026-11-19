@@ -26,6 +26,7 @@ func TestEngineeringMachineSecretCustody(t *testing.T) {
  other:=t.TempDir()
  outside:=filepath.Join(other,"secret")
  if err:=os.WriteFile(outside,[]byte(strings.Repeat("x",64)),0640);err!=nil{t.Fatal(err)}
+ if err:=os.Chmod(outside,0640);err!=nil{t.Fatal(err)}
  if _,err:=readMachineSecret(outside);err==nil{t.Fatal("outside credential directory accepted")}
  link:=filepath.Join(dir,"alias")
  if err:=os.Symlink(path,link);err!=nil{t.Fatal(err)}
