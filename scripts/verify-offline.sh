@@ -73,6 +73,7 @@ verify_go services/health
 
 verify_go services/motivation
 verify_go services/native-hardware
+verify_go services/sandbox
 
 if ! command -v nix >/dev/null 2>&1; then
   printf '%s\n' 'Nix is required to verify the source-pinned browser console.' >&2
