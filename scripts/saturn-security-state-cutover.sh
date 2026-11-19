@@ -63,6 +63,10 @@ if [[ $target == go ]]; then
   }
   migrator="${HOMELAB_SECURITY_GO_PREFLIGHT%/*}/homelab-security-migrate"
   [[ -x $migrator ]] || { echo 'Go security migrator is missing.' >&2; exit 1; }
+  export HOMELAB_SECURITY_COMPAT_PREFLIGHT=/tmp/rust-security-authority/bin/security-preflight
+  [[ -x $HOMELAB_SECURITY_COMPAT_PREFLIGHT ]] || {
+    echo 'Independent compatibility preflight is missing.' >&2; exit 1;
+  }
   receipt="$secret_dir/authority-go-rollback.json"
 else
   # Retain the existing rollback path until the Go release passes acceptance.
@@ -84,6 +88,7 @@ runuser -u homelab-security -- env \
   HOMELAB_SECURITY_ACCESS_ISSUER="$HOMELAB_SECURITY_ACCESS_ISSUER" \
   HOMELAB_SECURITY_ACCESS_GATEWAY_AUD="$HOMELAB_SECURITY_ACCESS_GATEWAY_AUD" \
   HOMELAB_SECURITY_GO_PREFLIGHT="$(printenv HOMELAB_SECURITY_GO_PREFLIGHT || :)" \
+  HOMELAB_SECURITY_COMPAT_PREFLIGHT="$(printenv HOMELAB_SECURITY_COMPAT_PREFLIGHT || :)" \
   "$migrator" prepare --target "$target" --state-dir "$state" --snapshot-dir "$snapshot"
 install -o root -g root -m 0600 -- "$snapshot/authority-cutover.json" "$receipt"
 echo 'Protected migration receipt installed; active authentication state was not restored.'
