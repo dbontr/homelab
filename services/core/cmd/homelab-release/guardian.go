@@ -112,7 +112,7 @@ func matchingAuditedReleaseStart(ctrl *release.Controller,stageID string)(string
  pending,err:=audit.Unresolved()
  closeErr:=audit.Close()
  if err!=nil{return "",err}
- if closeErr!=nil{return closeErr}
+ if closeErr!=nil{return "",closeErr}
  var id string
  for _,entry:=range pending{
   if entry.Operation!="infrastructure__release_activate" ||
