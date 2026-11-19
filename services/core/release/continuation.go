@@ -4,7 +4,9 @@ import (
  "context"
  "errors"
  "fmt"
+ "net/url"
  "os"
+ "strings"
  "time"
 )
 
@@ -29,8 +31,12 @@ func (c *Controller) continueTransition(ctx context.Context, action, id string, 
   stage, err := c.loadStage(id)
   if err != nil { return err }
   var ready Manifest
-  if err := c.read("stage-ready-"+id+".json", &ready); err != nil { return fmt.Errorf("stage authority receipt unavailable: %w",err) }
-  if ready.ID != stage.ID || ready.Host != stage.Host || ready.Revision != stage.Revision ||
+  receiptErr := c.read("stage-ready-"+id+".json", &ready)
+  if receiptErr != nil {
+   if !audited || !c.Config.TrustedSource || !errors.Is(receiptErr,os.ErrNotExist){
+    return fmt.Errorf("stage authority receipt unavailable: %w",receiptErr)
+   }
+  } else if ready.ID != stage.ID || ready.Host != stage.Host || ready.Revision != stage.Revision ||
    ready.System != stage.System || !ready.Created.Equal(stage.Created) {
    return errors.New("stage authority receipt differs from immutable manifest")
   }
@@ -64,6 +70,15 @@ func (c *Controller) continueTransition(ctx context.Context, action, id string, 
    return errors.New("release attempt does not match transaction journal")
   }
 
+  if receiptErr != nil {
+   // The predecessor authority may have staged the exact target before
+   // Go receipt custody existed. An audited in-flight activation may
+   // requalify that immutable stage; a new activation may not.
+   if err := c.requalifyAuditedStage(ctx,stage);err!=nil{
+    return fmt.Errorf("audited stage requalification failed: %w",err)
+   }
+  }
+
   // A separate systemd unit owns the remaining switch. This context belongs
   // to that unit and remains alive when the executor service is replaced.
   if action == "activate" {
@@ -93,4 +108,34 @@ func (c *Controller) continueTransition(ctx context.Context, action, id string, 
   defer cancel()
   return c.rollback(cleanup, txn)
  })
+}
+
+
+// requalifyAuditedStage is reached only after the caller has verified an
+// accepted/started privileged audit record, exact in-flight journal and host.
+func (c *Controller) requalifyAuditedStage(ctx context.Context, stage Manifest) error {
+ if !c.Config.TrustedSource{return errors.New("trusted source required for audited requalification")}
+ if err:=requireRootOwnedParents(c.Config.FlakeDir);err!=nil{return err}
+ if err:=c.verifyImmutableStageBuild(ctx,stage);err!=nil{return err}
+ return c.atomic("stage-ready-"+stage.ID+".json",stage)
+}
+
+// verifyImmutableStageBuild independently rebuilds the immutable Git object
+// and compares its Nix store identity with the protected legacy manifest.
+func (c *Controller) verifyImmutableStageBuild(ctx context.Context, stage Manifest) error {
+ if stage.Host!=c.Config.Host||!revisionPattern.MatchString(stage.Revision)||!checkStorePath(stage.System){
+  return errors.New("invalid legacy stage")
+ }
+ ref:=stage.Revision+"^{commit}"
+ resolved,err:=c.Config.Run(ctx,c.Config.Git,"-C",c.Config.FlakeDir,"rev-parse","--verify",ref)
+ if err!=nil||strings.TrimSpace(resolved)!=stage.Revision{return errors.New("stage source revision is unavailable")}
+ source:=(&url.URL{Scheme:"git+file",Path:c.Config.FlakeDir,
+  RawQuery:"rev="+stage.Revision,
+  Fragment:"nixosConfigurations."+stage.Host+".config.system.build.toplevel"}).String()
+ system,err:=c.Config.Run(ctx,c.Config.Nix,"build","--offline","--no-link","--print-out-paths",source)
+ if err!=nil{return fmt.Errorf("immutable stage Nix build failed: %w",err)}
+ if strings.TrimSpace(system)!=stage.System{
+  return errors.New("immutable stage does not match rebuilt NixOS generation")
+ }
+ return nil
 }
