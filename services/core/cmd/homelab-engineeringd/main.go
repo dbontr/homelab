@@ -47,8 +47,25 @@ func main(){
   os.Getenv("HOMELAB_ENGINEERING_VAULT_URL")!=""{
   log.Fatal("unattended engineering requires a protected service credential, not an owner-operation vault alias")
  }
- computeFile:=required("HOMELAB_COMPUTE_TOKEN_FILE")
- compute,err:=agentflow.NewComputeClientFromFile(required("HOMELAB_COMPUTE_URL"),computeFile)
+ computeFile:=os.Getenv("HOMELAB_COMPUTE_TOKEN_FILE")
+ tokenURL:=os.Getenv("HOMELAB_ENGINEERING_OIDC_TOKEN_URL")
+ if (computeFile=="")== (tokenURL=="") {
+  log.Fatal("exactly one scoped Compute credential source is required")
+ }
+ var compute *agentflow.ComputeClient
+ var err error
+ if tokenURL!="" {
+  source,sourceErr:=agentflow.NewMachineTokenSource(
+   tokenURL,required("HOMELAB_ENGINEERING_OIDC_CLIENT_ID"),
+   required("HOMELAB_ENGINEERING_OIDC_SECRET_FILE"),
+   os.Getenv("HOMELAB_ENGINEERING_OIDC_SCOPE"),
+   os.Getenv("HOMELAB_ENGINEERING_OIDC_RESOURCE"),
+  )
+  if sourceErr!=nil{log.Fatal(sourceErr)}
+  compute,err=agentflow.NewComputeClientFromSource(required("HOMELAB_COMPUTE_URL"),source)
+ }else{
+  compute,err=agentflow.NewComputeClientFromFile(required("HOMELAB_COMPUTE_URL"),computeFile)
+ }
  if err!=nil{log.Fatal(err)}
  probeCtx,stopProbe:=context.WithTimeout(context.Background(),10*time.Second)
  err=compute.VerifyProjectCredential(probeCtx)
