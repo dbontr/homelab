@@ -34,8 +34,7 @@ func TestTransitionRequiresExactStaticOperatorEnvironment(t *testing.T){
  if transition,err:=securityTransitionFromEnv();err!=nil||transition!=nil {
   t.Fatalf("disabled transition unexpectedly started: %v",err)
  }
- t.Setenv("HOMELAB_RELEASE_SECURITY_TRANSITION","1")
- if _,err:=securityTransitionFromEnv();err==nil {
+ // Test a deliberately incomplete operator environment even when the\n // caller itself carries a fully configured production release context.\n t.Setenv("HOMELAB_RELEASE_SECURITY_STATE","")\n t.Setenv("HOMELAB_RELEASE_SECURITY_TRANSITION","1")\n if _,err:=securityTransitionFromEnv();err==nil {
   t.Fatal("incomplete protected credential configuration was accepted")
  }
  t.Setenv("HOMELAB_RELEASE_SECURITY_TRANSITION","wrong")
