@@ -33,7 +33,7 @@ func newMigrationCLITest(t *testing.T, rejectCompat bool) (string, string, strin
 	}
 	for path, script := range map[string]string{
 		compat: compatScript,
-		goPre: "#!/bin/sh\nprintf 'go\\n' >> \"$MIGRATION_PREFLIGHT_TEST_CALLS\"\n",
+		goPre:  "#!/bin/sh\nprintf 'go\\n' >> \"$MIGRATION_PREFLIGHT_TEST_CALLS\"\n",
 	} {
 		if err := os.WriteFile(path, []byte(script), 0700); err != nil {
 			t.Fatal(err)
