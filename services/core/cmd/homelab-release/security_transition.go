@@ -76,6 +76,10 @@ func securitySystemUnit(system string)(string,string,error){
  unit:=filepath.Join(system,"etc/systemd/system/homelab-securityd.service")
  raw,err:=os.ReadFile(unit)
  if err!=nil||len(raw)>65536{return "","",errors.New("security unit unavailable")}
+ return parseSecurityUnit(raw)
+}
+
+func parseSecurityUnit(raw []byte)(string,string,error){
  impl,receipt:="",""
  for _,line:=range strings.Split(string(raw),"\n"){
   if strings.HasPrefix(line,"ExecStart=") {
