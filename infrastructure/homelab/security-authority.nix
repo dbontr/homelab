@@ -69,7 +69,7 @@ in
     sourceDirectory = "/srv/homelab-main-build";
     workspace = {
       enable = true;
-      endpoint = "http://127.0.0.1:8104/workspace";
+      endpoint = "http://127.0.0.1:8104/mcp";
       rootTokenFile = "/srv/homelab/secrets/compute-controller-admin.token";
       projects = [
         "acceptance"
