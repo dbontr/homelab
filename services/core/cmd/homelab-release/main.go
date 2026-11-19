@@ -58,7 +58,7 @@ func configured()( *release.Controller,error){
 // modifying the same generation journal while the privileged daemon owns it.
 func acquireReleaseLease(state,operation string)(*statelease.Lease,error){
  switch operation {
- case "status","guard-activate","guard-revert":return nil,nil
+ case "status","guard-activate","guard-revert","guard-resume":return nil,nil
  case "stage","activate","revert","recover":
   return statelease.Acquire(state,"executord")
  default:return nil,errors.New("unknown release operation")
@@ -104,6 +104,9 @@ func run(args []string)error{
   action:="activate"
   if args[0]=="guard-revert"{action="revert"}
   return guardRelease(ctx,ctrl,action,args[1],args[2])
+ case "guard-resume":
+  if len(args)!=1{return errors.New("guard resume has no external target arguments")}
+  return resumeAuditedActivation(ctx,ctrl)
  case "recover":
   if len(args)!=1{return errors.New("recover accepts no arguments")}
   return ctrl.Recover(ctx)
