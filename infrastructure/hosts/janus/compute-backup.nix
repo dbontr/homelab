@@ -19,6 +19,8 @@
     "f /etc/ssh/authorized_keys.d/compute-backup 0600 root root -"
   ];
 
+  services.openssh.settings.PermitUserEnvironment = "no";
+
   services.openssh.extraConfig = ''
     Match User compute-backup
       AuthorizedKeysFile /etc/ssh/authorized_keys.d/compute-backup
@@ -26,7 +28,6 @@
       ForceCommand internal-sftp -d /repository -u 077
       AuthenticationMethods publickey
       DisableForwarding yes
-      PermitUserEnvironment no
       PermitUserRC no
       AllowStreamLocalForwarding no
       PermitTTY no
