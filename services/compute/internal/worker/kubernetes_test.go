@@ -121,6 +121,37 @@ func TestKubernetesJobUsesBatchAPIAndCleansUp(t *testing.T) {
 	}
 }
 
+func TestKubernetesTemporaryBuildStorageIsBounded(t *testing.T) {
+	k, _ := testKubernetes(t)
+	id := strings.Repeat("a", 32)
+	workspace := k.workspacePod(id, "debian:bookworm-slim", 1, 2048, false, 0, 0, nil)
+	job := k.jobManifest(Job{ID: strings.Repeat("b", 32),
+		Image: "debian:bookworm-slim", CPU: 1, MemoryMB: 2048,
+		Command: "go test ./..."}, k.Worker)
+	jobPod := kubeObject(kubeObject(job, "spec"), "template")
+	for name, pod := range map[string]map[string]any{"workspace": workspace, "batch job": jobPod} {
+		spec := kubeObject(pod, "spec")
+		volumes, ok := spec["volumes"].([]any)
+		if !ok {
+			t.Fatalf("%s has no volumes", name)
+		}
+		found := false
+		for _, raw := range volumes {
+			volume, ok := raw.(map[string]any)
+			if !ok || volume["name"] != "scratch" {
+				continue
+			}
+			found = true
+			if quota := kubeObject(volume, "emptyDir")["sizeLimit"]; quota != "4Gi" {
+				t.Fatalf("%s has inadequate or unbounded compiler scratch: %v", name, quota)
+			}
+		}
+		if !found {
+			t.Fatalf("%s has no compiler scratch volume", name)
+		}
+	}
+}
+
 func TestKubernetesDevicePluginPolicy(t *testing.T) {
 	k, _ := testKubernetes(t)
 	if _, err := k.hardwareResources(map[string]any{"usb_passthrough": true}); err == nil {
