@@ -16,7 +16,7 @@ func TestExecReturnsOnlyStdoutNotDiagnosticStderr(t *testing.T){
  shell,err:=exec.LookPath("sh")
  if err!=nil{t.Skip("shell is unavailable")}
  output,err:=Exec(context.Background(),shell,"-c",
-  `printf '/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-system\\n'; printf 'warning: unrelated diagnostic\\n' >&2`)
+  `printf '/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-system\n'; printf 'warning: unrelated diagnostic\n' >&2`)
  if err!=nil{t.Fatal(err)}
  if strings.TrimSpace(output)!="/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-system"{
   t.Fatalf("stderr contaminated immutable build path: %q",output)
