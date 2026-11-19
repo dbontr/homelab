@@ -422,14 +422,24 @@ portal. The code is a request identifier, never a bearer token or
 permission to execute a command. Do not solicit administrator passwords,
 OTPs, controller credentials, signed Access assertions or secret contents.
 
-A separately trusted local-console operator may use NanoKVM to reach
-Saturn's root login on a local `seat0` virtual terminal. The
-`homelab-release-runner console-activate` operation verifies the root
-login, uses a one-use, root-owned console receipt, and launches the same
-staged-release activation, audit, health and rollback machinery through
-a detached guardian. It does not require browser owner authentication.
-Do not treat a remote shell, pseudoterminal or a caller-supplied string
-as proof of this local-console authority.
+NanoKVM provides out-of-band host administration through Saturn's
+authenticated physical `seat0` root login. This root authority is independent
+of Homelab's MCP, API, browser sessions, and remote executor policy. Use it
+for NixOS, systemd, Kubernetes, source deployment, and recovery during
+bootstrap, including when the Homelab approval service is unavailable.
+Do not demand an MCP owner session to perform a physical-console root action.
+Prefer `homelab-release-runner console-activate` for staged generation
+changes: it verifies the local login, records a one-use receipt, and runs a
+detached, audited guardian with health and rollback checks. When that
+mechanism is itself unavailable, native root recovery remains available;
+record the exact source, action, outcome, and restored declarative state.
+Only the owner determines when the normal development path can rely
+exclusively on Homelab-managed authorization.
+
+This authority is never delegated to an MCP caller or remote worker. A
+remote shell, pseudoterminal, or caller-supplied identity does not prove the
+local-console release authority. Browser, MCP, API, and distributed requests
+continue to require signed owner authorization and operation-specific policy.
 
 When a conversation is resumed, recover its nonsecret operation IDs
 through `continuity_handoff` and check the independent session with
