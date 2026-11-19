@@ -164,6 +164,7 @@ func TestOwnerEngineeringReadAllowlistDoesNotPermitExecutions(t *testing.T) {
         "/v1/engineering/projects/project-a/jobs",
         "/v1/engineering/projects/project-a/workspaces",
         "/v1/engineering/projects/project-a/artifacts",
+        "/v1/engineering/projects/project-a/artifacts/0123456789abcdef0123456789abcdef/download",
         "/v1/engineering/projects/project-a/context",
         "/v1/engineering/projects/project-a/repositories",
         "/v1/engineering/projects/project-a/research",
@@ -179,6 +180,9 @@ func TestOwnerEngineeringReadAllowlistDoesNotPermitExecutions(t *testing.T) {
     for _, path := range []string{
         "/v1/engineering/runs",
         "/v1/engineering/projects/project-a/jobs/other",
+        "/v1/engineering/projects/project-a/artifacts/0123456789abcdef0123456789abcdef/delete",
+        "/v1/engineering/projects/project-a/artifacts/../download",
+        "/v1/engineering/projects/project-a/artifacts/not-an-artifact/download",
         "/v1/engineering/projects/project-a/resource-plan",
         "/v1/engineering/projects/project-a/../../../cluster",
         "/v1/engineering/projects/project-a/something",
