@@ -84,7 +84,9 @@ func parseSecurityUnit(raw []byte)(string,string,error){
  for _,line:=range strings.Split(string(raw),"\n"){
   if strings.HasPrefix(line,"ExecStart=") {
    command:=strings.Fields(strings.TrimPrefix(line,"ExecStart="))
-   if len(command)!=1||impl!="" {return "","",errors.New("ambiguous authority executable")}
+   if len(command)!=1||impl!=""||!strings.HasPrefix(command[0],"/nix/store/") {
+    return "","",errors.New("ambiguous or untrusted authority executable")
+   }
    switch {
    case strings.HasSuffix(command[0],"/bin/homelab-securityd"):impl="go"
    case strings.HasSuffix(command[0],"/bin/securityd"):impl="rust"
