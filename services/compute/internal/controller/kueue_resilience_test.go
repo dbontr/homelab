@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+ "encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -342,4 +343,50 @@ func TestKueueLegacyMigrationFencesUnknownCreateHistory(t *testing.T) {
 	if err := srv.Kueue.reconcile(context.Background(), reopened, row); err != nil { t.Fatal(err) }
 	fake.mu.Lock(); created = fake.created; fake.mu.Unlock()
 	if created != 1 { t.Fatalf("fresh request created %d Kubernetes jobs, want one", created) }
+}
+
+func TestBatchJobCanonicalWholeCoreQuantity(t *testing.T){
+ row:=map[string]any{
+  "id":"canonical-cpu","project":"research","request_id":"canonical-cpu-001",
+  "remote_name":"pwm-canonical-cpu","image":testBatchImage,
+  "command":"printf canonical","cpu":1.0,"memory_mb":256,
+ }
+ job:=batchKubernetesJob(row)
+ // The API response decodes Go slices as JSON arrays.
+ raw,err:=json.Marshal(job)
+ if err!=nil{t.Fatal(err)}
+ var decoded map[string]any
+ if err:=json.Unmarshal(raw,&decoded);err!=nil{t.Fatal(err)}
+ job=decoded
+ decodeAnyObject(job["metadata"])["uid"]="canonical-uid"
+ pod:=decodeAnyObject(decodeAnyObject(decodeAnyObject(job["spec"])["template"])["spec"])
+ containers:=pod["containers"].([]any)
+ resources:=decodeAnyObject(decodeAnyObject(containers[0])["resources"])
+ for _,key:=range []string{"requests","limits"}{
+  decodeAnyObject(resources[key])["cpu"]="1"
+ }
+ if uid,err:=matchBatchJob(job,row);err!=nil||uid!="canonical-uid"{
+  t.Fatalf("integral core form must match 1000m: uid=%q err=%v",uid,err)
+ }
+ decodeAnyObject(resources["limits"])["cpu"]="2"
+ if _,err:=matchBatchJob(job,row);err==nil||!strings.Contains(err.Error(),"resource quota changed"){
+  t.Fatalf("resource mutation was accepted: %v",err)
+ }
+ decodeAnyObject(resources["limits"])["cpu"]="1"
+ decodeAnyObject(resources["requests"])["cpu"]="1.001"
+ if _,err:=matchBatchJob(job,row);err==nil{
+  t.Fatal("fractional CPU mutation was accepted")
+ }
+}
+
+func TestMatchCPUQuantityExactEquivalence(t *testing.T){
+ for _,tc:=range []struct{actual,expected string;valid bool}{
+  {"1","1000m",true},{"2","2000m",true},{"1000m","1000m",true},
+  {"250m","250m",true},{"1","250m",false},{"2","1000m",false},
+  {"0.999","1000m",false},{"1.001","1000m",false},{"-1","1000m",false},
+ }{
+  if got:=matchCPUQuantity(tc.actual,tc.expected);got!=tc.valid{
+   t.Errorf("CPU %q vs %q: got %t want %t",tc.actual,tc.expected,got,tc.valid)
+  }
+ }
 }

@@ -145,6 +145,18 @@ func asAnySlice(value any) []any {
 	return v
 }
 
+// Kubernetes renders integral CPU quantities as cores (for example, "1")
+// even when the Job was submitted in millicores ("1000m"). Compare only
+// canonical equivalent values; changes in requested resources remain denied.
+func matchCPUQuantity(actual,expected string)bool{
+ if actual==expected{return true}
+ if !strings.HasSuffix(expected,"m"){return false}
+ milli,err:=strconv.ParseInt(strings.TrimSuffix(expected,"m"),10,64)
+ if err!=nil||milli<=0||milli%1000!=0{return false}
+ cores,err:=strconv.ParseUint(actual,10,64)
+ return err==nil&&cores==uint64(milli/1000)
+}
+
 func matchBatchJob(job,row map[string]any)(string,error){
 	meta:=decodeAnyObject(job["metadata"])
 	if asString(meta["name"])!=asString(row["remote_name"])||
@@ -172,7 +184,7 @@ func matchBatchJob(job,row map[string]any)(string,error){
 	resources:=decodeAnyObject(c["resources"])
 	for _,key:=range []string{"requests","limits"}{
 		values:=decodeAnyObject(resources[key])
-		if asString(values["cpu"])!=cpu||asString(values["memory"])!=memory{
+		if !matchCPUQuantity(asString(values["cpu"]),cpu)||asString(values["memory"])!=memory{
 			return "",errors.New("Kubernetes Job resource quota changed")
 		}
 	}
