@@ -80,7 +80,7 @@ func(b *BrowserPortal) renderRequest(w http.ResponseWriter,code int,message,prin
  if requestID!="" {
   var found bool
   completed,found=b.manager.OwnerRequestStatusFor(principal,requestID)
-  if !found {http.NotFound(w,nil);return}
+  if !found {http.Error(w,"owner request unavailable",http.StatusNotFound);return}
  }
  token,err:=b.token()
  if err!=nil{http.Error(w,"authentication temporarily unavailable",http.StatusServiceUnavailable);return}
@@ -99,6 +99,16 @@ func(b *BrowserPortal) renderRequest(w http.ResponseWriter,code int,message,prin
  if err:=browserPage.Execute(w,data);err!=nil{log.Print("security portal response error")}
 }
 
+// browserRequestRoute accepts only exact, lower-case request IDs.
+func browserRequestRoute(path string)(id,action string,ok bool) {
+ if !strings.HasPrefix(path,"/request/"){return "","",false}
+ parts:=strings.Split(strings.TrimPrefix(path,"/request/"),"/")
+ if len(parts)==0||len(parts)>2||!validOwnerRequestID(parts[0]){return "","",false}
+ if len(parts)==1{return parts[0],"",true}
+ if parts[1]!="login"&&parts[1]!="approve"{return "","",false}
+ return parts[0],parts[1],true
+}
+
 func(b *BrowserPortal) ServeHTTP(w http.ResponseWriter,r *http.Request){
  w.Header().Set("Cache-Control","no-store")
  w.Header().Set("Pragma","no-cache")
@@ -109,19 +119,52 @@ func(b *BrowserPortal) ServeHTTP(w http.ResponseWriter,r *http.Request){
  if r.Host!=strings.TrimPrefix(b.origin,"https://"){http.Error(w,"wrong host",http.StatusMisdirectedRequest);return}
  principal,err:=b.verify(r.Header.Get("Cf-Access-Jwt-Assertion"))
  if err!=nil||principal==""{http.Error(w,"verified owner identity required",http.StatusForbidden);return}
- if r.Method==http.MethodGet&&r.URL.Path=="/"{b.render(w,200,"",principal);return}
- if r.Method!=http.MethodPost||(r.URL.Path!="/login"&&r.URL.Path!="/close"&&!strings.HasPrefix(r.URL.Path,"/confirm/")){
+ requestID,requestAction,requestRoute:=browserRequestRoute(r.URL.Path)
+ if r.Method==http.MethodGet {
+  if r.URL.Path=="/"{b.render(w,http.StatusOK,"",principal);return}
+  if requestRoute&&requestAction==""{b.renderRequest(w,http.StatusOK,"",principal,requestID);return}
   http.NotFound(w,r);return
  }
- // Reject cross-origin form submissions and consume a short-lived CSRF value.
- if r.Header.Get("Origin")!=b.origin||(r.Header.Get("Sec-Fetch-Site")!=""&&r.Header.Get("Sec-Fetch-Site")!="same-origin")||r.Header.Get("Content-Type")!="application/x-www-form-urlencoded"{
+ if r.Method!=http.MethodPost|| !(r.URL.Path=="/login"||r.URL.Path=="/close"||strings.HasPrefix(r.URL.Path,"/confirm/")||
+  (requestRoute&&(requestAction=="login"||requestAction=="approve"))) {
+  http.NotFound(w,r);return
+ }
+ // Require same-origin form submission and a single-use CSRF value.
+ if r.Header.Get("Origin")!=b.origin||
+  (r.Header.Get("Sec-Fetch-Site")!=""&&r.Header.Get("Sec-Fetch-Site")!="same-origin")||
+  r.Header.Get("Content-Type")!="application/x-www-form-urlencoded" {
   http.Error(w,"untrusted request",http.StatusForbidden);return
  }
  r.Body=http.MaxBytesReader(w,r.Body,4096)
- if err:=r.ParseForm();err!=nil||!b.take(r.PostForm.Get("csrf")){
+ if err:=r.ParseForm();err!=nil||!b.take(r.PostForm.Get("csrf")) {
   http.Error(w,"invalid form",http.StatusForbidden);return
  }
- switch{
+ if requestRoute {
+  if _,found:=b.manager.OwnerRequestStatusFor(principal,requestID);!found {
+   http.Error(w,"owner request unavailable",http.StatusNotFound);return
+  }
+  switch requestAction {
+  case "login":
+   if _,err:=b.manager.AuthenticateFor(principal,r.PostForm.Get("password"),r.PostForm.Get("totp"));err!=nil{
+    log.Print("security audit owner_request_login denied")
+    b.renderRequest(w,http.StatusUnauthorized,"Authentication denied",principal,requestID);return
+   }
+  case "approve":
+   if !b.manager.StatusFor(principal).Active {
+    http.Error(w,"owner session unavailable",http.StatusForbidden);return
+   }
+  default:
+   http.NotFound(w,r);return
+  }
+  if !b.manager.ApproveOwnerRequestFor(principal,requestID) {
+   log.Print("security audit owner_request_approval denied")
+   http.Error(w,"owner request unavailable",http.StatusForbidden);return
+  }
+  log.Print("security audit owner_request_approval accepted")
+  http.Redirect(w,r,"/request/"+requestID,http.StatusSeeOther)
+  return
+ }
+ switch {
  case r.URL.Path=="/login":
   if _,err:=b.manager.AuthenticateFor(principal,r.PostForm.Get("password"),r.PostForm.Get("totp"));err!=nil{
    log.Print("security audit web_authentication denied")
@@ -133,7 +176,7 @@ func(b *BrowserPortal) ServeHTTP(w http.ResponseWriter,r *http.Request){
   log.Print("security audit web_session revoked")
  default:
   id:=strings.TrimPrefix(r.URL.Path,"/confirm/")
-  if len(id)!=48||strings.ContainsRune(id,'/'){http.NotFound(w,r);return}
+  if !validOwnerRequestID(id){http.NotFound(w,r);return}
   if err:=b.manager.ConfirmFor(principal,id,r.PostForm.Get("password"),r.PostForm.Get("totp"));err!=nil{
    log.Print("security audit web_confirmation denied")
    b.render(w,http.StatusForbidden,"Confirmation denied",principal);return
