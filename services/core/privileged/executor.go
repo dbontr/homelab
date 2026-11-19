@@ -346,6 +346,7 @@ func (e *Executor) ExecuteWithID(ctx context.Context,requestID,operation,target 
 
 func(e *Executor) Handler()http.Handler{
  mux:=http.NewServeMux()
+ e.registerReleaseStage(mux)
  mux.HandleFunc("POST /v1/execute",func(w http.ResponseWriter,r *http.Request){
   w.Header().Set("Cache-Control","no-store")
   w.Header().Set("X-Content-Type-Options","nosniff")
