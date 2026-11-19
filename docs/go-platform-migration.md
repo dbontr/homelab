@@ -8,7 +8,9 @@ The operating-system privilege and trust boundaries are unaffected by the choice
 
 ## Safety and deployment boundaries
 
-The source selector is not a live cutover. The active Rust authority is the sole writer of its private authenticator, TOTP replay record, encrypted vault and session state until the separately approved transition.
+The source selector is not a live cutover. Host-local release staging is exposed through the protected executor Unix socket and requires the same independently verified signed owner identity and exact `infrastructure__release_stage` policy as remote staging. Staging never selects a NixOS generation. Remote fleet staging still requires a verified coordinator certificate; a local gateway connection does not gain remote fleet privileges.
+
+ The active Rust authority is the sole writer of its private authenticator, TOTP replay record, encrypted vault and session state until the separately approved transition.
 
 A protected cutover must:
 
