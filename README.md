@@ -8,8 +8,8 @@ The system is maintained in one repository but runs as independently operable se
 
 - `skills/` contains portable Development, Writing, Teaching and Ideas skills for consistent assistant behavior and project workflows.
 
-- `services/` contains the domain service implementations and private contracts. `services/core/` contains the application runtime; `services/compute/`, `services/learning/`, and `services/health/` are independently buildable modules. `services/motivation/` currently contains an opt-in private native service whose records remain independently owned during the Go service migration. Each service retains its own persistent state.
-- `ui/web/` contains the React/TypeScript console, Tailwind styles and source-owned shadcn/ui components. `ui/console/` remains available as the deployed Dioxus client until verified retirement.
+- `services/` contains the domain service implementations and private contracts. `services/core/` contains the application runtime; `services/compute/`, `services/learning/`, and `services/health/` are independently buildable modules. `services/motivation/` contains an independent opt-in Go service with private, durable records. Each service retains its own persistent state.
+- `ui/web/` contains the React/TypeScript console, Tailwind styles and source-owned shadcn/ui components. The browser client and its static source are owned by `ui/web/`.
 - `mcp/` contains the independently startable, single aggregated MCP listener.
 - `api/` contains the independently startable, optionally writable native HTTP API listener.
 - `infrastructure/` declares the hosts, networking, K3s, storage, media applications and operational environment.
@@ -23,7 +23,7 @@ Cross-capability research and explicitly authorized personal-task workflows are 
 
 Compute, teaching and health implementations retain independent operating-system and database boundaries where necessary for reliability. Their separation must not require the user to choose between assistants, endpoints or inconsistent project identifiers.
 
-See [interface boundaries](docs/interface-boundaries.md) for service ownership, availability and credential isolation. The [language policy](docs/language-policy.md) specifies Go, Rust, Nix and SQL responsibilities and the acceptance requirements for high-assurance migrations. The MCP and public API listeners are disabled by default and are not prerequisites for browser or background operation.
+See [interface boundaries](docs/interface-boundaries.md) for service ownership, availability and credential isolation. The [language policy](docs/language-policy.md) specifies Go, TypeScript, Nix and SQL responsibilities and the acceptance requirements for high-assurance migrations. The MCP and public API listeners are disabled by default and are not prerequisites for browser or background operation.
 
 ## Console
 
