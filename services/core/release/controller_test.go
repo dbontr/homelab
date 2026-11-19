@@ -105,6 +105,25 @@ func TestReleaseStagesOnlyCleanExactOfflineGeneration(t *testing.T){
  if _,err:=ctrl.loadStage("../evil");err==nil{t.Fatal("path traversal accepted")}
 }
 
+func TestStageVerificationRequiresMatchingAuthorityReceipt(t *testing.T){
+ runner:=&fakeReleaseRunner{}
+ ctrl:=releaseTestController(t,runner)
+ stage,err:=ctrl.Stage(context.Background(),testRevision)
+ if err!=nil{t.Fatal(err)}
+ if err:=ctrl.VerifyStaged(stage.ID);err!=nil{t.Fatalf("valid stage rejected: %v",err)}
+ receipt:="stage-ready-"+stage.ID+".json"
+ if err:=os.Remove(filepath.Join(ctrl.Config.StateDir,receipt));err!=nil{t.Fatal(err)}
+ if err:=ctrl.VerifyStaged(stage.ID);err==nil||!strings.Contains(err.Error(),"authority receipt"){
+  t.Fatalf("stage without authority receipt passed verification: %v",err)
+ }
+ mismatched:=stage
+ mismatched.System=priorSystem
+ if err:=ctrl.atomic(receipt,mismatched);err!=nil{t.Fatal(err)}
+ if err:=ctrl.VerifyStaged(stage.ID);err==nil||!strings.Contains(err.Error(),"differs"){
+  t.Fatalf("mismatched authority receipt passed verification: %v",err)
+ }
+}
+
 func TestReleaseActivationRecordsAndChecksHealth(t *testing.T){
  runner:=&fakeReleaseRunner{}
  ctrl:=releaseTestController(t,runner)
