@@ -6,6 +6,7 @@ on:
       - ".github/workflows/go-operational-packages.yml"
       - "services/core/**"
       - "services/compute/**"
+      - "services/native-hardware/**"
       - "packages/**"
       - "infrastructure/**"
       - "nixosModules/**"
@@ -33,11 +34,12 @@ jobs:
             .#homelab-security \
             .#homelab-executor \
             .#homelab-engineering \
-            .#homelab-platform
+            .#homelab-platform \
+            .#homelab-native-hardware
       - name: Verify executable outputs
         run: |
           set -euo pipefail
-          for name in homelab-security homelab-executor homelab-engineering homelab-platform; do
+          for name in homelab-security homelab-executor homelab-engineering homelab-platform homelab-native-hardware; do
             result="$(nix path-info ".#${name}")"
             test -d "${result}/bin"
             test -n "$(find "${result}/bin" -maxdepth 1 -type f -o -type l | head -1)"
