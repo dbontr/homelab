@@ -29,18 +29,26 @@ Credential installation only satisfies the release preflight dependency. It does
 
 A detached Saturn NixOS trial must validate the candidate's generated `homelab-securityd.service` and `homelab-executord.service` `LoadCredential` sources before changing any units. `scripts/saturn-detached-activation.sh` checks root ownership, nonempty regular files, final-path symlink rejection, and restrictive permissions in both the initiating console and the detached runner. Missing protected Compute credentials therefore block trial activation without touching the existing executor. The check inspects file metadata only and never copies credential bytes or opens a new owner session. It does not substitute for a signed owner authorization or the guarded release-state lease.
 
-The release CLI requires exclusive executor-state ownership for staging and ordinary
-recovery. An attached root login on the host's local virtual terminal has a separate
-console activation path. This path does not acquire or replace the running executor's
-process lease. A detached guardian uses the same staged manifest, health checks,
-NixOS generation journal and rollback logic as remote activation.
+Managed `stage` and `recover` operations require the Executor's exclusive
+process lease. A locally authenticated root login on the host's `seat0`
+virtual terminal can stage and activate releases independently, without a
+Homelab owner session or stopping the Executor merely to stage. Both console
+operations use the protected release journal lock rather than the Executor
+process lease. The detached activation guardian uses the same exact-stage
+manifest, health checks, NixOS generation journal and rollback behavior as
+remote activation.
 
-From the root login on the host's local console, invoke the installed release runner
-with an exact, already-staged release ID:
+From an authenticated root login on the host's local virtual terminal:
 
 ```sh
+homelab-release-runner console-stage <40-character-Git-commit>
 homelab-release-runner console-activate <48-character-staged-release-id>
 ```
+
+Use the `id` returned by `console-stage` for activation. Staging does not
+change the running NixOS generation. The source must be an exact, clean Git
+checkout and the offline build must pass. A dirty checkout, mismatched commit,
+unresolved journal, remote session or pseudoterminal is rejected.
 
 The runner checks the local `seat0` login, records a one-use console authority
 receipt in the root-owned release directory, and starts a transient systemd unit.
@@ -61,9 +69,12 @@ private credential and state custody, and must be recorded with the source
 revision and observed outcome. Reconcile each change with the declarative
 configuration. They never authorize an equivalent remote MCP or API call.
 
-Read-only release status remains available. Staging requires the executor's
-exclusive state lease; stop the executor briefly only when an operator
-must stage or perform a manual recovery, and restore it afterward.
+Read-only release status remains available. Use `console-stage` for physical
+root staging with the Executor still running. Managed `stage` and
+`recover` retain the Executor process lease; interrupted managed
+transitions must be recovered with exclusive state ownership. The
+authenticated physical root console retains independent native NixOS
+recovery authority when managed release services are unavailable.
 
 The complete release includes separately executable `homelab-mcp` and `homelab-api` adapters. Building them does not enable their optional NixOS listeners or alter running services. The web UI is built from `ui/web` and requires neither external listener.
 
