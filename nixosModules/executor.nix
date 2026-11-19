@@ -394,6 +394,30 @@ in
         LockPersonality = true;
       };
     };
+    # Resume an interrupted, signed release after the predecessor executor
+    # has been replaced. This unit has no caller-selected operation or target.
+    # Its Go guardian reads the immutable stage and privileged audit record;
+    # without an exactly matching owner-approved start it exits without a
+    # generation change. Type=simple prevents a nested NixOS switch deadlock.
+    systemd.services.homelab-release-resume = lib.mkIf
+      (cfg.allowReleaseActivation && cfg.implementation == "go") {
+      description = "Reconcile an approved NixOS activation across executor replacement";
+      wantedBy = [ "multi-user.target" ];
+      after = [ "local-fs.target" ];
+      serviceConfig = {
+        Type = "simple";
+        User = "root";
+        Group = "root";
+        ExecStart = "${releaseRunner}/bin/homelab-release-runner guard-resume";
+        Restart = "no";
+        TimeoutStopSec = "20min";
+        UMask = "0077";
+        NoNewPrivileges = false;
+        PrivateTmp = false;
+        ProtectHome = true;
+        RestrictSUIDSGID = true;
+      };
+    };
     # This unit is not started automatically. It requires the active executor
     # to stop and release its state lease before recovery can begin.
     # Operator-triggered only: the active executor must surrender its state
