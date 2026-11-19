@@ -58,6 +58,7 @@ jobs:
           - "services/learning"
           - "services/health"
           - "services/motivation"
+          - "services/native-hardware"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -96,23 +97,17 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-go@v5
         with:
-          components: rustfmt
-      - name: Compile native device helper and isolated tests
+          go-version: "1.27.3"
+      - name: Test native device identity and exclusive custody
+        working-directory: services/native-hardware
+        env:
+          GOWORK: "off"
         run: |
-          set -o pipefail
-          rustc --edition=2021 -D warnings --test services/compute/native-hardware/src/main.rs -o /tmp/homelab-native-hardware-tests 2>&1 | tee "$RUNNER_TEMP/native-build.log"
-          /tmp/homelab-native-hardware-tests 2>&1 | tee "$RUNNER_TEMP/native-test.log"
-          rustc --edition=2021 -D warnings -C opt-level=2 services/compute/native-hardware/src/main.rs -o /tmp/homelab-native-hardware
-      - name: Preserve native diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: native-device-diagnostics
-          path: ${{ runner.temp }}/native-*.log
-          if-no-files-found: warn
-          retention-days: 7
+          set -euo pipefail
+          go test -race -count=1 ./...
+          go vet ./...
 
   rust-components:
     runs-on: ubuntu-24.04

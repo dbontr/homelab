@@ -1,5 +1,7 @@
 # References
 
+- [Go hash/fnv package](https://pkg.go.dev/hash/fnv) — Go project. Used for: preserving fixed-size native hardware custody keys across the Go device validator and persisted lease records.
+- [Linux sysfs device model](https://www.kernel.org/doc/html/latest/filesystems/sysfs.html) — Linux kernel documentation. Used for: resolving USB ancestry through kernel device identity rather than trusting a caller-provided alias.
 - [nftables rule management](https://wiki.nftables.org/wiki-nftables/index.php/Simple_rule_management) — nftables project. Used for: evaluating conjunctions within single rules and preserving explicit forward-chain verdicts for private VLAN isolation.
 - [Prometheus node_exporter Textfile Collector](https://github.com/prometheus/node_exporter#textfile-collector) — Prometheus project. Used for: machine-local GPU metric publication through atomic `.prom` replacement and the exporter textfile directory.
 - [NixOS Prometheus exporters](https://wiki.nixos.org/wiki/Prometheus) — NixOS project. Used for: `services.prometheus.exporters.node.extraFlags` and systemd-managed exporter collector configuration.
