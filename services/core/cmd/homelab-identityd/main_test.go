@@ -28,6 +28,7 @@ func TestMachineIssuerCredentialCustody(t *testing.T) {
  if err:=os.Mkdir(nested,0700);err!=nil{t.Fatal(err)}
  nestedPath:=filepath.Join(nested,"copy")
  if err:=os.WriteFile(nestedPath,[]byte(strings.Repeat("s",64)),0640);err!=nil{t.Fatal(err)}
+ if err:=os.Chmod(nestedPath,0640);err!=nil{t.Fatal(err)}
  if _,err:=credential(nestedPath,256);err==nil{t.Fatal("nested unmanaged copy accepted")}
  link:=filepath.Join(dir,"alias")
  if err:=os.Symlink(path,link);err!=nil{t.Fatal(err)}
