@@ -1,11 +1,11 @@
 { pkgs }:
-pkgs.rustPlatform.buildRustPackage {
+pkgs.buildGoModule {
   pname = "homelab-motivation";
   version = "0.1.0";
   src = ../services/motivation;
-  cargoLock.lockFile = ../services/motivation/Cargo.lock;
+  vendorHash = null;
+  subPackages = [ "cmd/homelab-motivation" ];
   doCheck = true;
-  cargoTestFlags = [ "--all-targets" ];
 
   postInstall = ''
     test -x "$out/bin/homelab-motivation"
