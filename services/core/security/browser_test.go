@@ -111,3 +111,61 @@ func TestBrowserPortalDestructiveConfirmation(t *testing.T){
  if next:=manager.AuthorizeFor(principal,"platform-gateway",operation,"saturn",args);!next.Allowed{t.Fatal("confirmed operation not authorized",next.Reason)}
  if manager.AuthorizeFor(principal,"platform-gateway",operation,"saturn",args).Allowed{t.Fatal("destructive grant replayed")}
 }
+
+
+func TestTrustedBrowserFormSource(t *testing.T){
+ portal:=&BrowserPortal{origin:"https://auth.example.test"}
+ cases:=[]struct {
+  name,origin,fetchSite,contentType string
+  allowed bool
+ }{
+  {"exact origin","https://auth.example.test","same-origin","application/x-www-form-urlencoded",true},
+  {"privacy origin omission","","same-origin","application/x-www-form-urlencoded; charset=UTF-8",true},
+  {"explicit origin without metadata","https://auth.example.test","","application/x-www-form-urlencoded",true},
+  {"exact origin with charset","https://auth.example.test","same-origin","application/x-www-form-urlencoded; charset=utf-8",true},
+  {"missing origin and metadata","","","application/x-www-form-urlencoded",false},
+  {"cross-site origin","https://evil.example.test","same-origin","application/x-www-form-urlencoded",false},
+  {"null origin","null","same-origin","application/x-www-form-urlencoded",false},
+  {"downgraded origin","http://auth.example.test","same-origin","application/x-www-form-urlencoded",false},
+  {"cross-site metadata","https://auth.example.test","cross-site","application/x-www-form-urlencoded",false},
+  {"same-site metadata","https://auth.example.test","same-site","application/x-www-form-urlencoded",false},
+  {"plain text body","https://auth.example.test","same-origin","text/plain",false},
+  {"malformed media type","https://auth.example.test","same-origin","application/x-www-form-urlencoded; broken",false},
+ }
+ for _,tc:=range cases {
+  t.Run(tc.name,func(t *testing.T){
+   r:=httptest.NewRequest(http.MethodPost,"https://auth.example.test/login",nil)
+   r.Header.Set("Content-Type",tc.contentType)
+   if tc.origin!=""{r.Header.Set("Origin",tc.origin)}
+   if tc.fetchSite!=""{r.Header.Set("Sec-Fetch-Site",tc.fetchSite)}
+   if got:=portal.trustedBrowserForm(r);got!=tc.allowed{t.Fatalf("trustedBrowserForm=%v want %v",got,tc.allowed)}
+  })
+ }
+}
+
+func TestBrowserPortalAcceptsSameOriginFetchMetadataWithNoOrigin(t *testing.T){
+ manager,key,now:=testSessionManager(t)
+ verifier,assertion,_:=accessFixture(t,"browser-aud")
+ portal,err:=NewBrowserPortal(manager,"https://auth.example.test",func(token string)(string,error){
+  return verifier.Verify(token,"browser-aud")
+ })
+ if err!=nil{t.Fatal(err)}
+ page:=httptest.NewRecorder()
+ portal.ServeHTTP(page,browserRequest(assertion,http.MethodGet,"https://auth.example.test/",nil))
+ if page.Code!=http.StatusOK{t.Fatalf("GET rejected %d",page.Code)}
+ matches:=regexp.MustCompile(`name="csrf" value="([a-f0-9]{48})"`).FindStringSubmatch(page.Body.String())
+ if len(matches)!=2{t.Fatal("CSRF token not found")}
+ fields:=url.Values{"csrf":{matches[1]},"password":{testOwnerPassword},"totp":{TOTPCode(key,now.Unix()/30)}}
+ req:=browserRequest(assertion,http.MethodPost,"https://auth.example.test/login",strings.NewReader(fields.Encode()))
+ req.Header.Set("Content-Type","application/x-www-form-urlencoded; charset=UTF-8")
+ req.Header.Set("Sec-Fetch-Site","same-origin")
+ result:=httptest.NewRecorder()
+ portal.ServeHTTP(result,req)
+ if result.Code!=http.StatusSeeOther||!manager.Status().Active {
+  t.Fatalf("valid same-origin form rejected: HTTP %d",result.Code)
+ }
+ if out:=httptest.NewRecorder();true {
+  portal.ServeHTTP(out,req)
+  if out.Code!=http.StatusForbidden{t.Fatalf("CSRF replay accepted: HTTP %d",out.Code)}
+ }
+}
