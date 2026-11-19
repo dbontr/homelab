@@ -211,3 +211,9 @@
 - [GitHub Packages](https://docs.github.com/en/packages) — GitHub Docs. Used for: scoped artifact publication and OCI package lifecycle in the Development skill.
 - [GitHub Actions](https://docs.github.com/en/actions) — GitHub Docs. Used for: workflow parity, runner usage and quota-aware local acceptance.
 - [GitHub Wikis](https://docs.github.com/en/communities/documenting-your-project-with-wikis) — GitHub Docs. Used for: separation of maintained wiki guidance from versioned release policy.
+
+- [RFC 6749: OAuth 2.0 Authorization Framework](https://www.rfc-editor.org/rfc/rfc6749) — IETF. Used for: the restricted client_credentials token endpoint and HTTP Basic client authentication.
+- [RFC 7517: JSON Web Key](https://www.rfc-editor.org/rfc/rfc7517) — IETF. Used for: exporting only the RSA public verification key through JWKS.
+- [RFC 7519: JSON Web Token](https://www.rfc-editor.org/rfc/rfc7519) — IETF. Used for: short-lived issuer-, audience-, and subject-bound machine identity claims.
+- [RFC 8017: PKCS #1](https://www.rfc-editor.org/rfc/rfc8017) — IETF. Used for: RSASSA-PKCS1-v1_5 RSA-SHA256 signing and verification of machine access tokens.
+- [systemd LoadCredential](https://www.freedesktop.org/software/systemd/man/latest/systemd.exec.html#LoadCredential=ID:PATH) — systemd project. Used for: supplying private RSA keys and service client secrets without embedding them in source or unit environment.
