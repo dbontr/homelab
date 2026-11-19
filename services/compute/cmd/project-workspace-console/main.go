@@ -18,7 +18,7 @@ import (
 )
 
 var (
-	ttyName = regexp.MustCompile("^/dev/tty[1-9][0-9]*$")
+	ttyName     = regexp.MustCompile("^/dev/tty[1-9][0-9]*$")
 	sessionName = regexp.MustCompile("^[0-9]{1,8}$")
 )
 
@@ -195,7 +195,6 @@ func grant(args []string) error {
 		"previous_role": previous, "status": "completed",
 	})
 }
-
 
 var pinnedImage = regexp.MustCompile(`^[a-z0-9][a-z0-9.-]*/[a-z0-9._/-]+@sha256:[a-f0-9]{64}$`)
 
