@@ -334,3 +334,26 @@ func TestRollbackSecurityPreparationFailurePreventsUnsafeGenerationRestore(t *te
   t.Fatalf("unsafe rollback behavior: %+v, %v",journal,err)
  }
 }
+
+func TestUncertainPreparationAfterProfileChangeRequiresProtectedRollback(t *testing.T){
+ runner:=&fakeReleaseRunner{}
+ ctrl:=releaseTestController(t,runner)
+ staged,err:=ctrl.Stage(context.Background(),testRevision)
+ if err!=nil{t.Fatal(err)}
+ ctrl.Config.BeforeSwitch=func(context.Context,string,string)error{
+  runner.current=builtSystem
+  return errors.New("transition interrupted after profile selection")
+ }
+ rollbackPrepared:=false
+ ctrl.Config.BeforeRollback=func(context.Context,string,string)error{
+  rollbackPrepared=true
+  return nil
+ }
+ if err:=ctrl.Activate(context.Background(),staged.ID);err==nil{
+  t.Fatal("incomplete authority switch was admitted")
+ }
+ journal,err:=ctrl.Status()
+ if err!=nil||journal.Phase!="rolled-back"||runner.current!=priorSystem||!rollbackPrepared{
+  t.Fatalf("unverified authority generation was retained: %+v %v",journal,err)
+ }
+}
