@@ -12,7 +12,7 @@ Janus runs a dedicated `compute-backup` SFTP identity confined to
 `internal-sftp`. The account cannot use interactive SSH, port forwarding or
 a remote command. Its `authorized_keys` file is provisioned locally at
 `/etc/ssh/authorized_keys.d/compute-backup` and must not be
-committed to Git. Protect this file as root-owned, mode 0600. The server's
+committed to Git. Protect this file as `root:compute-backup`, mode `0640`: root alone may modify it, while the restricted SSH account can read it. A root-owned `0600` file is **not readable by sshd after it switches to the backup UID** and results in `Permission denied (publickey)`. The server's
 host-key fingerprint must be verified independently before writing a pinned
 `known_hosts` entry.
 

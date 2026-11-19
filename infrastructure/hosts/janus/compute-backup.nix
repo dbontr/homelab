@@ -15,8 +15,8 @@
     "d /srv/compute-restic 0755 root root -"
     "d /srv/compute-restic/repository 0700 compute-backup compute-backup -"
     "d /etc/ssh/authorized_keys.d 0755 root root -"
-    # Empty until a protected provisioning operation installs the public key.
-    "f /etc/ssh/authorized_keys.d/compute-backup 0600 root root -"
+    # The dedicated account must be able to read this root-owned key list.\n    # Root retains exclusive write custody; no world access or shell access.
+    "f /etc/ssh/authorized_keys.d/compute-backup 0640 root compute-backup -"
   ];
 
   services.openssh.settings.PermitUserEnvironment = "no";
