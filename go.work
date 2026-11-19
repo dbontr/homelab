@@ -7,4 +7,5 @@ use (
   ./services/learning
   ./services/health
   ./services/motivation
+  ./services/sandbox
 )
