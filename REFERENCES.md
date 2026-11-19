@@ -1,5 +1,7 @@
 # References
 
+- [systemd-run](https://www.freedesktop.org/software/systemd/man/latest/systemd-run.html) — systemd project. Used for: detached local-console release guardian units with journal custody and bounded execution.
+- [loginctl](https://www.freedesktop.org/software/systemd/man/latest/loginctl.html) — systemd project. Used for: validating root logins on the local seat before issuing console release authority.
 - [Go MIME media type parser](https://pkg.go.dev/mime#ParseMediaType) — Go standard library. Used for: validating form media types without rejecting conforming charset parameters on protected browser requests.
 
 - [Go hash/fnv package](https://pkg.go.dev/hash/fnv) — Go project. Used for: preserving fixed-size native hardware custody keys across the Go device validator and persisted lease records.
