@@ -34,6 +34,23 @@ func TestTransitionRequiresExactStaticOperatorEnvironment(t *testing.T){
  if transition,err:=securityTransitionFromEnv();err!=nil||transition!=nil {
   t.Fatalf("disabled transition unexpectedly started: %v",err)
  }
+ // A production host can expose a fully configured release environment.
+ // This negative test must remove every protected setting explicitly rather
+ // than assume its test process inherited an empty environment.
+ for _,name:=range []string{
+  "HOMELAB_RELEASE_SECURITY_STATE",
+  "HOMELAB_RELEASE_SECURITY_SNAPSHOT_PARENT",
+  "HOMELAB_RELEASE_SECURITY_SECRETS",
+  "HOMELAB_RELEASE_SECURITY_ACCESS_OWNER",
+  "HOMELAB_RELEASE_SECURITY_POLICY",
+  "HOMELAB_RELEASE_SECURITY_ISSUER",
+  "HOMELAB_RELEASE_SECURITY_GATEWAY_AUD",
+  "HOMELAB_RELEASE_SECURITY_BROWSER_AUD",
+  "HOMELAB_RELEASE_SECURITY_BROWSER_ORIGIN",
+  "HOMELAB_RELEASE_SYSTEMCTL",
+  "HOMELAB_RELEASE_RUNUSER",
+  "HOMELAB_RELEASE_ENV",
+ } { t.Setenv(name,"") }
  t.Setenv("HOMELAB_RELEASE_SECURITY_TRANSITION","1")
  if _,err:=securityTransitionFromEnv();err==nil {
   t.Fatal("incomplete protected credential configuration was accepted")
