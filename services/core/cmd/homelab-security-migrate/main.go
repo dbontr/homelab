@@ -25,18 +25,16 @@ func run(args []string) error {
 		filepath.Clean(stateDir) != stateDir || filepath.Clean(snapshotDir) != snapshotDir {
 		return errors.New("migration paths must be canonical and absolute")
 	}
-	preflight := os.Getenv("HOMELAB_SECURITY_GO_PREFLIGHT")
-	if !filepath.IsAbs(preflight) || filepath.Clean(preflight) != preflight {
-		return errors.New("exact Go security preflight executable required")
+	preflight, err := checkedPreflight("HOMELAB_SECURITY_GO_PREFLIGHT")
+	if err != nil {
+		return err
 	}
-	info, err := os.Lstat(preflight)
-	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0022 != 0 ||
-		info.Mode().Perm()&0111 == 0 {
-		return errors.New("unsafe Go security preflight binary")
+	compat, err := checkedPreflight("HOMELAB_SECURITY_COMPAT_PREFLIGHT")
+	if err != nil {
+		return err
 	}
-	owner, ok := info.Sys().(*syscall.Stat_t)
-	if !ok || (owner.Uid != 0 && owner.Uid != uint32(os.Geteuid())) {
-		return errors.New("Go security preflight binary owner is not trusted")
+	if preflight == compat {
+		return errors.New("independent security preflights must use distinct binaries")
 	}
 	lease, err := statelease.Acquire(stateDir, "securityd")
 	if err != nil {
@@ -44,14 +42,40 @@ func run(args []string) error {
 	}
 	defer lease.Close()
 	return security.PrepareMigration(stateDir, snapshotDir, "go", func(copyDir string) error {
-		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-		defer cancel()
-		command := exec.CommandContext(ctx, preflight, "--state-dir", copyDir)
-		command.Env = os.Environ()
-		command.Stdout = os.Stdout
-		command.Stderr = os.Stderr
-		return command.Run()
+		for _, binary := range []string{compat, preflight} {
+			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+			command := exec.CommandContext(ctx, binary, "--state-dir", copyDir)
+			command.Env = os.Environ()
+			command.Stdout = os.Stdout
+			command.Stderr = os.Stderr
+			err := command.Run()
+			cancel()
+			if err != nil {
+				return fmt.Errorf("independent %s preflight denied: %w", filepath.Base(binary), err)
+			}
+		}
+		return nil
 	})
+}
+
+// checkedPreflight requires reviewed, non-writable, regular executables from
+// independent authorities. The Go and previous authority preflights must both
+// accept one identical copied state before a transition receipt can be issued.
+func checkedPreflight(key string) (string, error) {
+	binary := os.Getenv(key)
+	if !filepath.IsAbs(binary) || filepath.Clean(binary) != binary {
+		return "", fmt.Errorf("%s must specify an exact absolute executable", key)
+	}
+	info, err := os.Lstat(binary)
+	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0022 != 0 ||
+		info.Mode().Perm()&0111 == 0 {
+		return "", fmt.Errorf("%s is not a trusted regular executable", key)
+	}
+	owner, ok := info.Sys().(*syscall.Stat_t)
+	if !ok || (owner.Uid != 0 && owner.Uid != uint32(os.Geteuid())) {
+		return "", fmt.Errorf("%s executable owner is not trusted", key)
+	}
+	return binary, nil
 }
 
 func main() {
