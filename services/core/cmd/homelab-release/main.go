@@ -65,6 +65,13 @@ func acquireReleaseLease(state,operation string)(*statelease.Lease,error){
  }
 }
 
+func authorizeReleaseCLI(trusted bool,operation string)error{
+ if trusted&&(operation=="activate"||operation=="revert") {
+  return errors.New("protected releases require the audited detached guardian")
+ }
+ return nil
+}
+
 func run(args []string)error{
  if os.Geteuid()!=0{return errors.New("release management requires a local administrator")}
  ctrl,err:=configured();if err!=nil{return err}
@@ -85,9 +92,7 @@ func run(args []string)error{
  case "activate","revert":
   // Trusted production releases use an independently signed, one-use owner
   // authorization. A root shell alone never qualifies a generation switch.
-  if ctrl.Config.TrustedSource {
-   return errors.New("protected releases require the audited detached guardian")
-  }
+  if err:=authorizeReleaseCLI(ctrl.Config.TrustedSource,args[0]);err!=nil{return err}
   if len(args)!=2{return errors.New("release operation requires an exact staged release ID")}
   if args[0]=="activate" {
    if err:=ctrl.Activate(ctx,args[1]);err!=nil{return err}
