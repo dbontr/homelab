@@ -80,3 +80,49 @@ func lowerHex(id string, length int)bool {
  for _,r:=range id { if (r<'0'||r>'9')&&(r<'a'||r>'f') { return false } }
  return true
 }
+
+func resumeAuditedActivation(ctx context.Context,ctrl *release.Controller)error{
+ if ctrl==nil||!ctrl.Config.TrustedSource {
+  return errors.New("automatic release handoff requires a trusted release guardian")
+ }
+ journal,err:=ctrl.Status()
+ if errors.Is(err,os.ErrNotExist){return nil}
+ if err!=nil{return err}
+ if journal.Phase!="activating"{return nil}
+ if !validStagedID(journal.ID){return errors.New("interrupted release identity is invalid")}
+ id,err:=matchingAuditedReleaseStart(ctrl,journal.ID)
+ if err!=nil{return err}
+ return guardRelease(ctx,ctrl,"activate",id,journal.ID)
+}
+
+func matchingAuditedReleaseStart(ctrl *release.Controller,stageID string)(string,error){
+ if ctrl==nil||!validStagedID(stageID){return "",errors.New("invalid audited stage")}
+ auditPath:=os.Getenv("HOMELAB_RELEASE_AUDIT_FILE")
+ if auditPath==""{return "",errors.New("protected release audit unavailable")}
+ raw,err:=json.Marshal(map[string]string{
+  "host":ctrl.Config.Host,"release_id":stageID,
+ })
+ if err!=nil{return "",err}
+ canonical,_,err:=canonicaljson.Object(raw)
+ if err!=nil{return "",err}
+ digest:=sha256.Sum256(canonical)
+ expected:=hex.EncodeToString(digest[:])
+ audit,err:=privileged.OpenAuditJournal(auditPath)
+ if err!=nil{return "",err}
+ pending,err:=audit.Unresolved()
+ closeErr:=audit.Close()
+ if err!=nil{return "",err}
+ if closeErr!=nil{return "",closeErr}
+ var id string
+ for _,entry:=range pending{
+  if entry.Operation!="infrastructure__release_activate" ||
+   entry.Target!=ctrl.Config.Host || entry.ArgumentsSHA256!=expected ||
+   entry.Outcome!="started" {continue}
+  if id!="" {return "",errors.New("ambiguous interrupted owner-approved release")}
+  id=entry.ID
+ }
+ if id==""{
+  return "",errors.New("interrupted release lacks an exact owner-approved audit start")
+ }
+ return id,nil
+}

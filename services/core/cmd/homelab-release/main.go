@@ -45,6 +45,12 @@ func configured()( *release.Controller,error){
    return path,nil
   },
  }
+ transition,err:=securityTransitionFromEnv()
+ if err!=nil{return nil,err}
+ if transition!=nil{
+  cfg.BeforeSwitch=transition.beforeSwitch
+  cfg.BeforeRollback=transition.beforeRollback
+ }
  return release.New(cfg)
 }
 
@@ -52,11 +58,18 @@ func configured()( *release.Controller,error){
 // modifying the same generation journal while the privileged daemon owns it.
 func acquireReleaseLease(state,operation string)(*statelease.Lease,error){
  switch operation {
- case "status","guard-activate","guard-revert":return nil,nil
+ case "status","guard-activate","guard-revert","guard-resume":return nil,nil
  case "stage","activate","revert","recover":
   return statelease.Acquire(state,"executord")
  default:return nil,errors.New("unknown release operation")
  }
+}
+
+func authorizeReleaseCLI(trusted bool,operation string)error{
+ if trusted&&(operation=="activate"||operation=="revert") {
+  return errors.New("protected releases require the audited detached guardian")
+ }
+ return nil
 }
 
 func run(args []string)error{
@@ -76,18 +89,24 @@ func run(args []string)error{
   if len(args)!=2{return errors.New("stage requires an exact source commit")}
   manifest,err:=ctrl.Stage(ctx,args[1]);if err!=nil{return err}
   return json.NewEncoder(os.Stdout).Encode(manifest)
- case "activate":
-  if len(args)!=2{return errors.New("activate requires an exact staged release ID")}
-  if err:=ctrl.Activate(ctx,args[1]);err!=nil{return err}
-  return json.NewEncoder(os.Stdout).Encode(map[string]string{"status":"active","release":args[1]})
- case "revert":
-  if len(args)!=2{return errors.New("revert requires the active staged release ID")}
+ case "activate","revert":
+  // Trusted production releases use an independently signed, one-use owner
+  // authorization. A root shell alone never qualifies a generation switch.
+  if err:=authorizeReleaseCLI(ctrl.Config.TrustedSource,args[0]);err!=nil{return err}
+  if len(args)!=2{return errors.New("release operation requires an exact staged release ID")}
+  if args[0]=="activate" {
+   if err:=ctrl.Activate(ctx,args[1]);err!=nil{return err}
+   return json.NewEncoder(os.Stdout).Encode(map[string]string{"status":"active","release":args[1]})
+  }
   return ctrl.Revert(ctx,args[1])
  case "guard-activate","guard-revert":
   if len(args)!=3{return errors.New("protected release runner requires a request ID and staged release ID")}
   action:="activate"
   if args[0]=="guard-revert"{action="revert"}
   return guardRelease(ctx,ctrl,action,args[1],args[2])
+ case "guard-resume":
+  if len(args)!=1{return errors.New("guard resume has no external target arguments")}
+  return resumeAuditedActivation(ctx,ctrl)
  case "recover":
   if len(args)!=1{return errors.New("recover accepts no arguments")}
   return ctrl.Recover(ctx)

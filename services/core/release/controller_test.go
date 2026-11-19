@@ -272,3 +272,64 @@ func TestGoReleaseRejectsStageWithoutMatchingAuthorityReceipt(t *testing.T) {
   t.Fatalf("legacy or corrupt stage admitted: %v",err)
  }
 }
+
+func TestSecurityCutoverRunsAfterDurableAttemptAndBeforeSwitch(t *testing.T){
+ runner:=&fakeReleaseRunner{}
+ ctrl:=releaseTestController(t,runner)
+ staged,err:=ctrl.Stage(context.Background(),testRevision)
+ if err!=nil{t.Fatal(err)}
+ calls:=[]string{}
+ ctrl.Config.BeforeSwitch=func(_ context.Context,previous,target string)error{
+  if previous!=priorSystem||target!=builtSystem{t.Fatal("unexpected generation")}
+  var txn Journal
+  if err:=ctrl.read("attempt-"+staged.ID+".json",&txn);err!=nil||txn.Phase!="activating" {
+   t.Fatalf("security preparation preceded durable release attempt: %+v %v",txn,err)
+  }
+  calls=append(calls,"prepare")
+  return nil
+ }
+ ctrl.Config.BeforeRollback=func(_ context.Context,target,previous string)error{
+  calls=append(calls,"recover")
+  if target!=builtSystem||previous!=priorSystem{t.Fatal("wrong rollback generations")}
+  return nil
+ }
+ original:=ctrl.Config.Run
+ ctrl.Config.Run=func(ctx context.Context,name string,args ...string)(string,error){
+  if strings.HasSuffix(name,"/nix-env"){
+   if len(calls)!=1||calls[0]!="prepare"{t.Fatal("generation switched before security preparation")}
+  }
+  return original(ctx,name,args...)
+ }
+ if err:=ctrl.Activate(context.Background(),staged.ID);err!=nil{t.Fatal(err)}
+ if len(calls)!=1||calls[0]!="prepare"{t.Fatalf("unexpected security lifecycle: %v",calls)}
+}
+
+func TestSecurityPreparationFailureRestoresHealthyPreviousGeneration(t *testing.T){
+ runner:=&fakeReleaseRunner{}
+ ctrl:=releaseTestController(t,runner)
+ staged,err:=ctrl.Stage(context.Background(),testRevision)
+ if err!=nil{t.Fatal(err)}
+ ctrl.Config.BeforeSwitch=func(context.Context,string,string)error{return errors.New("state preflight failed")}
+ recovered:=false
+ ctrl.Config.BeforeRollback=func(context.Context,string,string)error{recovered=true;return nil}
+ err=ctrl.Activate(context.Background(),staged.ID)
+ if err==nil||!strings.Contains(err.Error(),"state preflight failed"){t.Fatalf("failed preparation accepted: %v",err)}
+ journal,jerr:=ctrl.Status()
+ if jerr!=nil||journal.Phase!="rolled-back"||!recovered||runner.current!=priorSystem {
+  t.Fatalf("failed preparation did not recover: %+v, %v, %t",journal,jerr,recovered)
+ }
+}
+
+func TestRollbackSecurityPreparationFailurePreventsUnsafeGenerationRestore(t *testing.T){
+ runner:=&fakeReleaseRunner{}
+ ctrl:=releaseTestController(t,runner)
+ staged,err:=ctrl.Stage(context.Background(),testRevision)
+ if err!=nil{t.Fatal(err)}
+ ctrl.Config.BeforeSwitch=func(context.Context,string,string)error{return errors.New("prepare failed")}
+ ctrl.Config.BeforeRollback=func(context.Context,string,string)error{return errors.New("parent-bound rollback receipt unavailable")}
+ if err:=ctrl.Activate(context.Background(),staged.ID);err==nil{t.Fatal("failed rollback reported success")}
+ journal,err:=ctrl.Status()
+ if err!=nil||journal.Phase!="rollback-failed"||runner.current!=priorSystem {
+  t.Fatalf("unsafe rollback behavior: %+v, %v",journal,err)
+ }
+}

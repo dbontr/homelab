@@ -140,3 +140,28 @@ func TestGuardianRejectsAuditedHandoffWithConflictingStage(t *testing.T) {
  if *current!=guardianOld{t.Fatal("conflicting stage changed generation")}
  if _,err:=os.Stat(filepath.Join(ctrl.Config.StateDir,"attempt-"+id+".json"));!os.IsNotExist(err){t.Fatal("conflicting stage recorded an attempt")}
 }
+
+func TestAutomaticReleaseHandoffSelectsOnlyExactAuthorizedAuditStart(t *testing.T) {
+ ctrl,_,stageID:=guardianFixture(t)
+ requestID:=strings.Repeat("8",32)
+ authorizedGuardianAudit(t,ctrl,stageID,requestID,"started")
+ recovered,err:=matchingAuditedReleaseStart(ctrl,stageID)
+ if err!=nil||recovered!=requestID {
+  t.Fatalf("audit handoff could not identify approved request: %q %v",recovered,err)
+ }
+ if _,err:=matchingAuditedReleaseStart(ctrl,strings.Repeat("a",48));err==nil {
+  t.Fatal("unrelated staged generation inherited owner approval")
+ }
+}
+
+func TestAutomaticReleaseHandoffDeniesTerminalAndUntrustedEvidence(t *testing.T) {
+ ctrl,_,stageID:=guardianFixture(t)
+ requestID:=strings.Repeat("9",32)
+ authorizedGuardianAudit(t,ctrl,stageID,requestID,"accepted")
+ if _,err:=matchingAuditedReleaseStart(ctrl,stageID);err==nil {
+  t.Fatal("already completed audit was accepted as an interrupted release")
+ }
+ if err:=resumeAuditedActivation(context.Background(),ctrl);err==nil {
+  t.Fatal("untrusted root controller was accepted as an automatic guardian")
+ }
+}

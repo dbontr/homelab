@@ -41,6 +41,10 @@ type Config struct {
  TrustedSource bool
  Run Run
  Current func()(string,error)
+ // The protected guardian invokes these only after a durable, owner-approved
+ // release attempt. Callbacks cannot change the immutable generation path.
+ BeforeSwitch func(context.Context,string,string) error
+ BeforeRollback func(context.Context,string,string) error
 }
 
 type Manifest struct {
@@ -246,6 +250,13 @@ func(c *Controller) set(ctx context.Context,system string)error{
 }
 
 func(c *Controller) rollback(ctx context.Context,j Journal)error{
+ if c.Config.BeforeRollback!=nil {
+  if err:=c.Config.BeforeRollback(ctx,j.Target,j.Previous);err!=nil {
+   j.Phase="rollback-failed"
+   _=c.atomic("journal.json",j)
+   return fmt.Errorf("security recovery preparation failed: %w",err)
+  }
+ }
  if err:=c.set(ctx,j.Previous);err!=nil{
   j.Phase="rollback-failed"
   _=c.atomic("journal.json",j)
@@ -293,7 +304,11 @@ func(c *Controller) Activate(ctx context.Context,id string)error{
   if err:=c.atomic("journal.json",txn);err!=nil{return err}
   // Do not use the caller's cancellation for rollback. A cancelled user
   // request must not leave an unverified generation active.
-  switchErr:=c.set(ctx,m.System)
+  var switchErr error
+  if c.Config.BeforeSwitch!=nil {
+   switchErr=c.Config.BeforeSwitch(ctx,current,m.System)
+  }
+  if switchErr==nil{switchErr=c.set(ctx,m.System)}
   if switchErr==nil{switchErr=c.health(ctx)}
   if switchErr!=nil{
    cleanup,cancel:=context.WithTimeout(context.Background(),90*time.Second);defer cancel()

@@ -35,3 +35,19 @@ func TestMutatingReleaseCLIRequiresDaemonStateOwnership(t *testing.T){
   t.Fatal("release lease inode must remain stable across acquisitions")
  }
 }
+
+func TestProductionRootCLICannotReplaceSignedOwnerApproval(t *testing.T){
+ for _,op:=range []string{"activate","revert"}{
+  if err:=authorizeReleaseCLI(true,op);err==nil{
+   t.Fatalf("root accepted unaudited %s on protected production host",op)
+  }
+  if err:=authorizeReleaseCLI(false,op);err!=nil{
+   t.Fatalf("isolated test release unexpectedly denied: %v",err)
+  }
+ }
+ for _,op:=range []string{"status","stage","recover","guard-activate","guard-revert"}{
+  if err:=authorizeReleaseCLI(true,op);err!=nil{
+   t.Fatalf("unexpected operation denial for %s: %v",op,err)
+  }
+ }
+}

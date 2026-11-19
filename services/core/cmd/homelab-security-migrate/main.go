@@ -16,9 +16,9 @@ import (
 
 func run(args []string) error {
 	if len(args) != 7 || args[0] != "prepare" ||
-		args[1] != "--target" || args[2] != "go" ||
+		args[1] != "--target" || (args[2] != "go" && args[2] != "rust") ||
 		args[3] != "--state-dir" || args[5] != "--snapshot-dir" {
-		return errors.New("usage: homelab-security-migrate prepare --target go --state-dir ABSOLUTE_STATE_DIR --snapshot-dir ABSOLUTE_NEW_DIR")
+		return errors.New("usage: homelab-security-migrate prepare --target go|rust --state-dir ABSOLUTE_STATE_DIR --snapshot-dir ABSOLUTE_NEW_DIR")
 	}
 	stateDir, snapshotDir := args[4], args[6]
 	if !filepath.IsAbs(stateDir) || !filepath.IsAbs(snapshotDir) ||
@@ -41,7 +41,7 @@ func run(args []string) error {
 		return fmt.Errorf("security authority still owns the state lease: %w", err)
 	}
 	defer lease.Close()
-	return security.PrepareMigration(stateDir, snapshotDir, "go", func(copyDir string) error {
+	return security.PrepareMigration(stateDir, snapshotDir, args[2], func(copyDir string) error {
 		for _, binary := range []string{compat, preflight} {
 			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 			command := exec.CommandContext(ctx, binary, "--state-dir", copyDir)
@@ -80,8 +80,8 @@ func checkedPreflight(key string) (string, error) {
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
-		fmt.Fprintln(os.Stderr, "Go security migration denied:", err)
+		fmt.Fprintln(os.Stderr, "Security migration denied:", err)
 		os.Exit(1)
 	}
-	fmt.Println("Go state-bound security migration receipt prepared.")
+	fmt.Println("State-bound security migration receipt prepared.")
 }

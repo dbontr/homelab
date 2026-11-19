@@ -1,0 +1,64 @@
+package main
+
+import (
+ "os"
+ "strings"
+ "testing"
+)
+
+func TestSecurityUnitSelectionRequiresProtectedReceipt(t *testing.T){
+ cases:=[]struct{name,content,implementation,receipt string;valid bool}{
+  {"Go", "[Service]\nExecStart=/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-homelab-security/bin/homelab-securityd\nLoadCredential=password:/vault/password totp:/vault/totp migration-receipt:/srv/homelab/secrets/security/authority-go-cutover.json\n", "go","/srv/homelab/secrets/security/authority-go-cutover.json",true},
+  {"Rust", "[Service]\nExecStart=/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-rust-security/bin/securityd\nLoadCredential=migration-receipt:/srv/homelab/secrets/security/authority-rust-cutover.json\n","rust","/srv/homelab/secrets/security/authority-rust-cutover.json",true},
+  {"missing receipt","[Service]\nExecStart=/nix/store/a/bin/homelab-securityd\n","", "",false},
+  {"duplicate receipts","[Service]\nExecStart=/nix/store/a/bin/homelab-securityd\nLoadCredential=migration-receipt:/a migration-receipt:/b\n","","",false},
+  {"unexpected executable","[Service]\nExecStart=/tmp/securityd\nLoadCredential=migration-receipt:/vault/receipt\n","","",false},
+  {"relative credential","[Service]\nExecStart=/nix/store/a/bin/securityd\nLoadCredential=migration-receipt:relative\n","","",false},
+ }
+ for _,tc:=range cases{
+  t.Run(tc.name,func(t *testing.T){
+   impl,receipt,err:=parseSecurityUnit([]byte(tc.content))
+   if tc.valid {
+    if err!=nil||impl!=tc.implementation||receipt!=tc.receipt {
+     t.Fatalf("wrong selection: %q %q %v",impl,receipt,err)
+    }
+   }else if err==nil{t.Fatalf("unsafe security configuration accepted: %s, %s",impl,receipt)}
+  })
+ }
+}
+
+func TestTransitionRequiresExactStaticOperatorEnvironment(t *testing.T){
+ t.Setenv("HOMELAB_RELEASE_SECURITY_TRANSITION","")
+ if transition,err:=securityTransitionFromEnv();err!=nil||transition!=nil {
+  t.Fatalf("disabled transition unexpectedly started: %v",err)
+ }
+ t.Setenv("HOMELAB_RELEASE_SECURITY_TRANSITION","1")
+ if _,err:=securityTransitionFromEnv();err==nil {
+  t.Fatal("incomplete protected credential configuration was accepted")
+ }
+ t.Setenv("HOMELAB_RELEASE_SECURITY_TRANSITION","wrong")
+ if _,err:=securityTransitionFromEnv();err==nil {
+  t.Fatal("unrecognized transition mode was accepted")
+ }
+}
+
+func TestProtectedTransitionReceiptRejectsUntrustedCustody(t *testing.T){
+ dir:=t.TempDir()
+ if err:=os.WriteFile(dir+"/unsafe",[]byte("{}"),0644);err!=nil{t.Fatal(err)}
+ if _,err:=transitionFile(dir+"/unsafe",1024);err==nil{
+  t.Fatal("world-readable protected credential admitted")
+ }
+ if err:=os.Symlink("unsafe",dir+"/link");err!=nil{t.Fatal(err)}
+ if _,err:=transitionFile(dir+"/link",1024);err==nil{
+  t.Fatal("symlink credential admitted")
+ }
+}
+
+func TestSecurityUnitRejectsMisleadingExecutableSuffix(t *testing.T){
+ for _,suffix:=range []string{"securityd --skip-migration","homelab-securityd --skip-migration","bad-securityd"}{
+  text:="[Service]\nExecStart=/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-security/bin/"+suffix+"\nLoadCredential=migration-receipt:/srv/homelab/secrets/security/authority-go-cutover.json\n"
+  if _,_,err:=parseSecurityUnit([]byte(text));err==nil {
+   t.Fatalf("unrecognized security executable accepted: %s",strings.TrimSpace(suffix))
+  }
+ }
+}
