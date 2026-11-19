@@ -4,6 +4,7 @@ package release
 
 import (
  "context"
+ "bytes"
  "crypto/rand"
  "encoding/hex"
  "encoding/json"
@@ -73,9 +74,17 @@ func Exec(ctx context.Context,name string,args ...string)(string,error){
  defer os.RemoveAll(cacheDir)
  cmd:=exec.CommandContext(ctx,name,args...)
  cmd.Env=[]string{"PATH=/run/current-system/sw/bin:/usr/bin:/bin","LANG=C","HOME=/var/empty","XDG_CACHE_HOME="+cacheDir}
- data,err:=cmd.CombinedOutput()
+ var stdout,stderr bytes.Buffer
+ cmd.Stdout=&stdout
+ cmd.Stderr=&stderr
+ err=cmd.Run()
+ if err!=nil{
+  data:=append(stdout.Bytes(),stderr.Bytes()...)
+  if len(data)>8192{data=data[:8192]}
+  return "",fmt.Errorf("release command %s failed: %w (%s)",filepath.Base(name),err,strings.TrimSpace(string(data)))
+ }
+ data:=stdout.Bytes()
  if len(data)>8192{data=data[:8192]}
- if err!=nil{return "",fmt.Errorf("release command %s failed: %w (%s)",filepath.Base(name),err,strings.TrimSpace(string(data)))}
  return string(data),nil
 }
 
