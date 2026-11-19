@@ -53,6 +53,9 @@
         homelab-engineering = import ./packages/engineering.nix {
           pkgs = nixpkgs.legacyPackages.${defaultSystem};
         };
+        homelab-compute-console = import ./packages/compute-console.nix {
+          pkgs = nixpkgs.legacyPackages.${defaultSystem};
+        };
         homelab-platform = import ./packages/platform.nix {
           pkgs = nixpkgs.legacyPackages.${defaultSystem};
         };
