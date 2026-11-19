@@ -315,7 +315,7 @@ func TestSecurityPreparationFailureRestoresHealthyPreviousGeneration(t *testing.
  err=ctrl.Activate(context.Background(),staged.ID)
  if err==nil||!strings.Contains(err.Error(),"state preflight failed"){t.Fatalf("failed preparation accepted: %v",err)}
  journal,jerr:=ctrl.Status()
- if jerr!=nil||journal.Phase!="rolled-back"||!recovered||runner.current!=priorSystem {
+ if jerr!=nil||journal.Phase!="rolled-back"||recovered||runner.current!=priorSystem {
   t.Fatalf("failed preparation did not recover: %+v, %v, %t",journal,jerr,recovered)
  }
 }
@@ -325,11 +325,35 @@ func TestRollbackSecurityPreparationFailurePreventsUnsafeGenerationRestore(t *te
  ctrl:=releaseTestController(t,runner)
  staged,err:=ctrl.Stage(context.Background(),testRevision)
  if err!=nil{t.Fatal(err)}
- ctrl.Config.BeforeSwitch=func(context.Context,string,string)error{return errors.New("prepare failed")}
+ ctrl.Config.BeforeSwitch=func(context.Context,string,string)error{return nil}
+ runner.failHealth=true
  ctrl.Config.BeforeRollback=func(context.Context,string,string)error{return errors.New("parent-bound rollback receipt unavailable")}
  if err:=ctrl.Activate(context.Background(),staged.ID);err==nil{t.Fatal("failed rollback reported success")}
  journal,err:=ctrl.Status()
- if err!=nil||journal.Phase!="rollback-failed"||runner.current!=priorSystem {
+ if err!=nil||journal.Phase!="rollback-failed"||runner.current!=builtSystem {
   t.Fatalf("unsafe rollback behavior: %+v, %v",journal,err)
+ }
+}
+
+func TestUncertainPreparationAfterProfileChangeRequiresProtectedRollback(t *testing.T){
+ runner:=&fakeReleaseRunner{}
+ ctrl:=releaseTestController(t,runner)
+ staged,err:=ctrl.Stage(context.Background(),testRevision)
+ if err!=nil{t.Fatal(err)}
+ ctrl.Config.BeforeSwitch=func(context.Context,string,string)error{
+  runner.current=builtSystem
+  return errors.New("transition interrupted after profile selection")
+ }
+ rollbackPrepared:=false
+ ctrl.Config.BeforeRollback=func(context.Context,string,string)error{
+  rollbackPrepared=true
+  return nil
+ }
+ if err:=ctrl.Activate(context.Background(),staged.ID);err==nil{
+  t.Fatal("incomplete authority switch was admitted")
+ }
+ journal,err:=ctrl.Status()
+ if err!=nil||journal.Phase!="rolled-back"||runner.current!=priorSystem||!rollbackPrepared{
+  t.Fatalf("unverified authority generation was retained: %+v %v",journal,err)
  }
 }

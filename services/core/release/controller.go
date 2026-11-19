@@ -307,6 +307,7 @@ func(c *Controller) Activate(ctx context.Context,id string)error{
   var switchErr error
   if c.Config.BeforeSwitch!=nil {
    switchErr=c.Config.BeforeSwitch(ctx,current,m.System)
+   if switchErr!=nil{return c.preparationFailed(ctx,txn,switchErr)}
   }
   if switchErr==nil{switchErr=c.set(ctx,m.System)}
   if switchErr==nil{switchErr=c.health(ctx)}
@@ -319,6 +320,32 @@ func(c *Controller) Activate(ctx context.Context,id string)error{
   txn.Phase="active"
   return c.atomic("journal.json",txn)
  })
+}
+
+// A failed pre-switch preparation may have stopped and restored the same
+// authority, but no NixOS generation has been selected. Avoid a second,
+// unnecessary migration to the previous implementation once both the running
+// generation and its protected health probes have been verified.
+func(c *Controller) preparationFailed(ctx context.Context,txn Journal,failure error)error{
+ current,err:=c.Config.Current()
+ sourceSelected:=err==nil&&current==txn.Previous
+ if sourceSelected&&c.Config.TrustedSource{
+  running,readErr:=filepath.EvalSymlinks("/run/current-system")
+  sourceSelected=readErr==nil&&running==txn.Previous
+ }
+ cleanup,cancel:=context.WithTimeout(context.Background(),90*time.Second)
+ defer cancel()
+ if sourceSelected&&c.health(cleanup)==nil{
+  txn.Phase="rolled-back"
+  if err:=c.atomic("journal.json",txn);err!=nil{
+   return fmt.Errorf("security preparation failed: %v; cannot persist recovery: %w",failure,err)
+  }
+  return fmt.Errorf("security preparation failed; previous generation remains healthy: %w",failure)
+ }
+ if err:=c.rollback(cleanup,txn);err!=nil{
+  return fmt.Errorf("security preparation failed: %v; rollback failed: %w",failure,err)
+ }
+ return fmt.Errorf("security preparation failed and previous generation restored: %w",failure)
 }
 
 // Revert restores a completed release only when the active system is the

@@ -127,10 +127,51 @@ func (t *securityTransition) prepare(ctx context.Context,fromSystem,toSystem str
  if receiptPath!=expectedReceipt {
   return errors.New("security unit receipt differs from reviewed custody policy")
  }
- if err:=t.stopCurrentAuthority(ctx);err!=nil{return err}
- // No authority is running after this point: TOTP state and the encrypted
- // vault cannot change between receipt capture and the new service startup.
- return t.capture(ctx,fromSystem,toSystem,targetImpl,receiptPath)
+ // The durable release guardian owns the single-writer handoff. A failed
+ // capture must not leave the original authority stopped when its NixOS
+ // generation still owns the system profile.
+ return transitionCaptureWithRecovery(
+  func()error{return t.stopCurrentAuthority(ctx)},
+  func()error{return t.capture(ctx,fromSystem,toSystem,targetImpl,receiptPath)},
+  func()error{return t.restartSourceAuthority(context.Background(),fromSystem)},
+ )
+}
+
+// A transition may fail after quiescing the old writer. Retain the original
+// error and independently verify that its still-selected generation is usable.
+func transitionCaptureWithRecovery(stop,capture,restore func()error)error{
+ if err:=stop();err!=nil{
+  if recoveryErr:=restore();recoveryErr!=nil{
+   return errors.Join(err,fmt.Errorf("previous security authority recovery failed: %w",recoveryErr))
+  }
+  return err
+ }
+ if err:=capture();err!=nil{
+  if recoveryErr:=restore();recoveryErr!=nil{
+   return errors.Join(err,fmt.Errorf("previous security authority recovery failed: %w",recoveryErr))
+  }
+  return err
+ }
+ return nil
+}
+
+func (t *securityTransition) restartSourceAuthority(ctx context.Context,fromSystem string)error{
+ selected,err:=filepath.EvalSymlinks("/run/current-system")
+ if err!=nil||selected!=fromSystem{
+  return errors.New("previous authority generation is no longer selected; release rollback is required")
+ }
+ restartCtx,cancel:=context.WithTimeout(ctx,35*time.Second)
+ defer cancel()
+ command:=exec.CommandContext(restartCtx,t.Systemctl,"start","homelab-securityd.service")
+ if output,err:=command.CombinedOutput();err!=nil{
+  return fmt.Errorf("previous security authority restart failed: %w (%s)",err,limitTransitionLog(output))
+ }
+ status:=exec.CommandContext(restartCtx,t.Systemctl,"is-active","homelab-securityd.service")
+ output,err:=status.Output()
+ if err!=nil||strings.TrimSpace(string(output))!="active"{
+  return errors.New("previous security authority did not become active")
+ }
+ return nil
 }
 
 func (t *securityTransition) stopCurrentAuthority(ctx context.Context)error{
