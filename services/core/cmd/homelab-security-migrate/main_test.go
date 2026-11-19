@@ -97,3 +97,22 @@ func TestGoMigrationCLIDeniesSamePreflightBinary(t *testing.T) {
 		t.Fatalf("same preflight binary accepted: %v", err)
 	}
 }
+
+func TestRustMigrationCLIUsesSameStatePreservingPreflight(t *testing.T) {
+ state, destination, calls, original := newMigrationCLITest(t, false)
+ if err := run([]string{"prepare", "--target", "rust", "--state-dir", state, "--snapshot-dir", destination}); err != nil {
+  t.Fatal(err)
+ }
+ logged,err:=os.ReadFile(calls)
+ if err!=nil||string(logged)!="compat\ngo\n" {
+  t.Fatalf("independent preflights did not both execute: %q, %v",logged,err)
+ }
+ raw,err:=os.ReadFile(filepath.Join(destination, "authority-cutover.json"))
+ if err!=nil {t.Fatal(err)}
+ var receipt struct {Target string `json:"target"`; AuthenticatorSHA256 string `json:"authenticator_sha256"`}
+ if err:=json.Unmarshal(raw,&receipt);err!=nil||receipt.Target!="rust"||len(receipt.AuthenticatorSHA256)!=64 {
+  t.Fatalf("invalid Rust recovery receipt: %+v, %v",receipt,err)
+ }
+ live,err:=os.ReadFile(filepath.Join(state,"authenticator.json"))
+ if err!=nil||string(live)!=string(original){t.Fatal("Rust recovery reset authentication state")}
+}
