@@ -119,6 +119,7 @@ type AdminSessions struct {
 	rules     map[string]OperationPolicy
 	session   *activeSession
 	pending   map[string]confirmation
+	ownerRequests map[string]ownerRequestState
 	now       func() time.Time
 	faulted   bool
 }
@@ -165,7 +166,7 @@ func NewAdminSessions(cfg SessionConfig) (*AdminSessions, error) {
 		rules[rule.Operation] = rule
 	}
 	manager := &AdminSessions{owner: cfg.Owner, client: cfg.Client, verifier: cfg.Verifier, totpKey: key, stateFile: cfg.StateFile,
-		rules: rules, pending: make(map[string]confirmation), serviceCredentialTickets: make(map[string]issuedCredentialTicket), now: time.Now, state: authenticatorState{Version: 1, LastTOTPStep: -1}}
+		rules: rules, pending: make(map[string]confirmation), ownerRequests: make(map[string]ownerRequestState), serviceCredentialTickets: make(map[string]issuedCredentialTicket), now: time.Now, state: authenticatorState{Version: 1, LastTOTPStep: -1}}
 	if err := manager.loadState(); err != nil {
 		return nil, err
 	}
