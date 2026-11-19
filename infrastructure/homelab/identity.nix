@@ -7,6 +7,7 @@ let
   key = "/srv/homelab/secrets/security/engineering-machine-signing.pem";
   package = import ../../packages/identity.nix { inherit pkgs; };
 in {
+  services.homelabExecutor.healthServices = [ "homelab-identityd.service" ];
   systemd.services.homelab-identityd = {
     description = "Restricted OAuth2 machine identity issuer";
     wantedBy = [ "multi-user.target" ];

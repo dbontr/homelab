@@ -9,6 +9,7 @@ import (
  "path/filepath"
  "strings"
  "testing"
+ "time"
 )
 
 func TestExecUsesPrivateWritableCache(t *testing.T){
@@ -35,6 +36,7 @@ type fakeReleaseRunner struct{
  current string
  failSwitch bool
  failHealth bool
+ transientHealthFailures int
  dirty bool
 }
 
@@ -56,6 +58,7 @@ func(f *fakeReleaseRunner) run(_ context.Context,name string,args ...string)(str
   if len(args)>0{f.current=args[len(args)-1]}
   return "",nil
  case strings.HasSuffix(name,"/systemctl"):
+  if f.transientHealthFailures>0{f.transientHealthFailures--;return "activating",errors.New("starting")}
   if f.failHealth{return "failed",errors.New("service down")}
   return "active\n",nil
  default:return "",nil
@@ -113,6 +116,28 @@ func TestReleaseActivationRecordsAndChecksHealth(t *testing.T){
   t.Fatalf("wrong durable activation journal: %+v %v",journal,err)
  }
  if err:=ctrl.Activate(context.Background(),stage.ID);err==nil{t.Fatal("same-generation activation repeated")}
+}
+
+func TestReleaseWaitsForDependentServicesBeforeAdmission(t *testing.T){
+ runner:=&fakeReleaseRunner{}
+ ctrl:=releaseTestController(t,runner)
+ stage,err:=ctrl.Stage(context.Background(),testRevision)
+ if err!=nil{t.Fatal(err)}
+ runner.transientHealthFailures=2
+ if err:=ctrl.Activate(context.Background(),stage.ID);err!=nil{t.Fatalf("startup delay triggered release failure: %v",err)}
+ if runner.transientHealthFailures!=0{t.Fatal("not all readiness attempts were consumed")}
+ journal,err:=ctrl.Status()
+ if err!=nil||journal.Phase!="active"{t.Fatalf("startup failed release: %+v %v",journal,err)}
+}
+
+func TestReleaseReadinessDeadlineRejectsUnhealthyService(t *testing.T){
+ runner:=&fakeReleaseRunner{failHealth:true}
+ ctrl:=releaseTestController(t,runner)
+ ctx,cancel:=context.WithTimeout(context.Background(),25*time.Millisecond)
+ defer cancel()
+ if err:=ctrl.waitForHealth(ctx);err==nil||!strings.Contains(err.Error(),"did not become ready"){
+  t.Fatalf("missing readiness failure at deadline: %v",err)
+ }
 }
 
 func TestReleaseFailureRestoresPreviousGeneration(t *testing.T){

@@ -25,7 +25,8 @@
 
   systemd.services.homelab-engineeringd =
     lib.mkIf config.services.homelabEngineering.enable {
-      after = [ "nginx.service" "homelab-identityd.service" ];
+      after = [ "nginx.service" "homelab-identityd.service" "cloudflared-saturn.service" ];
+      wants = [ "cloudflared-saturn.service" ];
       requires = [ "homelab-identityd.service" ];
     };
 }
