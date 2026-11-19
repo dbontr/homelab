@@ -1,11 +1,13 @@
 package motivation
 
 import (
+	"bytes"
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
+	"strings"
 )
 
 func NewHandler(engine *Engine,token string)(http.Handler,error){
@@ -19,8 +21,9 @@ func NewHandler(engine *Engine,token string)(http.Handler,error){
 		writeJSON(w,http.StatusOK,engine.Snapshot())
 	})
 	protected.HandleFunc("PUT /v1/motivation/profile",func(w http.ResponseWriter,r *http.Request){
-		var input ProfileChange
-		if !readRequest(w,r,&input){return}
+		input:=ProfileChange{CadenceMinutes:240}
+		if !readRequest(w,r,&input,"expected_revision","enabled","identity","outcome",
+			"next_step","intensity","daily_limit","quiet_start_utc_hour","quiet_end_utc_hour"){return}
 		next,err:=engine.UpdateProfile(input)
 		writeResult(w,next,err)
 	})
@@ -36,19 +39,19 @@ func NewHandler(engine *Engine,token string)(http.Handler,error){
 	})
 	protected.HandleFunc("POST /v1/motivation/feedback",func(w http.ResponseWriter,r *http.Request){
 		var input FeedbackInput
-		if !readRequest(w,r,&input){return}
+		if !readRequest(w,r,&input,"intervention_id","engagement","progress","wellbeing"){return}
 		next,err:=engine.Feedback(input,Now())
 		writeResult(w,next,err)
 	})
 	protected.HandleFunc("POST /v1/motivation/dismiss",func(w http.ResponseWriter,r *http.Request){
 		var input struct{ID uint64 `json:"id"`}
-		if !readRequest(w,r,&input){return}
+		if !readRequest(w,r,&input,"id"){return}
 		next,err:=engine.Dismiss(input.ID)
 		writeResult(w,next,err)
 	})
 	protected.HandleFunc("POST /v1/motivation/checkins",func(w http.ResponseWriter,r *http.Request){
 		var input CheckinInput
-		if !readRequest(w,r,&input){return}
+		if !readRequest(w,r,&input,"minutes","self_initiated","fascination","wellbeing"){return}
 		next,err:=engine.Checkin(input,Now())
 		writeResult(w,next,err)
 	})
@@ -57,13 +60,13 @@ func NewHandler(engine *Engine,token string)(http.Handler,error){
 	})
 	protected.HandleFunc("POST /v1/motivation/focus",func(w http.ResponseWriter,r *http.Request){
 		var input FocusStart
-		if !readRequest(w,r,&input){return}
+		if !readRequest(w,r,&input,"target_minutes"){return}
 		next,err:=engine.StartFocus(input,Now())
 		writeResult(w,next,err)
 	})
 	protected.HandleFunc("POST /v1/motivation/focus/end",func(w http.ResponseWriter,r *http.Request){
 		var input FocusFinish
-		if !readRequest(w,r,&input){return}
+		if !readRequest(w,r,&input,"id","completed"){return}
 		next,err:=engine.FinishFocus(input,Now())
 		writeResult(w,next,err)
 	})
@@ -80,8 +83,30 @@ func NewHandler(engine *Engine,token string)(http.Handler,error){
 	return mux,nil
 }
 
-func readRequest(w http.ResponseWriter,r *http.Request,target any)bool{
-	reader:=json.NewDecoder(io.LimitReader(r.Body,32<<10+1))
+func readRequest(w http.ResponseWriter,r *http.Request,target any,required ...string)bool{
+	if ct:=r.Header.Get("Content-Type");ct!="application/json"&&
+		!strings.HasPrefix(ct,"application/json;") {
+		writeJSON(w,http.StatusBadRequest,map[string]string{"error":"invalid motivation request"})
+		return false
+	}
+	raw,err:=io.ReadAll(io.LimitReader(r.Body,32<<10+1))
+	if err!=nil||len(raw)>32<<10{
+		writeJSON(w,http.StatusBadRequest,map[string]string{"error":"invalid motivation request"})
+		return false
+	}
+	var keys map[string]json.RawMessage
+	if err:=json.Unmarshal(raw,&keys);err!=nil||keys==nil {
+		writeJSON(w,http.StatusBadRequest,map[string]string{"error":"invalid motivation request"})
+		return false
+	}
+	for _,field:=range required{
+		value,ok:=keys[field]
+		if !ok||string(value)=="null"{
+			writeJSON(w,http.StatusBadRequest,map[string]string{"error":"invalid motivation request"})
+			return false
+		}
+	}
+	reader:=json.NewDecoder(bytes.NewReader(raw))
 	reader.DisallowUnknownFields()
 	if err:=reader.Decode(target);err!=nil{
 		writeJSON(w,http.StatusBadRequest,map[string]string{"error":"invalid motivation request"})
