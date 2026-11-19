@@ -12,6 +12,8 @@ import (
  "sync"
  "syscall"
  "time"
+
+ "github.com/dbontr/homelab-new/system/security"
 )
 
 type machineTokenSource struct {
@@ -66,9 +68,14 @@ func readMachineSecret(path string)(string,error){
  if err!=nil{return "",errors.New("engineering client secret unavailable")}
  defer f.Close()
  stat,err:=f.Stat()
- if err!=nil||!stat.Mode().IsRegular()||stat.Mode().Perm()&0077!=0||
-  stat.Size()<32||stat.Size()>4096{return "",errors.New("unsafe engineering client secret")}
- if s,ok:=stat.Sys().(*syscall.Stat_t);!ok||s.Nlink!=1{return "",errors.New("unsafe engineering client secret links")}
+ if err!=nil||!stat.Mode().IsRegular()||stat.Size()<32||stat.Size()>4096{
+  return "",errors.New("unsafe engineering client secret")
+ }
+ inode,ok:=stat.Sys().(*syscall.Stat_t)
+ if !ok||inode.Nlink!=1{return "",errors.New("unsafe engineering client secret links")}
+ if !security.PrivateCredentialFileAllowed(path,stat.Mode(),inode.Uid){
+  return "",errors.New("unsafe engineering client secret")
+ }
  raw,err:=io.ReadAll(io.LimitReader(f,4097))
  if err!=nil||len(raw)>4096{return "",errors.New("engineering client secret exceeds limit")}
  secret:=strings.TrimSpace(string(raw))
