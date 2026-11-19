@@ -179,6 +179,24 @@ func TestReleaseWaitsForDependentServicesBeforeAdmission(t *testing.T){
  if err!=nil||journal.Phase!="active"{t.Fatalf("startup failed release: %+v %v",journal,err)}
 }
 
+func TestContinuedReleaseWaitsForDependentServices(t *testing.T){
+ runner:=&fakeReleaseRunner{}
+ ctrl:=releaseTestController(t,runner)
+ stage,err:=ctrl.Stage(context.Background(),testRevision)
+ if err!=nil{t.Fatal(err)}
+ txn:=Journal{Phase:"activating",ID:stage.ID,Previous:priorSystem,Target:builtSystem,Time:time.Now().UTC()}
+ if err:=ctrl.atomic("journal.json",txn);err!=nil{t.Fatal(err)}
+ if err:=ctrl.atomic("attempt-"+stage.ID+".json",txn);err!=nil{t.Fatal(err)}
+ runner.transientHealthFailures=2
+ if err:=ctrl.Continue(context.Background(),"activate",stage.ID);err!=nil{
+  t.Fatalf("continued service startup interrupted: %v",err)
+ }
+ status,err:=ctrl.Status()
+ if err!=nil||status.Phase!="active"||runner.transientHealthFailures!=0{
+  t.Fatalf("recovered release was not admitted: %+v, %v",status,err)
+ }
+}
+
 func TestReleaseReadinessDeadlineRejectsUnhealthyService(t *testing.T){
  runner:=&fakeReleaseRunner{failHealth:true}
  ctrl:=releaseTestController(t,runner)
