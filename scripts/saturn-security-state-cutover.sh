@@ -57,14 +57,17 @@ if [[ ! -e $state/authenticator.json || ! -e $state/credentials.json ]]; then
 fi
 install -d -o homelab-security -g homelab-security -m 0700 "$snapshot_parent"
 snapshot="$snapshot_parent/$(date -u +%Y%m%dT%H%M%SZ)-$target-$$"
-migrator=/tmp/rust-security-authority/bin/security-migrate
-[[ -x $migrator ]] || { echo 'Rust migrator is missing.' >&2; exit 1; }
 if [[ $target == go ]]; then
   [[ -v HOMELAB_SECURITY_GO_PREFLIGHT && -x $HOMELAB_SECURITY_GO_PREFLIGHT ]] || {
     echo 'Go rollback requires HOMELAB_SECURITY_GO_PREFLIGHT.' >&2; exit 1;
   }
+  migrator="${HOMELAB_SECURITY_GO_PREFLIGHT%/*}/homelab-security-migrate"
+  [[ -x $migrator ]] || { echo 'Go security migrator is missing.' >&2; exit 1; }
   receipt="$secret_dir/authority-go-rollback.json"
 else
+  # Retain the existing rollback path until the Go release passes acceptance.
+  migrator=/tmp/rust-security-authority/bin/security-migrate
+  [[ -x $migrator ]] || { echo 'Rollback migrator is missing.' >&2; exit 1; }
   receipt="$secret_dir/authority-rust-cutover.json"
 fi
 [[ ! -e $receipt && ! -L $receipt ]] || {
