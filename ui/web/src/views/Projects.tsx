@@ -15,13 +15,22 @@ function ProjectRecords({ project, kind, revision }: { project: string; kind: "j
       <ResourceState value={response}>{result => {
         const entries = list(result, [kind, "items", "results"])
         return entries.length === 0 ? <EmptyState title={`No ${kind} returned`} /> :
-          <Table><TableHeader><TableRow><TableHead>Identifier</TableHead><TableHead>State</TableHead></TableRow></TableHeader><TableBody>
-            {entries.slice(0, 35).map((entry, i) =>
-              <TableRow key={text(entry, "id", "job_id", "workspace_id") || i}>
-                <TableCell className="max-w-80 truncate font-mono text-xs">{text(entry, "id", "job_id", "workspace_id", "name")}</TableCell>
-                <TableCell><Badge variant={statusVariant(text(entry, "status", "state"))}>{text(entry, "status", "state") || "Recorded"}</Badge></TableCell>
-              </TableRow>)
-            }</TableBody></Table>
+          <Table><TableHeader><TableRow><TableHead>{kind === "artifacts" ? "File" : "Identifier"}</TableHead><TableHead>{kind === "artifacts" ? "Download" : "State"}</TableHead></TableRow></TableHeader><TableBody>
+            {entries.slice(0, 35).map((entry, i) => {
+              const id = text(entry, "id", "job_id", "workspace_id")
+              const size = typeof entry.size === "number" ? entry.size : -1
+              const downloadable = kind === "artifacts" && /^[0-9a-f]{32}$/.test(id) &&
+                Number.isInteger(size) && size >= 0 && size <= 512 * 1024
+              return <TableRow key={id || i}>
+                <TableCell className="max-w-80 truncate font-mono text-xs">{kind === "artifacts" ? text(entry, "name", "id") : id}</TableCell>
+                <TableCell>{kind === "artifacts" ?
+                  downloadable ?
+                    <a className="text-sm underline underline-offset-2 focus-visible:outline focus-visible:outline-2" href={`/v1/engineering/projects/${encodeURIComponent(project)}/artifacts/${id}/download`} download>Download</a> :
+                    <span className="text-xs text-muted-foreground">{size > 512 * 1024 ? "File exceeds 512 KiB browser limit" : "Unavailable"}</span> :
+                  <Badge variant={statusVariant(text(entry, "status", "state"))}>{text(entry, "status", "state") || "Recorded"}</Badge>}
+                </TableCell>
+              </TableRow>
+            })}</TableBody></Table>
       }}</ResourceState>
     </CardContent>
   </Card>
