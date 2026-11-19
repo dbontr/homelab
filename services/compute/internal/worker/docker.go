@@ -831,6 +831,31 @@ func (r *Runner) Handle(ctx context.Context, op Operation, c *Client) (map[strin
 	}
 }
 
+// GitHub tarballs contain a root directory and trailing slashes on directory
+// entries. Normalize only those directory separators; reject every malformed
+// descendant and never extract the archive's root or links.
+func repositoryArchivePath(name string, kind byte) (string, bool, error) {
+	if !safeArchiveEntry(name) {
+		return "", false, errors.New("unsafe repository archive entry")
+	}
+	parts := strings.SplitN(name, "/", 2)
+	if len(parts) < 2 {
+		return "", true, nil
+	}
+	relative := parts[1]
+	if kind == tar.TypeDir {
+		if relative == "" {
+			return "", true, nil
+		}
+		relative = strings.TrimSuffix(relative, "/")
+	}
+	if relative == "" || relative == "." || !safeArchiveEntry(relative) ||
+		path.Clean(relative) != relative {
+		return "", false, errors.New("unsafe repository archive entry")
+	}
+	return relative, false, nil
+}
+
 func (r *Runner) importArchive(ctx context.Context, op Operation, c *Client) (map[string]any, error) {
 	var p struct {
 		Repository string `json:"repository"`
@@ -879,13 +904,12 @@ func (r *Runner) importArchive(ctx context.Context, op Operation, c *Client) (ma
 		if count > 10000 {
 			return nil, errors.New("too many repository files")
 		}
-		components := strings.Split(header.Name, "/")
-		if len(components) < 2 {
-			continue
+		relative, skip, err := repositoryArchivePath(header.Name, header.Typeflag)
+		if err != nil {
+			return nil, err
 		}
-		relative := strings.Join(components[1:], "/")
-		if !safeArchiveEntry(relative) || relative == "." || path.Clean(relative) != relative {
-			return nil, errors.New("unsafe repository archive entry")
+		if skip {
+			continue
 		}
 		if seen[relative] {
 			return nil, errors.New("duplicate repository archive path")
