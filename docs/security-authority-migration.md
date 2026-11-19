@@ -85,9 +85,12 @@ homelab-security-migrate prepare --target go \
 
 The Go preparer obtains the shared security-state lease, reads the exact
 current replay record and encrypted vault without changing either file,
-prepares an independently owned snapshot, executes the protected Go
-preflight, and emits the version-one parent-bound receipt only after
-preflight succeeds. A live writer, changed replay state, invalid protected
+prepares an independently owned snapshot, and requires both the previous
+authority's protected compatibility preflight and the reviewed Go preflight
+to accept the same copy. Provide the independent executable through
+`HOMELAB_SECURITY_COMPAT_PREFLIGHT`; it must be distinct from the Go
+preflight and must be a trusted, non-writable regular executable.
+Only then does the preparer emit the version-one parent-bound receipt. A live writer, changed replay state, invalid protected
 file, or failed preflight prevents receipt issuance. The operator supplies
 the resulting receipt to the protected credential location only under an
 independently authorized release. The original authority remains available
