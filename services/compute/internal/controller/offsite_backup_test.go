@@ -338,6 +338,11 @@ func TestResticUsesPinnedSFTPIdentity(t *testing.T) {
 	if err := os.Chmod(config, 0600); err != nil {
 		t.Fatal(err)
 	}
+	conf.SFTPSSHConfig = "/tmp/.ssh/config;touch /tmp/unsafe"
+	if err := conf.Validate(); err == nil {
+		t.Fatal("shell metacharacters in SSH config path must be rejected")
+	}
+	conf.SFTPSSHConfig = config
 	conf.Repository = filepath.Join(root, "encrypted")
 	if err := conf.Validate(); err == nil {
 		t.Fatal("pinned SFTP identity must not be used with local backend")
