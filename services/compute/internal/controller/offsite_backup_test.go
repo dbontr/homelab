@@ -306,3 +306,48 @@ func TestExactSnapshotIDRejectsPrefix(t *testing.T) {
 		t.Fatal("a truncated snapshot prefix must not be considered an exact recovery identity")
 	}
 }
+
+func TestResticUsesPinnedSFTPIdentity(t *testing.T) {
+	conf, root := setupResticTest(t)
+	config := filepath.Join(root, "ssh_config")
+	if err := os.WriteFile(config, []byte("Host *\n  BatchMode yes\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	conf.Repository = "sftp:compute-backup@10.77.30.232:/repository"
+	conf.SFTPSSHConfig = config
+	if err := conf.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	cmd := conf.resticCommand(context.Background(), root, "check", "--read-data")
+	if len(cmd.Args) != 5 || cmd.Args[1] != "-o" ||
+		cmd.Args[2] != "sftp.command=ssh -F "+config+" -s compute-backup@10.77.30.232 sftp" ||
+		cmd.Args[3] != "check" || cmd.Args[4] != "--read-data" {
+		t.Fatalf("Restic did not use the pinned SFTP command: %q", cmd.Args)
+	}
+	conf.Repository = "sftp:compute-backup@10.77.30.232;echo-danger:/repository"
+	if err := conf.Validate(); err == nil {
+		t.Fatal("invalid SFTP host must be rejected")
+	}
+	conf.Repository = "sftp:compute-backup@10.77.30.232:/repository"
+	if err := os.Chmod(config, 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := conf.Validate(); err == nil {
+		t.Fatal("world-readable SSH config must be rejected")
+	}
+	if err := os.Chmod(config, 0600); err != nil {
+		t.Fatal(err)
+	}
+	conf.Repository = filepath.Join(root, "encrypted")
+	if err := conf.Validate(); err == nil {
+		t.Fatal("pinned SFTP identity must not be used with local backend")
+	}
+}
+
+func TestResticSFTPConfigFromEnvironment(t *testing.T) {
+	t.Setenv("PWM_RESTIC_SFTP_SSH_CONFIG", "/tmp/.ssh/config")
+	conf := ResticConfigFromEnv()
+	if conf.SFTPSSHConfig != "/tmp/.ssh/config" {
+		t.Fatalf("SFTP config source not retained: %q", conf.SFTPSSHConfig)
+	}
+}
