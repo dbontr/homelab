@@ -29,6 +29,10 @@ func testKubernetes(t *testing.T) (*Kubernetes, string) {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	// Kubernetes injects an API service address even when a sandbox has no
+	// mounted ServiceAccount token. Keep the fake-kubectl tests independent
+	// of those inherited settings; production token custody is unchanged.
+	t.Setenv("KUBERNETES_SERVICE_HOST", "")
 	k, err := NewKubernetes("pwm-research", "research", 8, 16384, 4)
 	if err != nil {
 		t.Fatal(err)
