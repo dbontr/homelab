@@ -152,7 +152,14 @@ export function Learning({ revision, csrf, refresh }: { revision: number; csrf: 
   function changed() { setLocal(v => v + 1); refresh() }
   async function loadGraph() {
     setGraphError(""); setBusy(true)
-    try { setGraph(await apiWrite("POST", "/v1/learning/app-tools/get_graph/call", csrf, { focus, depth: 2, limit: 60 })) }
+    try {
+      const raw = await apiWrite<unknown>("POST", "/v1/learning/app-tools/get_graph/call", csrf,
+        { arguments: { focus, depth: 2, limit: 60 } })
+      const first = asRecord(asRecord(raw)?.content instanceof Array ? (asRecord(raw)?.content as unknown[])[0] : null)
+      const content = first?.text
+      if (typeof content !== "string" || content.length > 200000) throw new Error("Invalid graph response")
+      setGraph(JSON.parse(content) as unknown)
+    }
     catch (e) { setGraphError(e instanceof Error ? e.message : "Graph unavailable") }
     finally { setBusy(false) }
   }
