@@ -42,7 +42,7 @@ export function Notifications({ revision, csrf }: { revision: number; csrf: stri
     setError("")
     setBusy(id)
     try {
-      await apiWrite("POST", `/v1/notifications/${encodeURIComponent(id)}/ack`, csrf, {})
+      await apiWrite("POST", `/v1/notifications/ack/${encodeURIComponent(id)}`, csrf, {})
       setLocalRevision(r => r + 1)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unable to acknowledge notification")
