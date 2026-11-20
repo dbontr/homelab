@@ -12,6 +12,11 @@ import { apiWrite, list, text, validProject, statusVariant, useApi, asRecord } f
 const REPO = /^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/
 const REVISION = /^[0-9a-f]{40}$/
 const IMAGE = /^[a-z0-9][a-z0-9_-]{0,79}$/
+function validSourcePath(value: string): boolean {
+  return value.length > 0 && value.length <= 255 && !value.startsWith("/") &&
+    !/[\\\0\r\n]/.test(value) &&
+    value.split("/").every(part => part !== "" && part !== "." && part !== ".." && part !== ".git")
+}
 
 function VerifiedRunForm({ csrf, onSubmitted }: { csrf: string; onSubmitted: () => void }) {
   const catalog = useApi<unknown>("/v1/software")
@@ -21,6 +26,11 @@ function VerifiedRunForm({ csrf, onSubmitted }: { csrf: string; onSubmitted: () 
   const programs = list(asRecord(catalog.data)?.programs).filter(item =>
     text(item, "status") === "available" && text(item, "pool_kind") === "image" &&
     eligibleImageIDs.has(text(item, "pool_id")))
+  const [mode, setMode] = useState<"verify" | "draft">("verify")
+  const [sourcePath, setSourcePath] = useState("")
+  const [sourceContent, setSourceContent] = useState("")
+  const [draftTitle, setDraftTitle] = useState("")
+  const [draftDescription, setDraftDescription] = useState("")
   const [project, setProject] = useState("")
   const [repository, setRepository] = useState("")
   const [revision, setRevision] = useState("")
@@ -49,6 +59,12 @@ function VerifiedRunForm({ csrf, onSubmitted }: { csrf: string; onSubmitted: () 
       setError("Supply an exact project, repository, 40-character Git commit, approved image and bounded test commands.")
       return
     }
+    if (mode === "draft" && (!validSourcePath(sourcePath) ||
+        sourceContent.length === 0 || new TextEncoder().encode(sourceContent).length > 24000 ||
+        draftTitle.trim().length === 0 || draftTitle.length > 256 || draftDescription.length > 8192)) {
+      setError("Specify a relative source path, complete file content (up to 24 KiB), and a short draft title.")
+      return
+    }
     if (!csrf) { setError("A verified browser session is required to submit builds."); return }
     setBusy(true)
     try {
@@ -56,7 +72,11 @@ function VerifiedRunForm({ csrf, onSubmitted }: { csrf: string; onSubmitted: () 
         project, repository, revision, image_pool_id: image,
         objective: "Verify the declared source revision with the approved toolchain",
         checks: commands, cpu: cpuNumber, memory_mb: memoryNumber, duration_minutes: durationNumber,
-        prepare_only: true, verify_only: true,
+        ...(mode === "draft" ? {
+          title: draftTitle.trim(), description: draftDescription,
+          base_branch: "main", expected_head: revision,
+          changes: { [sourcePath]: sourceContent },
+        } : { prepare_only: true, verify_only: true }),
       }
       const result = await apiWrite<unknown>("POST", "/v1/engineering/runs", csrf, payload)
       const record = asRecord(result)
@@ -71,11 +91,22 @@ function VerifiedRunForm({ csrf, onSubmitted }: { csrf: string; onSubmitted: () 
 
   return <Card>
     <CardHeader>
-      <CardTitle className="flex items-center gap-2"><Play aria-hidden="true" className="size-4" /> Verify a source revision</CardTitle>
-      <CardDescription>Run approved compiler and test commands. No source edits, authoring model, or PR publication.</CardDescription>
+      <CardTitle className="flex items-center gap-2"><Play aria-hidden="true" className="size-4" /> Engineering workspaces</CardTitle>
+      <CardDescription>Verify a pinned commit or submit owner-supplied full-file changes for tests, immutable artifact export and a reviewable draft pull request. No automatic merge or deployment.</CardDescription>
     </CardHeader>
     <CardContent>
       <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
+        <fieldset className="sm:col-span-2 space-y-2">
+          <legend className="text-sm font-medium">Operation</legend>
+          <label className="mr-5 inline-flex items-center gap-2 text-sm">
+            <input type="radio" checked={mode === "verify"} onChange={() => setMode("verify")} name="engineering-mode" />
+            Verify source only
+          </label>
+          <label className="inline-flex items-center gap-2 text-sm">
+            <input type="radio" checked={mode === "draft"} onChange={() => setMode("draft")} name="engineering-mode" />
+            Edit, verify and prepare draft PR
+          </label>
+        </fieldset>
         <label className="space-y-1 text-sm">Project ID
           <Input autoComplete="off" value={project} onChange={e => setProject(e.target.value)} required placeholder="research-project" />
         </label>
@@ -101,6 +132,21 @@ function VerifiedRunForm({ csrf, onSubmitted }: { csrf: string; onSubmitted: () 
           </select>
           {images.length === 0 && <span className="block text-xs text-muted-foreground">No eligible execution image is reported. Review the <a href="#software" className="underline">software library</a> and worker admission status.</span>}
         </label>
+        {mode === "draft" && <>
+          <label className="space-y-1 text-sm sm:col-span-2">Repository-relative file path
+            <Input value={sourcePath} onChange={e => setSourcePath(e.target.value)} required placeholder="services/core/example.go" autoComplete="off" />
+          </label>
+          <label className="space-y-1 text-sm sm:col-span-2">Complete file contents (not a patch)
+            <Textarea className="min-h-48 font-mono text-xs" value={sourceContent} onChange={e => setSourceContent(e.target.value)} required placeholder="Full replacement contents of the selected source file" />
+          </label>
+          <label className="space-y-1 text-sm sm:col-span-2">Draft pull-request title
+            <Input value={draftTitle} onChange={e => setDraftTitle(e.target.value)} required maxLength={256} />
+          </label>
+          <label className="space-y-1 text-sm sm:col-span-2">Draft description (optional)
+            <Textarea value={draftDescription} onChange={e => setDraftDescription(e.target.value)} maxLength={8192} />
+          </label>
+          <p className="text-xs text-muted-foreground sm:col-span-2">The selected commit must still be main HEAD at publication. Every check must pass before a draft is created. The worker cannot merge or deploy.</p>
+        </>}
         <label className="space-y-1 text-sm sm:col-span-2">Verification commands, one per line
           <Textarea className="min-h-28 font-mono text-xs" value={checks} onChange={e => setChecks(e.target.value)} required placeholder={"go test ./...\nmake test"} />
         </label>
@@ -114,27 +160,47 @@ function VerifiedRunForm({ csrf, onSubmitted }: { csrf: string; onSubmitted: () 
           <Input type="number" min="10" max="180" value={duration} onChange={e => setDuration(e.target.value)} />
         </label>
         <div className="flex items-end"><Button type="submit" disabled={busy || !csrf} className="w-full">
-          <FileCode2 aria-hidden="true" /> {busy ? "Submitting…" : "Submit verification"}
+          <FileCode2 aria-hidden="true" /> {busy ? "Submitting…" : mode === "draft" ? "Verify and prepare draft" : "Submit verification"
         </Button></div>
-        {error && <div className="sm:col-span-2"><Alert variant="destructive"><AlertTitle>Verification not submitted</AlertTitle><AlertDescription>{error}</AlertDescription></Alert></div>}
+        {error && <div className="sm:col-span-2"><Alert variant="destructive"><AlertTitle>Engineering request not submitted</AlertTitle><AlertDescription>{error}</AlertDescription></Alert></div>}
         {created && <div className="flex items-center gap-2 text-sm sm:col-span-2"><CheckCircle2 aria-hidden="true" className="size-4" /> Request: <code className="break-all">{created}</code></div>}
       </form>
     </CardContent>
   </Card>
 }
 
-function RunDetail({ id, revision }: { id: string; revision: number }) {
+function RunDetail({ id, revision, csrf, refresh }: { id: string; revision: number; csrf: string; refresh: () => void }) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState("")
+  async function cancel(expectedRevision: number) {
+    if (!csrf || busy) return
+    setBusy(true); setError("")
+    try {
+      await apiWrite("POST", `/v1/engineering/runs/${encodeURIComponent(id)}/cancel`, csrf, { revision: expectedRevision })
+      refresh()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not cancel the run")
+    } finally { setBusy(false) }
+  }
   const item = useApi<unknown>(`/v1/engineering/runs/${encodeURIComponent(id)}`, revision)
   return <Card>
     <CardHeader><CardTitle>Run {id}</CardTitle><CardDescription>Recorded execution, not a prediction of success</CardDescription></CardHeader>
     <CardContent><ResourceState value={item}>{result => {
       const object = asRecord(result)
       const steps = list(object?.steps)
+      const status = text(object, "status")
+      const rev = Number(object?.revision)
       return steps.length === 0 ? <EmptyState title="No execution steps were returned" /> :
-        <div className="space-y-2">{steps.map((step, i) => <div key={text(step, "id") || i} className="flex items-center justify-between border-b py-2">
+        <div className="space-y-2">{steps.map((step, i) => <div key={text(step, "id") || i} className="flex flex-wrap items-center justify-between gap-2 border-b py-2">
           <span className="font-mono text-xs">{text(step, "kind", "id")}</span>
           <Badge variant={statusVariant(text(step, "status"))}>{text(step, "status") || "Unknown"}</Badge>
-        </div>)}</div>
+          {text(step, "error") && <span className="w-full text-xs text-destructive">{text(step, "error")}</span>}
+          {text(asRecord(asRecord(step)?.result), "url") && <a className="w-full text-xs underline" href={text(asRecord(asRecord(step)?.result), "url")} target="_blank" rel="noopener noreferrer">Open draft pull request</a>}
+        </div>)}
+        {(status === "pending" || status === "running") && Number.isInteger(rev) && csrf &&
+          <Button type="button" variant="outline" disabled={busy} onClick={() => cancel(rev)}>{busy ? "Cancelling…" : "Cancel run"}</Button>}
+        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+        </div>
     }}</ResourceState></CardContent>
   </Card>
 }
@@ -158,6 +224,6 @@ export function Engineering({ revision, csrf, refresh }: { revision: number; csr
           })}</div>
       }}</ResourceState></CardContent>
     </Card>
-    {selected && <RunDetail id={selected} revision={revision} />}
+    {selected && <RunDetail id={selected} revision={revision} csrf={csrf} refresh={refresh} />}
   </div>
 }
