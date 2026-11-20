@@ -83,8 +83,8 @@ function TaskFields({ value, update, goals }: {
 function TaskRow({ task, goals, allTasks, busy, complete, save, decompose }: {
   task: Task; goals: Goal[]; allTasks: Task[]; busy: boolean;
   complete: (id: string) => Promise<void>;
-  save: (task: Task, data: TaskForm) => Promise<void>;
-  decompose: (task: Task, steps: string) => Promise<void>;
+  save: (task: Task, data: TaskForm) => Promise<boolean>;
+  decompose: (task: Task, steps: string) => Promise<boolean>;
 }) {
   const [editing, setEditing] = useState(false)
   const [breaking, setBreaking] = useState(false)
@@ -120,11 +120,11 @@ function TaskRow({ task, goals, allTasks, busy, complete, save, decompose }: {
         </Button>
       </div>}
     </div>
-    {editing && <form className="mt-3 space-y-3 border-t pt-3" onSubmit={async e => { e.preventDefault(); await save(task, form); setEditing(false) }}>
+    {editing && <form className="mt-3 space-y-3 border-t pt-3" onSubmit={async e => { e.preventDefault(); if (await save(task, form)) setEditing(false) }}>
       <TaskFields value={form} update={update} goals={goals} />
       <Button disabled={busy || (form.recurrence !== "" && !form.due)}>Save task</Button>
     </form>}
-    {breaking && <form className="mt-3 space-y-2 border-t pt-3" onSubmit={async e => { e.preventDefault(); await decompose(task, breakdown); setBreaking(false) }}>
+    {breaking && <form className="mt-3 space-y-2 border-t pt-3" onSubmit={async e => { e.preventDefault(); if (await decompose(task, breakdown)) setBreaking(false) }}>
       <label className="block text-sm">Subtasks, one per line as <code>Title | minutes</code>
         <Textarea className="mt-1 font-mono text-xs" value={breakdown} onChange={e => setBreakdown(e.target.value)}
           placeholder={"Review assumptions | 30\nBuild prototype | 60\nVerify result | 30"} />
@@ -167,9 +167,11 @@ export function Productivity({ revision, csrf, refresh, plannerOnly = false }: {
   async function complete(id: string) { try { await mutate(() => apiWrite("POST", `/v1/tasks/${id}/complete`, csrf, {})) } catch { /* error shown above */ } }
   async function save(t: Task, f: TaskForm) {
     try { await mutate(() => apiWrite("PUT", `/v1/tasks/${t.id}`, csrf, { ...taskPayload(f), scheduled: t.scheduled ?? "", expected_revision: t.revision })) }
-    catch { /* error shown above */ }
+    catch { return false }
+    return true
   }
   async function decompose(t: Task, raw: string) {
+    try {
     const lines = raw.split("\n").map(s => s.trim()).filter(Boolean)
     const steps = lines.map((line, i) => {
       const at = line.lastIndexOf("|")
@@ -178,9 +180,10 @@ export function Productivity({ revision, csrf, refresh, plannerOnly = false }: {
       if (at <= 0 || !title || !Number.isInteger(minutes) || minutes < 1 || minutes > 1440) throw new Error("Use Title | minutes on each line")
       return { title, minutes, depends_on_steps: i ? [i - 1] : [] }
     })
-    if (steps.length < 2 || steps.length > 32) { setError("Specify 2–32 valid subtasks"); return }
-    try { await mutate(() => apiWrite("POST", `/v1/tasks/${t.id}/decompose`, csrf, { expected_revision: t.revision, steps })) }
-    catch { /* error shown above */ }
+    if (steps.length < 2 || steps.length > 32) { setError("Specify 2–32 valid subtasks"); return false }
+    await mutate(() => apiWrite("POST", `/v1/tasks/${t.id}/decompose`, csrf, { expected_revision: t.revision, steps }))
+    return true
+    } catch (error) { setError(error instanceof Error ? error.message : "Subtasks could not be created"); return false }
   }
   return <div className="space-y-5">
     <Card>
