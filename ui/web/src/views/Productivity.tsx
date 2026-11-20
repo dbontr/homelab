@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
-import { apiWrite, list, useApi, asRecord } from "@/lib/api"
+import { apiWrite, list, useApi } from "@/lib/api"
 
 type Task = {
   id: string; title: string; notes?: string; status: string; revision: number;
@@ -167,7 +167,7 @@ export function Productivity({ revision, csrf, refresh, plannerOnly = false }: {
   async function complete(id: string) { try { await mutate(() => apiWrite("POST", `/v1/tasks/${id}/complete`, csrf, {})) } catch { /* error shown above */ } }
   async function save(t: Task, f: TaskForm) {
     try { await mutate(() => apiWrite("PUT", `/v1/tasks/${t.id}`, csrf, { ...taskPayload(f), scheduled: t.scheduled ?? "", expected_revision: t.revision })) }
-    catch { throw new Error("Save rejected; reload the task before editing again") }
+    catch { /* error shown above */ }
   }
   async function decompose(t: Task, raw: string) {
     const lines = raw.split("\n").map(s => s.trim()).filter(Boolean)
