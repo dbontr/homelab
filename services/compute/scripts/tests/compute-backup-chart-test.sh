@@ -38,6 +38,8 @@ helm template verify "$chart" "${args[@]}" \
   >"$scratch/rendered.yaml"
 
 grep -q 'name: PWM_RESTIC_BACKUP_INTERVAL' "$scratch/rendered.yaml"
+grep -q 'name: PWM_RESTIC_SFTP_SSH_CONFIG' "$scratch/rendered.yaml"
+grep -q 'value: /tmp/.ssh/config' "$scratch/rendered.yaml"
 grep -q 'name: PWM_RESTIC_ALERT_URL' "$scratch/rendered.yaml"
 grep -q 'name: PWM_RESTIC_ALERT_TOKEN_FILE' "$scratch/rendered.yaml"
 grep -q 'secretName: synthetic-alert' "$scratch/rendered.yaml"
