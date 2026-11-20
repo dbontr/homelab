@@ -379,7 +379,7 @@ func TestResticJSONShortSummaryResolvesExactSnapshot(t *testing.T) {
 	for _, line := range bytes.Split(output, []byte("\n")) {
 		var event struct {
 			MessageType string `json:"message_type"`
-			SnapshotID string `json:"snapshot_id"`
+			SnapshotID  string `json:"snapshot_id"`
 		}
 		if json.Unmarshal(line, &event) == nil && event.MessageType == "summary" {
 			reported = event.SnapshotID
