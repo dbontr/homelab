@@ -149,7 +149,7 @@ func TestSessionManagerNotConfiguredDoesNotPermitBrowserAccess(t *testing.T) {
 }
 
 
-func TestOwnerEngineeringReadAllowlistDoesNotPermitExecutions(t *testing.T) {
+func TestOwnerEngineeringReadAndBoundedWrites(t *testing.T) {
     db, err := store.Open(filepath.Join(t.TempDir(),"state.json"),"UTC")
     if err != nil { t.Fatal(err) }
     service, err := New(db,strings.Repeat("t",40),nil)
@@ -161,6 +161,9 @@ func TestOwnerEngineeringReadAllowlistDoesNotPermitExecutions(t *testing.T) {
     allowed := []string{
         "/v1/engineering/projects",
         "/v1/engineering/nodes",
+        "/v1/engineering/runs",
+        "/v1/engineering/teams",
+        "/v1/engineering/runs/run-0123456789abcdef01234567",
         "/v1/engineering/projects/project-a/jobs",
         "/v1/engineering/projects/project-a/workspaces",
         "/v1/engineering/projects/project-a/artifacts",
@@ -178,7 +181,7 @@ func TestOwnerEngineeringReadAllowlistDoesNotPermitExecutions(t *testing.T) {
         }
     }
     for _, path := range []string{
-        "/v1/engineering/runs",
+        "/v1/engineering/runs/run-0123456789abcdef01234567/diffs",
         "/v1/engineering/projects/project-a/jobs/other",
         "/v1/engineering/projects/project-a/artifacts/0123456789abcdef0123456789abcdef/delete",
         "/v1/engineering/projects/project-a/artifacts/../download",
@@ -199,8 +202,22 @@ func TestOwnerEngineeringReadAllowlistDoesNotPermitExecutions(t *testing.T) {
     req.Header.Set("Origin","https://console.example")
     req.Header.Set("Content-Type","application/json")
     req.Header.Set("X-CSRF-Token",csrf)
+    if !service.sessionOwnerWriteAllowed(req) {
+        t.Fatal("signed browser owner cannot submit bounded engineering runs")
+    }
+    req.Header.Del("X-CSRF-Token")
     if service.sessionOwnerWriteAllowed(req) {
-        t.Fatal("owner browser session gained engineering execution privileges")
+        t.Fatal("engineering source submission bypassed CSRF")
+    }
+    req.Header.Set("X-CSRF-Token",csrf)
+    req.Header.Del("Origin")
+    if service.sessionOwnerWriteAllowed(req) { t.Fatal("engineering submission bypassed origin") }
+    req.Header.Set("Origin","https://console.example")
+    req.URL.Path="/v1/engineering/runs/run-0123456789abcdef01234567/cancel"
+    if !service.sessionOwnerWriteAllowed(req) {t.Fatal("bounded cancellation denied")}
+    for _,bad:=range []string{"/v1/engineering/projects/p/grant","/v1/engineering/runs/run-1/delete","/v1/engineering/teams/team-1/privilege","/v1/engineering/admin","/mcp"}{
+        req.URL.Path=bad
+        if service.sessionOwnerWriteAllowed(req){t.Fatalf("engineering owner scope permitted %s",bad)}
     }
 }
 
