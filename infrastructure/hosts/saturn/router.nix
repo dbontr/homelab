@@ -1,4 +1,4 @@
-{ config, lib, ... }:
+{ config, lib, pkgs, ... }:
 let
   cfg = config.homelab.router;
   internalNetworks = [ "management10" "services20" "compute30" ];
@@ -79,6 +79,13 @@ in {
     };
     boot.kernel.sysctl."net.ipv4.ip_forward" = 1;
     boot.kernel.sysctl."net.ipv6.conf.all.forwarding" = 0;
+
+    # K3s sets IPv6 forwarding while it starts, including for IPv4-only
+    # clusters. Apply the router policy after each successful K3s start.
+    systemd.services.k3s.postStart = lib.mkAfter ''
+      ${pkgs.procps}/bin/sysctl -q -w net.ipv6.conf.all.forwarding=0
+      ${pkgs.procps}/bin/sysctl -q -w net.ipv6.conf.default.forwarding=0
+    '';
 
     services.dnsmasq = {
       enable = true;
