@@ -9,6 +9,7 @@
 - [nftables rule management](https://wiki.nftables.org/wiki-nftables/index.php/Simple_rule_management) — nftables project. Used for: evaluating conjunctions within single rules and preserving explicit forward-chain verdicts for private VLAN isolation.
 - [Prometheus node_exporter Textfile Collector](https://github.com/prometheus/node_exporter#textfile-collector) — Prometheus project. Used for: machine-local GPU metric publication through atomic `.prom` replacement and the exporter textfile directory.
 - [NixOS Prometheus exporters](https://wiki.nixos.org/wiki/Prometheus) — NixOS project. Used for: `services.prometheus.exporters.node.extraFlags` and systemd-managed exporter collector configuration.
+- [Restic SFTP repository configuration](https://restic.readthedocs.io/en/v0.16.2/030_preparing_a_new_repo.html) — Restic project. Used for: selecting an explicit SFTP subprocess command with pinned SSH identity and host-key verification on Restic versions without `sftp.args`.
 - [Restic backup options](https://restic.readthedocs.io/en/stable/040_backup.html) — Restic project. Used for: encrypted Compute snapshots, tag grouping across controller restarts and stable repository identity.
 - [Restic snapshot retention](https://restic.readthedocs.io/en/stable/060_forget.html) — Restic project. Used for: tag-scoped daily, weekly and monthly retention with independently preserved snapshots.
 - [OpenSSH sshd_config](https://man.openbsd.org/sshd_config) — OpenBSD project. Used for: match-scoped, chrooted SFTP-only backup identities with fixed authorized key custody.
