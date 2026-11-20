@@ -25,6 +25,7 @@ type ResticRepositoryConfig struct {
 
 var resticSnapshotID = regexp.MustCompile(`^[a-f0-9]{64}$`)
 var resticSFTPHost = regexp.MustCompile(`^[A-Za-z0-9._-]+@[A-Za-z0-9.-]+$`)
+var resticSSHPath = regexp.MustCompile(`^/[A-Za-z0-9_./-]+$`)
 
 type resticDiagnostic struct {
 	bytes.Buffer
@@ -86,7 +87,7 @@ func (c ResticRepositoryConfig) validate() error {
 		if !found || !resticSFTPHost.MatchString(remote) {
 			return errors.New("SFTP repository must specify a valid user and host")
 		}
-		if !filepath.IsAbs(c.SFTPSSHConfig) || strings.ContainsAny(c.SFTPSSHConfig, " \t\r\n\x00'\"\\") {
+		if !filepath.IsAbs(c.SFTPSSHConfig) || !resticSSHPath.MatchString(c.SFTPSSHConfig) {
 			return errors.New("pinned SSH config path must be an absolute simple path")
 		}
 		ssh, err := os.Lstat(c.SFTPSSHConfig)
