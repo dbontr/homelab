@@ -354,6 +354,10 @@ spec:
               value: {{ .Values.controller.offsite.repository | quote }}
             - name: PWM_RESTIC_PASSWORD_FILE
               value: /run/restic/password
+            {{- if .Values.controller.offsite.sshSecretName }}
+            - name: PWM_RESTIC_SFTP_SSH_CONFIG
+              value: /tmp/.ssh/config
+            {{- end }}
             - name: PWM_RESTIC_ALERT_URL
               value: {{ .Values.controller.offsite.alertURL | quote }}
             - name: PWM_RESTIC_ALERT_TOKEN_FILE
