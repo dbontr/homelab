@@ -160,7 +160,7 @@ function VerifiedRunForm({ csrf, onSubmitted }: { csrf: string; onSubmitted: () 
           <Input type="number" min="10" max="180" value={duration} onChange={e => setDuration(e.target.value)} />
         </label>
         <div className="flex items-end"><Button type="submit" disabled={busy || !csrf} className="w-full">
-          <FileCode2 aria-hidden="true" /> {busy ? "Submitting…" : mode === "draft" ? "Verify and prepare draft" : "Submit verification"
+          <FileCode2 aria-hidden="true" /> {busy ? "Submitting…" : mode === "draft" ? "Verify and prepare draft" : "Submit verification"}
         </Button></div>
         {error && <div className="sm:col-span-2"><Alert variant="destructive"><AlertTitle>Engineering request not submitted</AlertTitle><AlertDescription>{error}</AlertDescription></Alert></div>}
         {created && <div className="flex items-center gap-2 text-sm sm:col-span-2"><CheckCircle2 aria-hidden="true" className="size-4" /> Request: <code className="break-all">{created}</code></div>}
