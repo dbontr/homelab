@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, type FormEvent } from "react"
 import { BookOpen, ChevronRight, RefreshCcw } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -153,7 +153,7 @@ export function Learning({ revision, csrf, refresh }: { revision: number; csrf: 
     finally { setBusy(false) }
   }
   const nodes = list(graph, ["nodes", "concepts", "items", "results"])
-  async function createSession(e: React.FormEvent<HTMLFormElement>) {
+  async function createSession(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
     setError(""); setBusy(true)
     try {
