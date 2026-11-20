@@ -86,7 +86,7 @@ func (c ResticRepositoryConfig) validate() error {
 		if !found || !resticSFTPHost.MatchString(remote) {
 			return errors.New("SFTP repository must specify a valid user and host")
 		}
-		if !filepath.IsAbs(c.SFTPSSHConfig) || strings.ContainsAny(c.SFTPSSHConfig, " \t\r\n\x00\'\"\\") {
+		if !filepath.IsAbs(c.SFTPSSHConfig) || strings.ContainsAny(c.SFTPSSHConfig, " \t\r\n\x00'\"\\") {
 			return errors.New("pinned SSH config path must be an absolute simple path")
 		}
 		ssh, err := os.Lstat(c.SFTPSSHConfig)
