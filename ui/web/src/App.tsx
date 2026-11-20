@@ -15,6 +15,8 @@ import { Monitoring } from "@/views/Monitoring"
 import { Notifications } from "@/views/Notifications"
 import { Engineering } from "@/views/Engineering"
 import { SoftwareLibrary } from "@/views/SoftwareLibrary"
+import { Productivity } from "@/views/Productivity"
+import { Learning } from "@/views/Learning"
 import { Records, recordPages } from "@/views/Records"
 import { useApi, type Session } from "@/lib/api"
 import { cn } from "@/lib/utils"
@@ -34,7 +36,7 @@ const navigation: NavGroup[] = [
     { id: "software", label: "Software library", icon: Library },
   ] },
   { group: "Personal", items: [
-    { id: "tasks", label: "Tasks", icon: ListTodo },
+    { id: "tasks", label: "Productivity", icon: ListTodo },
     { id: "calendar", label: "Calendar", icon: CalendarDays },
     { id: "planner", label: "Weekly planner", icon: ClipboardList },
     { id: "learning", label: "Learning", icon: Brain },
@@ -158,6 +160,9 @@ export default function App() {
           page === "monitoring" ? <Monitoring revision={revision} /> :
           page === "notifications" ? <Notifications revision={revision} csrf={session.data.csrf_token ?? ""} /> :
           page === "software" ? <SoftwareLibrary revision={revision} /> :
+          page === "tasks" ? <Productivity revision={revision} csrf={session.data.csrf_token ?? ""} refresh={refresh} /> :
+          page === "planner" ? <Productivity plannerOnly revision={revision} csrf={session.data.csrf_token ?? ""} refresh={refresh} /> :
+          page === "learning" ? <Learning revision={revision} csrf={session.data.csrf_token ?? ""} refresh={refresh} /> :
           page in recordPages ? <Records definition={recordPages[page]} revision={revision} /> :
           <p className="text-muted-foreground">The selected view is unavailable.</p>}
       </div>
