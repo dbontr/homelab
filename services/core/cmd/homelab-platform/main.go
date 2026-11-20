@@ -2,6 +2,7 @@ package main
 
 import (
     "context"
+    "encoding/json"
     "errors"
     "fmt"
     "log"
@@ -87,6 +88,18 @@ func main(){
         v,enabled,e:=configuredBackend(b.name,b.upper);if e!=nil{log.Fatal(e)};if enabled{backends=append(backends,v)}
     }
     server,e:=transport.New(db,token,backends);if e!=nil{log.Fatal(e)}
+    if path:=os.Getenv("HOMELAB_NOTIFICATION_PUBLISHERS_FILE");path!=""{
+        info,err:=os.Lstat(path)
+        if err!=nil || !info.Mode().IsRegular() || !protectedServiceCredential(path,info.Mode()) {
+            log.Fatal("notification publisher policy must be a protected regular credential file")
+        }
+        raw,err:=os.ReadFile(path)
+        if err!=nil{log.Fatal("notification publisher policy: ",err)}
+        var publishers map[string]string
+        if err=json.Unmarshal(raw,&publishers);err!=nil{log.Fatal("notification publisher policy JSON: ",err)}
+        if err=server.SetNotificationPublishers(publishers);err!=nil{log.Fatal("notification publisher policy: ",err)}
+    }
+
     mcpInterfaceToken,apiInterfaceToken:="",""
     if path:=os.Getenv("HOMELAB_MCP_INTERFACE_TOKEN_FILE");path!=""{
         mcpInterfaceToken,e=secret(path)
