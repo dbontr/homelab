@@ -2,6 +2,9 @@
 # Overlay on top of retained Helm release values and controller-backup-values.yaml.
 # No credential bytes are stored in this file.
 controller:
+  # Exact OCI index built from merged Go source commit
+  # 68c52f90bb7409cb79381f67396d9a1b4032533f; CRI imports verified on Saturn/Janus.
+  image: "images.dbontr.internal/homelab/controller@sha256:b29e91819cdcc1101e95cd1fde9aa40205f0d6962e7b9b33eb390ed52eb4f14a"
   offsite:
     alertURL: "https://homelab-compute-backup-alerts.self-optimization.workers.dev/hooks/compute"
     alertSecretName: "pwm-compute-backup-alert"
