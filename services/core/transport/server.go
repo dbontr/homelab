@@ -140,7 +140,7 @@ func(s *Server) Handler()http.Handler{
  mux.HandleFunc("GET /v1/notifications",s.notificationFeed)
  mux.HandleFunc("GET /v1/notifications/preferences",s.notificationPreferences)
  mux.HandleFunc("PUT /v1/notifications/preferences/{source}",s.notificationPreferenceUpdate)
- mux.HandleFunc("POST /v1/notifications/{id}/ack",s.notificationAcknowledge)
+ mux.HandleFunc("POST /v1/notifications/ack/{id}",s.notificationAcknowledge)
  mux.HandleFunc("POST /v1/notifications/publish/{source}",s.notificationPublish)
  mux.HandleFunc("GET /v1/automations/alerts",s.automationAlerts)
  mux.HandleFunc("POST /v1/automations/{id}/alerts/{run}/ack",s.automationAlertAck)
