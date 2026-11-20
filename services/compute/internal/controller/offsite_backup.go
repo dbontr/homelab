@@ -23,7 +23,58 @@ type ResticRepositoryConfig struct {
 	SFTPSSHConfig string
 }
 
-var resticSnapshotID = regexp.MustCompile(`^[a-f0-9]{64}$`)
+var resticSnapshotID = regexp.MustCompile(`^[a-f0-9]{64}package controller
+
+import (
+	"bufio"
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"regexp"
+	"strings"
+)
+
+// ResticRepositoryConfig delegates encryption and remote storage to Restic.
+// Credentials are controller-local and never travel to worker payloads.
+type ResticRepositoryConfig struct {
+	Repository    string
+	PasswordFile  string
+	SFTPSSHConfig string
+}
+
+)
+var resticShortSnapshotID = regexp.MustCompile(`^[a-f0-9]{8}package controller
+
+import (
+	"bufio"
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"regexp"
+	"strings"
+)
+
+// ResticRepositoryConfig delegates encryption and remote storage to Restic.
+// Credentials are controller-local and never travel to worker payloads.
+type ResticRepositoryConfig struct {
+	Repository    string
+	PasswordFile  string
+	SFTPSSHConfig string
+}
+
+)
 var resticSFTPHost = regexp.MustCompile(`^[A-Za-z0-9._-]+@[A-Za-z0-9.-]+$`)
 var resticSSHPath = regexp.MustCompile(`^/[A-Za-z0-9_./-]+$`)
 
@@ -145,6 +196,65 @@ func (c ResticRepositoryConfig) run(ctx context.Context, directory string, args 
 	return nil
 }
 
+// resolveResticSummaryID upgrades Restic 0.14's 8-character JSON summary ID
+// to the exact persisted 64-character snapshot ID. The stage path and owned
+// tag both have to match; ambiguous or absent results fail closed.
+func (c ResticRepositoryConfig) resolveResticSummaryID(ctx context.Context, stage, reported string) (string, error) {
+	if resticSnapshotID.MatchString(reported) {
+		return reported, nil
+	}
+	if !resticShortSnapshotID.MatchString(reported) {
+		return "", errors.New("invalid Restic summary snapshot ID")
+	}
+	cmd := c.resticCommand(ctx, stage, "snapshots", "--json", "--tag", "project-workspace")
+	var diagnostic resticDiagnostic
+	cmd.Stderr = &diagnostic
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("cannot resolve Restic snapshot identity: %w", diagnostic.classify(err))
+	}
+	if len(output) > 16<<20 {
+		return "", errors.New("Restic snapshot list exceeds safe bound")
+	}
+	var records []struct {
+		ID string `json:"id"`
+		Tags []string `json:"tags"`
+		Paths []string `json:"paths"`
+	}
+	if err := json.Unmarshal(output, &records); err != nil {
+		return "", errors.New("invalid Restic snapshot list response")
+	}
+	expectedPath := filepath.Join(stage, "snapshot")
+	var resolved string
+	for _, record := range records {
+		if !resticSnapshotID.MatchString(record.ID) || !strings.HasPrefix(record.ID, reported) {
+			continue
+		}
+		hasTag, hasPath := false, false
+		for _, tag := range record.Tags {
+			if tag == "project-workspace" {
+				hasTag = true
+			}
+		}
+		for _, path := range record.Paths {
+			if path == expectedPath {
+				hasPath = true
+			}
+		}
+		if !hasTag || !hasPath {
+			continue
+		}
+		if resolved != "" {
+			return "", errors.New("ambiguous Restic summary snapshot ID")
+		}
+		resolved = record.ID
+	}
+	if resolved == "" {
+		return "", errors.New("Restic summary ID has no exact staged snapshot")
+	}
+	return resolved, nil
+}
+
 // BackupOffsite captures the existing integrity-checked offline snapshot using
 // the same Database instance as the running controller, then sends the bundle
 // to an encrypted Restic repository. A separate CLI invocation must run only
@@ -180,7 +290,7 @@ func (db *Database) BackupOffsite(ctx context.Context, c ResticRepositoryConfig)
 			SnapshotID  string `json:"snapshot_id"`
 		}
 		if json.Unmarshal(scanner.Bytes(), &event) == nil &&
-			event.MessageType == "summary" && resticSnapshotID.MatchString(event.SnapshotID) {
+			event.MessageType == "summary" && (resticSnapshotID.MatchString(event.SnapshotID) || resticShortSnapshotID.MatchString(event.SnapshotID)) {
 			snapshot = event.SnapshotID
 		}
 	}
@@ -194,6 +304,10 @@ func (db *Database) BackupOffsite(ctx context.Context, c ResticRepositoryConfig)
 	}
 	if snapshot == "" {
 		return "", errors.New("Restic did not confirm a saved snapshot ID")
+	}
+	snapshot, err = c.resolveResticSummaryID(ctx, stage, snapshot)
+	if err != nil {
+		return "", err
 	}
 	if err := c.run(ctx, stage, "check"); err != nil {
 		return "", fmt.Errorf("encrypted repository verification failed for snapshot %s: %w", snapshot, err)
