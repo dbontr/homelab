@@ -72,6 +72,8 @@ func (s *Server) sessionOwnerWriteAllowed(r *http.Request) bool {
                 allowed=true
             }
         }
+    case r.Method == http.MethodPost && path == "/v1/learning/concepts":
+        allowed = true
     case r.Method == http.MethodPost && path == "/v1/learning/sessions":
         allowed = true
     case r.Method == http.MethodPost && path == "/v1/learning/attachments":

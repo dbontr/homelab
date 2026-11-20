@@ -30,6 +30,31 @@ func (s *Server) learningCall(w http.ResponseWriter,r *http.Request,tool string,
  writeJSON(w,status,value)
 }
 
+var learningConceptName = regexp.MustCompile("^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
+
+// Concept registration records curriculum content; it does not grant mastery.
+func (s *Server) uiLearningCreateConcept(w http.ResponseWriter, r *http.Request) {
+    r.Body = http.MaxBytesReader(w, r.Body, 8<<10)
+    var in struct {
+        Identifier string `json:"identifier"`
+        Title string `json:"title"`
+        Summary string `json:"summary"`
+        Domain string `json:"domain"`
+    }
+    if err := decode(r, &in); err != nil ||
+        !learningConceptName.MatchString(in.Identifier) ||
+        len(in.Identifier) > 128 || len(strings.TrimSpace(in.Title)) < 2 ||
+        len(in.Title) > 500 || len(strings.TrimSpace(in.Summary)) < 2 ||
+        len(in.Summary) > 4000 || len(in.Domain) > 100 {
+        writeError(w, http.StatusBadRequest, "concept requires a valid identifier, title and summary")
+        return
+    }
+    s.learningCall(w, r, "add_concept", map[string]string{
+        "identifier": in.Identifier, "title": strings.TrimSpace(in.Title),
+        "summary": strings.TrimSpace(in.Summary), "domain": strings.TrimSpace(in.Domain),
+    }, http.StatusCreated)
+}
+
 func (s *Server) uiLearningStart(w http.ResponseWriter,r *http.Request){
  var in struct{
   Goal string `json:"goal"`
