@@ -18,8 +18,8 @@ import (
 // ResticRepositoryConfig delegates encryption and remote storage to Restic.
 // Credentials are controller-local and never travel to worker payloads.
 type ResticRepositoryConfig struct {
-	Repository   string
-	PasswordFile string
+	Repository    string
+	PasswordFile  string
 	SFTPSSHConfig string
 }
 
@@ -58,8 +58,8 @@ func (d *resticDiagnostic) classify(err error) error {
 
 func ResticConfigFromEnv() ResticRepositoryConfig {
 	return ResticRepositoryConfig{
-		Repository:   os.Getenv("PWM_RESTIC_REPOSITORY"),
-		PasswordFile: os.Getenv("PWM_RESTIC_PASSWORD_FILE"),
+		Repository:    os.Getenv("PWM_RESTIC_REPOSITORY"),
+		PasswordFile:  os.Getenv("PWM_RESTIC_PASSWORD_FILE"),
 		SFTPSSHConfig: os.Getenv("PWM_RESTIC_SFTP_SSH_CONFIG"),
 	}
 }
@@ -90,7 +90,9 @@ func (c ResticRepositoryConfig) validate() error {
 			return errors.New("pinned SSH config path must be an absolute simple path")
 		}
 		ssh, err := os.Lstat(c.SFTPSSHConfig)
-		if err != nil { return fmt.Errorf("pinned SSH config unavailable: %w", err) }
+		if err != nil {
+			return fmt.Errorf("pinned SSH config unavailable: %w", err)
+		}
 		if !ssh.Mode().IsRegular() || ssh.Mode().Perm()&0077 != 0 {
 			return errors.New("pinned SSH config must be a regular owner-only file")
 		}
