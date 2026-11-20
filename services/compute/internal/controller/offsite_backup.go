@@ -167,8 +167,8 @@ func (c ResticRepositoryConfig) resolveResticSummaryID(ctx context.Context, stag
 		return "", errors.New("Restic snapshot list exceeds safe bound")
 	}
 	var records []struct {
-		ID string `json:"id"`
-		Tags []string `json:"tags"`
+		ID    string   `json:"id"`
+		Tags  []string `json:"tags"`
 		Paths []string `json:"paths"`
 	}
 	if err := json.Unmarshal(output, &records); err != nil {
