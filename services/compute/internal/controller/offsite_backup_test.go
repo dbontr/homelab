@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"os"
@@ -354,5 +355,49 @@ func TestResticSFTPConfigFromEnvironment(t *testing.T) {
 	conf := ResticConfigFromEnv()
 	if conf.SFTPSSHConfig != "/tmp/.ssh/config" {
 		t.Fatalf("SFTP config source not retained: %q", conf.SFTPSSHConfig)
+	}
+}
+
+func TestResticJSONShortSummaryResolvesExactSnapshot(t *testing.T) {
+	conf, root := setupResticTest(t)
+	stage := filepath.Join(root, "stage")
+	source := filepath.Join(stage, "snapshot")
+	if err := os.MkdirAll(source, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "check.txt"), []byte("short JSON summary identity"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+	command := conf.resticCommand(ctx, stage, "backup", "--json", "--tag", "project-workspace", "snapshot")
+	output, err := command.Output()
+	if err != nil {
+		t.Fatalf("fixture backup: %v", err)
+	}
+	var reported string
+	for _, line := range bytes.Split(output, []byte("\n")) {
+		var event struct {
+			MessageType string `json:"message_type"`
+			SnapshotID  string `json:"snapshot_id"`
+		}
+		if json.Unmarshal(line, &event) == nil && event.MessageType == "summary" {
+			reported = event.SnapshotID
+		}
+	}
+	if !resticShortSnapshotID.MatchString(reported) && !resticSnapshotID.MatchString(reported) {
+		t.Fatalf("unexpected Restic summary identifier length %d", len(reported))
+	}
+	id, err := conf.resolveResticSummaryID(ctx, stage, reported)
+	if err != nil || !resticSnapshotID.MatchString(id) || !strings.HasPrefix(id, reported) {
+		t.Fatalf("failed to confirm exact archived snapshot: %v", err)
+	}
+	if len(reported) == 8 {
+		if _, err := conf.resolveResticSummaryID(ctx, root, reported); err == nil {
+			t.Fatal("abbreviated ID must not resolve another stage path")
+		}
+	}
+	if _, err := conf.resolveResticSummaryID(ctx, stage, "00000000"); err == nil {
+		t.Fatal("unknown summary ID must fail closed")
 	}
 }
