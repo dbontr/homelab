@@ -71,6 +71,8 @@ type snapshot struct {
  BookRequests map[string]BookRequest `json:"book_requests,omitempty"`
  AutomationReceipts map[string]taskAutomationReceipt `json:"automation_receipts,omitempty"`
  Continuity map[string]ContinuityCheckpoint `json:"continuity,omitempty"`
+ Notifications map[string]NotificationEvent `json:"notifications,omitempty"`
+ NotificationPrefs map[string]NotificationPreference `json:"notification_prefs,omitempty"`
 }
 type Store struct { mu sync.Mutex; path string; zone *time.Location; data snapshot }
 
@@ -80,7 +82,7 @@ func Open(path, timeZone string) (*Store,error) {
  zone,err:=time.LoadLocation(timeZone);if err!=nil{return nil,err}
  if err=os.MkdirAll(filepath.Dir(path),0700);err!=nil{return nil,err}
  s:=&Store{path:path,zone:zone,data:snapshot{Tasks:map[string]Task{},Goals:map[string]Goal{},Rules:map[string]Rule{},BookRequests:map[string]BookRequest{},AutomationReceipts:map[string]taskAutomationReceipt{},
-  Continuity:map[string]ContinuityCheckpoint{}}}
+  Continuity:map[string]ContinuityCheckpoint{},Notifications:map[string]NotificationEvent{},NotificationPrefs:map[string]NotificationPreference{}}}
  raw,err:=os.ReadFile(path)
  if err!=nil&&!errors.Is(err,os.ErrNotExist){return nil,err}
  if err==nil {
@@ -91,11 +93,13 @@ func Open(path, timeZone string) (*Store,error) {
   if s.data.BookRequests==nil{s.data.BookRequests=map[string]BookRequest{}}
   if s.data.AutomationReceipts==nil{s.data.AutomationReceipts=map[string]taskAutomationReceipt{}}
   if s.data.Continuity==nil{s.data.Continuity=map[string]ContinuityCheckpoint{}}
+  if s.data.Notifications==nil{s.data.Notifications=map[string]NotificationEvent{}}
+  if s.data.NotificationPrefs==nil{s.data.NotificationPrefs=map[string]NotificationPreference{}}
  }
  return s,nil
 }
 func clone(in snapshot) snapshot {
- out:=snapshot{Tasks:make(map[string]Task,len(in.Tasks)),Goals:make(map[string]Goal,len(in.Goals)),Rules:make(map[string]Rule,len(in.Rules)),BookRequests:make(map[string]BookRequest,len(in.BookRequests)),AutomationReceipts:make(map[string]taskAutomationReceipt,len(in.AutomationReceipts)),Continuity:make(map[string]ContinuityCheckpoint,len(in.Continuity))}
+ out:=snapshot{Tasks:make(map[string]Task,len(in.Tasks)),Goals:make(map[string]Goal,len(in.Goals)),Rules:make(map[string]Rule,len(in.Rules)),BookRequests:make(map[string]BookRequest,len(in.BookRequests)),AutomationReceipts:make(map[string]taskAutomationReceipt,len(in.AutomationReceipts)),Continuity:make(map[string]ContinuityCheckpoint,len(in.Continuity)),Notifications:make(map[string]NotificationEvent,len(in.Notifications)),NotificationPrefs:make(map[string]NotificationPreference,len(in.NotificationPrefs))}
  for k,v:=range in.Tasks{out.Tasks[k]=v}
  for k,v:=range in.Goals{out.Goals[k]=v}
  for k,v:=range in.Rules{out.Rules[k]=v}
@@ -106,6 +110,8 @@ func clone(in snapshot) snapshot {
   out.Continuity[k]=v
  }
  for k,v:=range in.BookRequests{v.Authors=append([]string(nil),v.Authors...);out.BookRequests[k]=v}
+ for k,v:=range in.Notifications{out.Notifications[k]=v}
+ for k,v:=range in.NotificationPrefs{out.NotificationPrefs[k]=v}
  return out
 }
 func (s *Store) save(next snapshot) error {
