@@ -274,7 +274,6 @@ func VerifyOffsite(ctx context.Context, c ResticRepositoryConfig, snapshot strin
 	return nil
 }
 
- 
 // FullCheckOffsite reads and verifies all encrypted repository data without
 // materializing a second copy of the controller PVC in its scratch volume.
 func FullCheckOffsite(ctx context.Context, c ResticRepositoryConfig) error {
