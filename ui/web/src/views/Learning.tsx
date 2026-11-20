@@ -189,7 +189,7 @@ export function Learning({ revision, csrf, refresh }: { revision: number; csrf: 
               <span className="block break-all text-xs text-muted-foreground">{text(n, "id")}</span>
             </button>)}
           </div>
-          {graph && nodes.length === 0 && <p className="text-xs text-muted-foreground">No concepts in this graph selection.</p>}
+          {graph !== null && nodes.length === 0 && <p className="text-xs text-muted-foreground">No concepts in this graph selection.</p>}
         </CardContent>
       </Card>
       <Card>
