@@ -9,7 +9,7 @@
     { address = hardwareNode.nodeIP; prefixLength = 24; }
   ];
   networking.defaultGateway = "10.77.30.1";
-  networking.nameservers = [ "10.77.30.1" "1.1.1.1" ];
+  networking.nameservers = [ "10.77.30.1" ];
   time.timeZone = "America/Chicago";
   users.users.devon = { isNormalUser = true; extraGroups = [ "wheel" ]; };
   environment.systemPackages = with pkgs; [ vim curl git htop ];
