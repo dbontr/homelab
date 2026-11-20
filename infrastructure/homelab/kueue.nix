@@ -21,9 +21,12 @@ in
     systemd.services.homelab-kueue = {
       description = "Reconcile Kueue controller and opt-in compute queues";
       wantedBy = [ "multi-user.target" ];
-      requires = [ "k3s.service" ];
+      # Kueue is an optional Kubernetes reconciler, not part of the K3s process.
+      # Do not make a transient webhook outage during K3s restart fail a
+      # protected NixOS activation (including its audited rollback).
+      restartIfChanged = false;
       after = [ "k3s.service" "network-online.target" ];
-      wants = [ "network-online.target" ];
+      wants = [ "k3s.service" "network-online.target" ];
       path = with pkgs; [ bash coreutils jq gnugrep ];
       serviceConfig = {
         Type = "oneshot";
