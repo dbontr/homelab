@@ -155,6 +155,7 @@ func(s *Server) Handler()http.Handler{
  mux.HandleFunc("GET /v1/workspace/projects",s.uiProjects)
  mux.HandleFunc("GET /v1/workspace/projects/{project}/jobs",s.uiWorkspaceProjectView)
  mux.HandleFunc("GET /v1/workspace/projects/{project}/workspaces",s.uiWorkspaceProjectView)
+ mux.HandleFunc("POST /v1/learning/concepts",s.uiLearningCreateConcept)
  mux.HandleFunc("GET /v1/learning/summary",s.uiLearningSummary)
  mux.HandleFunc("GET /v1/learning/sessions",s.uiLearningSessions)
  mux.HandleFunc("POST /v1/learning/sessions",s.uiLearningStart)
