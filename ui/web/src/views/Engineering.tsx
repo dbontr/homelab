@@ -188,14 +188,14 @@ function RunDetail({ id, revision, csrf, refresh }: { id: string; revision: numb
     <CardContent><ResourceState value={item}>{result => {
       const object = asRecord(result)
       const steps = list(object?.steps)
-      const status = text(object, "status")
+      const status = text(object ?? {}, "status")
       const rev = Number(object?.revision)
       return steps.length === 0 ? <EmptyState title="No execution steps were returned" /> :
         <div className="space-y-2">{steps.map((step, i) => <div key={text(step, "id") || i} className="flex flex-wrap items-center justify-between gap-2 border-b py-2">
           <span className="font-mono text-xs">{text(step, "kind", "id")}</span>
           <Badge variant={statusVariant(text(step, "status"))}>{text(step, "status") || "Unknown"}</Badge>
           {text(step, "error") && <span className="w-full text-xs text-destructive">{text(step, "error")}</span>}
-          {text(asRecord(asRecord(step)?.result), "url") && <a className="w-full text-xs underline" href={text(asRecord(asRecord(step)?.result), "url")} target="_blank" rel="noopener noreferrer">Open draft pull request</a>}
+          {text(asRecord(asRecord(step)?.result) ?? {}, "url") && <a className="w-full text-xs underline" href={text(asRecord(asRecord(step)?.result) ?? {}, "url")} target="_blank" rel="noopener noreferrer">Open draft pull request</a>}
         </div>)}
         {(status === "pending" || status === "running") && Number.isInteger(rev) && csrf &&
           <Button type="button" variant="outline" disabled={busy} onClick={() => cancel(rev)}>{busy ? "Cancelling…" : "Cancel run"}</Button>}
