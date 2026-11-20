@@ -23,58 +23,8 @@ type ResticRepositoryConfig struct {
 	SFTPSSHConfig string
 }
 
-var resticSnapshotID = regexp.MustCompile(`^[a-f0-9]{64}package controller
-
-import (
-	"bufio"
-	"bytes"
-	"context"
-	"encoding/json"
-	"errors"
-	"fmt"
-	"io"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"regexp"
-	"strings"
-)
-
-// ResticRepositoryConfig delegates encryption and remote storage to Restic.
-// Credentials are controller-local and never travel to worker payloads.
-type ResticRepositoryConfig struct {
-	Repository    string
-	PasswordFile  string
-	SFTPSSHConfig string
-}
-
-)
-var resticShortSnapshotID = regexp.MustCompile(`^[a-f0-9]{8}package controller
-
-import (
-	"bufio"
-	"bytes"
-	"context"
-	"encoding/json"
-	"errors"
-	"fmt"
-	"io"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"regexp"
-	"strings"
-)
-
-// ResticRepositoryConfig delegates encryption and remote storage to Restic.
-// Credentials are controller-local and never travel to worker payloads.
-type ResticRepositoryConfig struct {
-	Repository    string
-	PasswordFile  string
-	SFTPSSHConfig string
-}
-
-)
+var resticSnapshotID = regexp.MustCompile(`^[a-f0-9]{64}$`)
+var resticShortSnapshotID = regexp.MustCompile(`^[a-f0-9]{8}$`)
 var resticSFTPHost = regexp.MustCompile(`^[A-Za-z0-9._-]+@[A-Za-z0-9.-]+$`)
 var resticSSHPath = regexp.MustCompile(`^/[A-Za-z0-9_./-]+$`)
 
