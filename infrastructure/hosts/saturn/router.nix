@@ -114,6 +114,11 @@ in {
       table inet saturn_isolation {
         chain forward {
           type filter hook forward priority -10; policy accept;
+          # All client DNS queries must use the VLAN-local resolver. These
+          # drops precede conntrack acceptance so old connections cannot
+          # retain unrestricted access to external DNS servers.
+          iifname { "management10", "services20", "compute30" } oifname "${cfg.wanInterface}" udp dport { 53, 853 } drop
+          iifname { "management10", "services20", "compute30" } oifname "${cfg.wanInterface}" tcp dport { 53, 853 } drop
           ct state established,related accept
           iifname "management10" oifname { "services20", "compute30" } accept
           # Keep predicates on one line: each newline ends an nftables rule.
