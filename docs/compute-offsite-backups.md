@@ -1,5 +1,38 @@
 # Compute project recovery
 
+## Verified production cutover (2026-11-19 CST)
+
+The Helm-managed `pwm-controller` in `pwm-system` is deployed at
+**revision 13**, using the immutable Go controller OCI pinned in
+`infrastructure/homelab/workspace/controller-backup-production-values.yaml`,
+the `24h` schedule in `controller-backup-values.yaml`, and a separately
+authenticated HTTPS alert receiver. The image was built from merged source
+`68c52f90bb7409cb79381f67396d9a1b4032533f` (PR #271);
+the OCI digest and an independently checksum-matched Janus recovery archive
+were validated, with matching CRI imports on both Saturn and Janus. The
+original controller PVC and Helm rollback history remain intact.
+
+Production created real `project-workspace`-tagged, encrypted Restic
+snapshots on Janus. The running Go controller resolved the exact 64-character
+snapshot IDs and persisted a healthy backup receipt with zero consecutive
+failures and no active alerts. A full `restic check --read-data` passed.
+An exact production snapshot was restored successfully both by
+`verify-offsite` and by a disposable, non-root verification Pod scheduled
+on Janus, without the controller's PVC or a Kubernetes service-account
+token. The project-tagged retention dry run succeeded without pruning.
+Source and execution receipts are recorded under GitHub issue #192.
+
+The Cloudflare Worker receiver rejects anonymous or invalid webhook
+requests, persists independent firing/resolved receipts in KV, and
+forwards non-sensitive events to a random ntfy subscription topic.
+A previous `repeated_failures` event was cleared upon successful recovery.
+**Server-side 2xx is not proof that the owner's device received a push
+notification.** Operator subscription and visible receipt remain a
+separate acceptance gate. The Janus root-only age-encrypted password escrow
+copy is present, but restore using an independently held recovery identity
+is also not yet verified. Preserve those open gates; do not assert
+unqualified disaster-recovery completion.
+
 Compute owns the authoritative project SQLite state and checksum-addressed
 artifacts in the `pwm-controller-state` PVC. Its in-process Restic scheduler
 creates a consistent snapshot while preserving the controller's running
@@ -35,9 +68,10 @@ identity and protected password, then verify its exact URL from within the
 same controller container environment. Use strict SSH host-key checking.
 Do not put password, SSH key or token bytes in Helm values, Nix source,
 logs, GitHub issues or MCP tool arguments. The alert receiver URL above is an
-example only, not a configured or authorized endpoint. The source overlay
-leaves the alert URL and Secret name empty, and Helm must refuse activation
-until these values are supplied through the protected release process.
+example only, not a configured or authorized endpoint. The baseline source overlay
+leaves the alert URL and Secret name empty. The separate production overlay
+supplies the approved receiver URL and token Secret name; Helm must still
+refuse activation if either is absent.
 
 ## Declarative configuration
 
