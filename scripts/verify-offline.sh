@@ -20,7 +20,11 @@ verify_go() {
     go test ./...
     go test -race ./...
     go vet ./...
-    go build ./cmd/...
+    if [ -d cmd ]; then
+      go build ./cmd/...
+    else
+      go build ./...
+    fi
   )
 }
 
@@ -43,7 +47,7 @@ bash "$root/scripts/tests/worker-detached-activation-test.sh"
 bash "$root/services/compute/scripts/tests/worker-host-maintenance-test.sh"
 bash "$root/scripts/tests/stage-component-test.sh"
 bash -n "$root/scripts/saturn-detached-activation.sh"
-if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
+if [ "$(id -u)" -eq 0 ]; then
   bash "$root/scripts/tests/saturn-credential-readiness-test.sh"
 fi
 
