@@ -86,6 +86,14 @@ must be preserved after the workspace expires. A `succeeded` run is proof
 of the listed tests only; mathematical claims still require Lean's own
 checker and proof acceptance receipts.
 
+## Owner-directed source changes
+
+The authenticated **Engineering** console supports two distinct operations. **Verify source only** runs bounded commands against an exact linked repository commit and does not change source. **Edit, verify and prepare draft PR** accepts the complete UTF-8 contents of one owner-selected repository-relative file, a short title, the exact 40-character current `main` commit, and 1–8 verification commands. It does not require a configured source-authoring model: the owner supplies the file, while Engineering supplies the isolated build and publication workflow.
+
+The source-change run provisions an approved worker workspace, checks out the pinned commit, applies only the supplied file, runs the declared checks, exports the verified result and requests a **draft** pull request against the same commit. Stale HEADs, failed checks, changes outside the linked project and revoked editor grants fail closed. The console shows the durable run status, step errors, draft link, and revision-bound cancellation. It never merges, deploys, or grants cluster administration privileges.
+
+Owner browser reads and mutations use a verified Cloudflare Access assertion. Mutating Engineering routes require the exact allowed origin, current session-derived CSRF token and JSON content type. They remain separate from privileged administration, image admission, software licensing and release execution. The Engineering daemon's current non-admin project editor grant is independently rechecked by the Compute controller.
+
 ## Execution contract
 
 An engineering run belongs to one explicitly permitted project, independently of how many repositories it links. The requested repository must be linked to that project in the compute controller. The run pins one exact 40-character Git commit. Publication requires the same expected head and a named base branch.
