@@ -62,7 +62,7 @@
 
   services.workspaceMcpProjectProvisioner = {
     enable = true;
-    workerImage = "ghcr.io/dbontr/homelab/worker@sha256:fe6cb6df8ef3f8ceb9c1ed447c4e7bc6412e3d421d0aebe84fa5fce76f107c3f";
+    workerImage = "ghcr.io/dbontr/homelab/worker@sha256:bb4e51b584340da74713b5055011560bd08cc09890ba0770ca497d04b65d0d70";
     computeNodes = [ "jupiter" "venus" "mercury" "janus" ];
     excludeProjects = [ "acceptance" ];
     projectApprovedImages = builtins.fromJSON
