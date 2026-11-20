@@ -23,58 +23,8 @@ type ResticRepositoryConfig struct {
 	SFTPSSHConfig string
 }
 
-var resticSnapshotID = regexp.MustCompile(`^[a-f0-9]{64}package controller
-
-import (
-	"bufio"
-	"bytes"
-	"context"
-	"encoding/json"
-	"errors"
-	"fmt"
-	"io"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"regexp"
-	"strings"
-)
-
-// ResticRepositoryConfig delegates encryption and remote storage to Restic.
-// Credentials are controller-local and never travel to worker payloads.
-type ResticRepositoryConfig struct {
-	Repository   string
-	PasswordFile string
-	SFTPSSHConfig string
-}
-
-)
-var resticSFTPHost = regexp.MustCompile(`^[A-Za-z0-9._-]+@[A-Za-z0-9.-]+package controller
-
-import (
-	"bufio"
-	"bytes"
-	"context"
-	"encoding/json"
-	"errors"
-	"fmt"
-	"io"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"regexp"
-	"strings"
-)
-
-// ResticRepositoryConfig delegates encryption and remote storage to Restic.
-// Credentials are controller-local and never travel to worker payloads.
-type ResticRepositoryConfig struct {
-	Repository   string
-	PasswordFile string
-	SFTPSSHConfig string
-}
-
-)
+var resticSnapshotID = regexp.MustCompile(`^[a-f0-9]{64}$`)
+var resticSFTPHost = regexp.MustCompile(`^[A-Za-z0-9._-]+@[A-Za-z0-9.-]+$`)
 
 type resticDiagnostic struct {
 	bytes.Buffer
@@ -153,7 +103,7 @@ func (c ResticRepositoryConfig) validate() error {
 
 func (c ResticRepositoryConfig) resticCommand(ctx context.Context, directory string, args ...string) *exec.Cmd {
 	// Restic 0.14 needs an explicit SSH subprocess command. OpenSSH does
-	// not load the container\'s HOME-based config from a passwd-independent path.
+	// not load a config from the container HOME when passwd specifies another home.
 	if c.SFTPSSHConfig != "" {
 		remote, _, _ := strings.Cut(strings.TrimPrefix(c.Repository, "sftp:"), ":")
 		option := "sftp.command=ssh -F " + c.SFTPSSHConfig + " -s " + remote + " sftp"
