@@ -8,8 +8,9 @@ import (
 	"strings"
 )
 
-// Owner-session mutations are limited to personal records; cluster privileges
-// and direct MCP tools always require independent authorization.
+// Owner-session mutations are limited to personal records and bounded
+// Engineering project workflows. Cluster privileges, grants, and direct MCP
+// tools always require independent authorization.
 func (s *Server) sessionOwnerWriteAllowed(r *http.Request) bool {
 	if s.sessions == nil || r.Header.Get("Origin") == "" { return false }
 	path := r.URL.Path
@@ -17,6 +18,14 @@ func (s *Server) sessionOwnerWriteAllowed(r *http.Request) bool {
 	switch {
 	case r.Method == http.MethodPost && (path == "/v1/recipes" || path == "/v1/recipes/import" || path == "/v1/recipes/parse" || path == "/v1/recipes/import-url" || path == "/v1/recipes/bundle" || path == "/v1/recipes/recipesage/preview" || path == "/v1/recipes/recipesage/import" || path == "/v1/recipes/images" || path == "/v1/meals" || path == "/v1/books/requests" || path == "/v1/tasks" || path == "/v1/tasks/capture" || path == "/v1/goals"):
         allowed = true
+    case r.Method == http.MethodPost && (path=="/v1/engineering/runs" || path=="/v1/engineering/teams"):
+        allowed=true
+    case r.Method == http.MethodPost && strings.HasPrefix(path,"/v1/engineering/runs/"):
+        parts:=strings.Split(path,"/")
+        allowed=len(parts)==6 && parts[4]!="" && parts[5]=="cancel"
+    case r.Method == http.MethodPost && strings.HasPrefix(path,"/v1/engineering/teams/"):
+        parts:=strings.Split(path,"/")
+        allowed=len(parts)==6 && parts[4]!="" && (parts[5]=="cancel" || parts[5]=="integrate")
     case r.Method == http.MethodPost && (path=="/v1/workflows" ||
         path=="/v1/workflows/plan" || path=="/v1/automations"):
         allowed=true
