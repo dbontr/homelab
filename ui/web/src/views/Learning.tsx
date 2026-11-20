@@ -133,6 +133,10 @@ export function Learning({ revision, csrf, refresh }: { revision: number; csrf: 
   const [selected, setSelected] = useState("")
   const [goal, setGoal] = useState("")
   const [concept, setConcept] = useState("")
+  const [identifier, setIdentifier] = useState("")
+  const [conceptTitle, setConceptTitle] = useState("")
+  const [conceptSummary, setConceptSummary] = useState("")
+  const [conceptDomain, setConceptDomain] = useState("")
   const [mode, setMode] = useState("learn")
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
@@ -190,6 +194,33 @@ export function Learning({ revision, csrf, refresh }: { revision: number; csrf: 
             </button>)}
           </div>
           {graph !== null && nodes.length === 0 && <p className="text-xs text-muted-foreground">No concepts in this graph selection.</p>}
+          <form className="space-y-2 border-t pt-3" onSubmit={async e => {
+            e.preventDefault(); setError(""); setBusy(true)
+            try {
+              await apiWrite("POST", "/v1/learning/concepts", csrf, {
+                identifier, title: conceptTitle.trim(), summary: conceptSummary.trim(), domain: conceptDomain.trim(),
+              })
+              setConcept(identifier); setIdentifier(""); setConceptTitle(""); setConceptSummary(""); setConceptDomain("")
+              setGraph(null); changed()
+            } catch (e) { setGraphError(e instanceof Error ? e.message : "Concept registration failed") }
+            finally { setBusy(false) }
+          }}>
+            <p className="text-sm font-medium">Register a curriculum concept</p>
+            <label className="block space-y-1 text-sm">Identifier (lowercase and hyphens)
+              <Input required maxLength={128} pattern="[a-z][a-z0-9]*(-[a-z0-9]+)*"
+                value={identifier} onChange={e => setIdentifier(e.target.value)} placeholder="fourier-transform" />
+            </label>
+            <label className="block space-y-1 text-sm">Title
+              <Input required maxLength={500} value={conceptTitle} onChange={e => setConceptTitle(e.target.value)} />
+            </label>
+            <label className="block space-y-1 text-sm">Summary
+              <Textarea required maxLength={4000} value={conceptSummary} onChange={e => setConceptSummary(e.target.value)} />
+            </label>
+            <label className="block space-y-1 text-sm">Domain
+              <Input maxLength={100} value={conceptDomain} onChange={e => setConceptDomain(e.target.value)} />
+            </label>
+            <Button disabled={busy || !csrf || !identifier || !conceptTitle.trim() || !conceptSummary.trim()}>Register concept</Button>
+          </form>
         </CardContent>
       </Card>
       <Card>
