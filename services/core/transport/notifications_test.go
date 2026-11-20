@@ -38,7 +38,7 @@ func TestNotificationPublisherIsolationAndOwnerAPI(t *testing.T){
  if w.Code!=200{t.Fatalf("preferences write failed: %s",w.Body.String())}
  if w:=request(h,"GET","/v1/notifications/preferences","",apiToken);w.Code!=200{t.Fatalf("preferences failed %s",w.Body.String())}
  event:=db.Notifications(10)[0]
- w=request(h,"POST","/v1/notifications/"+event.ID+"/ack",`{}`,apiToken)
+ w=request(h,"POST","/v1/notifications/ack/"+event.ID,`{}`,apiToken)
  if w.Code!=200{t.Fatalf("ack failed: %s",w.Body.String())}
  var ack store.NotificationEvent
  if err=json.Unmarshal(w.Body.Bytes(),&ack);err!=nil||ack.AcknowledgedAt==nil{t.Fatalf("ack not saved: %+v %v",ack,err)}
