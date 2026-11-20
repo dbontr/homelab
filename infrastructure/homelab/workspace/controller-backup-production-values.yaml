@@ -1,0 +1,7 @@
+# Approved alert delivery integration for the existing Compute controller.
+# Overlay on top of retained Helm release values and controller-backup-values.yaml.
+# No credential bytes are stored in this file.
+controller:
+  offsite:
+    alertURL: "https://homelab-compute-backup-alerts.self-optimization.workers.dev/hooks/compute"
+    alertSecretName: "pwm-compute-backup-alert"
