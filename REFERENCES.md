@@ -19,6 +19,8 @@
 
 - [Kueue v0.20.6 installation](https://kueue.sigs.k8s.io/docs/getting-started/installation/) — Kubernetes SIG Scheduling. Used for: versioned queue-admission controller installation, safe namespace opt-in, and CRD removal order.
 - [Kueue quick start](https://kueue.sigs.k8s.io/docs/getting-started/quick-start/) — Kubernetes SIG Scheduling. Used for: ResourceFlavor, ClusterQueue, LocalQueue and Job admission contracts.
+- [K3s startup sysctl behavior](https://github.com/k3s-io/k3s/issues/3852) — K3s project. Used for: identifying automatic IPv6 forwarding changes during cluster startup and reapplying Saturn's IPv4-only router policy after K3s starts.
+- [systemd.service ExecStartPost](https://www.freedesktop.org/software/systemd/man/latest/systemd.service.html#ExecStartPost=) — systemd project. Used for: ordering Saturn's forwarding policy after successful K3s service startup and on service restarts.
 - [K3s Helm Controller](https://docs.k3s.io/add-ons/helm) — K3s project. Used for: declarative HelmChart reconciliation and bounded Helm installation failure policies.
 
 - [K3s live-import Spegel peer advertisement race](https://github.com/k3s-io/k3s/issues/13794) — K3s project. Used for: requiring an uncached-layer pull and new mirror-hit evidence after live OCI import rather than treating metadata advertisements as proof of transfer.
