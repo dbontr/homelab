@@ -2,7 +2,7 @@ import { useEffect, useState } from "react"
 import {
   Activity, BookOpen, Brain, CalendarDays, CircleUserRound, Cpu,
   FolderKanban, HeartPulse, LayoutDashboard, Library, ListTodo,
-  MonitorCog, Moon, RefreshCcw, ScrollText, Server,
+  MonitorCog, Moon, RefreshCcw, ScrollText, Server, Bell,
   ShieldCheck, Sun, Workflow, Wrench, Menu, X, Utensils,
   AlarmClock, ClipboardList, NotebookPen, type LucideIcon,
 } from "lucide-react"
@@ -12,13 +12,14 @@ import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert"
 import { Overview } from "@/views/Overview"
 import { Projects } from "@/views/Projects"
 import { Monitoring } from "@/views/Monitoring"
+import { Notifications } from "@/views/Notifications"
 import { Engineering } from "@/views/Engineering"
 import { SoftwareLibrary } from "@/views/SoftwareLibrary"
 import { Records, recordPages } from "@/views/Records"
 import { useApi, type Session } from "@/lib/api"
 import { cn } from "@/lib/utils"
 
-type PageKey = "overview" | "projects" | "engineering" | "software" | "monitoring" | keyof typeof recordPages
+type PageKey = "overview" | "projects" | "engineering" | "software" | "monitoring" | "notifications" | keyof typeof recordPages
 
 type NavGroup = { group: string; items: Array<{ id: string; label: string; icon: LucideIcon }> }
 
@@ -45,6 +46,7 @@ const navigation: NavGroup[] = [
   ] },
   { group: "System", items: [
     { id: "monitoring", label: "Monitoring", icon: MonitorCog },
+    { id: "notifications", label: "Notifications", icon: Bell },
     { id: "activity", label: "Activity", icon: Activity },
     { id: "security", label: "Security", icon: ShieldCheck },
   ] },
@@ -154,6 +156,7 @@ export default function App() {
           page === "projects" ? <Projects revision={revision} /> :
           page === "engineering" ? <Engineering revision={revision} csrf={session.data.csrf_token ?? ""} refresh={refresh} /> :
           page === "monitoring" ? <Monitoring revision={revision} /> :
+          page === "notifications" ? <Notifications revision={revision} csrf={session.data.csrf_token ?? ""} /> :
           page === "software" ? <SoftwareLibrary revision={revision} /> :
           page in recordPages ? <Records definition={recordPages[page]} revision={revision} /> :
           <p className="text-muted-foreground">The selected view is unavailable.</p>}

@@ -11,6 +11,7 @@ in
     enable = lib.mkEnableOption "the independent domain service runtime";
     mcpInterfaceTokenFile = lib.mkOption { type = lib.types.nullOr lib.types.str; default = null; description = "Service-only token for the optional unified MCP listener."; };
     apiInterfaceTokenFile = lib.mkOption { type = lib.types.nullOr lib.types.str; default = null; description = "Service-only token for the optional native API listener."; };
+    notificationPublisherTokensFile = lib.mkOption { type = lib.types.nullOr lib.types.str; default = null; description = "Protected JSON map of separately permitted notification source publisher tokens; no publishers are enabled by default."; };
     apiInterfaceWritePaths = lib.mkOption { type = lib.types.listOf lib.types.str; default = []; description = "Exact native API write resource prefixes admitted by the domain runtime."; };
     package = lib.mkOption {
       type = lib.types.package;
@@ -340,6 +341,8 @@ in
         HOMELAB_API_TOKEN_FILE = "/run/credentials/homelab-platform.service/access_token";
         HOMELAB_PROMETHEUS_URL = cfg.monitoring.prometheusURL;
         HOMELAB_LOKI_URL = cfg.monitoring.lokiURL;
+      } // lib.optionalAttrs (cfg.notificationPublisherTokensFile != null) {
+        HOMELAB_NOTIFICATION_PUBLISHERS_FILE = "/run/credentials/homelab-platform.service/notification-publishers";
       } // lib.optionalAttrs (cfg.mcpInterfaceTokenFile != null) {
         HOMELAB_MCP_INTERFACE_TOKEN_FILE = "/run/credentials/homelab-platform.service/mcp-interface";
       } // lib.optionalAttrs (cfg.apiInterfaceTokenFile != null) {
@@ -436,6 +439,7 @@ in
           [ "access_token:${cfg.tokenFile}" ]
           ++ lib.optional (cfg.mcpInterfaceTokenFile != null) "mcp-interface:${cfg.mcpInterfaceTokenFile}"
           ++ lib.optional (cfg.apiInterfaceTokenFile != null) "api-interface:${cfg.apiInterfaceTokenFile}"
+          ++ lib.optional (cfg.notificationPublisherTokensFile != null) "notification-publishers:${cfg.notificationPublisherTokensFile}"
           ++ lib.optional (cfg.calendarURLFile != null) "calendar_url:${cfg.calendarURLFile}"
           ++ lib.optional calendarCfg.enable "calendar-service-token:${calendarCfg.tokenFile}"
           ++ lib.optional motivationCfg.enable "motivation-service-token:${motivationCfg.tokenFile}"

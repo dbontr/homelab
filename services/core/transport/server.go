@@ -42,7 +42,7 @@ type Backend struct {
  TokenSource func()(string,error)
  ForwardOwnerAssertion bool
 }
-type Server struct { db *store.Store; token string; mcpInterfaceToken string; apiInterfaceToken string; apiInterfaceWritePaths map[string]bool; backend []Backend; client *http.Client; calendarSource func(context.Context)(calendar.Feed,error); privilegeClient *security.AdminClient; executorClient *privileged.Client; fleetClient *release.FleetClient; securityLoginURL string; allowedOrigins map[string]struct{}; media *media.Client; deviceCatalog *devices.Catalog; nodeCatalog *devices.NodeCatalog; profiles *profiles.Registry; recipes *recipes.Store; sessions *session.Manager; observability *observability.Client; bookCatalog *books.Catalog; motivation *motivationhttp.Client; engineering agentflow.Manager; workflows *agentflow.Store; capabilityPlanner agentflow.CapabilityPlanner; inflight chan struct{} }
+type Server struct { db *store.Store; token string; mcpInterfaceToken string; apiInterfaceToken string; apiInterfaceWritePaths map[string]bool; backend []Backend; client *http.Client; calendarSource func(context.Context)(calendar.Feed,error); privilegeClient *security.AdminClient; executorClient *privileged.Client; fleetClient *release.FleetClient; securityLoginURL string; allowedOrigins map[string]struct{}; media *media.Client; deviceCatalog *devices.Catalog; nodeCatalog *devices.NodeCatalog; profiles *profiles.Registry; recipes *recipes.Store; sessions *session.Manager; observability *observability.Client; bookCatalog *books.Catalog; motivation *motivationhttp.Client; engineering agentflow.Manager; workflows *agentflow.Store; capabilityPlanner agentflow.CapabilityPlanner; notificationPublishers map[string]string; inflight chan struct{} }
 
 func New(db *store.Store,token string,backends []Backend)(*Server,error){
  if db==nil||len(token)<32||strings.ContainsAny(token,"\r\n\t"){return nil,errors.New("store and a strong access token are required")}
@@ -137,6 +137,11 @@ func(s *Server) Handler()http.Handler{
  mux.HandleFunc("POST /v1/workflows/plan",s.capabilityWorkflowPlan)
  mux.HandleFunc("GET /v1/automations",s.automationCollection)
  mux.HandleFunc("POST /v1/automations",s.automationCollection)
+ mux.HandleFunc("GET /v1/notifications",s.notificationFeed)
+ mux.HandleFunc("GET /v1/notifications/preferences",s.notificationPreferences)
+ mux.HandleFunc("PUT /v1/notifications/preferences/{source}",s.notificationPreferenceUpdate)
+ mux.HandleFunc("POST /v1/notifications/ack/{id}",s.notificationAcknowledge)
+ mux.HandleFunc("POST /v1/notifications/publish/{source}",s.notificationPublish)
  mux.HandleFunc("GET /v1/automations/alerts",s.automationAlerts)
  mux.HandleFunc("POST /v1/automations/{id}/alerts/{run}/ack",s.automationAlertAck)
  mux.HandleFunc("GET /v1/automations/{id}",s.automationItem)
@@ -253,6 +258,10 @@ func(s *Server) Handler()http.Handler{
   if r.URL.Path!="/healthz" {
    if !s.originAllowed(r) {writeError(w,http.StatusForbidden,"origin not permitted");return}
    if r.URL.Path=="/ui/session" {mux.ServeHTTP(w,r);return}
+   if r.Method==http.MethodPost && strings.HasPrefix(r.URL.Path,"/v1/notifications/publish/") {
+    if !s.notificationPublisherAuthorized(r) {writeError(w,http.StatusUnauthorized,"source publisher authorization required");return}
+    mux.ServeHTTP(w,r);return
+   }
    auth:=r.Header.Get("Authorization")
    bearer:=strings.HasPrefix(auth,"Bearer ") &&
      subtle.ConstantTimeCompare([]byte(strings.TrimPrefix(auth,"Bearer ")),[]byte(s.token))==1

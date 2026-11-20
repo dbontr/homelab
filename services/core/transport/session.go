@@ -65,6 +65,8 @@ func (s *Server) sessionReadAllowed(r *http.Request) bool {
         "/v1/monitoring/summary":true,
         "/v1/monitoring/targets":true,
         "/v1/monitoring/alerts":true,
+        "/v1/notifications":true,
+        "/v1/notifications/preferences":true,
         "/v1/monitoring/series":true,
         "/v1/monitoring/logs":true,
 	}
