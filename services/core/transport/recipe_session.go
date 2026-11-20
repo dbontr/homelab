@@ -1,6 +1,7 @@
 package transport
 
 import (
+ "github.com/dbontr/homelab-new/system/store"
 	"crypto/subtle"
 	"mime"
 	"net/http"
@@ -28,6 +29,12 @@ func (s *Server) sessionOwnerWriteAllowed(r *http.Request) bool {
             len(parts)==7 && parts[4]=="alerts" && parts[5]!="" && parts[6]=="ack")
     case r.Method == http.MethodPost && (path=="/v1/research/learning/preview" || path=="/v1/research/learning/import"):
         allowed=true
+    case r.Method == http.MethodPut && strings.HasPrefix(path,"/v1/notifications/preferences/"):
+        source:=strings.TrimPrefix(path,"/v1/notifications/preferences/")
+        allowed=store.ValidNotificationSource(source)
+    case r.Method == http.MethodPost && strings.HasPrefix(path,"/v1/notifications/") && strings.HasSuffix(path,"/ack"):
+        parts:=strings.Split(path,"/")
+        allowed=len(parts)==5 && parts[3]!="" && parts[4]=="ack"
     case r.Method == http.MethodPut && path == "/v1/motivation/profile":
         allowed=true
     case r.Method == http.MethodPost && (path == "/v1/motivation/pause" ||
