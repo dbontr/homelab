@@ -20,9 +20,61 @@ import (
 type ResticRepositoryConfig struct {
 	Repository   string
 	PasswordFile string
+	SFTPSSHConfig string
 }
 
-var resticSnapshotID = regexp.MustCompile(`^[a-f0-9]{64}$`)
+var resticSnapshotID = regexp.MustCompile(`^[a-f0-9]{64}package controller
+
+import (
+	"bufio"
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"regexp"
+	"strings"
+)
+
+// ResticRepositoryConfig delegates encryption and remote storage to Restic.
+// Credentials are controller-local and never travel to worker payloads.
+type ResticRepositoryConfig struct {
+	Repository   string
+	PasswordFile string
+	SFTPSSHConfig string
+}
+
+)
+var resticSFTPHost = regexp.MustCompile(`^[A-Za-z0-9._-]+@[A-Za-z0-9.-]+package controller
+
+import (
+	"bufio"
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"regexp"
+	"strings"
+)
+
+// ResticRepositoryConfig delegates encryption and remote storage to Restic.
+// Credentials are controller-local and never travel to worker payloads.
+type ResticRepositoryConfig struct {
+	Repository   string
+	PasswordFile string
+	SFTPSSHConfig string
+}
+
+)
 
 type resticDiagnostic struct {
 	bytes.Buffer
@@ -58,6 +110,7 @@ func ResticConfigFromEnv() ResticRepositoryConfig {
 	return ResticRepositoryConfig{
 		Repository:   os.Getenv("PWM_RESTIC_REPOSITORY"),
 		PasswordFile: os.Getenv("PWM_RESTIC_PASSWORD_FILE"),
+		SFTPSSHConfig: os.Getenv("PWM_RESTIC_SFTP_SSH_CONFIG"),
 	}
 }
 
@@ -75,6 +128,23 @@ func (c ResticRepositoryConfig) validate() error {
 	if !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 {
 		return errors.New("Restic password file must be a regular, owner-only file")
 	}
+	if c.SFTPSSHConfig != "" {
+		if !strings.HasPrefix(c.Repository, "sftp:") {
+			return errors.New("pinned SSH config requires an SFTP repository")
+		}
+		remote, _, found := strings.Cut(strings.TrimPrefix(c.Repository, "sftp:"), ":")
+		if !found || !resticSFTPHost.MatchString(remote) {
+			return errors.New("SFTP repository must specify a valid user and host")
+		}
+		if !filepath.IsAbs(c.SFTPSSHConfig) || strings.ContainsAny(c.SFTPSSHConfig, " \t\r\n\x00\'\"\\") {
+			return errors.New("pinned SSH config path must be an absolute simple path")
+		}
+		ssh, err := os.Lstat(c.SFTPSSHConfig)
+		if err != nil { return fmt.Errorf("pinned SSH config unavailable: %w", err) }
+		if !ssh.Mode().IsRegular() || ssh.Mode().Perm()&0077 != 0 {
+			return errors.New("pinned SSH config must be a regular owner-only file")
+		}
+	}
 	if _, err := exec.LookPath("restic"); err != nil {
 		return errors.New("Restic executable not found on controller")
 	}
@@ -82,6 +152,13 @@ func (c ResticRepositoryConfig) validate() error {
 }
 
 func (c ResticRepositoryConfig) resticCommand(ctx context.Context, directory string, args ...string) *exec.Cmd {
+	// Restic 0.14 needs an explicit SSH subprocess command. OpenSSH does
+	// not load the container\'s HOME-based config from a passwd-independent path.
+	if c.SFTPSSHConfig != "" {
+		remote, _, _ := strings.Cut(strings.TrimPrefix(c.Repository, "sftp:"), ":")
+		option := "sftp.command=ssh -F " + c.SFTPSSHConfig + " -s " + remote + " sftp"
+		args = append([]string{"-o", option}, args...)
+	}
 	cmd := exec.CommandContext(ctx, "restic", args...)
 	cmd.Dir = directory
 	// Inherited repository/password settings must not override the explicitly
