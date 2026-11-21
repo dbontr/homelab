@@ -67,6 +67,16 @@ func NewHandler(engine *Engine,token string)(http.Handler,error){
   plan,err:=engine.AttentionResponse(input.Trigger,input.Context)
   writeResult(w,plan,err)
  })
+ protected.HandleFunc("PUT /v1/motivation/curiosity/{id}",func(w http.ResponseWriter,r *http.Request){
+  var input CuriosityChange
+  if !readRequest(w,r,&input,"expected_revision","enabled","paused","source_kind","source_id","question","worthwhile_outcome","first_action","expected_evidence"){return}
+  next,err:=engine.SaveCuriosity(r.PathValue("id"),input)
+  writeResult(w,next,err)
+ })
+ protected.HandleFunc("GET /v1/motivation/curiosity/{id}",func(w http.ResponseWriter,r *http.Request){
+  next,err:=engine.Curiosity(r.PathValue("id"))
+  writeResult(w,next,err)
+ })
  protected.HandleFunc("GET /v1/motivation/recovery",func(w http.ResponseWriter,_ *http.Request){
   writeJSON(w,http.StatusOK,engine.Recovery())
  })

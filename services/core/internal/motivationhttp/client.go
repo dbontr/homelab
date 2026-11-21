@@ -51,6 +51,12 @@ func New(endpoint, token string)(*Client,error){
 }
 
 func admitted(method,path string)bool{
+ if (method=="PUT"||method=="GET")&&strings.HasPrefix(path,"/v1/motivation/curiosity/"){
+  id:=strings.TrimPrefix(path,"/v1/motivation/curiosity/")
+  if id==""||len(id)>80{return false}
+  for _,r:=range id{if !(r>='a'&&r<='z'||r>='A'&&r<='Z'||r>='0'&&r<='9'||r=='-'||r=='_'){return false}}
+  return true
+ }
  if method=="PUT"&&strings.HasPrefix(path,"/v1/motivation/attention-plans/"){
   id:=strings.TrimPrefix(path,"/v1/motivation/attention-plans/")
   if id==""||len(id)>80{return false}
@@ -133,6 +139,8 @@ func Register(mux *http.ServeMux,client *Client){
   {"PUT","/v1/motivation/recovery"},
   {"POST","/v1/motivation/recovery/clear"},
   {"PUT","/v1/motivation/attention-plans/{id}"},
+  {"GET","/v1/motivation/curiosity/{id}"},
+  {"PUT","/v1/motivation/curiosity/{id}"},
  }
  for _,route:=range routes {
   method,path:=route.method,route.path

@@ -81,6 +81,8 @@ func (s *Server) sessionReadAllowed(r *http.Request) bool {
     !(strings.HasPrefix(p,"/v1/projects/") && len(strings.Split(p,"/"))==5 && strings.HasSuffix(p,"/overview")) &&
     !(strings.HasPrefix(p,"/v1/workflows/") && len(strings.Split(p,"/"))==4) &&
     !(strings.HasPrefix(p,"/v1/automations/") && len(strings.Split(p,"/"))==4) &&
+    !(strings.HasPrefix(p,"/v1/motivation/curiosity/") && len(strings.Split(p,"/"))==5 && !strings.ContainsAny(strings.TrimPrefix(p,"/v1/motivation/curiosity/"),"/.") &&
+      strings.TrimPrefix(p,"/v1/motivation/curiosity/")!="") &&
     !(strings.HasPrefix(p,"/v1/workspace/projects/") && len(strings.Split(p,"/"))==6 && (strings.HasSuffix(p,"/jobs")||strings.HasSuffix(p,"/workspaces"))) &&
     !(strings.HasPrefix(p,"/v1/engineering/runs/") && len(strings.Split(p,"/"))==5 && strings.TrimPrefix(p,"/v1/engineering/runs/")!="" && !strings.ContainsAny(strings.TrimPrefix(p,"/v1/engineering/runs/"),"/.")) &&
     !(strings.HasPrefix(p,"/v1/engineering/teams/") && len(strings.Split(p,"/"))==5 && strings.TrimPrefix(p,"/v1/engineering/teams/")!="" && !strings.ContainsAny(strings.TrimPrefix(p,"/v1/engineering/teams/"),"/.")) &&

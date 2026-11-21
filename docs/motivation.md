@@ -22,6 +22,12 @@ The owner can create up to 64 named plans with a trigger, tempting alternative, 
 
 Plan selection requires the matching trigger and context and the global motivation opt-in. Pausing the motivation profile immediately suppresses plan responses. No browsing history is collected, device controls are installed or notifications are sent by this operation. The owner can change or withdraw a plan without a monitoring agent. The Go service remains its sole writer; the platform exposes fixed routes protected by owner session, Origin and CSRF checks, and the MCP has matching read/submit tools.
 
+## Curiosity and research orientation
+
+Curiosity questions are owner-directed proposals tied to an exact task, Learning concept or research source identifier. Each private record contains the unresolved question, a worthwhile near-term outcome, a bounded first action and the expected evidence that would test it. The writer records `owner_declared` provenance even when the conversational host proposes the wording. The MCP validates actual Productivity task identifiers and takes the authoritative task title from the Go task ledger; it does not infer that a suggested experiment has succeeded.
+
+The service retains the question, source and revision through restarts. Saving, pausing and revising a question do not create interventions, complete tasks or award Learning mastery. The owner must opt in to the question and the global motivation profile before requesting it as a prompt. No unattended model generation, covert novelty claims, fictional research rewards, or autonomous external AI API is used. A source label is a reference, not independent confirmation of its content.
+
 ## Recovery and resumption
 
 A private, revision-fenced recovery anchor holds the owner's last artifact reference, working draft, context and exact first action on return. It persists across service restarts, deliberate rest, distraction and changes to the intervention profile. A pause suppresses interventions but does not destroy an owner's saved research work. The anchor is explicitly editable or erasable, bounded in size and never counted as verified output. Its task and goal references are owner declarations; it cannot write other services' records.

@@ -182,12 +182,43 @@ type RecoveryChange struct {
  Context string `json:"context"`
  NextAction string `json:"next_action"`
 }
+// Curiosity prompts are declared research questions with verifiable source
+// references, not claims of discovery or independently observed results.
+type CuriosityPrompt struct {
+ ID string `json:"id"`
+ Revision uint64 `json:"revision"`
+ Enabled bool `json:"enabled"`
+ Paused bool `json:"paused"`
+ SourceKind string `json:"source_kind"`
+ SourceID string `json:"source_id"`
+ SourceLabel string `json:"source_label"`
+ Provenance string `json:"provenance"`
+ Question string `json:"question"`
+ WorthwhileOutcome string `json:"worthwhile_outcome"`
+ FirstAction string `json:"first_action"`
+ ExpectedEvidence string `json:"expected_evidence"`
+ CreatedAt uint64 `json:"created_at"`
+ UpdatedAt uint64 `json:"updated_at"`
+}
+type CuriosityChange struct {
+ ExpectedRevision uint64 `json:"expected_revision"`
+ Enabled bool `json:"enabled"`
+ Paused bool `json:"paused"`
+ SourceKind string `json:"source_kind"`
+ SourceID string `json:"source_id"`
+ SourceLabel string `json:"source_label"`
+ Question string `json:"question"`
+ WorthwhileOutcome string `json:"worthwhile_outcome"`
+ FirstAction string `json:"first_action"`
+ ExpectedEvidence string `json:"expected_evidence"`
+}
 type Record struct {
 	Profile Profile `json:"profile"`
 	Interventions []Intervention `json:"interventions"`
 	Checkins []Checkin `json:"checkins"`
 	FocusSessions []FocusSession `json:"focus_sessions"`
  AttentionPlans []AttentionPlan `json:"attention_plans"`
+ CuriosityPrompts []CuriosityPrompt `json:"curiosity_prompts"`
  Recovery RecoveryAnchor `json:"recovery"`
 	NextFocusID uint64 `json:"next_focus_id"`
 	NextID uint64 `json:"next_id"`
@@ -223,6 +254,7 @@ func defaultRecord() Record {
 		Checkins:[]Checkin{},
 		FocusSessions:[]FocusSession{},
   AttentionPlans:[]AttentionPlan{},
+  CuriosityPrompts:[]CuriosityPrompt{},
 		NextFocusID:1,NextID:1,
 	}
 }
@@ -254,7 +286,7 @@ func validProfile(p Profile) error {
 func validState(s Record) error {
 	if err:=validProfile(s.Profile);err!=nil{return err}
 	if s.NextID==0||s.NextFocusID==0||len(s.Interventions)>maxHistory||
-		len(s.FocusSessions)>maxHistory||len(s.Checkins)>maxCheckins||len(s.AttentionPlans)>64 {
+		len(s.FocusSessions)>maxHistory||len(s.Checkins)>maxCheckins||len(s.AttentionPlans)>64||len(s.CuriosityPrompts)>64 {
 		return InvalidError("stored intervention history is invalid")
 	}
 	planIDs:=map[string]bool{}
@@ -279,6 +311,13 @@ func validState(s Record) error {
 		}
 	}
 	if pending>1{return InvalidError("stored intervention sequence is invalid")}
+ curiosityIDs:=map[string]bool{}
+ for _,entry:=range s.CuriosityPrompts{
+  if curiosityIDs[entry.ID]||entry.Revision==0||!validCuriosity(entry){
+   return InvalidError("stored curiosity prompt is invalid")
+  }
+  curiosityIDs[entry.ID]=true
+ }
  if !validRecovery(s.Recovery){return InvalidError("stored recovery anchor is invalid")}
 	previous=0
 	active:=0
