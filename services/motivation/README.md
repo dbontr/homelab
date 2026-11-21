@@ -15,7 +15,7 @@ Every /v1 route requires the dedicated service token. The service does not accep
 | Method | Path | Purpose |
 | --- | --- | --- |
 | GET | /v1/motivation/state | Read owner profile, check-ins and intervention history |
-| PUT | /v1/motivation/profile | Apply a revision-checked profile and opt-in policy |\n| PUT | /v1/motivation/attention-plans/{id} | Create or revise a voluntary attention-defense plan |\n| POST | /v1/motivation/attention-response | Read the matching declared response only after opt-in |
+| PUT | /v1/motivation/profile | Apply a revision-checked profile and opt-in policy |\n| PUT | /v1/motivation/attention-plans/{id} | Create or revise a voluntary attention-defense plan |\n| POST | /v1/motivation/attention-response | Read the matching declared response only after opt-in |\n| GET | /v1/motivation/recovery | Read the private owner resumption anchor |\n| PUT | /v1/motivation/recovery | Revision-fenced save of last context, draft, artifact and next action |\n| POST | /v1/motivation/recovery/clear | Clear the anchor at the exact recorded revision |
 | POST | /v1/motivation/interventions | Request a situation-specific intervention |
 | POST | /v1/motivation/feedback | Record self-reported intervention feedback |
 | POST | /v1/motivation/checkins | Record voluntarily initiated work and fascination |
