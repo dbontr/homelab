@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { apiWrite, list, useApi } from "@/lib/api"
 import { OwnerRules } from "./OwnerRules"
 import { AttentionDefense } from "./AttentionDefense"
+import { RecoveryPanel } from "./RecoveryPanel"
 
 type Task = {
   id: string; title: string; notes?: string; status: string; revision: number;
@@ -254,6 +255,7 @@ export function Productivity({ revision, csrf, refresh, plannerOnly = false }: {
     </>}
     {!plannerOnly && <OwnerRules csrf={csrf} revision={rerender} refresh={refresh} goals={goalRows} />}
     {!plannerOnly && <AttentionDefense csrf={csrf} revision={rerender} refresh={refresh} />}
+    {!plannerOnly && <RecoveryPanel csrf={csrf} revision={rerender} refresh={refresh} />}
     <Card>
       <CardHeader><CardTitle>Weekly allocation</CardTitle><CardDescription>Seven daily capacities in minutes, Monday through Sunday; 0 means no availability. External calendar events are respected only when the private calendar feed is configured and reachable.</CardDescription></CardHeader>
       <CardContent className="space-y-4">
