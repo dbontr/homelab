@@ -492,6 +492,16 @@ func(s *Server)localTools()[]map[string]any{
     "trigger":map[string]any{"type":"string","enum":[]string{"session_start","resistance","distraction","uncertainty","milestone"}},
     "question":map[string]any{"type":"string","maxLength":320},
    }),
+   tool("motivation_attention_plan_set","Create or edit an opt-in owner attention-defense plan with a revision guard",map[string]any{
+    "id":prop("string"),"expected_revision":prop("integer"),"enabled":prop("boolean"),
+    "paused":prop("boolean"),"trigger":prop("string"),"alternative":prop("string"),
+    "context":prop("string"),"response":prop("string"),"boundary":prop("string"),
+    "outcome":prop("string"),"goal_id":prop("string"),"task_id":prop("string"),
+    "rule_key":prop("string"),"cooldown_minutes":prop("integer"),
+   },"id","expected_revision","enabled","paused","trigger","context","response","cooldown_minutes"),
+   tool("motivation_attention_response","Read an explicitly selected consented response without surveillance or sending a notification",map[string]any{
+    "trigger":prop("string"),"context":prop("string"),
+   },"trigger","context"),
    tool("motivation_pause","Immediately pause the opt-in motivation service",map[string]any{}))
  }
  if s.deviceCatalog!=nil{
@@ -705,6 +715,13 @@ func(s *Server)localTool(ctx context.Context,name string,raw json.RawMessage)(an
   case "motivation_status":return s.motivation.Call(ctx,http.MethodGet,"/v1/motivation/state",nil)
   case "motivation_metrics":return s.motivation.Call(ctx,http.MethodGet,"/v1/motivation/metrics",nil)
   case "motivation_suggest":return s.motivation.Call(ctx,http.MethodPost,"/v1/motivation/interventions",raw)
+  case "motivation_attention_plan_set":
+   var request struct{ID string `json:"id"`}
+   if err:=json.Unmarshal(raw,&request);err!=nil{return nil,err}
+   if request.ID==""||len(request.ID)>80||strings.ContainsAny(request.ID,"/ .\\\t\r\n"){return nil,errors.New("invalid attention plan ID")}
+   return s.motivation.Call(ctx,http.MethodPut,"/v1/motivation/attention-plans/"+request.ID,raw)
+  case "motivation_attention_response":
+   return s.motivation.Call(ctx,http.MethodPost,"/v1/motivation/attention-response",raw)
   case "motivation_pause":return s.motivation.Call(ctx,http.MethodPost,"/v1/motivation/pause",nil)
   }
  }
