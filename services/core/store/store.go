@@ -355,7 +355,7 @@ func (s *Store) SetRule(key,text,kind string)(Rule,error){
  if kind!="constraint"&&kind!="preference"{return Rule{},errors.New("rule kind must be constraint or preference")}
  if key=="minimum_daily_tasks"{n,e:=strconv.Atoi(text);if e!=nil||n<0||n>20{return Rule{},errors.New("minimum_daily_tasks must be from 0 to 20")}}
  r:=Rule{Key:key,Text:text,Kind:kind,Scope:"global"}
- s.mu.Lock();defer s.mu.Unlock();old:=s.data.Rules[key];r.Revision=old.Revision+1;r.CreatedAt=old.CreatedAt;if r.CreatedAt.IsZero(){r.CreatedAt=time.Now().UTC()};r.UpdatedAt=time.Now().UTC();next:=clone(s.data);next.Rules[key]=r
+ s.mu.Lock();defer s.mu.Unlock();old:=s.data.Rules[key];if old.Enabled||old.Effect!=""{return Rule{},ErrRuleRevision};r.Revision=old.Revision+1;r.CreatedAt=old.CreatedAt;if r.CreatedAt.IsZero(){r.CreatedAt=time.Now().UTC()};r.UpdatedAt=time.Now().UTC();next:=clone(s.data);next.Rules[key]=r
  return r,s.save(next)
 }
 func (s *Store) Rules()[]Rule{
