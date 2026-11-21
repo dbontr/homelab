@@ -32,6 +32,7 @@ func Register(mux *http.ServeMux, db *store.Store) {
  mux.HandleFunc("POST /v1/goals",h.goals)
  mux.HandleFunc("GET /v1/rules",h.rules)
  mux.HandleFunc("PUT /v1/rules/{key}",h.rules)
+ mux.HandleFunc("PUT /v1/rules/{key}/policy",h.rulePolicy)
  mux.HandleFunc("GET /v1/recommendations",h.recommendations)
  mux.HandleFunc("GET /v1/reports/weekly",h.weekly)
 }
@@ -66,7 +67,10 @@ func(h *Handler) rules(w http.ResponseWriter,r *http.Request){
 }
 func(h *Handler) recommendations(w http.ResponseWriter,r *http.Request){
  q:=r.URL.Query();minutes,_:=strconv.Atoi(q.Get("minutes"));limit,_:=strconv.Atoi(q.Get("limit"))
- httpjson.Write(w,200,h.db.Suggest(minutes,q.Get("energy"),q.Get("location"),q.Get("mode"),limit))
+ result,err:=h.db.Recommend(minutes,q.Get("energy"),q.Get("location"),q.Get("mode"),limit)
+ if errors.Is(err,store.ErrRuleConflict){httpjson.Error(w,409,err.Error());return}
+ if err!=nil{httpjson.Error(w,400,err.Error());return}
+ httpjson.Write(w,200,result)
 }
 func(h *Handler) weekly(w http.ResponseWriter,r *http.Request){
  v,e:=h.db.Report(r.URL.Query().Get("week_of"));if e!=nil{httpjson.Error(w,400,e.Error());return}
@@ -113,5 +117,16 @@ func(h *Handler) taskUpdate(w http.ResponseWriter,r *http.Request){
  case errors.Is(err,store.ErrTaskRevision):httpjson.Error(w,409,"task revision conflict")
  case err!=nil:httpjson.Error(w,400,err.Error())
  default:httpjson.Write(w,200,task)
+ }
+}
+
+func(h *Handler) rulePolicy(w http.ResponseWriter,r *http.Request){
+ var input store.RuleChange
+ if err:=httpjson.Decode(r,&input);err!=nil{httpjson.Error(w,400,"invalid rule policy");return}
+ rule,err:=h.db.PutRule(r.PathValue("key"),input)
+ switch {
+ case errors.Is(err,store.ErrRuleRevision):httpjson.Error(w,409,"rule revision conflict")
+ case err!=nil:httpjson.Error(w,400,err.Error())
+ default:httpjson.Write(w,200,rule)
  }
 }

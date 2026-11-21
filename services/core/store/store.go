@@ -53,7 +53,24 @@ type TaskInput struct {
  Priority int `json:"priority,omitempty"`
 }
 type Goal struct { ID string `json:"id"`; Title string `json:"title"`; Notes string `json:"notes,omitempty"`; CreatedAt time.Time `json:"created_at"` }
-type Rule struct { Key string `json:"key"`; Text string `json:"text"`; Kind string `json:"kind"` }
+type Rule struct {
+ Key string `json:"key"`
+ Text string `json:"text"`
+ Kind string `json:"kind"`
+ Revision int `json:"revision"`
+ Enabled bool `json:"enabled"`
+ Paused bool `json:"paused"`
+ Priority int `json:"priority"`
+ Scope string `json:"scope,omitempty"`
+ GoalID string `json:"goal_id,omitempty"`
+ Context string `json:"context,omitempty"`
+ Effect string `json:"effect,omitempty"`
+ Value string `json:"value,omitempty"`
+ Exceptions []string `json:"exceptions,omitempty"`
+ ExpiresAt string `json:"expires_at,omitempty"`
+ CreatedAt time.Time `json:"created_at,omitempty"`
+ UpdatedAt time.Time `json:"updated_at,omitempty"`
+}
 type Daily struct { Date string `json:"date"`; Completed int `json:"completed"`; MinimumMet bool `json:"minimum_met"` }
 type GoalProgress struct { GoalID string `json:"goal_id"`; Title string `json:"title"`; Tasks int `json:"tasks"`; Completed int `json:"completed"` }
 type Report struct {
@@ -102,7 +119,7 @@ func clone(in snapshot) snapshot {
  out:=snapshot{Tasks:make(map[string]Task,len(in.Tasks)),Goals:make(map[string]Goal,len(in.Goals)),Rules:make(map[string]Rule,len(in.Rules)),BookRequests:make(map[string]BookRequest,len(in.BookRequests)),AutomationReceipts:make(map[string]taskAutomationReceipt,len(in.AutomationReceipts)),Continuity:make(map[string]ContinuityCheckpoint,len(in.Continuity)),Notifications:make(map[string]NotificationEvent,len(in.Notifications)),NotificationPrefs:make(map[string]NotificationPreference,len(in.NotificationPrefs))}
  for k,v:=range in.Tasks{out.Tasks[k]=v}
  for k,v:=range in.Goals{out.Goals[k]=v}
- for k,v:=range in.Rules{out.Rules[k]=v}
+ for k,v:=range in.Rules{v.Exceptions=append([]string(nil),v.Exceptions...);out.Rules[k]=v}
  for k,v:=range in.AutomationReceipts{out.AutomationReceipts[k]=v}
  for k,v:=range in.Continuity{
   v.NextSteps=append([]string(nil),v.NextSteps...)
@@ -337,13 +354,13 @@ func (s *Store) SetRule(key,text,kind string)(Rule,error){
  if key==""||len(key)>80||text==""||len(text)>2000{return Rule{},errors.New("invalid rule key or text")}
  if kind!="constraint"&&kind!="preference"{return Rule{},errors.New("rule kind must be constraint or preference")}
  if key=="minimum_daily_tasks"{n,e:=strconv.Atoi(text);if e!=nil||n<0||n>20{return Rule{},errors.New("minimum_daily_tasks must be from 0 to 20")}}
- r:=Rule{Key:key,Text:text,Kind:kind}
- s.mu.Lock();defer s.mu.Unlock();next:=clone(s.data);next.Rules[key]=r
+ r:=Rule{Key:key,Text:text,Kind:kind,Scope:"global"}
+ s.mu.Lock();defer s.mu.Unlock();old:=s.data.Rules[key];if old.Enabled||old.Effect!=""{return Rule{},ErrRuleRevision};r.Revision=old.Revision+1;r.CreatedAt=old.CreatedAt;if r.CreatedAt.IsZero(){r.CreatedAt=time.Now().UTC()};r.UpdatedAt=time.Now().UTC();next:=clone(s.data);next.Rules[key]=r
  return r,s.save(next)
 }
 func (s *Store) Rules()[]Rule{
  s.mu.Lock();defer s.mu.Unlock();out:=make([]Rule,0,len(s.data.Rules))
- for _,r:=range s.data.Rules{out=append(out,r)}
+ for _,r:=range s.data.Rules{r.Exceptions=append([]string(nil),r.Exceptions...);out=append(out,r)}
  sort.Slice(out,func(i,j int)bool{return out[i].Key<out[j].Key})
  return out
 }

@@ -17,6 +17,7 @@ func (s *Server) sessionReadAllowed(r *http.Request) bool {
 		"/v1/tasks":true,
         "/v1/motivation/state":true,
         "/v1/motivation/metrics":true,
+        "/v1/motivation/recovery":true,
         "/v1/tasks/delegations":true,
         "/v1/tasks/agenda":true,
         "/v1/tasks/conflicts":true,

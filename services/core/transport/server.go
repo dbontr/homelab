@@ -453,6 +453,14 @@ func(s *Server)localTools()[]map[string]any{
   tool("goal_add","Add a personal goal",map[string]any{"title":prop("string"),"notes":prop("string")},"title"),
   tool("goal_list","List personal goals",map[string]any{}),
   tool("rule_set","Store a personal constraint or preference; only structured rules are mechanically enforced",map[string]any{"key":prop("string"),"text":prop("string"),"kind":prop("string")},"key","text","kind"),
+  tool("rule_policy_set","Revision-fenced owner policy for advisory recommendations; never edits tasks",map[string]any{
+   "key":prop("string"),"expected_revision":prop("integer"),"text":prop("string"),
+   "kind":prop("string"),"enabled":prop("boolean"),"paused":prop("boolean"),
+   "priority":prop("integer"),"scope":prop("string"),"goal_id":prop("string"),
+   "context":prop("string"),"effect":prop("string"),"value":prop("string"),
+   "exceptions":map[string]any{"type":"array","items":prop("string")},
+   "expires_at":prop("string"),
+  },"key","expected_revision","text","kind","enabled","paused","scope"),
   tool("rule_list","List personal rules",map[string]any{}),
   tool("weekly_report","Summarize recorded task completions",map[string]any{"week_of":prop("string")}),
   tool("task_review","Inspect recorded deadlines, prerequisites and missing estimates without interpreting absent logs as neglect",map[string]any{"horizon_days":prop("integer")}),
@@ -484,6 +492,26 @@ func(s *Server)localTools()[]map[string]any{
     "trigger":map[string]any{"type":"string","enum":[]string{"session_start","resistance","distraction","uncertainty","milestone"}},
     "question":map[string]any{"type":"string","maxLength":320},
    }),
+   tool("motivation_attention_plan_set","Create or edit an opt-in owner attention-defense plan with a revision guard",map[string]any{
+    "id":prop("string"),"expected_revision":prop("integer"),"enabled":prop("boolean"),
+    "paused":prop("boolean"),"trigger":prop("string"),"alternative":prop("string"),
+    "context":prop("string"),"response":prop("string"),"boundary":prop("string"),
+    "outcome":prop("string"),"goal_id":prop("string"),"task_id":prop("string"),
+    "rule_key":prop("string"),"cooldown_minutes":prop("integer"),
+   },"id","expected_revision","enabled","paused","trigger","context","response","cooldown_minutes"),
+   tool("motivation_attention_response","Read an explicitly selected consented response without surveillance or sending a notification",map[string]any{
+    "trigger":prop("string"),"context":prop("string"),
+   },"trigger","context"),
+   tool("motivation_recovery_get","Read the owner's private resume anchor without treating its draft as completed evidence",map[string]any{}),
+   tool("motivation_recovery_save","Persist last artifact and exact next action for voluntary resumption",map[string]any{
+    "expected_revision":prop("integer"),"goal_id":prop("string"),
+    "task_id":prop("string"),"artifact_ref":prop("string"),
+    "draft":prop("string"),"context":prop("string"),
+    "next_action":prop("string"),
+   },"expected_revision","next_action"),
+   tool("motivation_recovery_clear","Discard the private resume anchor with exact revision",map[string]any{
+    "expected_revision":prop("integer"),
+   },"expected_revision"),
    tool("motivation_pause","Immediately pause the opt-in motivation service",map[string]any{}))
  }
  if s.deviceCatalog!=nil{
@@ -697,6 +725,26 @@ func(s *Server)localTool(ctx context.Context,name string,raw json.RawMessage)(an
   case "motivation_status":return s.motivation.Call(ctx,http.MethodGet,"/v1/motivation/state",nil)
   case "motivation_metrics":return s.motivation.Call(ctx,http.MethodGet,"/v1/motivation/metrics",nil)
   case "motivation_suggest":return s.motivation.Call(ctx,http.MethodPost,"/v1/motivation/interventions",raw)
+  case "motivation_attention_plan_set":
+   var request map[string]json.RawMessage
+   if err:=json.Unmarshal(raw,&request);err!=nil{return nil,err}
+   var planID string
+   if err:=json.Unmarshal(request["id"],&planID);err!=nil{return nil,errors.New("invalid attention plan ID")}
+   if planID==""||len(planID)>80{return nil,errors.New("invalid attention plan ID")}
+   for _,r:=range planID{
+    if !(r>='a'&&r<='z'||r>='A'&&r<='Z'||r>='0'&&r<='9'||r=='-'||r=='_'){
+     return nil,errors.New("invalid attention plan ID")
+    }
+   }
+   delete(request,"id")
+   payload,err:=json.Marshal(request)
+   if err!=nil{return nil,err}
+   return s.motivation.Call(ctx,http.MethodPut,"/v1/motivation/attention-plans/"+planID,payload)
+  case "motivation_attention_response":
+   return s.motivation.Call(ctx,http.MethodPost,"/v1/motivation/attention-response",raw)
+  case "motivation_recovery_get":return s.motivation.Call(ctx,http.MethodGet,"/v1/motivation/recovery",nil)
+  case "motivation_recovery_save":return s.motivation.Call(ctx,http.MethodPut,"/v1/motivation/recovery",raw)
+  case "motivation_recovery_clear":return s.motivation.Call(ctx,http.MethodPost,"/v1/motivation/recovery/clear",raw)
   case "motivation_pause":return s.motivation.Call(ctx,http.MethodPost,"/v1/motivation/pause",nil)
   }
  }
@@ -747,10 +795,17 @@ func(s *Server)localTool(ctx context.Context,name string,raw json.RawMessage)(an
  case "task_complete":return s.db.CompleteTask(args.ID)
  case "task_list":return s.db.Tasks(args.Status),nil
  case "task_delegations":return s.taskDelegations(),nil
- case "task_suggest":return s.db.Suggest(args.Minutes,args.Energy,args.Location,args.Mode,args.Limit),nil
+ case "task_suggest":return s.db.Recommend(args.Minutes,args.Energy,args.Location,args.Mode,args.Limit)
  case "goal_add":return s.db.AddGoal(args.Title,args.Notes)
  case "goal_list":return s.db.Goals(),nil
- case "rule_set":return s.db.SetRule(args.Key,args.Text,args.Kind)
+ case "rule_policy_set":
+   var input struct{
+    Key string `json:"key"`
+    store.RuleChange
+   }
+   if err:=json.Unmarshal(raw,&input);err!=nil{return nil,err}
+   return s.db.PutRule(input.Key,input.RuleChange)
+  case "rule_set":return s.db.SetRule(args.Key,args.Text,args.Kind)
  case "rule_list":return s.db.Rules(),nil
  case "weekly_report":return s.db.Report(args.WeekOf)
  case "task_review":

@@ -98,6 +98,7 @@ func cloneState(record Record)Record{
 	clone.Interventions=append([]Intervention{},record.Interventions...)
 	clone.Checkins=append([]Checkin{},record.Checkins...)
 	clone.FocusSessions=append([]FocusSession{},record.FocusSessions...)
+ clone.AttentionPlans=append([]AttentionPlan{},record.AttentionPlans...)
 	for i:=range clone.Interventions{
 		if f:=record.Interventions[i].Feedback;f!=nil{
 			value:=*f

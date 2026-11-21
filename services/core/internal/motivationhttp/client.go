@@ -19,7 +19,7 @@ const (
  maxResponse = 2 << 20
 )
 
-// Client is a private transport for an independently owned Rust domain
+// Client is a private transport for the independently owned Motivation Go
 // service. It never reads or writes the motivation state file.
 type Client struct {
  origin string
@@ -51,8 +51,18 @@ func New(endpoint, token string)(*Client,error){
 }
 
 func admitted(method,path string)bool{
+ if method=="PUT"&&strings.HasPrefix(path,"/v1/motivation/attention-plans/"){
+  id:=strings.TrimPrefix(path,"/v1/motivation/attention-plans/")
+  if id==""||len(id)>80{return false}
+  for _,r:=range id{if !(r>='a'&&r<='z'||r>='A'&&r<='Z'||r>='0'&&r<='9'||r=='-'||r=='_'){return false}}
+  return true
+ }
  switch method+" "+path {
  case "GET /v1/motivation/state",
+      "GET /v1/motivation/recovery",
+      "PUT /v1/motivation/recovery",
+      "POST /v1/motivation/recovery/clear",
+      "POST /v1/motivation/attention-response",
       "PUT /v1/motivation/profile",
       "POST /v1/motivation/pause",
       "POST /v1/motivation/interventions",
@@ -118,6 +128,11 @@ func Register(mux *http.ServeMux,client *Client){
   {"GET","/v1/motivation/metrics"},
   {"POST","/v1/motivation/focus"},
   {"POST","/v1/motivation/focus/end"},
+  {"POST","/v1/motivation/attention-response"},
+  {"GET","/v1/motivation/recovery"},
+  {"PUT","/v1/motivation/recovery"},
+  {"POST","/v1/motivation/recovery/clear"},
+  {"PUT","/v1/motivation/attention-plans/{id}"},
  }
  for _,route:=range routes {
   method,path:=route.method,route.path
@@ -134,7 +149,9 @@ func Register(mux *http.ServeMux,client *Client){
    if len(input)>0&&!json.Valid(input){
     errorJSON(w,http.StatusBadRequest,"invalid motivation JSON");return
    }
-   status,data,err:=client.exchange(r.Context(),method,path,input)
+   forwardPath:=path
+   if strings.Contains(path,"{id}"){forwardPath=strings.Replace(path,"{id}",r.PathValue("id"),1)}
+   status,data,err:=client.exchange(r.Context(),method,forwardPath,input)
    if err!=nil{
     errorJSON(w,http.StatusServiceUnavailable,"motivation service unavailable");return
    }
