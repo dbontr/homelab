@@ -453,6 +453,14 @@ func(s *Server)localTools()[]map[string]any{
   tool("goal_add","Add a personal goal",map[string]any{"title":prop("string"),"notes":prop("string")},"title"),
   tool("goal_list","List personal goals",map[string]any{}),
   tool("rule_set","Store a personal constraint or preference; only structured rules are mechanically enforced",map[string]any{"key":prop("string"),"text":prop("string"),"kind":prop("string")},"key","text","kind"),
+  tool("rule_policy_set","Revision-fenced owner policy for advisory recommendations; never edits tasks",map[string]any{
+   "key":prop("string"),"expected_revision":prop("integer"),"text":prop("string"),
+   "kind":prop("string"),"enabled":prop("boolean"),"paused":prop("boolean"),
+   "priority":prop("integer"),"scope":prop("string"),"goal_id":prop("string"),
+   "context":prop("string"),"effect":prop("string"),"value":prop("string"),
+   "exceptions":map[string]any{"type":"array","items":prop("string")},
+   "expires_at":prop("string"),
+  },"key","expected_revision","text","kind","enabled","paused","scope"),
   tool("rule_list","List personal rules",map[string]any{}),
   tool("weekly_report","Summarize recorded task completions",map[string]any{"week_of":prop("string")}),
   tool("task_review","Inspect recorded deadlines, prerequisites and missing estimates without interpreting absent logs as neglect",map[string]any{"horizon_days":prop("integer")}),
@@ -747,10 +755,17 @@ func(s *Server)localTool(ctx context.Context,name string,raw json.RawMessage)(an
  case "task_complete":return s.db.CompleteTask(args.ID)
  case "task_list":return s.db.Tasks(args.Status),nil
  case "task_delegations":return s.taskDelegations(),nil
- case "task_suggest":return s.db.Suggest(args.Minutes,args.Energy,args.Location,args.Mode,args.Limit),nil
+ case "task_suggest":return s.db.Recommend(args.Minutes,args.Energy,args.Location,args.Mode,args.Limit)
  case "goal_add":return s.db.AddGoal(args.Title,args.Notes)
  case "goal_list":return s.db.Goals(),nil
- case "rule_set":return s.db.SetRule(args.Key,args.Text,args.Kind)
+ case "rule_policy_set":
+   var input struct{
+    Key string `json:"key"`
+    store.RuleChange
+   }
+   if err:=json.Unmarshal(raw,&input);err!=nil{return nil,err}
+   return s.db.PutRule(input.Key,input.RuleChange)
+  case "rule_set":return s.db.SetRule(args.Key,args.Text,args.Kind)
  case "rule_list":return s.db.Rules(),nil
  case "weekly_report":return s.db.Report(args.WeekOf)
  case "task_review":
