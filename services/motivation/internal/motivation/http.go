@@ -67,6 +67,21 @@ func NewHandler(engine *Engine,token string)(http.Handler,error){
   plan,err:=engine.AttentionResponse(input.Trigger,input.Context)
   writeResult(w,plan,err)
  })
+ protected.HandleFunc("GET /v1/motivation/recovery",func(w http.ResponseWriter,_ *http.Request){
+  writeJSON(w,http.StatusOK,engine.Recovery())
+ })
+ protected.HandleFunc("PUT /v1/motivation/recovery",func(w http.ResponseWriter,r *http.Request){
+  var input RecoveryChange
+  if !readRequest(w,r,&input,"expected_revision","next_action"){return}
+  next,err:=engine.SaveRecovery(input)
+  writeResult(w,next,err)
+ })
+ protected.HandleFunc("POST /v1/motivation/recovery/clear",func(w http.ResponseWriter,r *http.Request){
+  var input struct{ExpectedRevision uint64 `json:"expected_revision"`}
+  if !readRequest(w,r,&input,"expected_revision"){return}
+  next,err:=engine.ClearRecovery(input.ExpectedRevision)
+  writeResult(w,next,err)
+ })
  protected.HandleFunc("GET /v1/motivation/metrics",func(w http.ResponseWriter,_ *http.Request){
 		writeJSON(w,http.StatusOK,engine.Metrics(Now()))
 	})
