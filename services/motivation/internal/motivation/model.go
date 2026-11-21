@@ -127,11 +127,46 @@ type FocusFinish struct {
 	Reflection string `json:"reflection"`
 }
 
+// Attention plans are owner-declared, opt-in responses to specific distractions.
+type AttentionPlan struct {
+ ID string `json:"id"`
+ Revision uint64 `json:"revision"`
+ Enabled bool `json:"enabled"`
+ Paused bool `json:"paused"`
+ Trigger string `json:"trigger"`
+ Alternative string `json:"alternative"`
+ Context string `json:"context"`
+ Response string `json:"response"`
+ Boundary string `json:"boundary"`
+ Outcome string `json:"outcome"`
+ GoalID string `json:"goal_id,omitempty"`
+ TaskID string `json:"task_id,omitempty"`
+ RuleKey string `json:"rule_key,omitempty"`
+ CooldownMinutes uint16 `json:"cooldown_minutes"`
+ UpdatedAt uint64 `json:"updated_at"`
+}
+type AttentionPlanChange struct {
+ ExpectedRevision uint64 `json:"expected_revision"`
+ Enabled bool `json:"enabled"`
+ Paused bool `json:"paused"`
+ Trigger string `json:"trigger"`
+ Alternative string `json:"alternative"`
+ Context string `json:"context"`
+ Response string `json:"response"`
+ Boundary string `json:"boundary"`
+ Outcome string `json:"outcome"`
+ GoalID string `json:"goal_id,omitempty"`
+ TaskID string `json:"task_id,omitempty"`
+ RuleKey string `json:"rule_key,omitempty"`
+ CooldownMinutes uint16 `json:"cooldown_minutes"`
+}
+
 type Record struct {
 	Profile Profile `json:"profile"`
 	Interventions []Intervention `json:"interventions"`
 	Checkins []Checkin `json:"checkins"`
 	FocusSessions []FocusSession `json:"focus_sessions"`
+ AttentionPlans []AttentionPlan `json:"attention_plans"`
 	NextFocusID uint64 `json:"next_focus_id"`
 	NextID uint64 `json:"next_id"`
 }
@@ -165,6 +200,7 @@ func defaultRecord() Record {
 		Interventions:[]Intervention{},
 		Checkins:[]Checkin{},
 		FocusSessions:[]FocusSession{},
+  AttentionPlans:[]AttentionPlan{},
 		NextFocusID:1,NextID:1,
 	}
 }
@@ -196,11 +232,16 @@ func validProfile(p Profile) error {
 func validState(s Record) error {
 	if err:=validProfile(s.Profile);err!=nil{return err}
 	if s.NextID==0||s.NextFocusID==0||len(s.Interventions)>maxHistory||
-		len(s.FocusSessions)>maxHistory||len(s.Checkins)>maxCheckins {
+		len(s.FocusSessions)>maxHistory||len(s.Checkins)>maxCheckins||len(s.AttentionPlans)>64 {
 		return InvalidError("stored intervention history is invalid")
 	}
-	var previous uint64
-	pending:=0
+	planIDs:=map[string]bool{}
+ for _,plan:=range s.AttentionPlans {
+  if planIDs[plan.ID]||plan.Revision==0||!validAttentionPlan(plan){return InvalidError("stored attention plan is invalid")}
+  planIDs[plan.ID]=true
+ }
+ var previous uint64
+ pending:=0
 	for _,event:=range s.Interventions {
 		if event.ID<=previous||event.ID>=s.NextID||len([]rune(event.Message))>1600||
 			!validStrategy(event.Strategy)||!validTrigger(event.Trigger) {
