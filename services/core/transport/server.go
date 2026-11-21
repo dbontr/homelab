@@ -726,10 +726,20 @@ func(s *Server)localTool(ctx context.Context,name string,raw json.RawMessage)(an
   case "motivation_metrics":return s.motivation.Call(ctx,http.MethodGet,"/v1/motivation/metrics",nil)
   case "motivation_suggest":return s.motivation.Call(ctx,http.MethodPost,"/v1/motivation/interventions",raw)
   case "motivation_attention_plan_set":
-   var request struct{ID string `json:"id"`}
+   var request map[string]json.RawMessage
    if err:=json.Unmarshal(raw,&request);err!=nil{return nil,err}
-   if request.ID==""||len(request.ID)>80||strings.ContainsAny(request.ID,"/ .\\\t\r\n"){return nil,errors.New("invalid attention plan ID")}
-   return s.motivation.Call(ctx,http.MethodPut,"/v1/motivation/attention-plans/"+request.ID,raw)
+   var planID string
+   if err:=json.Unmarshal(request["id"],&planID);err!=nil{return nil,errors.New("invalid attention plan ID")}
+   if planID==""||len(planID)>80{return nil,errors.New("invalid attention plan ID")}
+   for _,r:=range planID{
+    if !(r>='a'&&r<='z'||r>='A'&&r<='Z'||r>='0'&&r<='9'||r=='-'||r=='_'){
+     return nil,errors.New("invalid attention plan ID")
+    }
+   }
+   delete(request,"id")
+   payload,err:=json.Marshal(request)
+   if err!=nil{return nil,err}
+   return s.motivation.Call(ctx,http.MethodPut,"/v1/motivation/attention-plans/"+planID,payload)
   case "motivation_attention_response":
    return s.motivation.Call(ctx,http.MethodPost,"/v1/motivation/attention-response",raw)
   case "motivation_recovery_get":return s.motivation.Call(ctx,http.MethodGet,"/v1/motivation/recovery",nil)
