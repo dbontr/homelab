@@ -130,36 +130,53 @@ func ruleConflicts(a,b Rule)bool{
  return true
 }
 
+// ApplicableRules returns typed policy for one task. Contradictory required
+// contexts block advice instead of silently choosing a restriction.
+func (s *Store) ApplicableRules(task Task, context string, now time.Time)([]Rule,error){
+ rules:=s.Rules()
+ active:=[]Rule{}
+ for _,rule:=range rules{if ruleApplies(rule,task,context,now)&&rule.Effect!=""{active=append(active,rule)}}
+ for i,a:=range active{for _,b:=range active[i+1:]{
+  if ruleConflicts(a,b){return nil,fmt.Errorf("%w: %s and %s",ErrRuleConflict,a.Key,b.Key)}
+ }}
+ sort.SliceStable(active,func(i,j int)bool{return active[i].Priority>active[j].Priority})
+ return active,nil
+}
+
+func RuleExclusions(task Task,active []Rule)[]string{
+ excluded:=[]string{}
+ for _,rule:=range active {
+  switch rule.Effect {
+  case "max_minutes":
+   bound,_:=strconv.Atoi(rule.Value)
+   if task.Minutes>bound{excluded=append(excluded,rule.Key)}
+  case "exclude_energy":
+   if task.Energy==rule.Value{excluded=append(excluded,rule.Key)}
+  case "require_energy":
+   if task.Energy!=rule.Value{excluded=append(excluded,rule.Key)}
+  case "exclude_location":
+   if task.Location==rule.Value{excluded=append(excluded,rule.Key)}
+  }
+ }
+ return excluded
+}
+
 // Recommend applies only explicit structured rules. Unstructured personal
 // principles remain visible but do not become executable policy.
 func (s *Store) Recommend(minutes int,energy,location,mode string,limit int)(RecommendationResult,error){
  candidates:=s.Suggest(minutes,energy,location,mode,50)
- rules:=s.Rules()
  now:=time.Now().UTC()
  result:=RecommendationResult{Recommendations:[]Recommendation{},Excluded:[]RuleExclusion{},Advisory:true}
  for _,task:=range candidates {
-  active:=[]Rule{}
-  for _,rule:=range rules{if ruleApplies(rule,task,location,now)&&rule.Effect!=""{active=append(active,rule)}}
-  for i,a:=range active{for _,b:=range active[i+1:]{
-   if ruleConflicts(a,b){return RecommendationResult{},fmt.Errorf("%w: %s and %s",ErrRuleConflict,a.Key,b.Key)}
-  }}
+  active,err:=s.ApplicableRules(task,location,now)
+  if err!=nil{return RecommendationResult{},err}
   rationale:=[]string{"Open actionable task with satisfied prerequisites"}
   if task.GoalID!=""{rationale=append(rationale,"Linked to owner goal "+task.GoalID)}
   if task.Due!=""{rationale=append(rationale,"Due "+task.Due)}
-  excluded:=[]string{}
+  excluded:=RuleExclusions(task,active)
   score:=0
-  sort.SliceStable(active,func(i,j int)bool{return active[i].Priority>active[j].Priority})
   for _,rule:=range active {
    switch rule.Effect {
-   case "max_minutes":
-    bound,_:=strconv.Atoi(rule.Value)
-    if task.Minutes>bound{excluded=append(excluded,rule.Key)}
-   case "exclude_energy":
-    if task.Energy==rule.Value{excluded=append(excluded,rule.Key)}
-   case "require_energy":
-    if task.Energy!=rule.Value{excluded=append(excluded,rule.Key)}
-   case "exclude_location":
-    if task.Location==rule.Value{excluded=append(excluded,rule.Key)}
    case "prefer_goal":
     if task.GoalID==rule.Value{score+=rule.Priority+1;rationale=append(rationale,"Preference "+rule.Key+" favors this goal")}
    case "prefer_location":
