@@ -3,6 +3,7 @@ package store
 import (
  "errors"
  "sort"
+ "strings"
  "time"
 )
 
@@ -22,6 +23,7 @@ type PlannedTask struct {
  Priority int `json:"priority"`
  Due string `json:"due,omitempty"`
  DeadlineStatus string `json:"deadline_status,omitempty"`
+ Rationale []string `json:"rationale,omitempty"`
 }
 type UnplannedTask struct {
  TaskID string `json:"task_id"`
@@ -135,6 +137,15 @@ func (s *Store) PlanWeekWithCapacities(day string, capacities [7]int, startHour 
 
 	remaining := make(map[string]Task)
 	for _, task := range tasks {
+        if task.Status == "open" && !task.Decomposed && task.Scheduled == "" {
+         active,err:=s.ApplicableRules(task,"",now)
+         if err!=nil{return WeeklyPlan{},err}
+         if keys:=RuleExclusions(task,active);len(keys)>0{
+          plan.Unplanned=append(plan.Unplanned,UnplannedTask{TaskID:task.ID,Title:task.Title,
+           Reason:"Excluded by active owner rule: "+strings.Join(keys,", ")})
+          continue
+         }
+        }
 		if task.Status != "open" || task.Decomposed || task.Scheduled != "" {
 			continue
 		}
@@ -264,6 +275,7 @@ func (s *Store) PlanWeekWithCapacities(day string, capacities [7]int, startHour 
 						Start: cursor.Format(time.RFC3339), End: next.Format(time.RFC3339),
 						Minutes: task.Minutes, Priority: task.Priority, Due: task.Due,
 						DeadlineStatus: deadlineStatus,
+                        Rationale: []string{"Actionable task, selected within declared capacity and applicable owner rules"},
 					})
 					busy = append(busy, BusyWindow{Start: cursor, End: next, Source: "proposal", Title: task.Title})
 					used[dayIndex] += task.Minutes
