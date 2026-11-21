@@ -55,7 +55,19 @@ func NewHandler(engine *Engine,token string)(http.Handler,error){
 		next,err:=engine.Checkin(input,Now())
 		writeResult(w,next,err)
 	})
-	protected.HandleFunc("GET /v1/motivation/metrics",func(w http.ResponseWriter,_ *http.Request){
+	protected.HandleFunc("PUT /v1/motivation/attention-plans/{id}",func(w http.ResponseWriter,r *http.Request){
+  var input AttentionPlanChange
+  if !readRequest(w,r,&input,"expected_revision","enabled","paused","trigger","context","response","cooldown_minutes"){return}
+  next,err:=engine.PutAttentionPlan(r.PathValue("id"),input)
+  writeResult(w,next,err)
+ })
+ protected.HandleFunc("POST /v1/motivation/attention-response",func(w http.ResponseWriter,r *http.Request){
+  var input struct{Trigger string `json:"trigger"`; Context string `json:"context"`}
+  if !readRequest(w,r,&input,"trigger","context"){return}
+  plan,err:=engine.AttentionResponse(input.Trigger,input.Context)
+  writeResult(w,plan,err)
+ })
+ protected.HandleFunc("GET /v1/motivation/metrics",func(w http.ResponseWriter,_ *http.Request){
 		writeJSON(w,http.StatusOK,engine.Metrics(Now()))
 	})
 	protected.HandleFunc("POST /v1/motivation/focus",func(w http.ResponseWriter,r *http.Request){
