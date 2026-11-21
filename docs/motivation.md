@@ -16,6 +16,12 @@ Interventions start disabled. The owner can additionally enable proactive schedu
 
 Pausing and profile revisions cancel unresolved prompts without fabricating feedback. Very low reported well-being pauses further interventions. No browsing surveillance, device blocking, autonomous messaging or infrastructure operations are authorized.
 
+## Voluntary attention-defense plans
+
+The owner can create up to 64 named plans with a trigger, tempting alternative, declared context, preferred response, boundary, desired outcome, optional goal/task/rule references and a bounded cooldown. Every plan is enabled or paused explicitly and updated with an exact revision. A plan references another record only by its owner-provided identity; it cannot change that record or assert its completion.
+
+Plan selection requires the matching trigger and context and the global motivation opt-in. Pausing the motivation profile immediately suppresses plan responses. No browsing history is collected, device controls are installed or notifications are sent by this operation. The owner can change or withdraw a plan without a monitoring agent. The Go service remains its sole writer; the platform exposes fixed routes protected by owner session, Origin and CSRF checks, and the MCP has matching read/submit tools.
+
 ## Observations
 
 Intervention feedback records engagement, progress and well-being linked to the exact strategy. Independent check-ins record minutes of intellectual work, voluntary initiation, fascination, well-being, optional evidence reference and whether the record occurred on a scheduled intervention-free day.
@@ -24,7 +30,7 @@ The Go service computes 28-day aggregates. These are owner self-reports, not ver
 
 ## Service independence
 
-Source is in services/motivation. The private Go process owns the profile, scheduler, state lock and all intervention records. Its ten protected HTTP routes are available only on loopback through a service-specific bearer credential. The Go platform separately enforces owner-session and CSRF controls at its user-facing boundary. The React interface consumes the authorized platform routes. The unified MCP offers status, metrics, requested suggestions and pause without allowing the model to change the aspirational identity or submit purported self-reports.
+Source is in services/motivation. The private Go process owns the profile, scheduler, state lock and all intervention records. Its protected HTTP routes are available only on loopback through a service-specific bearer credential. The Go platform separately enforces owner-session and CSRF controls at its user-facing boundary. The React interface consumes the authorized platform routes. The unified MCP offers status, metrics, requested suggestions, voluntary attention plans and pause without allowing the model to change the aspirational identity or submit purported self-reports.
 
 The optional NixOS service module provides process isolation, a private state directory, credential loading and loopback transport. The service is disabled by default. Its package must be an immutable, independently verified Go build supplied explicitly. A source-pinned NixOS generation and a preserved single-writer state lease are required before activation.
 
