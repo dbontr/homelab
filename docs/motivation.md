@@ -22,6 +22,12 @@ The owner can create up to 64 named plans with a trigger, tempting alternative, 
 
 Plan selection requires the matching trigger and context and the global motivation opt-in. Pausing the motivation profile immediately suppresses plan responses. No browsing history is collected, device controls are installed or notifications are sent by this operation. The owner can change or withdraw a plan without a monitoring agent. The Go service remains its sole writer; the platform exposes fixed routes protected by owner session, Origin and CSRF checks, and the MCP has matching read/submit tools.
 
+## Recovery and resumption
+
+A private, revision-fenced recovery anchor holds the owner's last artifact reference, working draft, context and exact first action on return. It persists across service restarts, deliberate rest, distraction and changes to the intervention profile. A pause suppresses interventions but does not destroy an owner's saved research work. The anchor is explicitly editable or erasable, bounded in size and never counted as verified output. Its task and goal references are owner declarations; it cannot write other services' records.
+
+The main console and canonical MCP use the same private Go state through fixed adapter routes. A saved anchor can be read without generating any prompt. Every mutation checks the expected revision.
+
 ## Observations
 
 Intervention feedback records engagement, progress and well-being linked to the exact strategy. Independent check-ins record minutes of intellectual work, voluntary initiation, fascination, well-being, optional evidence reference and whether the record occurred on a scheduled intervention-free day.
