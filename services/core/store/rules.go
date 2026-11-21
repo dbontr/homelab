@@ -57,7 +57,7 @@ func validRuleChange(key string, c RuleChange) error {
   if c.Value!="" {return errors.New("rule value needs a typed effect")}
  case "max_minutes":
   n,e:=strconv.Atoi(c.Value);if e!=nil||n<1||n>1440{return errors.New("max_minutes must be 1..1440")}
- case "exclude_energy":
+ case "exclude_energy","require_energy":
   if c.Value!="low"&&c.Value!="medium"&&c.Value!="high"{return errors.New("invalid excluded energy")}
  case "exclude_location","prefer_location":
   if c.Value==""||len(c.Value)>128{return errors.New("invalid location value")}
@@ -122,7 +122,7 @@ func ruleApplies(r Rule,task Task,context string,now time.Time)bool{
 
 func ruleConflicts(a,b Rule)bool{
  if a.Kind!="constraint"||b.Kind!="constraint"||a.Effect!=b.Effect{return false}
- if a.Effect=="max_minutes"{return false} // the tighter capacity is unambiguous
+ if a.Effect!="require_energy"{return false} // other constraints can coexist
  if a.Value==b.Value{return false}
  // Different context and different goal restrictions do not overlap.
  if a.Scope=="context"&&b.Scope=="context"&&a.Context!=b.Context{return false}
@@ -156,6 +156,8 @@ func (s *Store) Recommend(minutes int,energy,location,mode string,limit int)(Rec
     if task.Minutes>bound{excluded=append(excluded,rule.Key)}
    case "exclude_energy":
     if task.Energy==rule.Value{excluded=append(excluded,rule.Key)}
+   case "require_energy":
+    if task.Energy!=rule.Value{excluded=append(excluded,rule.Key)}
    case "exclude_location":
     if task.Location==rule.Value{excluded=append(excluded,rule.Key)}
    case "prefer_goal":
