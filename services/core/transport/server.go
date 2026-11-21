@@ -502,6 +502,16 @@ func(s *Server)localTools()[]map[string]any{
    tool("motivation_attention_response","Read an explicitly selected consented response without surveillance or sending a notification",map[string]any{
     "trigger":prop("string"),"context":prop("string"),
    },"trigger","context"),
+   tool("motivation_recovery_get","Read the owner's private resume anchor without treating its draft as completed evidence",map[string]any{}),
+   tool("motivation_recovery_save","Persist last artifact and exact next action for voluntary resumption",map[string]any{
+    "expected_revision":prop("integer"),"goal_id":prop("string"),
+    "task_id":prop("string"),"artifact_ref":prop("string"),
+    "draft":prop("string"),"context":prop("string"),
+    "next_action":prop("string"),
+   },"expected_revision","next_action"),
+   tool("motivation_recovery_clear","Discard the private resume anchor with exact revision",map[string]any{
+    "expected_revision":prop("integer"),
+   },"expected_revision"),
    tool("motivation_pause","Immediately pause the opt-in motivation service",map[string]any{}))
  }
  if s.deviceCatalog!=nil{
@@ -722,6 +732,9 @@ func(s *Server)localTool(ctx context.Context,name string,raw json.RawMessage)(an
    return s.motivation.Call(ctx,http.MethodPut,"/v1/motivation/attention-plans/"+request.ID,raw)
   case "motivation_attention_response":
    return s.motivation.Call(ctx,http.MethodPost,"/v1/motivation/attention-response",raw)
+  case "motivation_recovery_get":return s.motivation.Call(ctx,http.MethodGet,"/v1/motivation/recovery",nil)
+  case "motivation_recovery_save":return s.motivation.Call(ctx,http.MethodPut,"/v1/motivation/recovery",raw)
+  case "motivation_recovery_clear":return s.motivation.Call(ctx,http.MethodPost,"/v1/motivation/recovery/clear",raw)
   case "motivation_pause":return s.motivation.Call(ctx,http.MethodPost,"/v1/motivation/pause",nil)
   }
  }
