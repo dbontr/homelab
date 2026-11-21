@@ -11,10 +11,13 @@ type Plan = {
   boundary: string; outcome: string; goal_id?: string; task_id?: string;
   rule_key?: string; cooldown_minutes: number
 }
-type State = {
-  profile: { enabled: boolean; proactive_enabled: boolean };
-  attention_plans: Plan[]
+type Profile = {
+  revision: number; enabled: boolean; proactive_enabled: boolean;
+  cadence_minutes: number; holdout_weekday_utc?: number | null;
+  goal_id: string; identity: string; outcome: string; next_step: string;
+  intensity: string; daily_limit: number; quiet_start_utc_hour: number; quiet_end_utc_hour: number
 }
+type State = { profile: Profile; attention_plans: Plan[] }
 const blank: Plan = {
   id: "", revision: 0, enabled: false, paused: false, trigger: "",
   alternative: "", context: "", response: "", boundary: "", outcome: "",
@@ -24,6 +27,7 @@ export function AttentionDefense({ csrf, revision, refresh }: {
   csrf: string; revision: number; refresh: () => void
 }) {
   const [local, setLocal] = useState(0)
+  const [profileDraft, setProfileDraft] = useState<Profile | null>(null)
   const [entry, setEntry] = useState<Plan>(blank)
   const [error, setError] = useState("")
   const [result, setResult] = useState("")
@@ -45,6 +49,65 @@ export function AttentionDefense({ csrf, revision, refresh }: {
     <CardContent className="space-y-3">
       {state.error && <p role="alert" className="text-sm text-destructive">{state.error}</p>}
       <p className="text-sm">{state.data?.profile.enabled ? "Motivation interventions enabled" : "Motivation interventions paused or disabled"}</p>
+      <Button type="button" variant="outline" disabled={!csrf || busy || !state.data}
+        onClick={() => { setProfileDraft(state.data?.profile ?? null); setError("") }}>
+        Edit motivation profile
+      </Button>
+      {profileDraft && <form className="grid gap-3 rounded border p-3 sm:grid-cols-2" onSubmit={async event => {
+        event.preventDefault()
+        await mutate(() => apiWrite("PUT", "/v1/motivation/profile", csrf, {
+          expected_revision: profileDraft.revision, enabled: profileDraft.enabled,
+          proactive_enabled: profileDraft.proactive_enabled,
+          cadence_minutes: profileDraft.cadence_minutes,
+          holdout_weekday_utc: profileDraft.holdout_weekday_utc ?? null,
+          goal_id: profileDraft.goal_id, identity: profileDraft.identity,
+          outcome: profileDraft.outcome, next_step: profileDraft.next_step,
+          intensity: profileDraft.intensity, daily_limit: profileDraft.daily_limit,
+          quiet_start_utc_hour: profileDraft.quiet_start_utc_hour,
+          quiet_end_utc_hour: profileDraft.quiet_end_utc_hour,
+        }))
+        setProfileDraft(null)
+      }}>
+        <p className="text-sm sm:col-span-2">Revision {profileDraft.revision}. Enabling requires an authentic identity, outcome, and next step.</p>
+        {(["identity", "outcome", "next_step", "goal_id"] as const).map(field =>
+          <label className="space-y-1 text-sm" key={field}>{field.replaceAll("_"," ")}
+            <Input value={profileDraft[field]} onChange={e => setProfileDraft(v => v && {...v,[field]:e.target.value})} />
+          </label>)}
+        <label className="space-y-1 text-sm">Style
+          <select className="h-9 w-full rounded border bg-background px-2" value={profileDraft.intensity}
+            onChange={e => setProfileDraft(v => v && {...v,intensity:e.target.value})}>
+            <option value="guided">Guided</option><option value="direct">Direct</option>
+          </select>
+        </label>
+        {(["cadence_minutes", "daily_limit", "quiet_start_utc_hour", "quiet_end_utc_hour"] as const).map(field =>
+          <label className="space-y-1 text-sm" key={field}>{field.replaceAll("_"," ")}
+            <Input type="number" min={field === "cadence_minutes" ? 60 : field === "daily_limit" ? 1 : 0}
+              max={field === "cadence_minutes" ? 1440 : field === "daily_limit" ? 8 : 23}
+              value={profileDraft[field]} onChange={e => setProfileDraft(v => v && {...v,[field]:Number(e.target.value)})} />
+          </label>)}
+        <label className="space-y-1 text-sm">Intervention-free weekday (UTC)
+          <select className="h-9 w-full rounded border bg-background px-2"
+            value={profileDraft.holdout_weekday_utc == null ? "" : String(profileDraft.holdout_weekday_utc)}
+            onChange={e => setProfileDraft(v => v && {...v,holdout_weekday_utc:e.target.value==="" ? null : Number(e.target.value)})}>
+            <option value="">None</option>{["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"].map((d,i)=>
+              <option value={i} key={d}>{d}</option>)}
+          </select>
+        </label>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={profileDraft.enabled}
+            onChange={e => setProfileDraft(v => v && {...v,enabled:e.target.checked})} />
+          Enable consented interventions
+        </label>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={profileDraft.proactive_enabled}
+            onChange={e => setProfileDraft(v => v && {...v,proactive_enabled:e.target.checked})} />
+          Enable bounded in-app scheduling
+        </label>
+        <div className="flex gap-2 sm:col-span-2">
+          <Button disabled={!csrf || busy}>Save profile</Button>
+          <Button type="button" variant="outline" onClick={() => setProfileDraft(null)}>Cancel</Button>
+        </div>
+      </form>}
       <Button type="button" variant="outline" disabled={busy || !csrf}
         onClick={() => mutate(() => apiWrite("POST", "/v1/motivation/pause", csrf, {}))}>
         Pause all interventions
