@@ -502,6 +502,15 @@ func(s *Server)localTools()[]map[string]any{
    tool("motivation_attention_response","Read an explicitly selected consented response without surveillance or sending a notification",map[string]any{
     "trigger":prop("string"),"context":prop("string"),
    },"trigger","context"),
+   tool("motivation_curiosity_set","Store a source-linked unanswered question and falsifiable scholarly next action",map[string]any{
+    "id":prop("string"),"expected_revision":prop("integer"),
+    "enabled":prop("boolean"),"paused":prop("boolean"),
+    "source_kind":prop("string"),"source_id":prop("string"),
+    "source_label":prop("string"),"question":prop("string"),
+    "worthwhile_outcome":prop("string"),"first_action":prop("string"),
+    "expected_evidence":prop("string"),
+   },"id","expected_revision","enabled","paused","source_kind","source_id","question","worthwhile_outcome","first_action","expected_evidence"),
+   tool("motivation_curiosity_get","Read an enabled source-linked curiosity question without autonomous prompting",map[string]any{"id":prop("string")},"id"),
    tool("motivation_recovery_get","Read the owner's private resume anchor without treating its draft as completed evidence",map[string]any{}),
    tool("motivation_recovery_save","Persist last artifact and exact next action for voluntary resumption",map[string]any{
     "expected_revision":prop("integer"),"goal_id":prop("string"),
@@ -742,6 +751,36 @@ func(s *Server)localTool(ctx context.Context,name string,raw json.RawMessage)(an
    return s.motivation.Call(ctx,http.MethodPut,"/v1/motivation/attention-plans/"+planID,payload)
   case "motivation_attention_response":
    return s.motivation.Call(ctx,http.MethodPost,"/v1/motivation/attention-response",raw)
+  case "motivation_curiosity_set":
+   var req map[string]json.RawMessage
+   if err:=json.Unmarshal(raw,&req);err!=nil{return nil,err}
+   var id,sourceKind,sourceID string
+   if err:=json.Unmarshal(req["id"],&id);err!=nil||len(id)==0||len(id)>80{return nil,errors.New("invalid curiosity ID")}
+   if err:=json.Unmarshal(req["source_kind"],&sourceKind);err!=nil{return nil,err}
+   if err:=json.Unmarshal(req["source_id"],&sourceID);err!=nil{return nil,err}
+   for _,r:=range id{if !(r>='a'&&r<='z'||r>='A'&&r<='Z'||r>='0'&&r<='9'||r=='-'||r=='_'){return nil,errors.New("invalid curiosity ID")}}
+   if sourceKind=="task" {
+    found:=false
+    for _,task:=range s.db.Tasks("") {
+     if task.ID==sourceID {
+      label,_:=json.Marshal(task.Title)
+      req["source_label"]=label
+      found=true
+      break
+     }
+    }
+    if !found{return nil,errors.New("curiosity task does not exist")}
+   }
+   delete(req,"id")
+   payload,err:=json.Marshal(req)
+   if err!=nil{return nil,err}
+   return s.motivation.Call(ctx,http.MethodPut,"/v1/motivation/curiosity/"+id,payload)
+  case "motivation_curiosity_get":
+   var req struct{ID string `json:"id"`}
+   if err:=json.Unmarshal(raw,&req);err!=nil{return nil,err}
+   if req.ID==""||len(req.ID)>80{return nil,errors.New("invalid curiosity ID")}
+   for _,r:=range req.ID{if !(r>='a'&&r<='z'||r>='A'&&r<='Z'||r>='0'&&r<='9'||r=='-'||r=='_'){return nil,errors.New("invalid curiosity ID")}}
+   return s.motivation.Call(ctx,http.MethodGet,"/v1/motivation/curiosity/"+req.ID,nil)
   case "motivation_recovery_get":return s.motivation.Call(ctx,http.MethodGet,"/v1/motivation/recovery",nil)
   case "motivation_recovery_save":return s.motivation.Call(ctx,http.MethodPut,"/v1/motivation/recovery",raw)
   case "motivation_recovery_clear":return s.motivation.Call(ctx,http.MethodPost,"/v1/motivation/recovery/clear",raw)
