@@ -161,12 +161,34 @@ type AttentionPlanChange struct {
  CooldownMinutes uint16 `json:"cooldown_minutes"`
 }
 
+// Recovery is an owner-supplied resumption anchor, not evidence of completed work.
+type RecoveryAnchor struct {
+ Revision uint64 `json:"revision"`
+ Active bool `json:"active"`
+ GoalID string `json:"goal_id,omitempty"`
+ TaskID string `json:"task_id,omitempty"`
+ ArtifactRef string `json:"artifact_ref,omitempty"`
+ Draft string `json:"draft,omitempty"`
+ Context string `json:"context,omitempty"`
+ NextAction string `json:"next_action,omitempty"`
+ UpdatedAt uint64 `json:"updated_at"`
+}
+type RecoveryChange struct {
+ ExpectedRevision uint64 `json:"expected_revision"`
+ GoalID string `json:"goal_id"`
+ TaskID string `json:"task_id"`
+ ArtifactRef string `json:"artifact_ref"`
+ Draft string `json:"draft"`
+ Context string `json:"context"`
+ NextAction string `json:"next_action"`
+}
 type Record struct {
 	Profile Profile `json:"profile"`
 	Interventions []Intervention `json:"interventions"`
 	Checkins []Checkin `json:"checkins"`
 	FocusSessions []FocusSession `json:"focus_sessions"`
  AttentionPlans []AttentionPlan `json:"attention_plans"`
+ Recovery RecoveryAnchor `json:"recovery"`
 	NextFocusID uint64 `json:"next_focus_id"`
 	NextID uint64 `json:"next_id"`
 }
@@ -257,6 +279,7 @@ func validState(s Record) error {
 		}
 	}
 	if pending>1{return InvalidError("stored intervention sequence is invalid")}
+ if !validRecovery(s.Recovery){return InvalidError("stored recovery anchor is invalid")}
 	previous=0
 	active:=0
 	for _,session:=range s.FocusSessions {
