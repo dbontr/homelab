@@ -59,6 +59,9 @@ func admitted(method,path string)bool{
  }
  switch method+" "+path {
  case "GET /v1/motivation/state",
+      "GET /v1/motivation/recovery",
+      "PUT /v1/motivation/recovery",
+      "POST /v1/motivation/recovery/clear",
       "POST /v1/motivation/attention-response",
       "PUT /v1/motivation/profile",
       "POST /v1/motivation/pause",
@@ -126,6 +129,9 @@ func Register(mux *http.ServeMux,client *Client){
   {"POST","/v1/motivation/focus"},
   {"POST","/v1/motivation/focus/end"},
   {"POST","/v1/motivation/attention-response"},
+  {"GET","/v1/motivation/recovery"},
+  {"PUT","/v1/motivation/recovery"},
+  {"POST","/v1/motivation/recovery/clear"},
   {"PUT","/v1/motivation/attention-plans/{id}"},
  }
  for _,route:=range routes {
