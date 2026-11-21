@@ -51,11 +51,13 @@ func (s *Server) sessionOwnerWriteAllowed(r *http.Request) bool {
     case r.Method == http.MethodPut && strings.HasPrefix(path, "/v1/motivation/attention-plans/"):
         parts:=strings.Split(path,"/")
         allowed=len(parts)==5 && parts[4]!=""
+    case r.Method == http.MethodPut && path == "/v1/motivation/recovery":
+        allowed=true
     case r.Method == http.MethodPut && path == "/v1/motivation/profile":
         allowed=true
     case r.Method == http.MethodPost && (path == "/v1/motivation/pause" ||
         path == "/v1/motivation/interventions" || path == "/v1/motivation/feedback" ||
-        path == "/v1/motivation/dismiss" || path == "/v1/motivation/attention-response" || path == "/v1/motivation/checkins" ||
+        path == "/v1/motivation/dismiss" || path == "/v1/motivation/recovery/clear" || path == "/v1/motivation/attention-response" || path == "/v1/motivation/checkins" ||
         path == "/v1/motivation/focus" || path == "/v1/motivation/focus/end"):
         allowed=true
     case r.Method == http.MethodPut && path == "/v1/pantry":
