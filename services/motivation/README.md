@@ -15,7 +15,7 @@ Every /v1 route requires the dedicated service token. The service does not accep
 | Method | Path | Purpose |
 | --- | --- | --- |
 | GET | /v1/motivation/state | Read owner profile, check-ins and intervention history |
-| PUT | /v1/motivation/profile | Apply a revision-checked profile and opt-in policy |
+| PUT | /v1/motivation/profile | Apply a revision-checked profile and opt-in policy |\n| PUT | /v1/motivation/attention-plans/{id} | Create or revise a voluntary attention-defense plan |\n| POST | /v1/motivation/attention-response | Read the matching declared response only after opt-in |
 | POST | /v1/motivation/interventions | Request a situation-specific intervention |
 | POST | /v1/motivation/feedback | Record self-reported intervention feedback |
 | POST | /v1/motivation/checkins | Record voluntarily initiated work and fascination |
@@ -31,7 +31,7 @@ The service also stores bounded focus commitments independently of notifications
 
 The optional background scheduler creates inbox records only after the owner opts into both interventions and proactive scheduling. It respects quiet hours, cooldown, daily limits, an intervention-free weekday and the unresolved inbox item. It never pushes messages to third parties, edits study records or controls devices.
 
-The Go core is a narrow credential-holding transport client, configured with HOMELAB_MOTIVATION_SERVICE_URL and HOMELAB_MOTIVATION_SERVICE_TOKEN_FILE. Its address must be an exact numeric loopback HTTP origin; its bearer is not supplied to the UI or MCP. Browser writes are subject to the platform's existing owner-session and CSRF checks. The optional MCP offers only read, requested suggestion and pause operations.
+The Go core is a narrow credential-holding transport client, configured with HOMELAB_MOTIVATION_SERVICE_URL and HOMELAB_MOTIVATION_SERVICE_TOKEN_FILE. Its address must be an exact numeric loopback HTTP origin; its bearer is not supplied to the UI or MCP. Browser writes are subject to the platform's existing owner-session and CSRF checks. The MCP offers opt-in attention-plan revision and context-scoped response operations alongside read, requested suggestion and pause. It never acquires browser history or asserts completed work.
 
 ## Build and acceptance
 
