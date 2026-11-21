@@ -46,15 +46,15 @@ func TestOwnerRuleRevisionPersistenceAndAdvisoryRecommendation(t *testing.T){
 func TestRuleConflictsFailClosedAndInvalidSemantics(t *testing.T){
  db,err:=Open(filepath.Join(t.TempDir(),"state.json"),"UTC");if err!=nil{t.Fatal(err)}
  if _,err=db.AddTask(TaskInput{Title:"Research",Minutes:25,Energy:"high"});err!=nil{t.Fatal(err)}
- a:=RuleChange{Text:"Avoid high energy",Kind:"constraint",Enabled:true,Scope:"global",Effect:"exclude_energy",Value:"high"}
+ a:=RuleChange{Text:"Require high energy",Kind:"constraint",Enabled:true,Scope:"global",Effect:"require_energy",Value:"high"}
  if _,err=db.PutRule("a",a);err!=nil{t.Fatal(err)}
- b:=a;b.Text="Avoid low energy";b.Value="low"
+ b:=a;b.Text="Require low energy";b.Value="low"
  if _,err=db.PutRule("b",b);err!=nil{t.Fatal(err)}
  if _,err=db.Recommend(60,"","","",3);!errors.Is(err,ErrRuleConflict){t.Fatalf("expected explicit conflict, got %v",err)}
  b.Enabled=false;b.ExpectedRevision=1
  if _,err=db.PutRule("b",b);err!=nil{t.Fatal(err)}
  result,err:=db.Recommend(60,"","","",3);if err!=nil{t.Fatal(err)}
- if len(result.Recommendations)!=0||len(result.Excluded)!=1{t.Fatalf("constraint not applied: %+v",result)}
+ if len(result.Recommendations)!=1||len(result.Excluded)!=0{t.Fatalf("constraint not applied: %+v",result)}
  invalid:=a;invalid.Value="extreme"
  if _,err=db.PutRule("invalid",invalid);err==nil{t.Fatal("invalid typed value accepted")}
 }
